@@ -1,0 +1,25 @@
+{
+  "short_name": "지원T",
+  "name": "지원T - 단어장 & 지문 분석",
+  "icons": [
+    {
+      "src": "https://storage.googleapis.com/app-assets-269697523796/ais-dev-lpumuspyaw53gk2yk3n47p-269697523796/icon.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://storage.googleapis.com/app-assets-269697523796/ais-dev-lpumuspyaw53gk2yk3n47p-269697523796/icon.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "https://storage.googleapis.com/app-assets-269697523796/ais-dev-lpumuspyaw53gk2yk3n47p-269697523796/icon.png",
+      "type": "image/png",
+      "sizes": "1024x1024"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#ff8fab",
+  "background_color": "#ffffff"
+}

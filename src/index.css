@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+@theme {
+  --color-pastel-pink-50: #fff5f7;
+  --color-pastel-pink-100: #ffeef2;
+  --color-pastel-pink-200: #ffd6e0;
+  --color-pastel-pink-300: #ffb3c6;
+  --color-pastel-pink-400: #ff85a1;
+  --color-pastel-pink-500: #ff4d6d;
+  --color-pastel-pink-600: #c9184a;
+  --color-pastel-pink-700: #a4133c;
+  --color-pastel-pink-800: #800f2f;
+  --color-pastel-pink-900: #590d22;
+  
+  /* Override default oklch colors with hex for html2canvas compatibility */
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+
+  --color-emerald-50: #ecfdf5;
+  --color-emerald-100: #d1fae5;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+  --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
+  --color-amber-800: #92400e;
+
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  
+  --color-blue-600: #2563eb;
+  --color-purple-600: #9333ea;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-pastel-pink-50 text-slate-800;
+  }
+}
+
+.analysis-container {
+  @apply max-w-6xl mx-auto p-8 bg-white rounded-3xl shadow-xl shadow-pastel-pink-200/50 my-8;
+}
+
+.sentence-block {
+  @apply mb-12 pb-8 border-b border-pastel-pink-100 last:border-0;
+}
+
+.chunk-container {
+  @apply flex flex-wrap gap-x-4 gap-y-12 items-end mb-4 pt-10;
+}
+
+.chunk-item {
+  @apply flex flex-col items-center relative;
+}
+
+.chunk-marking {
+  @apply text-[10px] font-black text-red-500 absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap;
+}
+
+.chunk-text {
+  @apply text-xl font-bold border-b-2 border-transparent;
+}
+
+.chunk-translation {
+  @apply text-sm text-slate-500 mt-1 font-medium;
+}
+
+.chunk-grammar-note {
+  @apply text-[10px] text-amber-700 font-bold absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap;
+}
+
+.full-translation {
+  @apply text-sm text-emerald-600 font-medium mt-4 bg-emerald-50/50 p-3 rounded-lg border border-emerald-100;
+}
+
+.grammar-points-list {
+  @apply mt-4 flex flex-wrap gap-2;
+}
+
+.grammar-point-tag {
+  @apply text-[11px] px-2 py-1 bg-pastel-pink-100 text-pastel-pink-600 rounded-full font-medium;
+}
+
+.important-badge {
+  @apply inline-flex items-center px-3 py-1 rounded-md bg-amber-100 text-amber-700 text-xs font-bold border border-amber-200 mb-4;
+}
+
+/* Export specific styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .analysis-container {
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    border: none !important;
+  }
+
+  .sentence-block {
+    page-break-inside: avoid !important;
+    margin-bottom: 2rem !important;
+    border-bottom: 1px solid #feeef2 !important;
+  }
+
+  h1, h2, h3 {
+    page-break-after: avoid !important;
+  }
+
+  .bg-pastel-pink-50\/30, .bg-slate-900 {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ensure text is dark for printing */
+  .text-slate-500, .text-slate-400 {
+    color: #475569 !important;
+  }
+}
+
+/* Flashcard 3D Effects */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+}
+

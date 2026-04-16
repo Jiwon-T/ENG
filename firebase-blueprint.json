@@ -1,0 +1,136 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "App user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["teacher", "student"] },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student record managed by teacher",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "parentPhone": { "type": "string" },
+        "grade": { "type": "string" },
+        "className": { "type": "string" },
+        "teacherUid": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "waiting", "graduated", "withdrawn"] },
+        "memo": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "teacherUid", "status"]
+    },
+    "Wordbook": {
+      "title": "Wordbook",
+      "description": "A collection of words",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "isPublic": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "createdBy"]
+    },
+    "Word": {
+      "title": "Word",
+      "description": "A single word in a wordbook",
+      "type": "object",
+      "properties": {
+        "wordbookId": { "type": "string" },
+        "word": { "type": "string" },
+        "meaning": { "type": "string" },
+        "example": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "order": { "type": "number" }
+      },
+      "required": ["wordbookId", "word", "meaning"]
+    },
+    "WordProgress": {
+      "title": "WordProgress",
+      "description": "Tracking student's word learning",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "wordId": { "type": "string" },
+        "wordbookId": { "type": "string" },
+        "status": { "type": "string", "enum": ["unlearned", "learned", "mastered"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "wordId", "status"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Student attendance record",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["present", "absent", "late", "early", "makeup"] },
+        "memo": { "type": "string" },
+        "teacherUid": { "type": "string" }
+      },
+      "required": ["studentId", "date", "status"]
+    },
+    "Consultation": {
+      "title": "Consultation",
+      "description": "Teacher-student consultation log",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "content": { "type": "string" },
+        "teacherUid": { "type": "string" }
+      },
+      "required": ["studentId", "date", "content", "teacherUid"]
+    },
+    "MatchLeaderboard": {
+      "title": "MatchLeaderboard",
+      "description": "Leaderboard for word match game",
+      "type": "object",
+      "properties": {
+        "wordbookId": { "type": "string" },
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "time": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["wordbookId", "uid", "name", "time"]
+    },
+    "AnalysisHistory": {
+      "title": "AnalysisHistory",
+      "description": "History of English text analysis",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "text": { "type": "string" },
+        "title": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "text", "title"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": "User", "description": "User profiles" },
+    "/students/{studentId}": { "schema": "Student", "description": "Student records" },
+    "/wordbooks/{wordbookId}": { "schema": "Wordbook", "description": "Wordbook metadata" },
+    "/wordbooks/{wordbookId}/words/{wordId}": { "schema": "Word", "description": "Words within a wordbook" },
+    "/wordProgress/{progressId}": { "schema": "WordProgress", "description": "Learning progress tracking" },
+    "/attendance/{attendanceId}": { "schema": "Attendance", "description": "Attendance logs" },
+    "/consultations/{consultationId}": { "schema": "Consultation", "description": "Consultation logs" },
+    "/matchLeaderboard/{recordId}": { "schema": "MatchLeaderboard", "description": "Match game leaderboard records" },
+    "/analysisHistory/{historyId}": { "schema": "AnalysisHistory", "description": "User's text analysis history" }
+  }
+}

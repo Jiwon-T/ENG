@@ -1,0 +1,189 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Fields:
+//   - uid: string (required)
+//   - email: string (required)
+//   - name: string
+//   - role: string (required, 'teacher' | 'student')
+//   - photoURL: string
+//   - createdAt: timestamp
+//
+// Collection: students
+// Fields:
+//   - name: string (required)
+//   - phone: string
+//   - parentPhone: string
+//   - grade: string
+//   - className: string
+//   - teacherUid: string (required)
+//   - status: string (required, 'active' | 'waiting' | 'graduated' | 'withdrawn')
+//   - memo: string
+//   - createdAt: timestamp
+//
+// Collection: wordbooks
+// Fields:
+//   - title: string (required)
+//   - description: string
+//   - createdBy: string (required)
+//   - isPublic: bool
+//   - createdAt: timestamp
+//
+// Collection: wordProgress
+// Fields:
+//   - uid: string (required)
+//   - wordId: string (required)
+//   - wordbookId: string (required)
+//   - status: string (required, 'unlearned' | 'learned' | 'mastered')
+//   - updatedAt: timestamp
+//
+// Collection: evaluations
+// Fields:
+//   - evaluation: string (required)
+//   - teacherUid: string (required)
+//   - updatedAt: timestamp
+//
+// Collection: matchLeaderboard
+// Fields:
+//   - wordbookId: string (required)
+//   - uid: string (required)
+//   - name: string (required)
+//   - time: number (required)
+//   - createdAt: timestamp
+//
+// Collection: words (subcollection of wordbooks)
+// Fields:
+//   - word: string (required)
+//   - meaning: string (required)
+//   - example: string
+//   - imageUrl: string
+//   - order: number
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "lizzieshere1@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isTeacher() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['teacher', 'student', 'admin'] &&
+             (!('alias' in data) || data.alias is string);
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['name', 'teacherUid', 'status']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.teacherUid is string &&
+             data.status in ['active', 'waiting', 'graduated', 'withdrawn'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(uid) && request.resource.data.role == 'student' || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    ((isOwner(uid) && request.resource.data.role == resource.data.role) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /students/{studentId} {
+      allow read: if isAuthenticated() && (resource.data.teacherUid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidStudent(request.resource.data) && 
+                    (request.resource.data.teacherUid == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && isValidStudent(request.resource.data) && 
+                    (resource.data.teacherUid == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.teacherUid == request.auth.uid || isAdmin());
+    }
+
+    match /wordbooks/{wordbookId} {
+      allow read: if isAuthenticated();
+      allow create: if isTeacher() || isAdmin();
+      allow update: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin());
+
+      match /words/{wordId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated() && (get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data.createdBy == request.auth.uid || isAdmin());
+      }
+    }
+
+    match /wordProgress/{progressId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isTeacher() || isAdmin());
+      allow write: if isAuthenticated() && (request.resource.data.uid == request.auth.uid || isAdmin());
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated() && (resource.data.teacherUid == request.auth.uid || resource.data.studentId == request.auth.uid || isAdmin());
+      allow write: if isTeacher() || isAdmin();
+    }
+
+    match /consultations/{consultationId} {
+      allow read: if isAuthenticated() && (resource.data.teacherUid == request.auth.uid || isAdmin());
+      allow write: if isTeacher() || isAdmin();
+    }
+
+    match /evaluations/{uid} {
+      allow read: if isAuthenticated() && (isOwner(uid) || isTeacher() || isAdmin());
+      allow write: if isTeacher() || isAdmin();
+    }
+
+    match /matchLeaderboard/{recordId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    match /analysisHistory/{historyId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+
+    match /generatorHistory/{historyId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+
+    match /folders/{folderId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+  }
+}
