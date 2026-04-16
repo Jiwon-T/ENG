@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, Plus, Search, Trash2, Edit3, FileSpreadsheet, X, CheckCircle2, Circle, GripVertical } from 'lucide-react';
+import { BookOpen, Plus, Search, Trash2, Edit3, FileSpreadsheet, X, CheckCircle2, Circle, GripVertical, FileText, Download } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, writeBatch, getDocs, orderBy } from 'firebase/firestore';
+import { generateWordTest } from '../../lib/wordTestGenerator';
 import {
   DndContext,
   closestCenter,
@@ -67,6 +68,21 @@ export default function WordbookManager() {
   // Delete confirmation states
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string; type: 'wordbook' | 'word' } | null>(null);
 
+  // Test paper states
+  const [isTestPaperModalOpen, setIsTestPaperModalOpen] = useState(false);
+  const [testPaperConfig, setTestPaperConfig] = useState({
+    title: '',
+    subtitle: '1회독',
+    studentName: '',
+    wordCount: 20,
+    includeAnswerKey: true,
+    testType: 'en-to-ko' as 'en-to-ko' | 'ko-to-en',
+    selectionMode: 'range' as 'random' | 'range',
+    unitSize: 40,
+    startDay: 1,
+    endDay: 1
+  });
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -98,9 +114,14 @@ export default function WordbookManager() {
       setWords([]);
       return;
     }
-    const q = query(collection(db, `wordbooks/${selectedWordbook.id}/words`));
+    const q = query(
+      collection(db, `wordbooks/${selectedWordbook.id}/words`),
+      orderBy('order', 'asc')
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setWords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Word)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `wordbooks/${selectedWordbook.id}/words`);
     });
     return () => unsubscribe();
   }, [selectedWordbook]);
@@ -361,6 +382,48 @@ export default function WordbookManager() {
     }
   };
 
+  const handleGenerateTestPaper = async () => {
+    if (!selectedWordbook || words.length === 0) return;
+    
+    let selectedWords: Word[] = [];
+
+    if (testPaperConfig.selectionMode === 'random') {
+      // Shuffle and pick words
+      const shuffled = [...words].sort(() => 0.5 - Math.random());
+      selectedWords = shuffled.slice(0, Math.min(testPaperConfig.wordCount, words.length));
+    } else {
+      // Range selection by DAY
+      const startIndex = (testPaperConfig.startDay - 1) * testPaperConfig.unitSize;
+      const endIndex = testPaperConfig.endDay * testPaperConfig.unitSize;
+      const rangeWords = words.slice(startIndex, endIndex);
+      // Shuffle words within the range
+      selectedWords = [...rangeWords].sort(() => 0.5 - Math.random());
+    }
+
+    if (selectedWords.length === 0) {
+      alert('선택된 범위에 단어가 없습니다.');
+      return;
+    }
+    
+    try {
+      await generateWordTest(
+        testPaperConfig.title || selectedWordbook.title,
+        testPaperConfig.subtitle,
+        selectedWords,
+        {
+          testType: testPaperConfig.testType,
+          includeAnswerKey: testPaperConfig.includeAnswerKey,
+          paperTitle: testPaperConfig.title || selectedWordbook.title,
+          studentName: testPaperConfig.studentName
+        }
+      );
+      setIsTestPaperModalOpen(false);
+    } catch (error) {
+      console.error('Failed to generate test paper:', error);
+      alert('시험지 생성 중 오류가 발생했습니다.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {!selectedWordbook ? (
@@ -419,6 +482,19 @@ export default function WordbookManager() {
               ← 단어장 목록으로
             </button>
             <div className="flex gap-3">
+              <button 
+                onClick={() => {
+                  setTestPaperConfig({
+                    ...testPaperConfig,
+                    title: selectedWordbook.title
+                  });
+                  setIsTestPaperModalOpen(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl font-bold text-sm hover:bg-blue-100 transition-all"
+              >
+                <FileText size={16} />
+                시험지 만들기
+              </button>
               <button onClick={() => setIsBulkAddOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-all">
                 <FileSpreadsheet size={16} />
                 엑셀로 단어 추가
@@ -674,6 +750,198 @@ export default function WordbookManager() {
                 className="flex-1 py-4 bg-red-500 text-white rounded-2xl font-bold shadow-lg shadow-red-200"
               >
                 네, 삭제합니다
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Test Paper Generation Modal */}
+      {isTestPaperModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 bg-slate-900/40 backdrop-blur-sm">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="max-w-lg w-full bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh]"
+          >
+            <div className="flex justify-between items-center p-8 pb-4 border-b border-slate-50">
+              <h2 className="text-xl font-black text-slate-900">단어 시험지 만들기</h2>
+              <button onClick={() => setIsTestPaperModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-8 pt-4 no-scrollbar">
+              <div className="space-y-4 mb-6">
+                <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
+                  <button
+                    onClick={() => setTestPaperConfig({ ...testPaperConfig, selectionMode: 'range' })}
+                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${testPaperConfig.selectionMode === 'range' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                  >
+                    범위 지정 (DAY 단위)
+                  </button>
+                  <button
+                    onClick={() => setTestPaperConfig({ ...testPaperConfig, selectionMode: 'random' })}
+                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${testPaperConfig.selectionMode === 'random' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                  >
+                    랜덤 추출
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">학생 이름</label>
+                    <input
+                      type="text"
+                      value={testPaperConfig.studentName}
+                      onChange={(e) => setTestPaperConfig({ ...testPaperConfig, studentName: e.target.value })}
+                      placeholder="이름 입력"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">시험지 제목 (왼쪽 상단)</label>
+                    <input
+                      type="text"
+                      value={testPaperConfig.title}
+                      onChange={(e) => setTestPaperConfig({ ...testPaperConfig, title: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">회차/부제 (중앙 상단)</label>
+                  <input
+                    type="text"
+                    value={testPaperConfig.subtitle}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTestPaperConfig({ ...testPaperConfig, subtitle: val });
+                    }}
+                    placeholder="예: 1회독, DAY 01-02"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                  />
+                </div>
+
+                {testPaperConfig.selectionMode === 'range' ? (
+                  <div className="space-y-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">학습 단위 (DAY당 단어)</label>
+                        <input
+                          type="number"
+                          value={testPaperConfig.unitSize}
+                          onChange={(e) => setTestPaperConfig({ ...testPaperConfig, unitSize: parseInt(e.target.value) || 1 })}
+                          className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">총 DAY 수</label>
+                        <div className="p-2.5 bg-white border border-blue-100 rounded-lg font-bold text-blue-600 text-sm">
+                          약 {Math.ceil(words.length / testPaperConfig.unitSize)} DAYS
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">시작 DAY</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={testPaperConfig.startDay}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 1;
+                            setTestPaperConfig({ 
+                              ...testPaperConfig, 
+                              startDay: val,
+                              subtitle: `DAY ${val.toString().padStart(2, '0')}-${testPaperConfig.endDay.toString().padStart(2, '0')}`
+                            });
+                          }}
+                          className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">종료 DAY</label>
+                        <input
+                          type="number"
+                          min={testPaperConfig.startDay}
+                          value={testPaperConfig.endDay}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 1;
+                            setTestPaperConfig({ 
+                              ...testPaperConfig, 
+                              endDay: val,
+                              subtitle: `DAY ${testPaperConfig.startDay.toString().padStart(2, '0')}-${val.toString().padStart(2, '0')}`
+                            });
+                          }}
+                          className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-bold text-blue-400 text-center">
+                      선택 범위: {((testPaperConfig.startDay - 1) * testPaperConfig.unitSize) + 1}번 ~ {Math.min(testPaperConfig.endDay * testPaperConfig.unitSize, words.length)}번 단어
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">단어 개수 (최대 {words.length})</label>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {[10, 20, 40, 80, 100].map(count => (
+                        <button
+                          key={count}
+                          onClick={() => setTestPaperConfig({ ...testPaperConfig, wordCount: Math.min(count, words.length) })}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${testPaperConfig.wordCount === count ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                        >
+                          {count}개
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="number"
+                      min={1}
+                      max={words.length}
+                      value={testPaperConfig.wordCount}
+                      onChange={(e) => setTestPaperConfig({ ...testPaperConfig, wordCount: parseInt(e.target.value) || 0 })}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">시험 유형</label>
+                    <select
+                      value={testPaperConfig.testType}
+                      onChange={(e) => setTestPaperConfig({ ...testPaperConfig, testType: e.target.value as any })}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                    >
+                      <option value="en-to-ko">영어 → 뜻</option>
+                      <option value="ko-to-en">뜻 → 영어</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px] mt-auto">
+                    <button 
+                      onClick={() => setTestPaperConfig({ ...testPaperConfig, includeAnswerKey: !testPaperConfig.includeAnswerKey })}
+                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.includeAnswerKey ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
+                    >
+                      {testPaperConfig.includeAnswerKey && <CheckCircle2 size={14} />}
+                    </button>
+                    <span className="font-bold text-slate-700 text-xs">정답지 포함하기</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 pt-0 flex gap-3">
+              <button onClick={() => setIsTestPaperModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm">취소</button>
+              <button 
+                onClick={handleGenerateTestPaper} 
+                disabled={testPaperConfig.selectionMode === 'range' ? (testPaperConfig.startDay > testPaperConfig.endDay) : (testPaperConfig.wordCount <= 0)}
+                className="flex-1 py-4 bg-blue-500 text-white rounded-2xl font-bold shadow-lg shadow-blue-200 flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
+              >
+                <Download size={18} />
+                시험지 다운로드
               </button>
             </div>
           </motion.div>
