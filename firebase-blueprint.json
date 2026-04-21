@@ -8,8 +8,11 @@
         "uid": { "type": "string" },
         "email": { "type": "string" },
         "name": { "type": "string" },
-        "role": { "type": "string", "enum": ["teacher", "student"] },
+        "alias": { "type": "string" },
+        "role": { "type": "string", "enum": ["teacher", "student", "admin"] },
         "photoURL": { "type": "string" },
+        "isNameSet": { "type": "boolean" },
+        "teacherNote": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email", "role"]
@@ -40,6 +43,7 @@
         "description": { "type": "string" },
         "createdBy": { "type": "string" },
         "isPublic": { "type": "boolean" },
+        "defaultUnitSize": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "createdBy"]
@@ -120,6 +124,59 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "text", "title"]
+    },
+    "Evaluation": {
+      "title": "Evaluation",
+      "description": "Teacher's evaluation of a student",
+      "type": "object",
+      "properties": {
+        "evaluation": { "type": "string" },
+        "teacherUid": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["evaluation", "teacherUid"]
+    },
+    "Assignment": {
+      "title": "Assignment",
+      "description": "Homework or notice for a student",
+      "type": "object",
+      "properties": {
+        "studentUid": { "type": "string" },
+        "teacherUid": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentUid", "teacherUid", "content"]
+    },
+    "StudySession": {
+      "title": "StudySession",
+      "description": "Student's game play session record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "wordbookId": { "type": "string" },
+        "wordbookTitle": { "type": "string" },
+        "type": { "type": "string", "enum": ["quiz", "flashcard", "match", "conjugation"] },
+        "category": { "type": "string", "enum": ["word", "grammar"] },
+        "duration": { "type": "number" },
+        "score": { "type": "number" },
+        "totalItems": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "wordbookId", "type", "category", "duration"]
+    },
+    "GrammarExample": {
+      "title": "GrammarExample",
+      "description": "An example sentence for a grammar concept",
+      "type": "object",
+      "properties": {
+        "sentence": { "type": "string" },
+        "explanation": { "type": "string" },
+        "type": { "type": "string", "enum": ["A", "B"] },
+        "choices": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sentence", "explanation", "type", "choices"]
     }
   },
   "firestore": {
@@ -127,10 +184,14 @@
     "/students/{studentId}": { "schema": "Student", "description": "Student records" },
     "/wordbooks/{wordbookId}": { "schema": "Wordbook", "description": "Wordbook metadata" },
     "/wordbooks/{wordbookId}/words/{wordId}": { "schema": "Word", "description": "Words within a wordbook" },
+    "/wordbooks/{wordbookId}/words/{wordId}/examples/{exampleId}": { "schema": "GrammarExample", "description": "Examples for grammar concepts" },
     "/wordProgress/{progressId}": { "schema": "WordProgress", "description": "Learning progress tracking" },
     "/attendance/{attendanceId}": { "schema": "Attendance", "description": "Attendance logs" },
     "/consultations/{consultationId}": { "schema": "Consultation", "description": "Consultation logs" },
     "/matchLeaderboard/{recordId}": { "schema": "MatchLeaderboard", "description": "Match game leaderboard records" },
-    "/analysisHistory/{historyId}": { "schema": "AnalysisHistory", "description": "User's text analysis history" }
+    "/analysisHistory/{historyId}": { "schema": "AnalysisHistory", "description": "User's text analysis history" },
+    "/evaluations/{uid}": { "schema": "Evaluation", "description": "Teacher evaluations of students" },
+    "/assignments/{assignmentId}": { "schema": "Assignment", "description": "Student assignments/notices" },
+    "/studySessions/{sessionId}": { "schema": "StudySession", "description": "Student game playtime records" }
   }
 }

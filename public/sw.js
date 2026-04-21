@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edu-manager-v2';
+const CACHE_NAME = 'edu-manager-v6';
 const urlsToCache = [
   '/',
   '/index.html',

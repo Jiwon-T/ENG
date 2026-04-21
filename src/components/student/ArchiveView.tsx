@@ -17,6 +17,7 @@ export default function ArchiveView() {
   const [newFolderName, setNewFolderName] = useState('');
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [isMovingRecord, setIsMovingRecord] = useState<{ id: string, type: 'analysis' | 'generator' } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string, type: 'analysis' | 'generator' | 'folder', name?: string } | null>(null);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -68,9 +69,9 @@ export default function ArchiveView() {
   };
 
   const handleDeleteFolder = async (id: string) => {
-    if (!confirm('폴더를 삭제하시겠습니까? 폴더 내의 모든 기록도 함께 삭제됩니다.')) return;
     await deleteFolder(id);
     if (activeFolderId === id) setActiveFolderId(null);
+    setConfirmDelete(null);
   };
 
   const handleMoveRecord = async (folderId: string | null) => {
@@ -85,27 +86,33 @@ export default function ArchiveView() {
   };
 
   const handleDeleteRecord = async (id: string, type: 'analysis' | 'generator') => {
-    if (!confirm('기록을 삭제하시겠습니까?')) return;
     const collectionName = type === 'analysis' ? 'analysisHistory' : 'generatorHistory';
     await deleteDoc(doc(db, collectionName, id));
+    setConfirmDelete(null);
   };
+
+  const [analysisPage, setAnalysisPage] = useState(1);
+  const [generatorPage, setGeneratorPage] = useState(1);
+  const ITEMS_PER_PAGE = 5;
+
+  useEffect(() => {
+    setAnalysisPage(1);
+    setGeneratorPage(1);
+  }, [activeFolderId]);
 
   const filteredHistory = stats.history.filter(item => (item.folderId || null) === activeFolderId);
   const filteredGenHistory = stats.generatorHistory.filter(item => (item.folderId || null) === activeFolderId);
-  const recentHistory = stats.history.filter(item => !item.folderId).slice(0, 5);
-  const recentGenHistory = stats.generatorHistory.filter(item => !item.folderId).slice(0, 5);
+  const recentHistory = stats.history.filter(item => !item.folderId);
+  const recentGenHistory = stats.generatorHistory.filter(item => !item.folderId);
 
-  // Grouping logic for 5 items
-  const groupItems = (items: any[]) => {
-    const groups = [];
-    for (let i = 0; i < items.length; i += 5) {
-      groups.push(items.slice(i, i + 5));
-    }
-    return groups;
-  };
+  const currentAnalysisItems = activeFolderId ? filteredHistory : recentHistory;
+  const currentGeneratorItems = activeFolderId ? filteredGenHistory : recentGenHistory;
 
-  const analysisGroups = groupItems(activeFolderId ? filteredHistory : recentHistory);
-  const generatorGroups = groupItems(activeFolderId ? filteredGenHistory : recentGenHistory);
+  const totalAnalysisPages = Math.ceil(currentAnalysisItems.length / ITEMS_PER_PAGE);
+  const totalGeneratorPages = Math.ceil(currentGeneratorItems.length / ITEMS_PER_PAGE);
+
+  const paginatedAnalysis = currentAnalysisItems.slice((analysisPage - 1) * ITEMS_PER_PAGE, analysisPage * ITEMS_PER_PAGE);
+  const paginatedGenerator = currentGeneratorItems.slice((generatorPage - 1) * ITEMS_PER_PAGE, generatorPage * ITEMS_PER_PAGE);
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12">
@@ -168,7 +175,7 @@ export default function ArchiveView() {
                 <span className="font-bold text-sm md:text-base truncate w-full text-center">{folder.name}</span>
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id); }}
+                onClick={(e) => { e.stopPropagation(); setConfirmDelete({ id: folder.id, type: 'folder', name: folder.name }); }}
                 className="absolute top-1 right-1 md:top-2 md:right-2 p-1.5 md:p-2 bg-red-50 text-red-500 rounded-full opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity hover:bg-red-100"
               >
                 <Trash2 size={12} className="md:w-[14px] md:h-[14px]" />
@@ -188,53 +195,59 @@ export default function ArchiveView() {
             </div>
             <span className="text-[10px] md:text-xs text-slate-400 font-bold">{(activeFolderId ? filteredHistory : recentHistory).length}개</span>
           </h3>
-          <div className="space-y-8">
-            {analysisGroups.map((group, gIdx) => (
-              <div key={gIdx} className="space-y-4">
-                <div className="flex items-center gap-2 px-2">
-                  <div className="h-px flex-1 bg-slate-100"></div>
-                  <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Group {gIdx + 1}</span>
-                  <div className="h-px flex-1 bg-slate-100"></div>
-                </div>
-                {group.map((item) => (
-                  <div key={item.id} className="group relative flex items-center bg-slate-50 rounded-xl md:rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md transition-all overflow-hidden">
-                    <button 
-                      onClick={() => setSelectedAnalysis(item.result)}
-                      className="flex-1 text-left p-4 md:p-5 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3 md:gap-4">
-                        <div className="w-8 h-8 md:w-10 md:h-10 bg-white rounded-lg md:rounded-xl flex items-center justify-center text-blue-500 shadow-sm">
-                          <FileText size={16} className="md:w-5 md:h-5" />
-                        </div>
-                        <div>
-                          <div className="font-bold text-sm md:text-base text-slate-900 truncate max-w-[100px] sm:max-w-[150px] md:max-w-[200px]">{item.title || '제목 없음'}</div>
-                          <div className="text-[10px] md:text-xs text-slate-400 font-medium">
-                            {item.createdAt?.toDate().toLocaleDateString()}
-                          </div>
-                        </div>
+          <div className="space-y-4">
+            {paginatedAnalysis.map((item) => (
+              <div key={item.id} className="group relative flex items-center bg-slate-50 rounded-xl md:rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md transition-all overflow-hidden">
+                <button 
+                  onClick={() => setSelectedAnalysis(item.result)}
+                  className="flex-1 text-left p-4 md:p-5 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div className="w-8 h-8 md:w-10 md:h-10 bg-white rounded-lg md:rounded-xl flex items-center justify-center text-blue-500 shadow-sm">
+                      <FileText size={16} className="md:w-5 md:h-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm md:text-base text-slate-900 truncate max-w-[100px] sm:max-w-[150px] md:max-w-[200px]">{item.title || '제목 없음'}</div>
+                      <div className="text-[10px] md:text-xs text-slate-400 font-medium">
+                        {item.createdAt?.toDate().toLocaleDateString()}
                       </div>
-                    </button>
-                    <div className="flex items-center gap-1 md:gap-2 pr-4 md:pr-5">
-                      <button
-                        onClick={() => setIsMovingRecord({ id: item.id, type: 'analysis' })}
-                        className="p-1.5 md:p-2 text-slate-300 hover:text-blue-500 transition-colors"
-                        title="폴더 이동"
-                      >
-                        <Move size={14} className="md:w-4 md:h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteRecord(item.id, 'analysis')}
-                        className="p-1.5 md:p-2 text-slate-300 hover:text-red-500 transition-colors"
-                        title="삭제"
-                      >
-                        <Trash2 size={14} className="md:w-4 md:h-4" />
-                      </button>
                     </div>
                   </div>
-                ))}
+                </button>
+                <div className="flex items-center gap-1 md:gap-2 pr-4 md:pr-5">
+                  <button
+                    onClick={() => setIsMovingRecord({ id: item.id, type: 'analysis' })}
+                    className="p-1.5 md:p-2 text-slate-300 hover:text-blue-500 transition-colors"
+                    title="폴더 이동"
+                  >
+                    <Move size={14} className="md:w-4 md:h-4" />
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete({ id: item.id, type: 'analysis', name: item.title })}
+                    className="p-1.5 md:p-2 text-slate-300 hover:text-red-500 transition-colors"
+                    title="삭제"
+                  >
+                    <Trash2 size={14} className="md:w-4 md:h-4" />
+                  </button>
+                </div>
               </div>
             ))}
-            {analysisGroups.length === 0 && (
+            
+            {totalAnalysisPages > 1 && (
+              <div className="flex justify-center items-center gap-2 pt-4">
+                {Array.from({ length: totalAnalysisPages }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setAnalysisPage(i + 1)}
+                    className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${analysisPage === i + 1 ? 'bg-blue-500 text-white shadow-md' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {paginatedAnalysis.length === 0 && (
               <div className="py-8 md:py-12 text-center text-slate-400 font-medium text-sm">
                 기록이 없습니다.
               </div>
@@ -251,53 +264,59 @@ export default function ArchiveView() {
             </div>
             <span className="text-[10px] md:text-xs text-slate-400 font-bold">{(activeFolderId ? filteredGenHistory : recentGenHistory).length}개</span>
           </h3>
-          <div className="space-y-8">
-            {generatorGroups.map((group, gIdx) => (
-              <div key={gIdx} className="space-y-4">
-                <div className="flex items-center gap-2 px-2">
-                  <div className="h-px flex-1 bg-slate-100"></div>
-                  <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Group {gIdx + 1}</span>
-                  <div className="h-px flex-1 bg-slate-100"></div>
-                </div>
-                {group.map((item) => (
-                  <div key={item.id} className="group relative flex items-center bg-slate-50 rounded-xl md:rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md transition-all overflow-hidden">
-                    <button 
-                      onClick={() => setSelectedGenerator(item.result)}
-                      className="flex-1 text-left p-4 md:p-5 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3 md:gap-4">
-                        <div className="w-8 h-8 md:w-10 md:h-10 bg-white rounded-lg md:rounded-xl flex items-center justify-center text-amber-500 shadow-sm">
-                          <Sparkles size={16} className="md:w-5 md:h-5" />
-                        </div>
-                        <div>
-                          <div className="font-bold text-sm md:text-base text-slate-900 truncate max-w-[100px] sm:max-w-[150px] md:max-w-[200px]">{item.title || '변형 문제 세트'}</div>
-                          <div className="text-[10px] md:text-xs text-slate-400 font-medium">
-                            {item.createdAt?.toDate().toLocaleDateString()}
-                          </div>
-                        </div>
+          <div className="space-y-4">
+            {paginatedGenerator.map((item) => (
+              <div key={item.id} className="group relative flex items-center bg-slate-50 rounded-xl md:rounded-2xl border border-slate-100 hover:bg-white hover:shadow-md transition-all overflow-hidden">
+                <button 
+                  onClick={() => setSelectedGenerator(item.result)}
+                  className="flex-1 text-left p-4 md:p-5 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div className="w-8 h-8 md:w-10 md:h-10 bg-white rounded-lg md:rounded-xl flex items-center justify-center text-amber-500 shadow-sm">
+                      <Sparkles size={16} className="md:w-5 md:h-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm md:text-base text-slate-900 truncate max-w-[100px] sm:max-w-[150px] md:max-w-[200px]">{item.title || '변형 문제 세트'}</div>
+                      <div className="text-[10px] md:text-xs text-slate-400 font-medium">
+                        {item.createdAt?.toDate().toLocaleDateString()}
                       </div>
-                    </button>
-                    <div className="flex items-center gap-1 md:gap-2 pr-4 md:pr-5">
-                      <button
-                        onClick={() => setIsMovingRecord({ id: item.id, type: 'generator' })}
-                        className="p-1.5 md:p-2 text-slate-300 hover:text-amber-500 transition-colors"
-                        title="폴더 이동"
-                      >
-                        <Move size={14} className="md:w-4 md:h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteRecord(item.id, 'generator')}
-                        className="p-1.5 md:p-2 text-slate-300 hover:text-red-500 transition-colors"
-                        title="삭제"
-                      >
-                        <Trash2 size={14} className="md:w-4 md:h-4" />
-                      </button>
                     </div>
                   </div>
-                ))}
+                </button>
+                <div className="flex items-center gap-1 md:gap-2 pr-4 md:pr-5">
+                  <button
+                    onClick={() => setIsMovingRecord({ id: item.id, type: 'generator' })}
+                    className="p-1.5 md:p-2 text-slate-300 hover:text-amber-500 transition-colors"
+                    title="폴더 이동"
+                  >
+                    <Move size={14} className="md:w-4 md:h-4" />
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete({ id: item.id, type: 'generator', name: item.title })}
+                    className="p-1.5 md:p-2 text-slate-300 hover:text-red-500 transition-colors"
+                    title="삭제"
+                  >
+                    <Trash2 size={14} className="md:w-4 md:h-4" />
+                  </button>
+                </div>
               </div>
             ))}
-            {generatorGroups.length === 0 && (
+
+            {totalGeneratorPages > 1 && (
+              <div className="flex justify-center items-center gap-2 pt-4">
+                {Array.from({ length: totalGeneratorPages }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setGeneratorPage(i + 1)}
+                    className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${generatorPage === i + 1 ? 'bg-amber-500 text-white shadow-md' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {paginatedGenerator.length === 0 && (
               <div className="py-8 md:py-12 text-center text-slate-400 font-medium text-sm">
                 기록이 없습니다.
               </div>
@@ -305,6 +324,40 @@ export default function ArchiveView() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white p-8 rounded-3xl w-full max-w-md shadow-2xl">
+            <h3 className="text-xl font-black text-slate-900 mb-4">정말 삭제하시겠습니까?</h3>
+            <p className="text-slate-500 mb-8 font-medium leading-relaxed">
+              {confirmDelete.type === 'folder' 
+                ? `[${confirmDelete.name}] 폴더와 그 안의 모든 기록이 영구적으로 삭제됩니다.`
+                : `[${confirmDelete.name || '제목 없음'}] 기록이 영구적으로 삭제됩니다.`}
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setConfirmDelete(null)} 
+                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all"
+              >
+                취소
+              </button>
+              <button 
+                onClick={() => {
+                  if (confirmDelete.type === 'folder') {
+                    handleDeleteFolder(confirmDelete.id);
+                  } else {
+                    handleDeleteRecord(confirmDelete.id, confirmDelete.type as 'analysis' | 'generator');
+                  }
+                }} 
+                className="flex-1 py-4 bg-red-500 text-white rounded-2xl font-bold hover:bg-red-600 transition-all"
+              >
+                삭제하기
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {/* Move Record Modal */}
       {isMovingRecord && (

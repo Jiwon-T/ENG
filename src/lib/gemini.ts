@@ -1,6 +1,3 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 export interface Chunk {
   text: string;
@@ -62,6 +59,9 @@ export async function analyzeEnglishText(
   selectedTypes: QuestionType[] = [],
   questionsOnly: boolean = false
 ): Promise<AnalysisResult> {
+  const { GoogleGenAI, Type } = await import("@google/genai");
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+  
   const prompt = `Analyze the following English text for a Korean high school student.
     
     ${!questionsOnly ? `

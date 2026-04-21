@@ -1,17 +1,18 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Languages, BookOpen, History, BarChart3, FileText, Users, ArrowRight, X } from 'lucide-react';
+import { GraduationCap, Languages, BookOpen, History, BarChart3, FileText, Users, ArrowRight, X, Sparkles } from 'lucide-react';
 
 interface HomeProps {
-  onNavigate: (view: 'home' | 'analyzer' | 'generator' | 'vocab' | 'vocab-mobile' | 'tutor' | 'report' | 'archive' | 'teacher-room') => void;
+  onNavigate: (view: 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'vocab-mobile' | 'tutor' | 'report' | 'archive' | 'teacher-room') => void;
   userRole?: 'teacher' | 'student' | 'admin';
+  hasNewAssignment?: boolean;
 }
 
-export default function Home({ onNavigate, userRole }: HomeProps) {
+export default function Home({ onNavigate, userRole, hasNewAssignment }: HomeProps) {
   const menuItems = [
     {
       id: 'vocab',
-      title: '단어장',
+      title: '단어 세트',
       description: '객관식, 플래시카드, 매치게임으로 단어장을 학습합니다.',
       icon: <BookOpen className="text-pastel-pink-500 w-4 h-4 md:w-8 md:h-8" />,
       color: 'bg-pastel-pink-50',
@@ -20,13 +21,23 @@ export default function Home({ onNavigate, userRole }: HomeProps) {
       show: true
     },
     {
+      id: 'grammar',
+      title: '드릴 세트',
+      description: '주요 문법 포인트를 학습합니다.',
+      icon: <GraduationCap className="text-purple-500 w-4 h-4 md:w-8 md:h-8" />,
+      color: 'bg-purple-50',
+      borderColor: 'border-purple-100',
+      textColor: 'text-purple-600',
+      show: true
+    },
+    {
       id: 'analyzer',
       title: '지문 분석기',
       description: '영어 지문을 분석해 보세요.',
-      icon: <Languages className="text-green-500 w-4 h-4 md:w-8 md:h-8" />,
-      color: 'bg-green-50',
-      borderColor: 'border-green-100',
-      textColor: 'text-green-600',
+      icon: <Languages className="text-blue-500 w-4 h-4 md:w-8 md:h-8" />,
+      color: 'bg-blue-50',
+      borderColor: 'border-blue-100',
+      textColor: 'text-blue-600',
       show: true
     },
     {
@@ -37,36 +48,6 @@ export default function Home({ onNavigate, userRole }: HomeProps) {
       color: 'bg-amber-50',
       borderColor: 'border-amber-100',
       textColor: 'text-amber-600',
-      show: true
-    },
-    {
-      id: 'archive',
-      title: '보관소',
-      description: '저장된 지문 분석과 변형 문제들을 관리합니다.',
-      icon: <History className="text-blue-500 w-4 h-4 md:w-8 md:h-8" />,
-      color: 'bg-blue-50',
-      borderColor: 'border-blue-100',
-      textColor: 'text-blue-600',
-      show: true
-    },
-    {
-      id: 'teacher-room',
-      title: '선생님방',
-      description: '수강생, 단어장 등을 관리합니다.',
-      icon: <Users className="text-violet-500 w-4 h-4 md:w-8 md:h-8" />,
-      color: 'bg-violet-50',
-      borderColor: 'border-violet-100',
-      textColor: 'text-violet-600',
-      show: userRole === 'teacher' || userRole === 'admin'
-    },
-    {
-      id: 'report',
-      title: '학습 리포트',
-      description: '나만의 단어 학습 현황과 성취도를 확인합니다.',
-      icon: <BarChart3 className="text-purple-500 w-4 h-4 md:w-8 md:h-8" />,
-      color: 'bg-purple-50',
-      borderColor: 'border-purple-100',
-      textColor: 'text-purple-600',
       show: true
     }
   ];
@@ -100,7 +81,7 @@ export default function Home({ onNavigate, userRole }: HomeProps) {
               <div className="flex-shrink-0">
                 {item.icon}
               </div>
-              <h3 className={`text-base md:text-xl font-black ${item.textColor}`}>
+              <h3 className={`text-base md:text-xl font-black ${item.textColor} flex items-center gap-2`}>
                 {item.title}
               </h3>
             </div>
@@ -122,7 +103,7 @@ export default function Home({ onNavigate, userRole }: HomeProps) {
           © 2026 지원T English. All rights reserved.
         </p>
         <p className="text-slate-400 text-sm font-medium mt-2">
-          ✉️ thaahfl@naver.com
+          ✉️ lizywon@naver.com
         </p>
       </footer>
     </div>

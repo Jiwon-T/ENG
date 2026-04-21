@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, collection, query, where, onSnapshot, Timestamp, addDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, collection, query, where, onSnapshot, Timestamp, addDoc, getDocs, deleteDoc, updateDoc, orderBy } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
@@ -233,4 +233,86 @@ export async function renameFolder(folderId: string, newName: string) {
 
 export async function logout() {
   await signOut(auth);
+}
+
+export async function saveAssignment(studentUid: string, teacherUid: string, content: string) {
+  const assignmentRef = collection(db, 'assignments');
+  const q = query(assignmentRef, where('studentUid', '==', studentUid), orderBy('createdAt', 'desc'));
+  
+  try {
+    // Add new assignment
+    await addDoc(assignmentRef, {
+      studentUid,
+      teacherUid,
+      content,
+      createdAt: Timestamp.now(),
+      isNew: true
+    });
+
+    // Fetch existing to enforce limit
+    const snapshot = await getDocs(q);
+    if (snapshot.docs.length >= 10) {
+      const allDocs = snapshot.docs;
+      if (allDocs.length >= 10) {
+        const toDelete = allDocs.slice(9); // Keep 0-8, delete 9 and beyond
+        for (const d of toDelete) {
+          await deleteDoc(doc(db, 'assignments', d.id));
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to save assignment:', error);
+  }
+}
+
+export async function updateAssignment(id: string, content: string) {
+  try {
+    await updateDoc(doc(db, 'assignments', id), {
+      content,
+      updatedAt: Timestamp.now()
+    });
+  } catch (error) {
+    console.error('Failed to update assignment:', error);
+    throw error;
+  }
+}
+
+export async function deleteAssignment(id: string) {
+  try {
+    await deleteDoc(doc(db, 'assignments', id));
+  } catch (error) {
+    console.error('Failed to delete assignment:', error);
+    throw error;
+  }
+}
+
+export async function recordStudySession(data: {
+  uid: string;
+  wordbookId: string;
+  wordbookTitle: string;
+  type: 'quiz' | 'flashcard' | 'match' | 'conjugation';
+  category: 'word' | 'grammar';
+  duration: number; // in seconds
+  score?: number;
+  totalItems?: number;
+}) {
+  const sessionRef = collection(db, 'studySessions');
+  try {
+    const docData: any = {
+      ...data,
+      createdAt: Timestamp.now()
+    };
+    
+    // Remove undefined fields
+    Object.keys(docData).forEach(key => {
+      if (docData[key] === undefined) {
+        delete docData[key];
+      }
+    });
+
+    await addDoc(sessionRef, docData);
+    console.log(`Study session recorded: ${data.type} for ${data.duration}s`);
+  } catch (error) {
+    console.error('Failed to record study session:', error);
+  }
 }

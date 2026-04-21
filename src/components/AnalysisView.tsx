@@ -2,10 +2,6 @@ import React, { useRef, useState, useEffect } from 'react';
 import { AnalysisResult, SentenceAnalysis } from '../lib/gemini';
 import { Download, FileText, File as FileIcon, Sparkles, Printer, Folder, Archive, CheckCircle2, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, Table, TableRow, TableCell, WidthType, TableBorders, ShadingType, VerticalAlign } from 'docx';
-import { saveAs } from 'file-saver';
 import { db, auth } from '../lib/firebase';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 
@@ -60,24 +56,51 @@ export default function AnalysisView({ result, isMobile, questionsOnly }: Analys
   const exportToPDF = async () => {
     if (!containerRef.current) return;
     
-    const canvas = await html2canvas(containerRef.current, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: '#ffffff'
-    });
-    
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-    
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`${result.title || 'analysis'}.pdf`);
+    setIsSaving(true);
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const jsPDF = (await import('jspdf')).default;
+
+      const canvas = await html2canvas(containerRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`${result.title || 'analysis'}.pdf`);
+    } catch (e) {
+      console.error('PDF export failed:', e);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const exportToWord = async () => {
-    const doc = new Document({
+    setIsSaving(true);
+    try {
+      const { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, Table, TableRow, TableCell, WidthType, TableBorders, ShadingType, VerticalAlign } = await import('docx');
+      const { saveAs } = (await import('file-saver'));
+
+      const parseTextWithUnderline = (text: string, size: number = 18) => {
+        if (!text) return [];
+        const parts = text.split(/(<u>.*?<\/u>)/g);
+        return parts.map((part) => {
+          if (part.startsWith('<u>') && part.endsWith('</u>')) {
+            const content = part.substring(3, part.length - 4);
+            return new TextRun({ text: content, underline: {}, bold: true, size });
+          }
+          return new TextRun({ text: part, size });
+        });
+      };
+
+      const doc = new Document({
       sections: [
         {
           properties: {},
@@ -490,6 +513,11 @@ export default function AnalysisView({ result, isMobile, questionsOnly }: Analys
 
     const blob = await Packer.toBlob(doc);
     saveAs(blob, `${result.title || 'analysis'}.docx`);
+    } catch (e) {
+      console.error('Word export failed:', e);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const renderPassage = (text: string) => {
@@ -507,18 +535,6 @@ export default function AnalysisView({ result, isMobile, questionsOnly }: Analys
         );
       }
       return part;
-    });
-  };
-
-  const parseTextWithUnderline = (text: string, size: number = 18) => {
-    if (!text) return [];
-    const parts = text.split(/(<u>.*?<\/u>)/g);
-    return parts.map((part) => {
-      if (part.startsWith('<u>') && part.endsWith('</u>')) {
-        const content = part.substring(3, part.length - 4);
-        return new TextRun({ text: content, underline: {}, bold: true, size });
-      }
-      return new TextRun({ text: part, size });
     });
   };
 

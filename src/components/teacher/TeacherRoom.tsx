@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Calendar, ClipboardList, Plus, Search, MoreVertical, Phone, GraduationCap, Clock, MessageSquare, Trash2, Save, X, FileSpreadsheet, BookOpen, BarChart3 } from 'lucide-react';
+import { Users, Calendar, ClipboardList, Plus, Search, MoreVertical, Phone, GraduationCap, Clock, MessageSquare, Trash2, Save, X, FileSpreadsheet, BookOpen, BarChart3, Sparkles, FileText } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, getDocs, writeBatch } from 'firebase/firestore';
 
@@ -14,16 +14,20 @@ interface StudentUser {
   role: string;
   photoURL?: string;
   alias?: string;
+  teacherNote?: string;
 }
 
 export default function TeacherRoom() {
-  const [activeTab, setActiveTab] = useState<'students' | 'wordbook' | 'reports'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'wordbook' | 'grammar' | 'reports'>('students');
   const [students, setStudents] = useState<StudentUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingAlias, setEditingAlias] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState<string | null>(null);
   const [aliasValue, setAliasValue] = useState('');
+  const [noteValue, setNoteValue] = useState('');
   const [selectedStudentUid, setSelectedStudentUid] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [confirmDeleteUid, setConfirmDeleteUid] = useState<string | null>(null);
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -57,13 +61,23 @@ export default function TeacherRoom() {
       setEditingAlias(null);
     } catch (error) {
       console.error('Failed to update alias:', error);
-      alert('별명 수정 중 오류가 발생했습니다.');
+      alert('이름 수정 중 오류가 발생했습니다.');
     }
   };
 
-  const handleDeleteStudent = async (uid: string, name: string) => {
-    if (!window.confirm(`${name} 학생을 정말 탈퇴 처리하시겠습니까? 모든 학습 기록이 삭제됩니다.`)) return;
+  const handleUpdateNote = async (uid: string) => {
+    try {
+      await updateDoc(doc(db, 'users', uid), {
+        teacherNote: noteValue.trim()
+      });
+      setEditingNote(null);
+    } catch (error) {
+      console.error('Failed to update note:', error);
+      alert('선생님 메모 수정 중 오류가 발생했습니다.');
+    }
+  };
 
+  const handleDeleteStudent = async (uid: string) => {
     try {
       // Delete user document
       await deleteDoc(doc(db, 'users', uid));
@@ -71,7 +85,7 @@ export default function TeacherRoom() {
       // Delete evaluation if exists
       await deleteDoc(doc(db, 'evaluations', uid));
       
-      alert('수강생 탈퇴 처리가 완료되었습니다.');
+      setConfirmDeleteUid(null);
     } catch (error) {
       console.error('Failed to withdraw student:', error);
       alert('탈퇴 처리 중 오류가 발생했습니다.');
@@ -93,6 +107,7 @@ export default function TeacherRoom() {
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-100 w-full md:w-auto overflow-x-auto no-scrollbar">
           <TabButton active={activeTab === 'students'} onClick={() => setActiveTab('students')} icon={<Users size={18} />} label="수강생 관리" />
           <TabButton active={activeTab === 'wordbook'} onClick={() => setActiveTab('wordbook')} icon={<BookOpen size={18} />} label="단어장 관리" />
+          <TabButton active={activeTab === 'grammar'} onClick={() => setActiveTab('grammar')} icon={<Sparkles size={18} />} label="문법 세트 관리" />
           <TabButton active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} icon={<BarChart3 size={18} />} label="학습 리포트" />
         </div>
       </header>
@@ -111,7 +126,7 @@ export default function TeacherRoom() {
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input
                     type="text"
-                    placeholder="학생 이름/별명 검색..."
+                    placeholder="학습자 이름/메모 검색..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none transition-all text-sm font-medium"
@@ -124,7 +139,8 @@ export default function TeacherRoom() {
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100">
                       <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">계정 정보</th>
-                      <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">별명 (학습자 이름)</th>
+                      <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">학습자 이름</th>
+                      <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">선생님 메모</th>
                       <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">이메일</th>
                       <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">구분</th>
                       <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">관리</th>
@@ -135,6 +151,7 @@ export default function TeacherRoom() {
                       .filter(s => 
                         s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                         (s.alias && s.alias.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                        (s.teacherNote && s.teacherNote.toLowerCase().includes(searchQuery.toLowerCase())) ||
                         s.email.toLowerCase().includes(searchQuery.toLowerCase())
                       )
                       .map((student) => (
@@ -142,10 +159,10 @@ export default function TeacherRoom() {
                         <td className="px-8 py-5">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-pastel-pink-100 rounded-xl flex items-center justify-center text-pastel-pink-600 font-black overflow-hidden">
-                              {student.photoURL ? (
+                              {student.photoURL && student.photoURL.startsWith('http') ? (
                                 <img src={student.photoURL} alt={student.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               ) : (
-                                student.name[0]
+                                <span className="text-xl">{student.photoURL || student.name[0]}</span>
                               )}
                             </div>
                             <div>
@@ -185,7 +202,7 @@ export default function TeacherRoom() {
                           ) : (
                             <div className="flex items-center gap-2">
                               <span className={`text-sm font-black ${student.alias ? 'text-slate-900' : 'text-slate-300 italic'}`}>
-                                {student.alias || '별명 없음'}
+                                {student.alias || '이름 미설정'}
                               </span>
                               <button 
                                 onClick={() => {
@@ -195,6 +212,47 @@ export default function TeacherRoom() {
                                 className="p-1 text-slate-300 hover:text-pastel-pink-500 transition-colors opacity-0 group-hover:opacity-100"
                               >
                                 <MessageSquare size={14} />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-8 py-5">
+                          {editingNote === student.uid ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={noteValue}
+                                onChange={(e) => setNoteValue(e.target.value)}
+                                placeholder="메모 입력..."
+                                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-pastel-pink-200 w-40"
+                                autoFocus
+                              />
+                              <button 
+                                onClick={() => handleUpdateNote(student.uid)}
+                                className="p-1.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
+                              >
+                                <Save size={12} />
+                              </button>
+                              <button 
+                                onClick={() => setEditingNote(null)}
+                                className="p-1.5 bg-slate-100 text-slate-400 rounded-lg hover:bg-slate-200 transition-colors"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs font-medium ${student.teacherNote ? 'text-slate-600' : 'text-slate-300 italic'}`}>
+                                {student.teacherNote || '메모 없음'}
+                              </span>
+                              <button 
+                                onClick={() => {
+                                  setEditingNote(student.uid);
+                                  setNoteValue(student.teacherNote || '');
+                                }}
+                                className="p-1 text-slate-300 hover:text-slate-500 transition-colors opacity-0 group-hover:opacity-100"
+                              >
+                                <FileText size={14} />
                               </button>
                             </div>
                           )}
@@ -219,13 +277,30 @@ export default function TeacherRoom() {
                               <BarChart3 size={18} />
                             </button>
                             {student.role !== 'teacher' && (
-                              <button 
-                                onClick={() => handleDeleteStudent(student.uid, student.alias || student.name)}
-                                className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                                title="학생 삭제"
-                              >
-                                <Trash2 size={18} />
-                              </button>
+                              confirmDeleteUid === student.uid ? (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleDeleteStudent(student.uid)}
+                                    className="px-2 py-1 bg-red-500 text-white text-[10px] font-black rounded-md"
+                                  >
+                                    확인
+                                  </button>
+                                  <button
+                                    onClick={() => setConfirmDeleteUid(null)}
+                                    className="px-2 py-1 bg-slate-200 text-slate-500 text-[10px] font-black rounded-md"
+                                  >
+                                    취소
+                                  </button>
+                                </div>
+                              ) : (
+                                <button 
+                                  onClick={() => setConfirmDeleteUid(student.uid)}
+                                  className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                  title="학생 삭제"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              )
                             )}
                           </div>
                         </td>
@@ -256,7 +331,18 @@ export default function TeacherRoom() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
             >
-              <WordbookManager />
+              <WordbookManager category="word" />
+            </motion.div>
+          )}
+
+          {activeTab === 'grammar' && (
+            <motion.div
+              key="grammar"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+            >
+              <WordbookManager category="grammar" />
             </motion.div>
           )}
 

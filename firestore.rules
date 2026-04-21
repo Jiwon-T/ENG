@@ -61,6 +61,18 @@
 //   - imageUrl: string
 //   - order: number
 //
+// Collection: studySessions
+// Fields:
+//   - uid: string (required)
+//   - wordbookId: string (required)
+//   - wordbookTitle: string
+//   - type: string (required, 'quiz' | 'flashcard' | 'match' | 'conjugation')
+//   - category: string (required, 'word' | 'grammar')
+//   - duration: number (required)
+//   - score: number
+//   - totalItems: number
+//   - createdAt: timestamp
+//
 // ===============================================================
 
 rules_version = '2';
@@ -90,19 +102,53 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
     }
 
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'email', 'role']) &&
-             data.uid is string &&
-             data.email is string &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.email is string && isValidEmail(data.email) &&
              data.role in ['teacher', 'student', 'admin'] &&
-             (!('alias' in data) || data.alias is string);
+             (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
+             (!('alias' in data) || (data.alias is string && data.alias.size() <= 100)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 2000)) &&
+             (!('isNameSet' in data) || data.isNameSet is bool) &&
+             (!('teacherNote' in data) || (data.teacherNote is string && data.teacherNote.size() <= 2000));
     }
 
     function isValidStudent(data) {
       return data.keys().hasAll(['name', 'teacherUid', 'status']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.teacherUid is string &&
-             data.status in ['active', 'waiting', 'graduated', 'withdrawn'];
+             data.status in ['active', 'waiting', 'graduated', 'withdrawn'] &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() < 20)) &&
+             (!('parentPhone' in data) || (data.parentPhone is string && data.parentPhone.size() < 20)) &&
+             (!('memo' in data) || (data.memo is string && data.memo.size() < 5000));
+    }
+
+    function isValidStudySession(data) {
+      return data.keys().hasAll(['uid', 'wordbookId', 'type', 'category', 'duration']) &&
+             data.uid is string &&
+             data.wordbookId is string &&
+             data.type in ['quiz', 'flashcard', 'match', 'conjugation'] &&
+             data.category in ['word', 'grammar'] &&
+             data.duration is number && data.duration >= 0 && data.duration < 86400 &&
+             (!('wordbookTitle' in data) || (data.wordbookTitle is string && data.wordbookTitle.size() < 200)) &&
+             (!('score' in data) || data.score is number) &&
+             (!('totalItems' in data) || data.totalItems is number) &&
+             (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidAttendance(data) {
+      return data.keys().hasAll(['studentId', 'date', 'status', 'updatedAt']) &&
+             data.studentId is string &&
+             data.date is string && data.date.matches("^\\d{4}-\\d{2}-\\d{2}$") &&
+             data.status in ['present', 'absent', 'late'] &&
+             data.updatedAt is timestamp &&
+             (!('teacherUid' in data) || data.teacherUid is string);
     }
 
     // ===============================================================
@@ -110,32 +156,61 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
-                    (isOwner(uid) && request.resource.data.role == 'student' || isAdmin());
-      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
-                    ((isOwner(uid) && request.resource.data.role == resource.data.role) || isAdmin());
+      allow read: if isAuthenticated(); // Allow reading profile for UI components (like name display)
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && isOwner(uid);
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
+        isAdmin() ||
+        (isOwner(uid) && 
+         request.resource.data.role == resource.data.role && 
+         // Student cannot change their own teacherNote
+         (resource.data.role != 'student' || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['teacherNote']))
+        ) ||
+        (isTeacher() && 
+         resource.data.role == 'student' && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['alias', 'teacherNote']))
+      );
       allow delete: if isAdmin();
     }
 
     match /students/{studentId} {
-      allow read: if isAuthenticated() && (resource.data.teacherUid == request.auth.uid || isAdmin());
+      allow read: if isAuthenticated(); // Allow listing students for assignment/attendance views
       allow create: if isAuthenticated() && isValidStudent(request.resource.data) && 
-                    (request.resource.data.teacherUid == request.auth.uid || isAdmin());
+                    (isTeacher() || isAdmin());
       allow update: if isAuthenticated() && isValidStudent(request.resource.data) && 
-                    (resource.data.teacherUid == request.auth.uid || isAdmin());
-      allow delete: if isAuthenticated() && (resource.data.teacherUid == request.auth.uid || isAdmin());
+                    (isTeacher() || isAdmin());
+      allow delete: if isAuthenticated() && (isTeacher() || isAdmin());
     }
 
     match /wordbooks/{wordbookId} {
       allow read: if isAuthenticated();
       allow create: if isTeacher() || isAdmin();
-      allow update: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin());
-      allow delete: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid || 
+        (isTeacher() && resource.data.createdBy == 'system') || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid || 
+        (isTeacher() && resource.data.createdBy == 'system') || 
+        isAdmin()
+      );
 
       match /words/{wordId} {
         allow read: if isAuthenticated();
-        allow write: if isAuthenticated() && (get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data.createdBy == request.auth.uid || isAdmin());
+        allow write: if isAuthenticated() && (
+          get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data.createdBy == request.auth.uid || 
+          (isTeacher() && get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data.createdBy == 'system') || 
+          isAdmin()
+        );
+
+        match /examples/{exampleId} {
+          allow read: if isAuthenticated();
+          allow write: if isAuthenticated() && (
+            get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data.createdBy == request.auth.uid || 
+            (isTeacher() && get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data.createdBy == 'system') || 
+            isAdmin()
+          );
+        }
       }
     }
 
@@ -145,8 +220,12 @@ service cloud.firestore {
     }
 
     match /attendance/{attendanceId} {
-      allow read: if isAuthenticated() && (resource.data.teacherUid == request.auth.uid || resource.data.studentId == request.auth.uid || isAdmin());
-      allow write: if isTeacher() || isAdmin();
+      allow read: if isAuthenticated() && (isTeacher() || resource.data.studentId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidAttendance(request.resource.data) && 
+                    (request.resource.data.studentId == request.auth.uid || isTeacher() || isAdmin());
+      allow update: if isAuthenticated() && isValidAttendance(request.resource.data) && 
+                    (isTeacher() || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /consultations/{consultationId} {
@@ -184,6 +263,19 @@ service cloud.firestore {
       allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
       allow update: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
       allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if isAuthenticated() && (resource.data.studentUid == request.auth.uid || isTeacher() || isAdmin());
+      allow create: if isTeacher() || isAdmin();
+      allow update: if isAuthenticated() && (resource.data.studentUid == request.auth.uid || isTeacher() || isAdmin());
+      allow delete: if isTeacher() || isAdmin();
+    }
+
+    match /studySessions/{sessionId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isTeacher() || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid && isValidStudySession(request.resource.data);
+      allow update, delete: if isAdmin();
     }
   }
 }

@@ -1,7 +1,8 @@
 {
   "name": "지원T English",
-  "description": "지원T 지문 분석 / 단어장",
+  "description": "지원T 학생들을 위한 학습 관리 서비스",
   "requestFramePermissions": [],
   "y7": [],
-  "Vp": []
+  "Vp": [],
+  "majorCapabilities": []
 }
