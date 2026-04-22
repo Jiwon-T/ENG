@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BarChart3, TrendingUp, BookOpen, Calendar, Search, User, Save, X, CheckCircle2, Trash2, MessageSquare, ClipboardList, Gamepad2, Clock, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { BarChart3, TrendingUp, BookOpen, Calendar, Search, User, Save, X, CheckCircle2, Trash2, MessageSquare, ClipboardList, Gamepad2, Clock, ChevronLeft, ChevronRight, Pencil, XCircle } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType, saveAssignment, updateAssignment, deleteAssignment } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, doc, setDoc, getDoc, Timestamp, deleteDoc, orderBy } from 'firebase/firestore';
 
@@ -53,8 +53,12 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
   const [sessionHistory, setSessionHistory] = useState<any[]>([]);
   const [studentAssignments, setStudentAssignments] = useState<any[]>([]);
   const [assignmentPage, setAssignmentPage] = useState(1);
+  const [sessionPage, setSessionPage] = useState(1);
+  const [wrongPage, setWrongPage] = useState(1);
   const [isConfirmingWithdraw, setIsConfirmingWithdraw] = useState(false);
   const ASSIGNMENTS_PER_PAGE = 5;
+  const SESSIONS_PER_PAGE = 5;
+  const WRONG_PER_PAGE = 5;
 
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState('');
@@ -149,6 +153,13 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
     };
   }, [selectedStudent]);
 
+  // Reset pages when student changes
+  useEffect(() => {
+    setAssignmentPage(1);
+    setSessionPage(1);
+    setWrongPage(1);
+  }, [selectedStudent]);
+
   const handleSaveEvaluation = async () => {
     if (!selectedStudent || !auth.currentUser) return;
     setSaving(true);
@@ -240,6 +251,19 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
 
   const totalAssignmentPages = Math.ceil(studentAssignments.length / ASSIGNMENTS_PER_PAGE);
   const paginatedAssignments = studentAssignments.slice((assignmentPage - 1) * ASSIGNMENTS_PER_PAGE, assignmentPage * ASSIGNMENTS_PER_PAGE);
+
+  const totalSessionPages = Math.ceil(sessionHistory.length / SESSIONS_PER_PAGE);
+  const paginatedSessions = sessionHistory.slice((sessionPage - 1) * SESSIONS_PER_PAGE, sessionPage * SESSIONS_PER_PAGE);
+
+  const allIncorrectAnswers = sessionHistory.flatMap(session => 
+    (session.incorrectAnswers || []).map((ans: any) => ({
+      ...ans,
+      wordbookTitle: session.wordbookTitle,
+      createdAt: session.createdAt
+    }))
+  );
+  const totalWrongPages = Math.ceil(allIncorrectAnswers.length / WRONG_PER_PAGE);
+  const paginatedWrongAnswers = allIncorrectAnswers.slice((wrongPage - 1) * WRONG_PER_PAGE, wrongPage * WRONG_PER_PAGE);
 
   const filteredStudents = students.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -582,15 +606,15 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                     </div>
                   </div>
 
-                  <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+                  <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 mb-8">
                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                       <TrendingUp size={16} className="text-pastel-pink-500" />
                       학습 활동 로그
                     </h3>
                     <div className="space-y-3">
-                      {sessionHistory.length > 0 ? (
-                        sessionHistory.slice(0, 10).map((session, idx) => (
-                          <div key={idx} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
+                      {paginatedSessions.length > 0 ? (
+                        paginatedSessions.map((session, idx) => (
+                          <div key={idx} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm hover:shadow-md transition-all">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500">
                                 {session.type === 'quiz' && <CheckCircle2 size={20} />}
@@ -623,6 +647,107 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                         </div>
                       )}
                     </div>
+
+                    {totalSessionPages > 1 && (
+                      <div className="flex justify-center items-center gap-4 pt-6">
+                        <button
+                          onClick={() => setSessionPage(prev => Math.max(1, prev - 1))}
+                          disabled={sessionPage === 1}
+                          className="p-1.5 rounded-lg hover:bg-slate-200 disabled:opacity-30 transition-all text-slate-400"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <span className="text-xs font-bold text-slate-400">{sessionPage} / {totalSessionPages}</span>
+                        <button
+                          onClick={() => setSessionPage(prev => Math.min(totalSessionPages, prev + 1))}
+                          disabled={sessionPage === totalSessionPages}
+                          className="p-1.5 rounded-lg hover:bg-slate-200 disabled:opacity-30 transition-all text-slate-400"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 5. 오답 노트 섹션 */}
+                  <div className="p-6 bg-rose-50/30 rounded-[2rem] border border-rose-100">
+                    <h3 className="text-xs font-black text-rose-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <XCircle size={16} className="text-rose-500" />
+                      수강생 오답 노트
+                      {allIncorrectAnswers.length > 0 && (
+                        <span className="ml-auto text-[10px] font-black bg-rose-100 text-rose-500 px-2 py-1 rounded-full">
+                          총 {allIncorrectAnswers.length}개
+                        </span>
+                      )}
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      {paginatedWrongAnswers.length > 0 ? (
+                        paginatedWrongAnswers.map((ans, idx) => (
+                          <div key={idx} className="bg-white p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between border border-rose-50 shadow-sm gap-4">
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-[9px] font-black text-rose-400 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 uppercase">
+                                  {ans.wordbookTitle}
+                                </span>
+                                <span className="text-[9px] font-bold text-slate-400">
+                                  {ans.createdAt?.toMillis ? new Date(ans.createdAt.toMillis()).toLocaleDateString() : '최근'}
+                                </span>
+                              </div>
+                              <div className="flex items-baseline gap-2">
+                                <span className="font-black text-slate-900 text-sm">
+                                  {ans.quizSentence ? (
+                                    <span className="italic">"{ans.quizSentence}"</span>
+                                  ) : (
+                                    ans.word
+                                  )}
+                                </span>
+                                {!ans.quizSentence && <span className="text-xs font-bold text-slate-500">{ans.meaning}</span>}
+                                {ans.isReviewed && (
+                                  <span className="ml-2 text-[9px] font-black text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 uppercase animate-pulse">
+                                    복습 완료
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 bg-rose-50/50 p-2 rounded-xl border border-rose-50 divide-x divide-rose-100">
+                              <div className="px-3 text-center">
+                                <div className="text-[8px] font-black text-rose-400 uppercase">오답</div>
+                                <div className="text-xs font-bold text-rose-600">{ans.userChoice}</div>
+                              </div>
+                              <div className="px-3 text-center">
+                                <div className="text-[8px] font-black text-emerald-400 uppercase">정답</div>
+                                <div className="text-xs font-bold text-emerald-600">{ans.correctAnswer}</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="py-12 text-center text-slate-300 italic text-sm bg-white rounded-2xl border border-dashed border-rose-100">
+                          기록된 오답 내역이 없습니다.
+                        </div>
+                      )}
+                    </div>
+
+                    {totalWrongPages > 1 && (
+                      <div className="flex justify-center items-center gap-4 pt-6">
+                        <button
+                          onClick={() => setWrongPage(prev => Math.max(1, prev - 1))}
+                          disabled={wrongPage === 1}
+                          className="p-1.5 rounded-lg hover:bg-rose-100 disabled:opacity-30 transition-all text-rose-300"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <span className="text-xs font-bold text-rose-300">{wrongPage} / {totalWrongPages}</span>
+                        <button
+                          onClick={() => setWrongPage(prev => Math.min(totalWrongPages, prev + 1))}
+                          disabled={wrongPage === totalWrongPages}
+                          className="p-1.5 rounded-lg hover:bg-rose-100 disabled:opacity-30 transition-all text-rose-300"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

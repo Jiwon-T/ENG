@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, CheckCircle2, Circle, ChevronRight, Sparkles, Trophy, Volume2, RotateCcw, ChevronLeft, Gamepad2, Timer, X, Info } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType, recordStudySession } from '../../lib/firebase';
+import { PetService } from '../../lib/petService';
 import { collection, query, where, onSnapshot, doc, setDoc, Timestamp, getDocs, orderBy, limit, addDoc } from 'firebase/firestore';
 
 interface Wordbook {
@@ -85,11 +86,40 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
   const [pendingMode, setPendingMode] = useState<'flashcard' | 'quiz' | 'match' | 'conjugation' | null>(null);
   const [isFocusedMode, setIsFocusedMode] = useState(false);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
+  const [earnedPoints, setEarnedPoints] = useState(0);
+  const [earnedXP, setEarnedXP] = useState(0);
+  const [totalPoints, setTotalPoints] = useState(0);
+  const [incorrectAnswers, setIncorrectAnswers] = useState<{ word: string; meaning: string; userChoice: string; correctAnswer: string; choices?: string[]; quizSentence?: string }[]>([]);
 
   const finishSession = (type: 'quiz' | 'flashcard' | 'match' | 'conjugation', score?: number, total?: number) => {
     if (!sessionStartTime || !auth.currentUser || !selectedWordbook) return;
     const duration = Math.floor((Date.now() - sessionStartTime) / 1000);
     if (duration < 1) return; // Ignore very short sessions (less than 1s)
+
+    // Calculate rewards
+    let points = 0;
+    let xp = 0;
+    if (type === 'quiz' || type === 'conjugation') {
+      points = (score || 0) * 5;
+      xp = (score || 0) * 10;
+    } else if (type === 'match') {
+      points = sessionWords.length * 5;
+      xp = sessionWords.length * 10;
+    } else if (type === 'flashcard') {
+      // Flashcards: give half reward?
+      points = sessionWords.length * 2;
+      xp = sessionWords.length * 5;
+    }
+    
+    setEarnedPoints(points);
+    setEarnedXP(xp);
+    if (points > 0) {
+      const newState = PetService.addPoints(points, auth.currentUser.uid);
+      setTotalPoints(newState.points);
+    } else {
+      setTotalPoints(PetService.getState(auth.currentUser.uid).points);
+    }
+    if (xp > 0) PetService.addXP(xp, auth.currentUser.uid);
 
     recordStudySession({
       uid: auth.currentUser.uid,
@@ -99,9 +129,11 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
       category: category as 'word' | 'grammar',
       duration,
       score,
-      totalItems: total
+      totalItems: total,
+      incorrectAnswers: type === 'quiz' || type === 'conjugation' ? incorrectAnswers : undefined
     });
     setSessionStartTime(null);
+    setIncorrectAnswers([]);
   };
 
   useEffect(() => {
@@ -238,6 +270,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
 
   const startQuiz = async () => {
     if (displayedWords.length === 0) return;
+    setIncorrectAnswers([]);
 
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || 
                               selectedWordbook?.title?.includes('관계부사');
@@ -310,6 +343,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
 
   const startFlashcards = () => {
     if (displayedWords.length === 0) return;
+    setIncorrectAnswers([]);
     const shuffled = [...displayedWords].sort(() => Math.random() - 0.5);
     setSessionWords(shuffled);
     
@@ -325,6 +359,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
 
   const startConjugationChallenge = () => {
     if (displayedWords.length === 0) return;
+    setIncorrectAnswers([]);
     const shuffled = [...displayedWords].sort(() => Math.random() - 0.5);
     setSessionWords(shuffled);
     
@@ -554,6 +589,15 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     
     if (isAnswerCorrect) {
       setQuizScore(prev => prev + 1);
+    } else {
+      setIncorrectAnswers(prev => [...prev, {
+        word: sessionWords[quizIndex].word,
+        meaning: sessionWords[quizIndex].meaning,
+        userChoice: quizOptions[optionIndex],
+        correctAnswer: correctAnswer,
+        choices: [...quizOptions],
+        quizSentence: sessionWords[quizIndex].quizSentence
+      }]);
     }
 
     // Don't auto-advance for relative grammar to show explanation
@@ -673,6 +717,15 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     
     if (isAnswerCorrect) {
       setConjugationScore(prev => prev + 0.5); // 0.5 for each step
+    } else {
+      setIncorrectAnswers(prev => [...prev, {
+        word: correctWord.word,
+        meaning: conjugationStep === 0 ? '과거형' : '과거분사형',
+        userChoice: conjugationOptions[optionIndex],
+        correctAnswer: correctAnswer || '',
+        choices: [...conjugationOptions],
+        quizSentence: correctWord.quizSentence
+      }]);
     }
 
     setTimeout(() => {
@@ -884,6 +937,16 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
                         <p className={`${isMobile ? 'text-base' : 'text-xl'} font-bold text-slate-500`}>
                           총 <span className="text-indigo-500">{sessionWords.length}</span>문제 중 <span className="text-indigo-500">{quizScore}</span>문제를 맞혔습니다.
                         </p>
+                        
+                        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-2">
+                           <div className="text-emerald-600 font-black text-lg">
+                              🎉 {quizScore}개 정답! +{earnedPoints} 포인트를 획득했어요!
+                           </div>
+                           <div className="text-indigo-500 font-black">
+                              +{earnedXP} XP를 획득했어요! (총 {totalPoints} 포인트)
+                           </div>
+                        </div>
+
                         <div className="pt-4 md:pt-6">
                           <button 
                             onClick={startQuiz}
@@ -1075,6 +1138,15 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
                         모든 단어를 <span className="text-amber-500">{matchTime.toFixed(1)}초</span> 만에 맞혔습니다!
                       </p>
 
+                      <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-2">
+                         <div className="text-emerald-600 font-black text-lg">
+                            🎉 완료! +{earnedPoints} 포인트를 획득했어요!
+                         </div>
+                         <div className="text-amber-500 font-black">
+                            +{earnedXP} XP를 획득했어요! (총 {totalPoints} 포인트)
+                         </div>
+                      </div>
+
                       {/* Leaderboard */}
                       <div className="max-w-md mx-auto bg-slate-50 rounded-3xl p-4 md:p-6 border border-slate-100">
                         <h4 className="text-xs md:text-sm font-black text-slate-900 mb-3 md:mb-4 flex items-center justify-center gap-2">
@@ -1155,6 +1227,16 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
                         <p className={`${isMobile ? 'text-base' : 'text-xl'} font-bold text-slate-500`}>
                           총 <span className="text-blue-500">{sessionWords.length}</span>단어 중 <span className="text-blue-500">{conjugationScore}</span>점을 획득했습니다.
                         </p>
+
+                        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-2">
+                           <div className="text-emerald-600 font-black text-lg">
+                              🎉 {conjugationScore}점 획득! +{earnedPoints} 포인트를 획득했어요!
+                           </div>
+                           <div className="text-blue-500 font-black">
+                              +{earnedXP} XP를 획득했어요! (총 {totalPoints} 포인트)
+                           </div>
+                        </div>
+
                         <div className="pt-4 md:pt-6">
                           <button 
                             onClick={startConjugationChallenge}
@@ -1427,7 +1509,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
                 }} 
                 className="text-sm font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1"
               >
-                ← 전체 드릴 세트
+                ← 전체 학습 세트
               </button>
               <div className="flex flex-wrap items-center gap-2 md:gap-4">
                 {selectedWordbook.type === 'irregular' && (

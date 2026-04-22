@@ -1,4 +1,4 @@
-import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, HeightRule } from 'docx';
+import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, HeightRule, SectionType, PageOrientation } from 'docx';
 import { saveAs } from 'file-saver';
 
 interface Word {
@@ -28,7 +28,7 @@ export const generateWordTest = async (
       },
       rows: [
         new TableRow({
-          height: { value: 800, rule: HeightRule.EXACT },
+          height: { value: 800, rule: HeightRule.ATLEAST },
           children: [
             new TableCell({
               width: { size: 15, type: WidthType.PERCENTAGE },
@@ -101,7 +101,7 @@ export const generateWordTest = async (
 
       wordRows.push(
         new TableRow({
-          height: { value: 450, rule: HeightRule.EXACT },
+          height: { value: 450, rule: HeightRule.ATLEAST },
           children: [
             new TableCell({
               width: { size: 50, type: WidthType.PERCENTAGE },
@@ -245,7 +245,7 @@ export const generateMultipleChoiceQuiz = async (
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: [
         new TableRow({
-          height: { value: 800, rule: HeightRule.EXACT },
+          height: { value: 800, rule: HeightRule.ATLEAST },
           children: [
             new TableCell({
               width: { size: 15, type: WidthType.PERCENTAGE },
@@ -276,9 +276,11 @@ export const generateMultipleChoiceQuiz = async (
       ],
     });
 
+    const headerElements: any[] = [];
+    headerElements.push(headerTable);
+    headerElements.push(new Paragraph({ spacing: { before: 100 } }));
+
     const quizElements: any[] = [];
-    quizElements.push(headerTable);
-    quizElements.push(new Paragraph({ spacing: { before: 200 } }));
 
     words.forEach((item, index) => {
       let distractors: string[] = [];
@@ -290,55 +292,37 @@ export const generateMultipleChoiceQuiz = async (
         correctAnswer = isPast ? item.past : item.pastParticiple;
         questionPrefix = isPast ? "과거형(Past)을 고르세요" : "과거분사(Participle)를 고르세요";
         
-        // Use custom distractors if they exist, otherwise scramble from data
         if (item.distractors && item.distractors.length >= 3) {
           distractors = [...item.distractors].slice(0, 3);
         } else {
-          // Fallback scrambled distractors
           distractors = [item.base + 'ed', item.past + 'ed', item.base + 'en'].filter(d => d !== correctAnswer);
           while (distractors.length < 3) distractors.push(item.base + 't');
         }
       } else if (wordbookType === 'conversion-grammar') {
-        const baseOptions = [
-          "동사 O to + 간접목적어",
-          "동사 O for + 간접목적어",
-          "동사 O of + 간접목적어",
-          "3형식 전환 불가"
-        ];
+        const baseOptions = ["동사 O to + 간접목적어", "동사 O for + 간접목적어", "동사 O of + 간접목적어", "3형식 전환 불가"];
         if (item.pattern === 'to') correctAnswer = baseOptions[0];
         else if (item.pattern === 'for') correctAnswer = baseOptions[1];
         else if (item.pattern === 'of') correctAnswer = baseOptions[2];
         else if (item.pattern === 'impossible') correctAnswer = baseOptions[3];
-        
         distractors = baseOptions.filter(o => o !== correctAnswer);
       } else if (wordbookType === 'to-ing-grammar') {
-        const baseOptions = [
-          "둘 다 가능하고 의미도 같음",
-          "둘 다 가능하고 의미 달라짐",
-          `${item.word} to V`,
-          `${item.word} Ving`
-        ];
+        const baseOptions = ["둘 다 가능(의미도 같음)", "둘 다 가능(의미는 다름)", "to부정사만 목적어", "동명사(V-ing)만 목적어"];
         if (item.pattern?.includes('의미도 같은')) correctAnswer = baseOptions[0];
         else if (item.pattern?.includes('의미는 다른')) correctAnswer = baseOptions[1];
         else if (item.pattern?.includes('to부정사만')) correctAnswer = baseOptions[2];
         else if (item.pattern?.includes('동명사만')) correctAnswer = baseOptions[3];
-        
         distractors = baseOptions.filter(o => o !== correctAnswer);
       } else if (wordbookType === 'complement-grammar') {
-        const baseOptions = [
-          `${item.word} O 명사/형용사`,
-          `${item.word} O to V`,
-          `${item.word} O 동사원형`,
-          `${item.word} O V-ing`
-        ];
+        const baseOptions = ["O + 명사/형용사", "O + to V", "O + 동사원형", "O + V-ing", "O + p.p. (과거분사)"];
         if (item.pattern?.includes('명형')) correctAnswer = baseOptions[0];
         else if (item.pattern?.includes('to V')) correctAnswer = baseOptions[1];
         else if (item.pattern?.includes('동사원형')) correctAnswer = baseOptions[2];
         else if (item.pattern?.includes('V-ing')) correctAnswer = baseOptions[3];
+        else if (item.pattern?.includes('p.p') || item.pattern?.includes('과거분사')) correctAnswer = baseOptions[4];
         
-        distractors = baseOptions.filter(o => o !== correctAnswer);
+        // Pick 3 distractors from the rest
+        distractors = baseOptions.filter(o => o !== correctAnswer).sort(() => 0.5 - Math.random()).slice(0, 3);
       } else if (wordbookType === 'relative-grammar') {
-        // Index 0 in seed data is the correct answer
         const choices = item.distractors || [];
         correctAnswer = choices[0] || '';
         distractors = choices.slice(1);
@@ -349,23 +333,23 @@ export const generateMultipleChoiceQuiz = async (
 
       const choices = [correctAnswer, ...distractors].sort(() => 0.5 - Math.random());
 
-      // Question
       const isRelative = wordbookType === 'relative-grammar';
+      const isConceptGrammar = ['conversion-grammar', 'to-ing-grammar', 'complement-grammar'].includes(wordbookType || '');
+      
       quizElements.push(new Paragraph({
         children: [
           new TextRun({ text: `${index + 1}. `, size: 22, bold: true }),
-          // For relative grammar, word is already a sentence. For others, show meaning in brackets.
           new TextRun({ 
-            text: isRelative ? item.word : `${item.word} (${item.meaning})`, 
-            size: 22, 
+            text: (isRelative || isConceptGrammar) ? item.word : `${item.word} (${item.meaning})`, 
+            size: 24, 
             bold: true 
           }),
-          questionPrefix ? new TextRun({ text: ` - ${questionPrefix}`, size: 20, color: "555555" }) : new TextRun({ text: "" }),
+          questionPrefix ? new TextRun({ text: ` - ${questionPrefix}`, size: 18, color: "555555", italics: true }) : new TextRun({ text: "" }),
         ],
-        spacing: { before: 120, after: 80 },
+        spacing: { before: 300, after: 100 },
+        keepNext: true,
       }));
 
-      // Answer/Explanation for Answer Key
       if (isAnswerKey && isRelative && item.meaning) {
         quizElements.push(new Paragraph({
           children: [
@@ -375,7 +359,6 @@ export const generateMultipleChoiceQuiz = async (
         }));
       }
 
-      // Options
       choices.forEach((choice, cIdx) => {
         const isCorrect = choice === correctAnswer || 
           (wordbookType === 'relative-grammar' && (
@@ -385,7 +368,7 @@ export const generateMultipleChoiceQuiz = async (
         
         quizElements.push(new Paragraph({
           children: [
-            new TextRun({ text: `   ${cIdx + 1}) `, size: 20 }),
+            new TextRun({ text: `   (${cIdx + 1}) `, size: 20 }),
             new TextRun({ 
               text: choice, 
               size: 20,
@@ -399,10 +382,25 @@ export const generateMultipleChoiceQuiz = async (
     });
 
     return new Document({
-      sections: [{
-        properties: { page: { margin: { top: 720, bottom: 720, left: 720, right: 720 } } },
-        children: quizElements,
-      }],
+      sections: [
+        {
+          properties: {
+            page: { margin: { top: 720, bottom: 400, left: 720, right: 720 } },
+          },
+          children: headerElements,
+        },
+        {
+          properties: {
+            page: { margin: { top: 200, bottom: 720, left: 720, right: 720 } },
+            type: SectionType.CONTINUOUS,
+            column: {
+              count: 2,
+              space: 720,
+            },
+          },
+          children: quizElements,
+        }
+      ],
     });
   };
 
@@ -435,7 +433,7 @@ export const generateIrregularVerbTest = async (
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: [
         new TableRow({
-          height: { value: 800, rule: HeightRule.EXACT },
+          height: { value: 800, rule: HeightRule.ATLEAST },
           children: [
             new TableCell({
               width: { size: 15, type: WidthType.PERCENTAGE },
@@ -479,7 +477,7 @@ export const generateIrregularVerbTest = async (
     });
 
     rows.push(new TableRow({
-      height: { value: 400, rule: HeightRule.EXACT },
+      height: { value: 400, rule: HeightRule.ATLEAST },
       children: [
         createHeaderCell("", 4), // Index
         createHeaderCell("현재형", 18),
@@ -521,7 +519,7 @@ export const generateIrregularVerbTest = async (
       });
 
       rows.push(new TableRow({
-        height: { value: 600, rule: HeightRule.EXACT },
+        height: { value: 600, rule: HeightRule.ATLEAST },
         children: [
           createCell((i + 1).toString(), 4), // Left Index
           createBaseCell(leftWord),

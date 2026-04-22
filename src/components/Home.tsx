@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GraduationCap, Languages, BookOpen, History, BarChart3, FileText, Users, ArrowRight, X, Sparkles } from 'lucide-react';
+import { GraduationCap, Languages, BookOpen, History, BarChart3, FileText, Users, ArrowRight, X, Sparkles, Dog } from 'lucide-react';
 
 interface HomeProps {
   onNavigate: (view: 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'vocab-mobile' | 'tutor' | 'report' | 'archive' | 'teacher-room') => void;
@@ -48,6 +48,16 @@ export default function Home({ onNavigate, userRole, hasNewAssignment }: HomePro
       color: 'bg-amber-50',
       borderColor: 'border-amber-100',
       textColor: 'text-amber-600',
+      show: true
+    },
+    {
+      id: 'pet',
+      title: '펫 키우기',
+      description: '학습으로 포인트를 모아 나만의 펫을 키워보세요.',
+      icon: <Dog className="text-emerald-500 w-4 h-4 md:w-8 md:h-8" />,
+      color: 'bg-emerald-50',
+      borderColor: 'border-emerald-100',
+      textColor: 'text-emerald-600',
       show: true
     }
   ];

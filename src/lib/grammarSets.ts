@@ -1,4 +1,4 @@
-import { collection, addDoc, Timestamp, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, query, where, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
 export interface GrammarWord {
@@ -283,7 +283,7 @@ export async function seedConversionGrammar() {
 
 export const RELATIVE_GRAMMAR_CONCEPTS = [
   { 
-    word: "관계대명사 (Relative Pronoun)", 
+    word: "관계대명사", 
     meaning: "선행사 O + 불완전한 절 (주어/목적어 생략)", 
     pattern: "rel-pronoun",
     examples: [
@@ -394,11 +394,131 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         explanation: "선행사: The ingredients (사물) / 뒤 절: need의 목적어가 빠짐 / 정답 이유: 목적격 관계대명사 that (또는 which)",
         type: "A",
         choices: ["that", "where", "when", "why"]
+      },
+      {
+        sentence: "The scientist (___) won the Nobel Prize is giving a lecture tomorrow.",
+        explanation: "선행사: The scientist (사람) / 뒤 절: 주어가 빠짐 / 정답 이유: 주격 관계대명사 who",
+        type: "A",
+        choices: ["who", "which", "where", "whom"]
+      },
+      {
+        sentence: "I finally found the key [which] I thought I had lost forever.",
+        explanation: "선행사: the key (사물) / 뒤 절: lost의 목적어가 빠짐 / 정답 이유: 목적격 관계대명사 which",
+        type: "B",
+        choices: ["관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The dress (___) she wore to the party was designed by a famous artist.",
+        explanation: "선행사: The dress (사물) / 뒤 절: wore의 목적어 빠짐 / 정답 이유: 목적격 관계대명사 that (또는 which)",
+        type: "A",
+        choices: ["that", "who", "where", "when"]
+      },
+      {
+        sentence: "People [who] exercise regularly tend to live longer and healthier lives.",
+        explanation: "선행사: People (사람) / 뒤 절: 주어 빠짐 / 정답 이유: 주격 관계대명사 who",
+        type: "B",
+        choices: ["관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The company (___) CEO resigned last month is facing a financial crisis.",
+        explanation: "선행사: The company / 뒤 절: 주어(CEO)의 소유주가 선행사 / 정답 이유: 소유격 관계대명사 whose",
+        type: "A",
+        choices: ["whose", "who", "which", "whom"]
+      },
+      {
+        sentence: "The book (___) I borrowed from the library was very interesting.",
+        explanation: "선행사: The book (사물) / 뒤 절: borrowed의 목적어가 빠짐 / 정답 이유: 목적격 관계대명사 which (또는 that)",
+        type: "A",
+        choices: ["which", "where", "when", "how"]
+      },
+      {
+        sentence: "The children [who] are playing in the backyard are my neighbor's kids.",
+        explanation: "선행사: The children (사람) / 뒤 절: 주어가 빠짐 / 정답 이유: 주격 관계대명사 who",
+        type: "B",
+        choices: ["관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "I know a scientist (___) research is about artificial intelligence.",
+        explanation: "선행사: a scientist / 뒤 절: 주어(research)의 소유주가 선행사 / 정답 이유: 소유격 관계대명사 whose",
+        type: "A",
+        choices: ["whose", "who", "whom", "which"]
+      },
+      {
+        sentence: "The apartment [which] he lives in is quite small but cozy.",
+        explanation: "선행사: The apartment (사물) / 뒤 절: in의 목적어가 빠짐 / 정답 이유: 목적격 관계대명사 which",
+        type: "B",
+        choices: ["관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "Workers [who] are diligent will be rewarded by the company.",
+        explanation: "선행사: Workers (사람) / 뒤 절: 주어 빠짐 / 정답 이유: 주격 관계대명사 who",
+        type: "B",
+        choices: ["관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The mountain (___) we climbed last summer was very steep and challenging.",
+        explanation: "선행사: The mountain (사물) / 뒤 절: climbed의 목적어가 빠짐 / 정답 이유: 목적격 관계대명사 which (또는 that)",
+        type: "A",
+        choices: ["which", "who", "where", "how"]
+      },
+      {
+        sentence: "I met a traveler [whose] stories about India were absolutely fascinating.",
+        explanation: "선행사: a traveler / 뒤 절: 주어(stories)의 소유주가 선행사 / 정답 이유: 소유격 관계대명사 whose",
+        type: "B",
+        choices: ["관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The actors (___) performed in the play received a standing ovation.",
+        explanation: "선행사: The actors (사람) / 뒤 절: 주어가 빠진 불완전한 절 / 정답 이유: 주격 관계대명사 who",
+        type: "A",
+        choices: ["who", "which", "whose", "when"]
+      },
+      {
+        sentence: "This is the artist [whom] the critics praised for her innovative style.",
+        explanation: "선행사: the artist (사람) / 뒤 절: praised의 목적어가 빠짐 / 정답 이유: 목적격 관계대명사 whom (who/that 가능)",
+        type: "B",
+        choices: ["관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The email (___) you sent me this morning went straight to my spam folder.",
+        explanation: "선행사: The email (사물) / 뒤 절: sent의 목적어가 빠짐 / 정답 이유: 목적격 관계대명사 that (또는 which)",
+        type: "A",
+        choices: ["that", "who", "whose", "why"]
+      },
+      {
+        sentence: "The cake (___) was on the table has disappeared.",
+        explanation: "선행사: The cake (사물) / 뒤 절: 주어가 빠진 불완전한 절 / 정답 이유: 주격 관계대명사 that (또는 which)",
+        type: "A",
+        choices: ["that", "where", "when", "how"]
+      },
+      {
+        sentence: "I finally saw the movie [that] all my friends had been talking about.",
+        explanation: "선행사: the movie (사물) / 뒤 절: about의 목적어가 빠진 불완전한 절 / 정답 이유: 목적격 관계대명사",
+        type: "B",
+        choices: ["관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The students (___) scores were the highest received a scholarship.",
+        explanation: "선행사: The students / 뒤 절: 주어(scores)의 소유주가 선행사 / 정답 이유: 소유격 관계대명사 whose",
+        type: "A",
+        choices: ["whose", "who", "which", "whom"]
+      },
+      {
+        sentence: "Do you know the boy [who] is standing by the entrance?",
+        explanation: "선행사: the boy (사람) / 뒤 절: 주어가 빠진 불완전한 절 / 정답 이유: 주격 관계대명사 who",
+        type: "B",
+        choices: ["관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The car (___) engine was making a strange noise broke down.",
+        explanation: "선행사: The car / 뒤 절: 주어(engine)의 소유주가 선행사 / 정답 이유: 소유격 관계대명사 whose",
+        type: "A",
+        choices: ["whose", "who", "which", "that"]
       }
     ]
   },
   { 
-    word: "관계부사 (Relative Adverb)", 
+    word: "관계부사", 
     meaning: "선행사 O + 완전한 절 (장소/시간/이유/방법)", 
     pattern: "rel-adverb",
     examples: [
@@ -533,11 +653,131 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         explanation: "선행사: 없음 / 뒤 절: 완전한 절 / 정답 이유: 방법을 나타내는 관계부사 how",
         type: "A",
         choices: ["how", "the way", "which", "where"]
+      },
+      {
+        sentence: "Tell me the reason (___) you decided to change your major so late.",
+        explanation: "선행사: the reason (이유) / 뒤 절: 완전한 절 / 정답 이유: 이유의 관계부사 why",
+        type: "A",
+        choices: ["why", "where", "which", "who"]
+      },
+      {
+        sentence: "This is the spot [where] our ancestors first settled hundreds of years ago.",
+        explanation: "선행사: the spot (장소) / 뒤 절: 완전한 절 / 정답 이유: 장소의 관계부사 where",
+        type: "B",
+        choices: ["관계부사 (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "I can't wait for the day (___) we can travel to other planets for vacation.",
+        explanation: "선행사: the day (시간) / 뒤 절: 완전한 절 / 정답 이유: 시간의 관계부사 when",
+        type: "A",
+        choices: ["when", "where", "which", "why"]
+      },
+      {
+        sentence: "The way [that] he solved the problem was truly creative and efficient.",
+        explanation: "선행사: the way / 뒤 절: 완전한 절 / 정답 이유: 관계부사 that (how 대용)",
+        type: "B",
+        choices: ["관계부사 (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The house (___) I spent my childhood has been completely renovated.",
+        explanation: "선행사: The house (장소) / 뒤 절: 완전한 절 / 정답 이유: 장소를 나타내는 관계부사 where",
+        type: "A",
+        choices: ["where", "which", "when", "that"]
+      },
+      {
+        sentence: "Do you remember the night (___) we saw the shooting star?",
+        explanation: "선행사: the night (시간) / 뒤 절: 완전한 절 / 정답 이유: 시간의 관계부사 when",
+        type: "A",
+        choices: ["when", "where", "which", "why"]
+      },
+      {
+        sentence: "This is the restaurant [where] I first met my wife ten years ago.",
+        explanation: "선행사: the restaurant (장소) / 뒤 절: 완전한 절 / 정답 이유: 장소의 관계부사 where",
+        type: "B",
+        choices: ["관계부사 (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "I don't know the reason (___) the meeting was cancelled so suddenly.",
+        explanation: "선행사: the reason (이유) / 뒤 절: 완전한 절 / 정답 이유: 이유의 관계부사 why",
+        type: "A",
+        choices: ["why", "where", "which", "how"]
+      },
+      {
+        sentence: "She showed me (___) she makes this delicious chocolate cake.",
+        explanation: "선행사: 없음 / 뒤 절: 완전한 절 / 정답 이유: 방법을 나타내는 관계부사 how",
+        type: "A",
+        choices: ["how", "the way", "which", "where"]
+      },
+      {
+        sentence: "The island [where] they spent their honeymoon is very peaceful.",
+        explanation: "선행사: the island (장소) / 뒤 절: 완전한 절 / 정답 이유: 장소의 관계부사 where",
+        type: "B",
+        choices: ["관계부사 (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "Can you suggest a place (___) I can find fresh organic vegetables?",
+        explanation: "선행사: a place (장소) / 뒤 절: 완전한 절 / 정답 이유: 장소를 나타내는 관계부사 where",
+        type: "A",
+        choices: ["where", "when", "which", "why"]
+      },
+      {
+        sentence: "I still remember the era [when] people didn't have smartphones or high-speed internet.",
+        explanation: "선행사: the era (시간) / 뒤 절: 완전한 절 / 정답 이유: 시간의 관계부사 when",
+        type: "B",
+        choices: ["관계부사 (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The reason (___) the prices of goods are rising is due to inflation.",
+        explanation: "선행사: the reason (이유) / 뒤 절: 완전한 절 / 정답 이유: 이유의 관계부사 why",
+        type: "A",
+        choices: ["why", "where", "which", "how"]
+      },
+      {
+        sentence: "Scientists are studying the way [that] dolphins communicate with each other.",
+        explanation: "선행사: the way / 뒤 절: 완전한 절 / 정답 이유: 관계부사 that (how 대신 사용)",
+        type: "B",
+        choices: ["관계부사 (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "This is the hospital (___) my grandfather worked as a surgeon for thirty years.",
+        explanation: "선행사: the hospital (장소) / 뒤 절: 완전한 절 / 정답 이유: 장소의 관계부사 where",
+        type: "A",
+        choices: ["where", "which", "when", "that"]
+      },
+      {
+        sentence: "I'll never forget the house (___) I grew up.",
+        explanation: "선행사: the house (장소) / 뒤 절: I grew up (완전한 절) / 정답 이유: 장소의 관계부사 where",
+        type: "A",
+        choices: ["where", "which", "when", "why"]
+      },
+      {
+        sentence: "Sunday is the day [when] I usually clean my entire apartment.",
+        explanation: "선행사: Sunday (시간) / 뒤 절: 완전한 절 / 정답 이유: 시간의 관계부사 when",
+        type: "B",
+        choices: ["관계부사 (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The reason (___) he didn't call remains a mystery.",
+        explanation: "선행사: The reason (이유) / 뒤 절: 완전한 절 / 정답 이유: 이유의 관계부사 why",
+        type: "A",
+        choices: ["why", "where", "which", "how"]
+      },
+      {
+        sentence: "Scientists are exploring the way [that] dolphins communicate with each other.",
+        explanation: "선행사: the way / 뒤 절: 완전한 절 / 정답 이유: 관계부사 that (how 대용)",
+        type: "B",
+        choices: ["관계부사 (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "This is the office (___) my father has worked for twenty years.",
+        explanation: "선행사: the office (장소) / 뒤 절: 완전한 절 / 정답 이유: 장소의 관계부사 where",
+        type: "A",
+        choices: ["where", "which", "when", "that"]
       }
     ]
   },
   { 
-    word: "동격 (Appositive that)", 
+    word: "동격 that", 
     meaning: "선행사(추상명사) O + 완전한 절", 
     pattern: "appositive",
     examples: [
@@ -642,11 +882,131 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         explanation: "선행사: The concept (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
         type: "B",
         choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The belief [that] everyone is equal regardless of their background is central to democracy.",
+        explanation: "선행사: The belief (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "B",
+        choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The news (___) the missing plane was found brought great relief to the families.",
+        explanation: "선행사: The news (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "A",
+        choices: ["that", "which", "where", "when"]
+      },
+      {
+        sentence: "The warning [that] a major earthquake might occur soon was taken very seriously.",
+        explanation: "선행사: The warning (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "B",
+        choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The fact (___) water freezes at zero degrees Celsius is a basic scientific principle.",
+        explanation: "선행사: The fact (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "A",
+        choices: ["that", "which", "how", "what"]
+      },
+      {
+        sentence: "The rumor [that] the company is planning a massive layoff spread quickly.",
+        explanation: "선행사: the rumor (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "B",
+        choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The possibility (___) oil prices will drop soon is very low.",
+        explanation: "선행사: The possibility (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "A",
+        choices: ["that", "which", "where", "whether"]
+      },
+      {
+        sentence: "We share the common belief [that] education can change one's life.",
+        explanation: "선행사: the belief (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "B",
+        choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The news [that] the war had finally ended spread like wildfire.",
+        explanation: "선행사: the news (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "B",
+        choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "Scientists are investigating the fact (___) global warming is accelerating.",
+        explanation: "선행사: the fact (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "A",
+        choices: ["that", "which", "how", "what"]
+      },
+      {
+        sentence: "The suggestion [that] we should delay the project was rejected.",
+        explanation: "선행사: the suggestion (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "B",
+        choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The assumption (___) money alone can bring happiness is often proven wrong.",
+        explanation: "선행사: The assumption (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "A",
+        choices: ["that", "which", "where", "how"]
+      },
+      {
+        sentence: "I was moved by the story [that] he gave all his savings to the orphanage.",
+        explanation: "선행사: the story (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "B",
+        choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "There is a general consensus (___) we need to reduce carbon emissions immediately.",
+        explanation: "선행사: consensus (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "A",
+        choices: ["that", "which", "whether", "why"]
+      },
+      {
+        sentence: "The evidence [that] the suspect was at the scene of the crime was undeniable.",
+        explanation: "선행사: The evidence (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "B",
+        choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "My father never lost his faith (___) justice would eventually prevail in the case.",
+        explanation: "선행사: faith (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "A",
+        choices: ["that", "which", "how", "where"]
+      },
+      {
+        sentence: "The belief (___) the soul is immortal is found in many cultures.",
+        explanation: "선행사: The belief (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "A",
+        choices: ["that", "which", "where", "how"]
+      },
+      {
+        sentence: "I cannot ignore the feeling [that] something is not quite right.",
+        explanation: "선행사: the feeling (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "B",
+        choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The news (___) the missing child was found safe brought tears to my eyes.",
+        explanation: "선행사: The news (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "A",
+        choices: ["that", "which", "where", "when"]
+      },
+      {
+        sentence: "He was motivated by the hope [that] he could make a difference in the world.",
+        explanation: "선행사: the hope (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "B",
+        choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
+      },
+      {
+        sentence: "The fact (___) she apologized doesn't mean I have to forgive her.",
+        explanation: "선행사: the fact (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
+        type: "A",
+        choices: ["that", "which", "how", "what"]
       }
     ]
   },
   { 
-    word: "접속사 (Conjunction that)", 
+    word: "접속사 that", 
     meaning: "선행사 X + 완전한 절", 
     pattern: "conjunction",
     examples: [
@@ -727,6 +1087,126 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         explanation: "선행사: 없음 (found out의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
         type: "B",
         choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
+      },
+      {
+        sentence: "I believe [that] honesty is the best policy in any relationship.",
+        explanation: "선행사: 없음 (believe의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "B",
+        choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
+      },
+      {
+        sentence: "The teacher suggested (___) we should read at least one English book a month.",
+        explanation: "선행사: 없음 (목적어 절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "A",
+        choices: ["that", "which", "where", "how"]
+      },
+      {
+        sentence: "Most people think [that] AI will significantly change the way we work.",
+        explanation: "선행사: 없음 (think의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "B",
+        choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
+      },
+      {
+        sentence: "It is important (___) you keep your personal information safe online.",
+        explanation: "선행사: 없음 (가주어 It의 진주어 절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "A",
+        choices: ["that", "which", "whether", "what"]
+      },
+      {
+        sentence: "I forgot [that] I had an appointment with the dentist this afternoon.",
+        explanation: "선행사: 없음 (forgot의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "B",
+        choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
+      },
+      {
+        sentence: "I am sure (___) you will find a way to overcome this challenge.",
+        explanation: "선행사: 없음 (형용사 sure 뒤 목적절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "A",
+        choices: ["that", "which", "how", "what"]
+      },
+      {
+        sentence: "The doctor advised [that] he should take a rest for at least a week.",
+        explanation: "선행사: 없음 (advised의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "B",
+        choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
+      },
+      {
+        sentence: "It is surprising [that] she finished such a huge project in a day.",
+        explanation: "선행사: 없음 (가주어 It의 진주어 절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "B",
+        choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
+      },
+      {
+        sentence: "I hope (___) everyone enjoys the party tonight.",
+        explanation: "선행사: 없음 (hope의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "A",
+        choices: ["that", "which", "where", "how"]
+      },
+      {
+        sentence: "He admitted [that] he had made a serious mistake in the report.",
+        explanation: "선행사: 없음 (admitted의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "B",
+        choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
+      },
+      {
+        sentence: "My manager promised (___) the new project would be funded by next month.",
+        explanation: "선행사: 없음 (promised의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "A",
+        choices: ["that", "which", "where", "what"]
+      },
+      {
+        sentence: "It is vital [that] medical equipment is sterilized properly before use.",
+        explanation: "선행사: 없음 (가주어 It의 진주어 절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "B",
+        choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
+      },
+      {
+        sentence: "I am convinced (___) we have made the right decision for the company.",
+        explanation: "선행사: 없음 (형용사 convinced 뒤 절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "A",
+        choices: ["that", "which", "how", "what"]
+      },
+      {
+        sentence: "The weather forecast predicted [that] it would rain heavily throughout the weekend.",
+        explanation: "선행사: 없음 (predicted의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "B",
+        choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
+      },
+      {
+        sentence: "I really regret (___) I didn't take that job offer when I had the chance.",
+        explanation: "선행사: 없음 (regret의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "A",
+        choices: ["that", "which", "where", "how"]
+      },
+      {
+        sentence: "I believe (___) everyone has a unique talent to share.",
+        explanation: "선행사: 없음 (believe의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "A",
+        choices: ["that", "which", "where", "how"]
+      },
+      {
+        sentence: "It is natural [that] parents worry about their children's future.",
+        explanation: "선행사: 없음 (가주어 It의 진주어 절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "B",
+        choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
+      },
+      {
+        sentence: "She mentioned (___) she would be late for the dinner.",
+        explanation: "선행사: 없음 (목적어 절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "A",
+        choices: ["that", "which", "where", "how"]
+      },
+      {
+        sentence: "I am so glad [that] the weather finally cleared up for our trip.",
+        explanation: "선행사: 없음 (형용사 glad 뒤 부사절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "B",
+        choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
+      },
+      {
+        sentence: "The study suggests (___) getting enough sleep is crucial for memory.",
+        explanation: "선행사: 없음 (suggests의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
+        type: "A",
+        choices: ["that", "which", "where", "what"]
       }
     ]
   }
@@ -759,56 +1239,59 @@ export async function seedRelativeGrammar() {
   }
 
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
-  const existingWords = await getDocs(wordsRef);
+  const existingWordsSnap = await getDocs(wordsRef);
   
-  // Refresh the words list to only contain the 4 main concepts
-  if (existingWords.size !== RELATIVE_GRAMMAR_CONCEPTS.length) {
-    // Delete old words if any
-    for (const d of existingWords.docs) {
-      // In a real app we'd be careful, but here we refresh
-      // await deleteDoc(d.ref); 
+  // 1. Delete outdated concepts (words that are not in the new RELATIVE_GRAMMAR_CONCEPTS list)
+  const currentConceptNames = RELATIVE_GRAMMAR_CONCEPTS.map(c => c.word);
+  for (const docSnap of existingWordsSnap.docs) {
+    const wordData = docSnap.data();
+    if (!currentConceptNames.includes(wordData.word)) {
+      // In a real production app we might archive instead of delete, 
+      // but here we sync to the code definitions.
+      await deleteDoc(doc(db, `wordbooks/${wordbookId}/words`, docSnap.id));
+    }
+  }
+
+  // 2. Update/Add the current main concepts and their examples
+  for (let i = 0; i < RELATIVE_GRAMMAR_CONCEPTS.length; i++) {
+    const concept = RELATIVE_GRAMMAR_CONCEPTS[i];
+    const conceptQuery = query(wordsRef, where('word', '==', concept.word));
+    const conceptSnap = await getDocs(conceptQuery);
+    
+    let conceptId: string;
+    if (conceptSnap.empty) {
+      const docRef = await addDoc(wordsRef, {
+        word: concept.word,
+        meaning: concept.meaning,
+        pattern: concept.pattern,
+        order: i
+      });
+      conceptId = docRef.id;
+    } else {
+      conceptId = conceptSnap.docs[0].id;
+      await setDoc(doc(db, `wordbooks/${wordbookId}/words`, conceptId), {
+        word: concept.word,
+        meaning: concept.meaning,
+        pattern: concept.pattern,
+        order: i
+      }, { merge: true });
     }
 
-    for (let i = 0; i < RELATIVE_GRAMMAR_CONCEPTS.length; i++) {
-      const concept = RELATIVE_GRAMMAR_CONCEPTS[i];
-      const conceptQuery = query(wordsRef, where('word', '==', concept.word));
-      const conceptSnap = await getDocs(conceptQuery);
+    // Add examples to subcollection if they don't exist
+    const examplesRef = collection(db, `wordbooks/${wordbookId}/words/${conceptId}/examples`);
+    
+    for (const ex of concept.examples) {
+      const exQuery = query(examplesRef, where('sentence', '==', ex.sentence));
+      const exSnap = await getDocs(exQuery);
       
-      let conceptId: string;
-      if (conceptSnap.empty) {
-        const docRef = await addDoc(wordsRef, {
-          word: concept.word,
-          meaning: concept.meaning,
-          pattern: concept.pattern,
-          order: i
+      if (exSnap.empty) {
+        await addDoc(examplesRef, {
+          sentence: ex.sentence,
+          explanation: ex.explanation,
+          type: ex.type, // A or B
+          choices: ex.choices,
+          createdAt: Timestamp.now()
         });
-        conceptId = docRef.id;
-      } else {
-        conceptId = conceptSnap.docs[0].id;
-        await setDoc(doc(db, `wordbooks/${wordbookId}/words`, conceptId), {
-          word: concept.word,
-          meaning: concept.meaning,
-          pattern: concept.pattern,
-          order: i
-        }, { merge: true });
-      }
-
-      // Add examples to subcollection if they don't exist
-      const examplesRef = collection(db, `wordbooks/${wordbookId}/words/${conceptId}/examples`);
-      
-      for (const ex of concept.examples) {
-        const exQuery = query(examplesRef, where('sentence', '==', ex.sentence));
-        const exSnap = await getDocs(exQuery);
-        
-        if (exSnap.empty) {
-          await addDoc(examplesRef, {
-            sentence: ex.sentence,
-            explanation: ex.explanation,
-            type: ex.type, // A or B
-            choices: ex.choices,
-            createdAt: Timestamp.now()
-          });
-        }
       }
     }
   }

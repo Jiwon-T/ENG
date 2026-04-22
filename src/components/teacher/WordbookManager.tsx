@@ -515,7 +515,15 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         // Special handling for relative-grammar: use examples instead of concepts
         if (selectedWordbook.type === 'relative-grammar') {
           const allExamples: any[] = [];
-          for (const concept of selectedWords) {
+          
+          // Determine which concepts to pull examples from
+          let conceptsToFetch = selectedWords;
+          if (testPaperConfig.selectionMode === 'random') {
+            // For random mode, we can pull from all categories if they want many questions
+            conceptsToFetch = words;
+          }
+
+          for (const concept of conceptsToFetch) {
             const examplesRef = collection(db, `wordbooks/${selectedWordbook.id}/words/${concept.id}/examples`);
             const snap = await getDocs(examplesRef);
             snap.docs.forEach(doc => {
@@ -534,14 +542,13 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
             return;
           }
 
-          // Shuffle and limit if random mode
+          // Pick the requested number of questions
+          const targetCount = testPaperConfig.selectionMode === 'random' 
+            ? testPaperConfig.wordCount 
+            : (testPaperConfig.endDay - testPaperConfig.startDay + 1) * testPaperConfig.unitSize;
+
           const shuffledEx = allExamples.sort(() => 0.5 - Math.random());
-          if (testPaperConfig.selectionMode === 'random') {
-            wordsForQuiz = shuffledEx.slice(0, Math.min(testPaperConfig.wordCount, allExamples.length));
-          } else {
-            // For range, we take all examples found in that range of concepts
-            wordsForQuiz = shuffledEx;
-          }
+          wordsForQuiz = shuffledEx.slice(0, Math.min(targetCount, allExamples.length));
         }
 
         await generateMultipleChoiceQuiz(
@@ -1327,26 +1334,35 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   </div>
                 ) : (
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">단어 개수 (최대 {words.length})</label>
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {[10, 20, 40, 80, 100].map(count => (
-                        <button
-                          key={count}
-                          onClick={() => setTestPaperConfig({ ...testPaperConfig, wordCount: Math.min(count, words.length) })}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${testPaperConfig.wordCount === count ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                        >
-                          {count}개
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      type="number"
-                      min={1}
-                      max={words.length}
-                      value={testPaperConfig.wordCount}
-                      onChange={(e) => setTestPaperConfig({ ...testPaperConfig, wordCount: parseInt(e.target.value) || 0 })}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
-                    />
+                    {(() => {
+                      const isGrammarType = selectedWordbook?.type && ['relative-grammar', 'conversion-grammar', 'to-ing-grammar', 'complement-grammar'].includes(selectedWordbook.type);
+                      return (
+                        <>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">
+                            단어 개수 (최대 {isGrammarType ? 100 : words.length})
+                          </label>
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {[10, 20, 40, 80, 100].map(count => (
+                              <button
+                                key={count}
+                                onClick={() => setTestPaperConfig({ ...testPaperConfig, wordCount: isGrammarType ? count : Math.min(count, words.length) })}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${testPaperConfig.wordCount === count ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                              >
+                                {count}개
+                              </button>
+                            ))}
+                          </div>
+                          <input
+                            type="number"
+                            min={1}
+                            max={isGrammarType ? 200 : words.length}
+                            value={testPaperConfig.wordCount}
+                            onChange={(e) => setTestPaperConfig({ ...testPaperConfig, wordCount: parseInt(e.target.value) || 0 })}
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                          />
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
 

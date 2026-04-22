@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, collection, query, where, onSnapshot, Timestamp, addDoc, getDocs, deleteDoc, updateDoc, orderBy } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -59,36 +59,59 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
+export async function ensureUserDocExists(user: FirebaseUser, name?: string) {
+  const userDocRef = doc(db, 'users', user.uid);
+  const userDoc = await getDoc(userDocRef);
+  
+  const isTeacherEmail = user.email === 'lizzieshere1@gmail.com';
+  const role = isTeacherEmail ? 'teacher' : 'student';
+
+  if (!userDoc.exists()) {
+    await setDoc(userDocRef, {
+      uid: user.uid,
+      email: user.email,
+      name: name || user.displayName || '사용자',
+      photoURL: user.photoURL,
+      role: role,
+      createdAt: Timestamp.now(),
+      isNameSet: !!name 
+    });
+  } else if (isTeacherEmail && userDoc.data().role !== 'teacher') {
+    await setDoc(userDocRef, { role: 'teacher' }, { merge: true });
+  }
+
+  // Record attendance for today
+  await recordAttendance(user.uid);
+}
+
+export async function signUpWithEmail(email: string, password: string) {
+  try {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    await ensureUserDocExists(result.user, '사용자');
+    return result.user;
+  } catch (error) {
+    console.error('Error signing up:', error);
+    throw error;
+  }
+}
+
+export async function signInWithEmail(email: string, password: string) {
+  try {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    // Already exists in Firestore, just ensure attendance
+    await recordAttendance(result.user.uid);
+    return result.user;
+  } catch (error) {
+    console.error('Error signing in:', error);
+    throw error;
+  }
+}
+
 export async function signIn() {
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
-    
-    // Check if user exists in Firestore, if not create
-    const userDocRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userDocRef);
-    
-    const isTeacherEmail = user.email === 'lizzieshere1@gmail.com';
-    const role = isTeacherEmail ? 'teacher' : 'student';
-
-    if (!userDoc.exists()) {
-      await setDoc(userDocRef, {
-        uid: user.uid,
-        email: user.email,
-        name: user.displayName,
-        photoURL: user.photoURL,
-        role: role,
-        createdAt: Timestamp.now()
-      });
-    } else if (isTeacherEmail && userDoc.data().role !== 'teacher') {
-      // Force update role for the teacher email if it was previously set to student
-      await setDoc(userDocRef, { role: 'teacher' }, { merge: true });
-    }
-
-    // Record attendance for today
-    await recordAttendance(user.uid);
-
-    return user;
+    await ensureUserDocExists(result.user);
+    return result.user;
   } catch (error) {
     console.error('Error signing in:', error);
     throw error;
@@ -116,8 +139,11 @@ export async function recordAttendance(uid: string) {
       });
       console.log(`Attendance recorded for ${uid} on ${today}`);
     }
-  } catch (error) {
-    console.error('Failed to record attendance:', error);
+  } catch (error: any) {
+    // Ignore permission denied errors for recordAttendance as it's a background task
+    if (error?.code !== 'permission-denied') {
+      console.error('Failed to record attendance:', error);
+    }
   }
 }
 
@@ -286,6 +312,28 @@ export async function deleteAssignment(id: string) {
   }
 }
 
+export async function markIncorrectAnswerReviewed(sessionId: string, word: string) {
+  const sessionRef = doc(db, 'studySessions', sessionId);
+  try {
+    const sessionDoc = await getDoc(sessionRef);
+    if (!sessionDoc.exists()) return;
+    
+    const data = sessionDoc.data();
+    const incorrectAnswers = data.incorrectAnswers || [];
+    
+    const updated = incorrectAnswers.map((ans: any) => {
+      if (ans.word === word) {
+        return { ...ans, isReviewed: true };
+      }
+      return ans;
+    });
+    
+    await updateDoc(sessionRef, { incorrectAnswers: updated });
+  } catch (error) {
+    console.error('Failed to mark incorrect answer as reviewed:', error);
+    throw error;
+  }
+}
 export async function recordStudySession(data: {
   uid: string;
   wordbookId: string;
@@ -295,6 +343,14 @@ export async function recordStudySession(data: {
   duration: number; // in seconds
   score?: number;
   totalItems?: number;
+  incorrectAnswers?: {
+    word: string;
+    meaning: string;
+    userChoice: string;
+    correctAnswer: string;
+    choices?: string[];
+    quizSentence?: string;
+  }[];
 }) {
   const sessionRef = collection(db, 'studySessions');
   try {

@@ -4,7 +4,7 @@ import Login from './components/auth/Login';
 import { auth, db, recordAttendance, logout } from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, collection, query, where, setDoc } from 'firebase/firestore';
-import { Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, ArrowRight, AlertTriangle, RefreshCw, Menu, History, BarChart3, Users, Download, Share, Smartphone, X as CloseIcon, Info, Plus } from 'lucide-react';
+import { Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, ArrowRight, AlertTriangle, RefreshCw, Menu, History, BarChart3, Users, Download, Share, Smartphone, X as CloseIcon, Info, Plus, Dog } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { AnalysisResult, QuestionType } from './lib/gemini';
 
@@ -94,8 +94,9 @@ const TeacherRoom = lazy(() => import('./components/teacher/TeacherRoom'));
 const WordbookView = lazy(() => import('./components/student/WordbookView'));
 const LearningReport = lazy(() => import('./components/student/LearningReport'));
 const ArchiveView = lazy(() => import('./components/student/ArchiveView'));
+const PetHome = lazy(() => import('./components/pet/PetHome'));
 
-type View = 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'tutor' | 'report' | 'archive' | 'teacher-room';
+type View = 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'tutor' | 'report' | 'archive' | 'teacher-room' | 'pet';
 
 interface UserProfile {
   uid: string;
@@ -341,9 +342,8 @@ export default function App() {
           <p className="text-slate-600 mb-8 font-medium leading-relaxed">
             구글 로그인은 보안 정책상<br />
             카카오톡 내 브라우저에서 이용이 어렵습니다.<br /><br />
-            아래 버튼을 눌러 <span className="text-blue-500 font-bold">주소를 복사</span>한 뒤,<br />
-            크롬이나 사파리 등 <span className="text-pastel-pink-500 font-bold">외부 브라우저</span>에서<br />
-            열어주시면 원활하게 이용 가능합니다!
+            크롬이나 사파리 등 <span className="text-pastel-pink-500 font-bold">외부 브라우저</span>를<br />
+            사용하시면 원활하게 이용 가능합니다!
           </p>
           
           <div className="space-y-3 w-full">
@@ -359,18 +359,20 @@ export default function App() {
               {isCopied ? '복사 완료!' : '주소 복사하기'}
             </button>
             
+            <div className="pt-6 mt-6 border-t border-slate-50">
+              <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
+                우측 상단이나 하단에서 <br />
+                <span className="font-bold text-slate-900">[︙]</span> 또는 <span className="font-bold text-slate-900">[공유]</span> 버튼을 눌러<br />
+                <span className="text-slate-600 font-bold">'다른 브라우저로 열기'</span>를 선택하셔도 됩니다.
+              </p>
+
             <button
               onClick={() => setIsKakaoManualBypass(true)}
               className="w-full py-4 text-slate-400 text-xs font-bold hover:text-slate-600 transition-all underline underline-offset-4"
             >
-              무시하고 계속하기 (로그인 오류가 발생할 수 있습니다)
-            </button>
-            
-            <div className="pt-6 mt-6 border-t border-slate-50">
-              <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
-                우측 상단 <span className="font-bold text-slate-900">[︙]</span> 또는 하단 <span className="font-bold text-slate-900">[공유]</span> 버튼을 눌러<br />
-                <span className="text-slate-600 font-bold">'다른 브라우저로 열기'</span>를 선택하셔도 됩니다.
-              </p>
+              무시하고 계속하기 (로그인 오류 발생 가능)
+            </button>            
+
             </div>
           </div>
         </motion.div>
@@ -480,7 +482,7 @@ export default function App() {
                       {profile?.alias || profile?.name}님
                     </div>
                     <div className="text-[11px] text-pastel-pink-500 font-black uppercase tracking-widest mt-1">
-                      {profile?.role === 'teacher' ? '관리자 선생님' : '지원T English 수강생'}
+                      {profile?.role === 'teacher' ? '관리자 선생님' : '수강생'}
                     </div>
                   </div>
                 </div>
@@ -515,7 +517,14 @@ export default function App() {
                   />
                 )}
                 
-                <div className="pt-4 mt-4">
+                <MenuNavItem 
+                  icon={<Dog size={18} />} 
+                  label="펫 키우기" 
+                  onClick={() => { setCurrentView('pet'); setIsMenuOpen(false); }}
+                  active={currentView === 'pet'}
+                />
+              
+              <div className="pt-4 mt-4">
                   <button
                     onClick={() => { logout(); setIsMenuOpen(false); }}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all font-bold text-xs"
@@ -581,7 +590,7 @@ export default function App() {
         <Suspense fallback={
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
             <Loader2 className="w-10 h-10 text-pastel-pink-500 animate-spin" />
-            <p className="text-slate-400 font-bold text-sm">콘텐츠를 불러오는 중...</p>
+            <p className="text-slate-400 font-bold text-sm">불러오는 중...</p>
           </div>
         }>
           {currentView === 'home' ? (
@@ -596,6 +605,15 @@ export default function App() {
                 userRole={profile?.role} 
                 hasNewAssignment={hasNewAssignment}
               />
+            </motion.div>
+          ) : currentView === 'pet' ? (
+            <motion.div
+              key="pet"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+            >
+              <PetHome onBack={() => setCurrentView('home')} />
             </motion.div>
           ) : currentView === 'analyzer' ? (
             <motion.div
