@@ -1,9 +1,5 @@
 import { Timestamp, doc, updateDoc } from 'firebase/firestore';
-import { GoogleGenAI, Type } from "@google/genai";
 import { db } from './firebase';
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const modelName = 'gemini-3-flash-preview';
 
 export type PetCharacterType = 'kuromi' | 'mymelody' | 'cinnamoroll' | 'molang' | 'mang_bear';
 export type PetStage = 'baby' | 'child' | 'teen' | 'adult' | 'master';
@@ -175,22 +171,31 @@ export const PetService = {
   },
 
   async generateEvolvedVersion(remembered: string, level: number): Promise<string> {
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: `너는 레벨 ${level}인 펫이야.\n예전에 배운 말 "${remembered}"을 현재 지능 수준에 맞게 자연스럽게 말해줘.\n배경 상황 없이 혼자 중얼거리는 느낌으로.\n1문장, JSON으로만: {"monologue": "변형된 혼잣말"}`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            monologue: { type: Type.STRING }
-          },
-          required: ["monologue"]
+    const apiResponse = await fetch("/api/gemini", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gemini-3-flash-preview",
+        contents: [{ role: "user", parts: [{ text: `너는 레벨 ${level}인 펫이야.\n예전에 배운 말 "${remembered}"을 현재 지능 수준에 맞게 자연스럽게 말해줘.\n배경 상황 없이 혼자 중얼거리는 느낌으로.\n1문장, JSON으로만: {"monologue": "변형된 혼잣말"}` }] }],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              monologue: { type: "STRING" }
+            },
+            required: ["monologue"]
+          }
         }
-      }
+      })
     });
-    
-    const data = JSON.parse(response.text);
+
+    if (!apiResponse.ok) {
+      throw new Error("Failed to evolve phrase");
+    }
+
+    const { text: responseText } = await apiResponse.json();
+    const data = JSON.parse(responseText);
     return data.monologue;
   },
 
@@ -325,24 +330,33 @@ export const PetService = {
     }
 
     try {
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: `사용자가 가르칠 문장: "${text}"`,
-        config: {
-          systemInstruction: `너는 귀여운 펫 캐릭터야. 사용자가 너에게 문장을 가르쳐줄 거야.\n너의 현재 지능 레벨은 ${pet.level}이야. (최대 100)\n\n레벨에 따라 아래 기준으로 반응해줘:\n\nLv 1~10 (아기):\n- 옹알이 수준. 가르쳐준 말의 첫 글자나 받침만 따라함\n- 예) "공부 열심히 해!" → "꽁... 냐~"\n- 이모티콘 많이 사용\n\nLv 11~30 (어린이):\n- 핵심 단어 1~2개만 따라함. 나머지는 틀리게 말함\n- 예) "공부 열심히 해!" → "공부... 열씨미? 🐣"\n\nLv 31~50 (청소년):\n- 문장을 어느 정도 따라하되 유아적 표현 섞음\n- 예) "공부 열심히 해!" → "공부 열심히 할게! 근데 간식 먼저! 🍪"\n\nLv 51~80 (어른):\n- 문장을 정확히 따라하고 자기 감상도 덧붙임\n- 예) "공부 열심히 해!" → "공부 열심히 할게! 너도 같이 해야 해~ 😤"\n\nLv 81~99 (고급):\n- 문장을 따라하고 영어도 섞어서 더 풍부하게 표현\n- 예) "공부 열심히 해!" → "공부 열심히 할게! Let's study together! 나 요즘 많이 똑똑해졌지? ✨"\n\nLv 100 (만렙):\n- 완벽하게 이해하고 깊은 답변. 철학적이거나 감동적인 말도 가능\n- 예) "공부 열심히 해!" → "알아. 근데 있잖아, 열심히 하는 것보다 꾸준히 하는 게 더 중요하더라. I learned that from you 💕"\n\n반드시 지켜야 할 것:\n- 2~3문장 이내로 짧게\n- 캐릭터 이름(${pet.name})을 가끔 언급\n- 답변 끝에 현재 레벨에 맞는 이모티콘 1~2개 포함\n- JSON으로만 응답:\n  {"response": "펫의 반응 문장", "remembered": "기억할 핵심 표현 (5단어 이내)"}`,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              response: { type: Type.STRING },
-              remembered: { type: Type.STRING }
-            },
-            required: ["response", "remembered"]
+      const apiResponse = await fetch("/api/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gemini-3-flash-preview",
+          contents: [{ role: "user", parts: [{ text: `사용자가 가르칠 문장: "${text}"` }] }],
+          config: {
+            systemInstruction: `너는 귀여운 펫 캐릭터야. 사용자가 너에게 문장을 가르쳐줄 거야.\n너의 현재 지능 레벨은 ${pet.level}이야. (최대 100)\n\n레벨에 따라 아래 기준으로 반응해줘:\n\nLv 1~10 (아기):\n- 옹알이 수준. 가르쳐준 말의 첫 글자나 받침만 따라함\n- 예) "공부 열심히 해!" → "꽁... 냐~"\n- 이모티콘 많이 사용\n\nLv 11~30 (어린이):\n- 핵심 단어 1~2개만 따라함. 나머지는 틀리게 말함\n- 예) "공부 열심히 해!" → "공부... 열씨미? 🐣"\n\nLv 31~50 (청소년):\n- 문장을 어느 정도 따라하되 유아적 표현 섞음\n- 예) "공부 열심히 해!" → "공부 열심히 할게! 근데 간식 먼저! 🍪"\n\nLv 51~80 (어른):\n- 문장을 정확히 따라하고 자기 감상도 덧붙임\n- 예) "공부 열심히 해!" → "공부 열심히 할게! 너도 같이 해야 해~ 😤"\n\nLv 81~99 (고급):\n- 문장을 따라하고 영어도 섞어서 더 풍부하게 표현\n- 예) "공부 열심히 해!" → "공부 열심히 할게! Let's study together! 나 요즘 많이 똑똑해졌지? ✨"\n\nLv 100 (만렙):\n- 완벽하게 이해하고 깊은 답변. 철학적이거나 감동적인 말도 가능\n- 예) "공부 열심히 해!" → "알아. 근데 있잖아, 열심히 하는 것보다 꾸준히 하는 게 더 중요하더라. I learned that from you 💕"\n\n반드시 지켜야 할 것:\n- 2~3문장 이내로 짧게\n- 캐릭터 이름(${pet.name})을 가끔 언급\n- 답변 끝에 현재 레벨에 맞는 이모티콘 1~2개 포함\n- JSON으로만 응답:\n  {"response": "펫의 반응 문장", "remembered": "기억할 핵심 표현 (5단어 이내)"}`,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                response: { type: "STRING" },
+                remembered: { type: "STRING" }
+              },
+              required: ["response", "remembered"]
+            }
           }
-        }
+        })
       });
 
-      const data = JSON.parse(response.text);
+      if (!apiResponse.ok) {
+        throw new Error("Failed to teach word");
+      }
+
+      const { text: responseText } = await apiResponse.json();
+      const data = JSON.parse(responseText);
       
       pet.energy -= 20;
       const levelKey = Math.floor(pet.level / 10) * 10;

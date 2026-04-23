@@ -529,13 +529,14 @@ export default function App() {
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
-        <Suspense fallback={
-          <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-            <Loader2 className="w-10 h-10 text-pastel-pink-500 animate-spin" />
-            <p className="text-slate-400 font-bold text-sm">불러오는 중...</p>
-          </div>
-        }>
-          {currentView === 'home' ? (
+        <ErrorBoundary>
+          <Suspense fallback={
+            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+              <Loader2 className="w-10 h-10 text-pastel-pink-500 animate-spin" />
+              <p className="text-slate-400 font-bold text-sm">불러오는 중...</p>
+            </div>
+          }>
+            {currentView === 'home' ? (
             <motion.div
               key="home"
               initial={{ opacity: 0 }}
@@ -828,7 +829,8 @@ export default function App() {
             </motion.div>
           )}
         </Suspense>
-      </AnimatePresence>
+      </ErrorBoundary>
+    </AnimatePresence>
 
       {/* Footer Decoration */}
       <div className="fixed bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-pastel-pink-200 via-pastel-pink-400 to-pastel-pink-200 opacity-50" />

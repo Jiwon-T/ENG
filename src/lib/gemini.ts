@@ -59,9 +59,6 @@ export async function analyzeEnglishText(
   selectedTypes: QuestionType[] = [],
   questionsOnly: boolean = false
 ): Promise<AnalysisResult> {
-  const { GoogleGenAI, Type } = await import("@google/genai");
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-  
   const prompt = `Analyze the following English text for a Korean high school student.
     
     ${!questionsOnly ? `
@@ -139,121 +136,130 @@ export async function analyzeEnglishText(
 
     Text: ${text}`;
 
-  const result = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
-    config: {
-      responseMimeType: "application/json",
-      maxOutputTokens: 8192,
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          englishTitle: { type: Type.STRING },
-          examInfo: { type: Type.STRING },
-          topic: {
-            type: Type.OBJECT,
-            properties: { ko: { type: Type.STRING }, en: { type: Type.STRING } },
-            required: ["ko", "en"]
-          },
-          mainIdea: {
-            type: Type.OBJECT,
-            properties: { ko: { type: Type.STRING }, en: { type: Type.STRING } },
-            required: ["ko", "en"]
-          },
-          summaryLong: {
-            type: Type.OBJECT,
-            properties: { ko: { type: Type.STRING }, en: { type: Type.STRING } },
-            required: ["ko", "en"]
-          },
-          plotPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
-          logicType: { type: Type.STRING },
-          purpose: { type: Type.STRING },
-          keySentence: { type: Type.STRING },
-          keywords: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: { en: { type: Type.STRING }, ko: { type: Type.STRING } },
-              required: ["en", "ko"]
-            }
-          },
-          sentences: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                category: { type: Type.STRING },
-                original: { type: Type.STRING },
-                chunks: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      text: { type: Type.STRING },
-                      translation: { type: Type.STRING },
-                      marking: { type: Type.STRING },
-                      grammarNote: { type: Type.STRING },
-                      color: { type: Type.STRING },
-                      underline: { type: Type.BOOLEAN },
-                      highlight: { type: Type.BOOLEAN }
-                    },
-                    required: ["text", "translation", "color", "marking", "grammarNote"]
-                  }
-                },
-                fullTranslation: { type: Type.STRING },
-                grammarPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
-                isImportant: { type: Type.BOOLEAN },
-                isTopicSentence: { type: Type.BOOLEAN },
-                isInsertionPoint: { type: Type.BOOLEAN }
-              },
-              required: ["category", "original", "chunks", "fullTranslation"]
-            }
-          },
-          summary: { type: Type.STRING },
-          clozePassage: { type: Type.STRING },
-          clozeAnswers: { type: Type.ARRAY, items: { type: Type.STRING } },
-          questions: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                type: { type: Type.STRING, enum: ["vocabulary", "title", "gist", "consistency", "ordering", "insertion", "summary", "blank", "grammar", "irrelevant", "claim", "topic", "workbook"] },
-                question: { type: Type.STRING },
-                boxContent: { type: Type.STRING },
-                passage: { type: Type.STRING },
-                paragraphs: {
-                  type: Type.OBJECT,
-                  properties: {
-                    A: { type: Type.STRING },
-                    B: { type: Type.STRING },
-                    C: { type: Type.STRING },
-                  }
-                },
-                summaryPassage: { type: Type.STRING },
-                options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                answer: { type: Type.STRING },
-                explanation: { type: Type.STRING }
-              },
-              required: ["type", "question", "answer"]
-            }
-          }
-        },
-        required: ["title", "englishTitle", "examInfo", "topic", "mainIdea", "summaryLong", "plotPoints", "logicType", "purpose", "keySentence", "keywords", "sentences", "summary"]
-      }
-    },
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-  });
-
-  const responseText = result.text || "";
-  
   try {
+    const apiResponse = await fetch("/api/gemini", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gemini-3-flash-preview",
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        config: {
+          responseMimeType: "application/json",
+          maxOutputTokens: 8192,
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              title: { type: "STRING" },
+              englishTitle: { type: "STRING" },
+              examInfo: { type: "STRING" },
+              topic: {
+                type: "OBJECT",
+                properties: { ko: { type: "STRING" }, en: { type: "STRING" } },
+                required: ["ko", "en"]
+              },
+              mainIdea: {
+                type: "OBJECT",
+                properties: { ko: { type: "STRING" }, en: { type: "STRING" } },
+                required: ["ko", "en"]
+              },
+              summaryLong: {
+                type: "OBJECT",
+                properties: { ko: { type: "STRING" }, en: { type: "STRING" } },
+                required: ["ko", "en"]
+              },
+              plotPoints: { type: "ARRAY", items: { type: "STRING" } },
+              logicType: { type: "STRING" },
+              purpose: { type: "STRING" },
+              keySentence: { type: "STRING" },
+              keywords: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: { en: { type: "STRING" }, ko: { type: "STRING" } },
+                  required: ["en", "ko"]
+                }
+              },
+              sentences: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    category: { type: "STRING" },
+                    original: { type: "STRING" },
+                    chunks: {
+                      type: "ARRAY",
+                      items: {
+                        type: "OBJECT",
+                        properties: {
+                          text: { type: "STRING" },
+                          translation: { type: "STRING" },
+                          marking: { type: "STRING" },
+                          grammarNote: { type: "STRING" },
+                          color: { type: "STRING" },
+                          underline: { type: "BOOLEAN" },
+                          highlight: { type: "BOOLEAN" }
+                        },
+                        required: ["text", "translation", "color", "marking", "grammarNote"]
+                      }
+                    },
+                    fullTranslation: { type: "STRING" },
+                    grammarPoints: { type: "ARRAY", items: { type: "STRING" } },
+                    isImportant: { type: "BOOLEAN" },
+                    isTopicSentence: { type: "BOOLEAN" },
+                    isInsertionPoint: { type: "BOOLEAN" }
+                  },
+                  required: ["category", "original", "chunks", "fullTranslation"]
+                }
+              },
+              summary: { type: "STRING" },
+              clozePassage: { type: "STRING" },
+              clozeAnswers: { type: "ARRAY", items: { type: "STRING" } },
+              questions: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    type: { type: "STRING", enum: ["vocabulary", "title", "gist", "consistency", "ordering", "insertion", "summary", "blank", "grammar", "irrelevant", "claim", "topic", "workbook"] },
+                    question: { type: "STRING" },
+                    boxContent: { type: "STRING" },
+                    passage: { type: "STRING" },
+                    paragraphs: {
+                      type: "OBJECT",
+                      properties: {
+                        A: { type: "STRING" },
+                        B: { type: "STRING" },
+                        C: { type: "STRING" },
+                      }
+                    },
+                    summaryPassage: { type: "STRING" },
+                    options: { type: "ARRAY", items: { type: "STRING" } },
+                    answer: { type: "STRING" },
+                    explanation: { type: "STRING" }
+                  },
+                  required: ["type", "question", "answer"]
+                }
+              }
+            },
+            required: ["title", "englishTitle", "examInfo", "topic", "mainIdea", "summaryLong", "plotPoints", "logicType", "purpose", "keySentence", "keywords", "sentences", "summary"]
+          }
+        }
+      })
+    });
+
+    if (!apiResponse.ok) {
+      const errorData = await apiResponse.json();
+      throw new Error(errorData.error || "Gemini API 호출 실패");
+    }
+
+    const { text: responseText } = await apiResponse.json();
+    
     // Clean potential markdown formatting if the model ignored responseMimeType
     const cleanedText = responseText.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
     const parsed = JSON.parse(cleanedText) as AnalysisResult;
     parsed.originalText = text;
     return parsed;
-  } catch (e) {
-    console.error("Failed to parse Gemini response:", responseText);
-    throw new Error("AI 응답을 분석하는 중 오류가 발생했습니다. 지문이 너무 길거나 복잡할 수 있습니다.");
+  } catch (e: any) {
+    console.error("Gemini analysis error:", e);
+    throw new Error(e.message || "AI 응답을 분석하는 중 오류가 발생했습니다. 지문이 너무 길거나 복잡할 수 있습니다.");
   }
 }
