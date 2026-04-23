@@ -1,6 +1,4 @@
 import React, { useState, useEffect, Suspense, lazy, Component } from 'react';
-import Home from './components/Home';
-import Login from './components/auth/Login';
 import { auth, db, recordAttendance, logout } from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, collection, query, where, setDoc } from 'firebase/firestore';
@@ -89,6 +87,8 @@ class ErrorBoundary extends (Component as any) {
 }
 
 // Lazy load heavy components
+const Login = lazy(() => import('./components/auth/Login'));
+const Home = lazy(() => import('./components/Home'));
 const AnalysisView = lazy(() => import('./components/AnalysisView'));
 const TeacherRoom = lazy(() => import('./components/teacher/TeacherRoom'));
 const WordbookView = lazy(() => import('./components/student/WordbookView'));
@@ -207,7 +207,7 @@ export default function App() {
             if (firebaseUser.email === 'lizzieshere1@gmail.com' && data.role !== 'teacher') {
               data = { ...data, role: 'teacher' as const };
               setDoc(userDocRef, { role: 'teacher' }, { merge: true }).catch(e => console.error('Silent role update failed:', e));
-              runTeacherSeeding();
+              setTimeout(runTeacherSeeding, 1000); // Defer seeding
             }
             
             setProfile(data);
@@ -219,7 +219,7 @@ export default function App() {
             }
 
             if (data.role === 'teacher') {
-              runTeacherSeeding();
+              setTimeout(runTeacherSeeding, 1000); // Defer seeding
             }
           } else {
             console.warn('User doc still does not exist after ensureUserDocExists');
@@ -329,7 +329,17 @@ export default function App() {
   }
 
   if (!user) {
-    return <Login />;
+    return (
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-[#fafafa]">
+          <div className="flex flex-col items-center gap-4">
+            <div className="text-4xl animate-bounce">🏫</div>
+          </div>
+        </div>
+      }>
+        <Login />
+      </Suspense>
+    );
   }
 
   return (
