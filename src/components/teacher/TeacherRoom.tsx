@@ -173,10 +173,10 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                 <table className="w-full text-left min-w-[900px] xl:min-w-full">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">계정 정보</th>
-                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">학습자 이름</th>
-                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">펫 / 포인트</th>
-                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">선생님 메모</th>
+                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">이름</th>
+                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">계정</th>
+                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">펫/포인트</th>
+                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">메모</th>
                       <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">이메일</th>
                       <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">구분</th>
                       <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">관리</th>
