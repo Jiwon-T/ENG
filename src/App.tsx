@@ -137,18 +137,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [generateQuestions, setGenerateQuestions] = useState(false);
   const [selectedQuestionTypes, setSelectedQuestionTypes] = useState<QuestionType[]>([]);
-  const [isKakao] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      const ua = navigator.userAgent.toLowerCase();
-      return ua.indexOf('kakaotalk') > -1 || ua.indexOf('kakao') > -1;
-    } catch (e) {
-      return false;
-    }
-  });
-  const [isKakaoManualBypass, setIsKakaoManualBypass] = useState(false);
   const [hasNewAssignment, setHasNewAssignment] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
   const [showNameEditModal, setShowNameEditModal] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [newName, setNewName] = useState('');
@@ -323,59 +312,6 @@ export default function App() {
     setCurrentView('home');
     reset();
   };
-
-  if (isKakao && !isKakaoManualBypass) {
-    return (
-      <div className="min-h-screen bg-[#fafafa] flex flex-col items-center justify-center p-8 text-center">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md w-full bg-white p-10 rounded-[3rem] shadow-2xl shadow-yellow-100/50 border border-yellow-50"
-        >
-          <div className="w-20 h-20 bg-yellow-100 rounded-3xl flex items-center justify-center mb-8 mx-auto">
-            <span className="text-4xl text-slate-900">💬</span>
-          </div>
-          <h2 className="text-2xl font-black text-slate-900 mb-4 tracking-tight">카카오톡 브라우저 안내</h2>
-          <p className="text-slate-600 mb-8 font-medium leading-relaxed">
-            구글 로그인은 보안 정책상<br />
-            카카오톡 내 브라우저에서 이용이 어렵습니다.<br /><br />
-            크롬이나 사파리 등 <span className="text-pastel-pink-500 font-bold">외부 브라우저</span>를<br />
-            사용하시면 원활하게 이용 가능합니다!
-          </p>
-          
-          <div className="space-y-3 w-full">
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(window.location.href);
-                setIsCopied(true);
-                setTimeout(() => setIsCopied(false), 2000);
-              }}
-              className="w-full py-5 bg-pastel-pink-500 text-white rounded-2xl font-black flex items-center justify-center gap-3 shadow-lg shadow-pastel-pink-200 hover:bg-pastel-pink-600 active:scale-[0.98] transition-all"
-            >
-              <ExternalLink size={24} />
-              {isCopied ? '복사 완료!' : '주소 복사하기'}
-            </button>
-            
-            <div className="pt-6 mt-6 border-t border-slate-50">
-              <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
-                우측 상단이나 하단에서 <br />
-                <span className="font-bold text-slate-900">[︙]</span> 또는 <span className="font-bold text-slate-900">[공유]</span> 버튼을 눌러<br />
-                <span className="text-slate-600 font-bold">'다른 브라우저로 열기'</span>를 선택하셔도 됩니다.
-              </p>
-
-            <button
-              onClick={() => setIsKakaoManualBypass(true)}
-              className="w-full py-4 text-slate-400 text-xs font-bold hover:text-slate-600 transition-all underline underline-offset-4"
-            >
-              무시하고 계속하기 (로그인 오류 발생 가능)
-            </button>            
-
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
 
   if (authLoading) {
     return (
