@@ -67,12 +67,34 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     if (!user) return;
-    const savedState = PetService.getState(user.uid);
-    // If first pet is initial placeholder, show selector
-    if (savedState.pets[0].name === '친구가 필요해요') {
-      setShowSelector(true);
-    }
-    setState(savedState);
+    
+    const initializePetState = async () => {
+      // 1. Get current state from local storage (or initial)
+      let currentLocalState = PetService.getState(user.uid);
+      
+      try {
+        // 2. Fetch latest profile from Firestore to sync progress
+        const { doc, getDoc } = await import('firebase/firestore');
+        const { db } = await import('../../lib/firebase');
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        
+        if (userDoc.exists()) {
+          const profileData = userDoc.data();
+          // 3. Sync local state with firestore profile (restores points/level if needed)
+          currentLocalState = await PetService.syncFromProfile(user.uid, profileData);
+        }
+      } catch (e) {
+        console.error('Failed to sync pet state from profile:', e);
+      }
+
+      // If first pet is initial placeholder, show selector
+      if (currentLocalState.pets[0].name === '친구가 필요해요') {
+        setShowSelector(true);
+      }
+      setState(currentLocalState);
+    };
+
+    initializePetState();
   }, [user]);
 
   // Need to update actions too.

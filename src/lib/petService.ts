@@ -35,7 +35,7 @@ export interface PetSystemState {
   pets: PetData[];
 }
 
-const INITIAL_STATE: PetSystemState = {
+const getInitialState = (): PetSystemState => ({
   currentPetSlot: 1,
   points: 0,
   inventory: [],
@@ -54,7 +54,7 @@ const INITIAL_STATE: PetSystemState = {
       learnedPhrases: []
     }
   ]
-};
+});
 
 const STORAGE_KEY = 'pet_system_data';
 
@@ -74,11 +74,11 @@ export const PetService = {
   getState(uid?: string): PetSystemState {
     const key = uid ? `${STORAGE_KEY}_${uid}` : STORAGE_KEY;
     const saved = localStorage.getItem(key);
-    if (!saved) return INITIAL_STATE;
+    if (!saved) return getInitialState();
     try {
       const parsed = JSON.parse(saved);
       // Migration or validation
-      if (!parsed.pets || parsed.pets.length === 0) return INITIAL_STATE;
+      if (!parsed.pets || parsed.pets.length === 0) return getInitialState();
       
       // Ensure energy exists (migration)
       parsed.pets.forEach((p: any) => {
@@ -89,7 +89,7 @@ export const PetService = {
       
       return parsed;
     } catch (e) {
-      return INITIAL_STATE;
+      return getInitialState();
     }
   },
 
@@ -384,5 +384,46 @@ export const PetService = {
       console.error('Teach word failed:', e);
       return { success: false, reaction: '', remembered: '', newState: state, message: '교육 중 오류가 발생했어요.' };
     }
+  },
+
+  async syncFromProfile(uid: string, profileData: any): Promise<PetSystemState> {
+    const state = this.getState(uid);
+    const pet = state.pets.find(p => p.slot === state.currentPetSlot);
+    
+    if (profileData?.petStats && pet) {
+      const stats = profileData.petStats;
+      let changed = false;
+
+      // Only sync if Firestore has more "progress" or if we are at base state
+      // Points restoration
+      if (stats.points > state.points) {
+        state.points = stats.points;
+        changed = true;
+      }
+      
+      // Level restoration
+      if (stats.highestLevel > pet.level) {
+        pet.level = stats.highestLevel;
+        changed = true;
+      }
+
+      // XP restoration
+      if (stats.totalXP > pet.xp) {
+        pet.xp = stats.totalXP;
+        changed = true;
+      }
+
+      // Character/Name restoration (in case local storage was cleared but they had chosen one)
+      if (pet.name === '친구가 필요해요' && stats.petName && stats.petName !== '친구가 필요해요') {
+        pet.name = stats.petName;
+        pet.character = stats.character || pet.character;
+        changed = true;
+      }
+
+      if (changed) {
+        this.saveState(state, uid);
+      }
+    }
+    return state;
   }
 };
