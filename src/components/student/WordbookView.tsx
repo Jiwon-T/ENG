@@ -10,7 +10,7 @@ interface Wordbook {
   title: string;
   description: string;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar';
   category?: 'word' | 'grammar';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -412,6 +412,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     const isToIngGrammar = selectedWordbook?.type === 'to-ing-grammar';
     const isComplementGrammar = selectedWordbook?.type === 'complement-grammar';
     const isConversionGrammar = selectedWordbook?.type === 'conversion-grammar';
+    const isModalGrammar = selectedWordbook?.type === 'modal-grammar';
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.title?.includes('관계부사');
     
     let correctOption: string;
@@ -472,6 +473,26 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
       otherOptions = allPatterns
         .filter(p => p !== (correctWord.pattern || ''))
         .map(getLabel);
+    } else if (isModalGrammar) {
+      correctOption = correctWord.meaning;
+      
+      // Get fixed distractors from the word data
+      const fixedDistractors = correctWord.distractors || [];
+      
+      // Get random meanings from the current set as potential distractors
+      const otherMeanings = currentWords
+        .filter(w => w.id !== correctWord.id)
+        .map(w => w.meaning);
+      
+      // User request: At least one distractor should be a random meaning from the set
+      const randomSetDistractor = otherMeanings[Math.floor(Math.random() * otherMeanings.length)];
+      
+      const combinedDistractors = new Set<string>();
+      if (randomSetDistractor) combinedDistractors.add(randomSetDistractor);
+      fixedDistractors.forEach(d => combinedDistractors.add(d));
+      
+      otherOptions = Array.from(combinedDistractors).filter(d => d !== correctOption);
+      if (otherOptions.length > 3) otherOptions = otherOptions.slice(0, 3);
     } else if (isIrregular) {
       // For irregular, test the past - participle pair
       correctOption = `${correctWord.past} - ${correctWord.pastParticiple}`;
@@ -555,6 +576,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     const isToIngGrammar = selectedWordbook?.type === 'to-ing-grammar';
     const isComplementGrammar = selectedWordbook?.type === 'complement-grammar';
     const isConversionGrammar = selectedWordbook?.type === 'conversion-grammar';
+    const isModalGrammar = selectedWordbook?.type === 'modal-grammar';
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.title?.includes('관계부사');
     
     let correctAnswer: string;

@@ -232,6 +232,72 @@ export const CONVERSION_GRAMMAR_DATA = [
   { word: 'take', meaning: '시간이 걸리게 하다', pattern: 'impossible' },
 ];
 
+export const MODAL_GRAMMAR_DATA = [
+  // POINT 5 — 조동사 + have + p.p.
+  { word: 'may[might] + have p.p.', meaning: '~했을 수도 있다', pattern: '조동사 + have p.p.', distractors: ['~했음이 틀림없다', '~했을 리가 없다', '~했어야 했다'] },
+  { word: 'must + have p.p.', meaning: '~했음이 틀림없다', pattern: '조동사 + have p.p.', distractors: ['~했을 수도 있다', '~했을 리가 없다', '~했을 수도 있었다'] },
+  { word: 'can\'t + have p.p.', meaning: '~했을 리가 없다', pattern: '조동사 + have p.p.', distractors: ['~했음이 틀림없다', '~했을 수도 있다', '~하는 것이 낫다'] },
+  { word: 'should + have p.p.', meaning: '~했어야 했다 (하지만 하지 않았다)', pattern: '조동사 + have p.p.', distractors: ['~했을 수도 있었다', '~했음이 틀림없다', '~했을 수도 있다'] },
+  { word: 'could + have p.p.', meaning: '~했을 수도 있었다 (하지만 하지 않았다)', pattern: '조동사 + have p.p.', distractors: ['~했어야 했다', '~했을 리가 없다', '~했음이 틀림없다'] },
+  
+  // POINT 6 — 조동사 관용 표현
+  { word: 'would like + 명사', meaning: '~을 원하다', pattern: '조동사 관용 표현', distractors: ['~하고 싶다', '(차라리) ~하겠다', '~하는 편이 좋다'] },
+  { word: 'would like to + 동사원형', meaning: '~하고 싶다', pattern: '조동사 관용 표현', distractors: ['~을 원하다', '~하는 것이 낫다', '~하는 것도 당연하다'] },
+  { word: 'would rather + 동사원형', meaning: '(차라리) ~하겠다', pattern: '조동사 관용 표현', distractors: ['~하고 싶다', '~하는 편이 좋다', '~하는 것이 낫다'] },
+  { word: 'may well + 동사원형', meaning: '(~하는 것도) 당연하다', pattern: '조동사 관용 표현', distractors: ['~하는 편이 좋다', '(차라리) ~하겠다', '~하고 싶다'] },
+  { word: 'may as well + 동사원형', meaning: '~하는 편이 좋다', pattern: '조동사 관용 표현', distractors: ['(~하는 것도) 당연하다', '~하는 것이 낫다', '~을 원하다'] },
+  { word: 'had better + 동사원형', meaning: '~하는 것이 낫다', pattern: '조동사 관용 표현', distractors: ['~하는 편이 좋다', '~하고 싶다', '(차라리) ~하겠다'] },
+];
+
+export async function seedModalGrammar() {
+  if ((window as any)._modalSeeded) return;
+  (window as any)._modalSeeded = true;
+
+  const wordbooksRef = collection(db, 'wordbooks');
+  const q = query(wordbooksRef, where('type', '==', 'modal-grammar'));
+  const snapshot = await getDocs(q);
+
+  let wordbookId: string;
+
+  if (snapshot.empty) {
+    const docRef = await addDoc(wordbooksRef, {
+      title: '조동사',
+      description: '조동사 + have p.p. 및 관용 표현을 학습합니다.',
+      createdBy: 'system',
+      isPublic: true,
+      type: 'modal-grammar',
+      category: 'grammar',
+      createdAt: Timestamp.now(),
+      order: 2
+    });
+    wordbookId = docRef.id;
+  } else {
+    wordbookId = snapshot.docs[0].id;
+    await setDoc(doc(db, 'wordbooks', wordbookId), { 
+      type: 'modal-grammar',
+      category: 'grammar',
+      createdBy: 'system',
+      description: '조동사 + have p.p. 및 관용 표현을 학습합니다.'
+    }, { merge: true });
+  }
+
+  const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
+  const existingWords = await getDocs(wordsRef);
+  
+  if (existingWords.empty) {
+    for (let i = 0; i < MODAL_GRAMMAR_DATA.length; i++) {
+      const item = MODAL_GRAMMAR_DATA[i];
+      await addDoc(wordsRef, {
+        word: item.word,
+        meaning: item.meaning,
+        pattern: item.pattern,
+        distractors: item.distractors,
+        order: i
+      });
+    }
+  }
+}
+
 export async function seedConversionGrammar() {
   if ((window as any)._conversionSeeded) return;
   (window as any)._conversionSeeded = true;
