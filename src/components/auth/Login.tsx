@@ -14,6 +14,11 @@ export default function Login() {
 
   const handleGoogleLogin = async () => {
     try {
+      const isKakaoTalk = /KAKAOTALK/i.test(navigator.userAgent);
+      if (isKakaoTalk) {
+        setError('카카오톡 인앱 브라우저에서는 구글 로그인이 제한될 수 있습니다. 상단 혹은 하단의 메뉴를 통해 "다른 브라우저로 열기"를 선택하시거나, 이메일/비밀번호 로그인을 이용해 주세요.');
+        return;
+      }
       await signIn();
     } catch (error) {
       console.error('Login failed:', error);
