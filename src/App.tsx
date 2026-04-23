@@ -200,62 +200,59 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setAuthLoading(true);
       setUser(firebaseUser);
+      
       if (firebaseUser) {
-        // Run background tasks without blocking UI loading if possible
-        // but we need profile for the role
-        recordAttendance(firebaseUser.uid);
-
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
         try {
+          const { ensureUserDocExists } = await import('./lib/firebase');
+          await ensureUserDocExists(firebaseUser);
+          
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
           const userDoc = await getDoc(userDocRef);
+          
           if (userDoc.exists()) {
-            const data = userDoc.data() as UserProfile;
+            let data = userDoc.data() as UserProfile;
+            
             // Force update role for teacher email if it's currently student
             if (firebaseUser.email === 'lizzieshere1@gmail.com' && data.role !== 'teacher') {
-              const updatedProfile = { ...data, role: 'teacher' as const };
-              setProfile(updatedProfile);
-              // Update Firestore in background
-              setDoc(userDocRef, { role: 'teacher' }, { merge: true });
-              // Auto-seed in background
+              data = { ...data, role: 'teacher' as const };
+              setDoc(userDocRef, { role: 'teacher' }, { merge: true }).catch(e => console.error('Silent role update failed:', e));
               runTeacherSeeding();
-            } else {
-              setProfile(data);
-              
-              // If student hasn't set their name yet, show the modal
-              if (data.role === 'student' && !data.isNameSet) {
-                setNewName(data.alias || data.name || '');
-                setShowNameEditModal(true);
-              }
-
-              if (data.role === 'teacher') {
-                runTeacherSeeding();
-              }
             }
-          } else {
-            // Create new profile
-            const newRole = firebaseUser.email === 'lizzieshere1@gmail.com' ? 'teacher' : 'student';
-            const newProfile: UserProfile = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              name: firebaseUser.displayName || '사용자',
-              role: newRole as any,
-              isNameSet: false
-            };
-            setProfile(newProfile);
-            setDoc(userDocRef, newProfile);
             
-            if (newProfile.role === 'student') {
-              setNewName(newProfile.name);
+            setProfile(data);
+            
+            // If student hasn't set their name yet, show the modal
+            if (data.role === 'student' && !data.isNameSet) {
+              setNewName(data.alias || data.name || '');
               setShowNameEditModal(true);
             }
 
-            if (newProfile.role === 'teacher') {
+            if (data.role === 'teacher') {
               runTeacherSeeding();
             }
+          } else {
+            console.warn('User doc still does not exist after ensureUserDocExists');
+            // Mock profile if firestore is lagging
+            setProfile({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              name: firebaseUser.displayName || '사용자',
+              role: firebaseUser.email === 'lizzieshere1@gmail.com' ? 'teacher' : 'student'
+            });
           }
-        } catch (error) {
-          console.error('Failed to fetch user profile:', error);
+        } catch (error: any) {
+          console.error('Failed to manage user profile:', error);
+          if (error.code === 'permission-denied' || error.message?.includes('permission')) {
+             // Fallback profile if rules are being strict during provisioning
+             setProfile({
+               uid: firebaseUser.uid,
+               email: firebaseUser.email || '',
+               name: firebaseUser.displayName || '사용자',
+               role: firebaseUser.email === 'lizzieshere1@gmail.com' ? 'teacher' : 'student'
+             });
+          }
         }
       } else {
         setProfile(null);

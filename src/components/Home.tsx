@@ -22,7 +22,7 @@ export default function Home({ onNavigate, userRole, hasNewAssignment }: HomePro
     },
     {
       id: 'grammar',
-      title: '드릴 세트',
+      title: '문법 세트',
       description: '주요 문법 포인트를 학습합니다.',
       icon: <GraduationCap className="text-purple-500 w-4 h-4 md:w-8 md:h-8" />,
       color: 'bg-purple-50',

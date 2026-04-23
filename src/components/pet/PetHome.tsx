@@ -537,7 +537,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
                             return (
                               <button
                                 key={id}
-                                onClick={() => PetService.applyItem(id, isOutfit ? 'outfit' : 'background')}
+                                onClick={() => user && PetService.applyItem(id, isOutfit ? 'outfit' : 'background', user.uid)}
                                 className={`p-4 rounded-2xl border-2 transition-all ${
                                   state.outfit === id || state.background === id ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 bg-slate-50'
                                 }`}

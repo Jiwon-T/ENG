@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, collection, query, where, onSnapshot, Timestamp, addDoc, getDocs, deleteDoc, updateDoc, orderBy } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -87,10 +87,13 @@ export async function ensureUserDocExists(user: FirebaseUser, name?: string) {
 export async function signUpWithEmail(email: string, password: string) {
   try {
     const result = await createUserWithEmailAndPassword(auth, email, password);
-    await ensureUserDocExists(result.user, '사용자');
+    // Profile sync will be handled by onAuthStateChanged in App.tsx
     return result.user;
-  } catch (error) {
-    console.error('Error signing up:', error);
+  } catch (error: any) {
+    // Only log unexpected errors
+    if (error?.code !== 'auth/email-already-in-use') {
+      console.error('Error signing up helper:', error);
+    }
     throw error;
   }
 }
@@ -98,11 +101,25 @@ export async function signUpWithEmail(email: string, password: string) {
 export async function signInWithEmail(email: string, password: string) {
   try {
     const result = await signInWithEmailAndPassword(auth, email, password);
-    // Already exists in Firestore, just ensure attendance
-    await recordAttendance(result.user.uid);
+    // Profile sync will be handled by onAuthStateChanged in App.tsx
     return result.user;
-  } catch (error) {
-    console.error('Error signing in:', error);
+  } catch (error: any) {
+    if (
+      error?.code !== 'auth/user-not-found' && 
+      error?.code !== 'auth/wrong-password' &&
+      error?.code !== 'auth/invalid-credential'
+    ) {
+      console.error('Error signing in helper:', error);
+    }
+    throw error;
+  }
+}
+
+export async function resetPassword(email: string) {
+  try {
+    await sendPasswordResetEmail(auth, email);
+  } catch (error: any) {
+    console.error('Error resetting password helper:', error);
     throw error;
   }
 }
@@ -110,10 +127,10 @@ export async function signInWithEmail(email: string, password: string) {
 export async function signIn() {
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    await ensureUserDocExists(result.user);
+    // Profile sync will be handled by onAuthStateChanged in App.tsx
     return result.user;
   } catch (error) {
-    console.error('Error signing in:', error);
+    console.error('Error signing in Google helper:', error);
     throw error;
   }
 }
@@ -354,16 +371,25 @@ export async function recordStudySession(data: {
 }) {
   const sessionRef = collection(db, 'studySessions');
   try {
-    const docData: any = {
+    // Recursive function to remove undefined values
+    const cleanObject = (obj: any): any => {
+      if (Array.isArray(obj)) {
+        return obj.map(item => cleanObject(item));
+      } else if (obj !== null && typeof obj === 'object' && !(obj instanceof Timestamp)) {
+        const newObj: any = {};
+        Object.keys(obj).forEach(key => {
+          if (obj[key] !== undefined) {
+            newObj[key] = cleanObject(obj[key]);
+          }
+        });
+        return newObj;
+      }
+      return obj;
+    };
+
+    const docData = cleanObject({
       ...data,
       createdAt: Timestamp.now()
-    };
-    
-    // Remove undefined fields
-    Object.keys(docData).forEach(key => {
-      if (docData[key] === undefined) {
-        delete docData[key];
-      }
     });
 
     await addDoc(sessionRef, docData);

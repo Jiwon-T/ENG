@@ -46,9 +46,11 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
   const [progress, setProgress] = useState<Progress>({});
   const [loading, setLoading] = useState(true);
   
-  // Chunking states
-  const [chunkSize, setChunkSize] = useState(10);
+  // Chunking states (Days)
   const [currentChunk, setCurrentChunk] = useState(0);
+
+  // Learning Unit Size for sessions
+  const [sessionUnitSize, setSessionUnitSize] = useState(10);
 
   // Flashcard states
   const [isFlashcardMode, setIsFlashcardMode] = useState(false);
@@ -91,7 +93,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
   const [totalPoints, setTotalPoints] = useState(0);
   const [incorrectAnswers, setIncorrectAnswers] = useState<{ word: string; meaning: string; userChoice: string; correctAnswer: string; choices?: string[]; quizSentence?: string }[]>([]);
 
-  const finishSession = (type: 'quiz' | 'flashcard' | 'match' | 'conjugation', score?: number, total?: number) => {
+  const finishSession = (type: 'quiz' | 'flashcard' | 'match' | 'conjugation', score?: number, total?: number, overrideIncorrectAnswers?: any[]) => {
     if (!sessionStartTime || !auth.currentUser || !selectedWordbook) return;
     const duration = Math.floor((Date.now() - sessionStartTime) / 1000);
     if (duration < 1) return; // Ignore very short sessions (less than 1s)
@@ -99,6 +101,8 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     // Calculate rewards
     let points = 0;
     let xp = 0;
+    const finalIncorrectAnswers = overrideIncorrectAnswers || incorrectAnswers;
+
     if (type === 'quiz' || type === 'conjugation') {
       points = (score || 0) * 5;
       xp = (score || 0) * 10;
@@ -130,7 +134,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
       duration,
       score,
       totalItems: total,
-      incorrectAnswers: type === 'quiz' || type === 'conjugation' ? incorrectAnswers : undefined
+      incorrectAnswers: (type === 'quiz' || type === 'conjugation' || type === 'match') ? finalIncorrectAnswers : undefined
     });
     setSessionStartTime(null);
     setIncorrectAnswers([]);
@@ -176,11 +180,11 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
   useEffect(() => {
     if (!selectedWordbook) return;
     
-    // Set initial chunk size from wordbook settings
+    // Set session unit size from wordbook settings, but keep Day tabs separate
     if (selectedWordbook.defaultUnitSize) {
-      setChunkSize(selectedWordbook.defaultUnitSize);
+      setSessionUnitSize(selectedWordbook.defaultUnitSize);
     } else {
-      setChunkSize(10);
+      setSessionUnitSize(10);
     }
     
     setLoading(true);
@@ -244,8 +248,12 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
   const startMatchGame = () => {
     if (displayedWords.length === 0) return;
     
+    const shuffledPool = [...displayedWords].sort(() => Math.random() - 0.5);
+    const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
+    setSessionWords(selectedSessionWords);
+
     const cards: any[] = [];
-    displayedWords.forEach(w => {
+    selectedSessionWords.forEach(w => {
       cards.push({ id: `${w.id}_word`, content: w.word, type: 'word', matched: false, wordId: w.id });
       cards.push({ id: `${w.id}_meaning`, content: w.meaning, type: 'meaning', matched: false, wordId: w.id });
     });
@@ -278,9 +286,6 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     if (isRelativeGrammar) {
       // Collect all available examples from all concepts in the current chunk
       let allPotentialExamples: Word[] = [];
-      
-      // Filter out concepts that might already be example-like if they were added manually
-      // but usually displayedWords here are the concepts themselves.
       const concepts = displayedWords;
       
       const exampleFetches = concepts.map(async (concept) => {
@@ -291,7 +296,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
           const exampleData = doc.data();
           return {
             ...concept,
-            id: `${concept.id}_${doc.id}`, // Unique ID for each example
+            id: `${concept.id}_${doc.id}`,
             quizSentence: exampleData.sentence,
             quizExplanation: exampleData.explanation,
             quizChoices: exampleData.choices || [],
@@ -307,9 +312,9 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
         return;
       }
 
-      // Shuffle and pick up to chunkSize
+      // Final pool: pick from entire book but limit by sessionUnitSize
       const shuffled = allPotentialExamples.sort(() => Math.random() - 0.5);
-      const selectedSessionWords = shuffled.slice(0, chunkSize);
+      const selectedSessionWords = shuffled.slice(0, sessionUnitSize);
       
       setSessionWords(selectedSessionWords);
       setQuizIndex(0);
@@ -322,13 +327,11 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
       setSessionStartTime(Date.now());
       generateQuizOptions(0, selectedSessionWords);
     } else {
-      if (displayedWords.length < 4) {
-        alert('객관식 학습을 위해서는 최소 4개의 단어가 필요합니다.');
-        return;
-      }
-      const shuffled = [...displayedWords].sort(() => Math.random() - 0.5);
-      setSessionWords(shuffled);
+      // Normal Wordbook: Pick sessionUnitSize random words from the current pool
+      const shuffledPool = [...displayedWords].sort(() => Math.random() - 0.5);
+      const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
       
+      setSessionWords(selectedSessionWords);
       setIsQuizMode(true);
       setIsMatchMode(false);
       setIsFlashcardMode(false);
@@ -336,7 +339,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
       setQuizScore(0);
       setSessionStartTime(Date.now());
       setIsQuizFinished(false);
-      generateQuizOptions(0, shuffled);
+      generateQuizOptions(0, selectedSessionWords);
       setIsFocusedMode(true);
     }
   };
@@ -344,8 +347,9 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
   const startFlashcards = () => {
     if (displayedWords.length === 0) return;
     setIncorrectAnswers([]);
-    const shuffled = [...displayedWords].sort(() => Math.random() - 0.5);
-    setSessionWords(shuffled);
+    const shuffledPool = [...displayedWords].sort(() => Math.random() - 0.5);
+    const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
+    setSessionWords(selectedSessionWords);
     
     setIsFlashcardMode(true);
     setIsMatchMode(false);
@@ -360,8 +364,9 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
   const startConjugationChallenge = () => {
     if (displayedWords.length === 0) return;
     setIncorrectAnswers([]);
-    const shuffled = [...displayedWords].sort(() => Math.random() - 0.5);
-    setSessionWords(shuffled);
+    const shuffledPool = [...displayedWords].sort(() => Math.random() - 0.5);
+    const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
+    setSessionWords(selectedSessionWords);
     
     setIsConjugationMode(true);
     setIsQuizMode(false);
@@ -372,7 +377,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     setConjugationScore(0);
     setSessionStartTime(Date.now());
     setIsConjugationFinished(false);
-    generateConjugationOptions(0, 0, shuffled);
+    generateConjugationOptions(0, 0, selectedSessionWords);
     setIsFocusedMode(true);
   };
 
@@ -587,17 +592,20 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     
     setIsCorrect(isAnswerCorrect);
     
+    let updatedIncorrectAnswers = [...incorrectAnswers];
     if (isAnswerCorrect) {
       setQuizScore(prev => prev + 1);
     } else {
-      setIncorrectAnswers(prev => [...prev, {
+      const newIncorrect = {
         word: sessionWords[quizIndex].word,
         meaning: sessionWords[quizIndex].meaning,
         userChoice: quizOptions[optionIndex],
         correctAnswer: correctAnswer,
         choices: [...quizOptions],
         quizSentence: sessionWords[quizIndex].quizSentence
-      }]);
+      };
+      updatedIncorrectAnswers.push(newIncorrect);
+      setIncorrectAnswers(prev => [...prev, newIncorrect]);
     }
 
     // Don't auto-advance for relative grammar to show explanation
@@ -611,7 +619,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
         generateQuizOptions(quizIndex + 1);
       } else {
         setIsQuizFinished(true);
-        finishSession('quiz', quizScore + (isAnswerCorrect ? 1 : 0), sessionWords.length);
+        finishSession('quiz', quizScore + (isAnswerCorrect ? 1 : 0), sessionWords.length, updatedIncorrectAnswers);
       }
     }, 600);
   };
@@ -715,17 +723,20 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     const isAnswerCorrect = conjugationOptions[optionIndex] === correctAnswer;
     setIsCorrect(isAnswerCorrect);
     
+    let updatedIncorrectAnswers = [...incorrectAnswers];
     if (isAnswerCorrect) {
       setConjugationScore(prev => prev + 0.5); // 0.5 for each step
     } else {
-      setIncorrectAnswers(prev => [...prev, {
+      const newIncorrect = {
         word: correctWord.word,
         meaning: conjugationStep === 0 ? '과거형' : '과거분사형',
         userChoice: conjugationOptions[optionIndex],
         correctAnswer: correctAnswer || '',
         choices: [...conjugationOptions],
         quizSentence: correctWord.quizSentence
-      }]);
+      };
+      updatedIncorrectAnswers.push(newIncorrect);
+      setIncorrectAnswers(prev => [...prev, newIncorrect]);
     }
 
     setTimeout(() => {
@@ -741,7 +752,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
           generateConjugationOptions(conjugationIndex + 1, 0);
         } else {
           setIsConjugationFinished(true);
-          finishSession('conjugation', conjugationScore + (isAnswerCorrect ? 0.5 : 0), sessionWords.length);
+          finishSession('conjugation', conjugationScore + (isAnswerCorrect ? 0.5 : 0), sessionWords.length, updatedIncorrectAnswers);
         }
       }
     }, 600);
@@ -801,11 +812,29 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
         if (newCards.every(c => c.matched)) {
           const finalTime = Math.floor((Date.now() - (matchStartTime || 0)) / 100) / 10;
           setIsMatchFinished(true);
-          finishSession('match');
+          finishSession('match', undefined, undefined, incorrectAnswers);
           saveScore(finalTime);
         }
       } else {
-        // No match
+        // No match - Record as incorrect answer
+        const card1 = matchCards[selectedMatchCard];
+        const card2 = matchCards[index];
+        const wordData = sessionWords.find(w => w.id === card1.wordId || w.id === card2.wordId);
+        
+        if (wordData) {
+          setIncorrectAnswers(prev => {
+            // Avoid duplicates in the same session
+            if (prev.some(ia => ia.word === wordData.word)) return prev;
+            return [...prev, {
+              word: wordData.word,
+              meaning: wordData.meaning,
+              userChoice: card1.type === 'word' ? card1.content : card2.content,
+              correctAnswer: wordData.meaning,
+              quizSentence: wordData.quizSentence
+            }];
+          });
+        }
+        
         setSelectedMatchCard(index);
       }
     }
@@ -831,21 +860,18 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     }
   };
 
-  let totalChunks = Math.ceil(words.length / chunkSize);
-  let displayedWords = words.slice(currentChunk * chunkSize, (currentChunk + 1) * chunkSize);
+  const daySize = selectedWordbook?.defaultUnitSize || 47;
+  let totalChunks = Math.ceil(words.length / daySize);
+  let displayedWords = words.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
 
   if (selectedWordbook?.type === 'relative-grammar') {
     // For relative-grammar, we only show concepts in the list, hiding sentences with blanks
     const conceptsOnly = words.filter(w => !w.word.includes('(___)'));
-    totalChunks = Math.ceil(conceptsOnly.length / chunkSize);
-    displayedWords = conceptsOnly.slice(currentChunk * chunkSize, (currentChunk + 1) * chunkSize);
+    totalChunks = Math.ceil(conceptsOnly.length / daySize);
+    displayedWords = conceptsOnly.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
   } else if (selectedWordbook?.type === 'complement-grammar') {
-    if (chunkSize >= 26) {
+    if (daySize >= 26) {
       totalChunks = 1;
-      // For "All mode", we use all 26 words. Randomize if starting a session.
-      // But displayedWords is used for the list too. 
-      // User says "전체 모드: 26개 랜덤 출제", but for the list view alphabetical/natural order is better?
-      // Actually quiz start uses sessionWords which is initialized from displayedWords.
       displayedWords = words; 
     } else {
       totalChunks = 3;
@@ -1554,17 +1580,15 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
             {/* Chunk Selector */}
             <div className={`bg-white ${isMobile ? 'p-4 rounded-2xl' : 'p-6 rounded-[2rem]'} border border-slate-100 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 overflow-hidden`}>
               <div className="flex items-center gap-3 md:gap-4 flex-shrink-0">
-                <span className="text-xs md:text-sm font-bold text-slate-500 whitespace-nowrap">학습 단위:</span>
+                <span className="text-xs md:text-sm font-bold text-slate-500 whitespace-nowrap">학습 단위(게임):</span>
                 <select 
-                  value={chunkSize}
+                  value={sessionUnitSize}
                   onChange={(e) => {
-                    setChunkSize(Number(e.target.value));
-                    setCurrentChunk(0);
-                    setCurrentCardIndex(0);
+                    setSessionUnitSize(Number(e.target.value));
                   }}
                   className="bg-slate-50 border border-slate-100 rounded-lg px-2 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pastel-pink-200"
                 >
-                  {[10, 20, 30, 40, 47, 50].map(size => (
+                  {[10, 20, 30, 40, 50, 100].map(size => (
                     <option key={size} value={size}>{size}개씩</option>
                   ))}
                 </select>

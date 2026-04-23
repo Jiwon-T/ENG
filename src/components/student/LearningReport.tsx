@@ -232,8 +232,10 @@ export default function LearningReport() {
     setReviewConfirmItem(null);
     try {
       await markIncorrectAnswerReviewed(ans.sessionId, ans.word);
-      PetService.addPoints(8);
-      PetService.addXP(15);
+      if (auth.currentUser) {
+        PetService.addPoints(8, auth.currentUser.uid);
+        PetService.addXP(15, auth.currentUser.uid);
+      }
       setRewardFeedback({ points: 8, xp: 15 });
       setTimeout(() => setRewardFeedback(null), 3000);
     } catch (error) {
@@ -320,8 +322,10 @@ export default function LearningReport() {
         setIsReviewFinished(true);
         // Award points and XP for finishing review
         const score = reviewScore + (isCorrect ? 1 : 0);
-        PetService.addPoints(score * 8);
-        PetService.addXP(score * 15);
+        if (auth.currentUser) {
+          PetService.addPoints(score * 8, auth.currentUser.uid);
+          PetService.addXP(score * 15, auth.currentUser.uid);
+        }
       }
     }, 1500);
   };

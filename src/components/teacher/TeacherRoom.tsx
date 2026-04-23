@@ -6,6 +6,8 @@ import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc
 
 import WordbookManager from './WordbookManager';
 import StudentReportManager from './StudentReportManager';
+import { PetService } from '../../lib/petService';
+import { PetCharacter } from '../pet/PetCharacters';
 
 interface StudentUser {
   uid: string;
@@ -15,6 +17,13 @@ interface StudentUser {
   photoURL?: string;
   alias?: string;
   teacherNote?: string;
+  petStats?: {
+    points: number;
+    totalXP: number;
+    highestLevel: number;
+    petName: string;
+    character: string;
+  };
 }
 
 export default function TeacherRoom() {
@@ -98,7 +107,7 @@ export default function TeacherRoom() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-10">
+    <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-10">
       <header className="mb-8 md:mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
           <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">선생님방</h1>
@@ -134,16 +143,17 @@ export default function TeacherRoom() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-x-auto no-scrollbar">
-                <table className="w-full text-left min-w-[800px]">
+              <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-x-auto">
+                <table className="w-full text-left min-w-[900px] xl:min-w-full">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">계정 정보</th>
-                      <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">학습자 이름</th>
-                      <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">선생님 메모</th>
-                      <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">이메일</th>
-                      <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">구분</th>
-                      <th className="px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest">관리</th>
+                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">계정 정보</th>
+                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">학습자 이름</th>
+                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">펫 / 포인트</th>
+                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">선생님 메모</th>
+                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">이메일</th>
+                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">구분</th>
+                      <th className="px-4 lg:px-6 xl:px-8 py-5 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">관리</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -156,7 +166,7 @@ export default function TeacherRoom() {
                       )
                       .map((student) => (
                       <tr key={student.uid} className="hover:bg-slate-50/50 transition-colors group">
-                        <td className="px-8 py-5">
+                        <td className="px-4 lg:px-6 xl:px-8 py-5 whitespace-nowrap">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-pastel-pink-100 rounded-xl flex items-center justify-center text-pastel-pink-600 font-black overflow-hidden">
                               {student.photoURL && student.photoURL.startsWith('http') ? (
@@ -170,19 +180,20 @@ export default function TeacherRoom() {
                                 onClick={() => navigateToReport(student.uid)}
                                 className="font-bold text-slate-900 hover:text-pastel-pink-500 transition-colors text-left"
                               >
-                                {student.name}
+                                {student.alias || student.name}
                               </button>
-                              <div className="text-xs text-slate-400 font-medium">UID: {student.uid.slice(0, 8)}</div>
+                              <div className="text-[10px] text-slate-400 font-medium">UID: {student.uid.slice(0, 8)}</div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-8 py-5">
+                        <td className="px-4 lg:px-6 xl:px-8 py-5 whitespace-nowrap">
                           {editingAlias === student.uid ? (
                             <div className="flex items-center gap-2">
                               <input
                                 type="text"
                                 value={aliasValue}
                                 onChange={(e) => setAliasValue(e.target.value)}
+                                placeholder="이름 수정..."
                                 className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-pastel-pink-200 w-32"
                                 autoFocus
                               />
@@ -201,22 +212,54 @@ export default function TeacherRoom() {
                             </div>
                           ) : (
                             <div className="flex items-center gap-2">
-                              <span className={`text-sm font-black ${student.alias ? 'text-slate-900' : 'text-slate-300 italic'}`}>
-                                {student.alias || '이름 미설정'}
-                              </span>
+                              <div className="flex flex-col">
+                                <span className="text-xs text-slate-400 font-medium leading-tight">
+                                  {student.name}
+                                </span>
+                                {student.alias && (
+                                  <span className="text-[10px] text-slate-300 font-medium lowercase italic">Account Nickname</span>
+                                )}
+                              </div>
                               <button 
                                 onClick={() => {
                                   setEditingAlias(student.uid);
                                   setAliasValue(student.alias || '');
                                 }}
                                 className="p-1 text-slate-300 hover:text-pastel-pink-500 transition-colors opacity-0 group-hover:opacity-100"
+                                title="학습자 이름 수정"
                               >
                                 <MessageSquare size={14} />
                               </button>
                             </div>
                           )}
                         </td>
-                        <td className="px-8 py-5">
+                        <td className="px-4 lg:px-6 xl:px-8 py-5 whitespace-nowrap">
+                          {student.petStats ? (
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center overflow-hidden border border-slate-100 flex-shrink-0">
+                                <div className="scale-[0.3]">
+                                  <PetCharacter 
+                                    character={student.petStats.character} 
+                                    stage={PetService.getStage(student.petStats.highestLevel)} 
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[9px] font-black px-1 py-0.5 bg-amber-100 text-amber-600 rounded">Lv.{student.petStats.highestLevel}</span>
+                                  <span className="text-sm font-bold text-slate-700 leading-tight">{student.petStats.petName}</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400">
+                                  <span className="flex items-center gap-0.5"><Sparkles size={10} className="text-emerald-400" />{student.petStats.points.toLocaleString()}</span>
+                                  <span className="flex items-center gap-0.5"><Users size={10} className="text-blue-400" />{PetService.getStage(student.petStats.highestLevel)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-300 italic font-medium">펫 정보 없음</span>
+                          )}
+                        </td>
+                        <td className="px-4 lg:px-6 xl:px-8 py-5 whitespace-nowrap">
                           {editingNote === student.uid ? (
                             <div className="flex items-center gap-2">
                               <input
@@ -257,17 +300,17 @@ export default function TeacherRoom() {
                             </div>
                           )}
                         </td>
-                        <td className="px-8 py-5">
+                        <td className="px-4 lg:px-6 xl:px-8 py-5 whitespace-nowrap">
                           <span className="text-sm font-medium text-slate-500">{student.email}</span>
                         </td>
-                        <td className="px-8 py-5">
+                        <td className="px-4 lg:px-6 xl:px-8 py-5 whitespace-nowrap">
                           <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
                             student.role === 'teacher' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'
                           }`}>
                             {student.role === 'teacher' ? '선생님' : '수강생'}
                           </span>
                         </td>
-                        <td className="px-8 py-5">
+                        <td className="px-4 lg:px-6 xl:px-8 py-5 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <button 
                               onClick={() => navigateToReport(student.uid)}
@@ -278,19 +321,24 @@ export default function TeacherRoom() {
                             </button>
                             {student.role !== 'teacher' && (
                               confirmDeleteUid === student.uid ? (
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    onClick={() => handleDeleteStudent(student.uid)}
-                                    className="px-2 py-1 bg-red-500 text-white text-[10px] font-black rounded-md"
-                                  >
-                                    확인
-                                  </button>
-                                  <button
-                                    onClick={() => setConfirmDeleteUid(null)}
-                                    className="px-2 py-1 bg-slate-200 text-slate-500 text-[10px] font-black rounded-md"
-                                  >
-                                    취소
-                                  </button>
+                                <div className="flex flex-col items-end gap-1">
+                                  <div className="text-[10px] text-red-400 font-medium mb-1 text-right leading-tight">
+                                    데이터만 삭제됩니다.<br />로그인 계정은 유지됩니다.
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => handleDeleteStudent(student.uid)}
+                                      className="px-2 py-1 bg-red-500 text-white text-[10px] font-black rounded-md"
+                                    >
+                                      확인
+                                    </button>
+                                    <button
+                                      onClick={() => setConfirmDeleteUid(null)}
+                                      className="px-2 py-1 bg-slate-200 text-slate-500 text-[10px] font-black rounded-md"
+                                    >
+                                      취소
+                                    </button>
+                                  </div>
                                 </div>
                               ) : (
                                 <button 

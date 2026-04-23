@@ -1,5 +1,6 @@
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { GoogleGenAI, Type } from "@google/genai";
+import { db } from './firebase';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const modelName = 'gemini-3-flash-preview';
@@ -99,6 +100,22 @@ export const PetService = {
   saveState(state: PetSystemState, uid?: string) {
     const key = uid ? `${STORAGE_KEY}_${uid}` : STORAGE_KEY;
     localStorage.setItem(key, JSON.stringify(state));
+
+    // Sync summary to Firestore for Teacher to see
+    if (uid) {
+      const pet = state.pets.find(p => p.slot === state.currentPetSlot);
+      if (pet) {
+        updateDoc(doc(db, 'users', uid), {
+          petStats: {
+            points: state.points,
+            totalXP: pet.xp, // Simplified for now
+            highestLevel: pet.level,
+            petName: pet.name,
+            character: pet.character
+          }
+        }).catch(e => console.error('Firestore sync failed:', e));
+      }
+    }
   },
 
   addXP(amount: number, uid: string): { leveledUp: boolean; newState: PetSystemState } {

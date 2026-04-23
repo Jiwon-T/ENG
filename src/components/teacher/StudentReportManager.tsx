@@ -643,7 +643,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                         ))
                       ) : (
                         <div className="py-12 text-center text-slate-300 italic text-sm bg-white rounded-2xl border border-dashed border-slate-200">
-                          기록된 게임 학습 내역이 아직 없습니다.
+                          기록된 학습 내역이 아직 없습니다.
                         </div>
                       )}
                     </div>

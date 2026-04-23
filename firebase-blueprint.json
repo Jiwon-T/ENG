@@ -13,6 +13,16 @@
         "photoURL": { "type": "string" },
         "isNameSet": { "type": "boolean" },
         "teacherNote": { "type": "string" },
+        "petStats": {
+          "type": "object",
+          "properties": {
+            "points": { "type": "number" },
+            "totalXP": { "type": "number" },
+            "highestLevel": { "type": "number" },
+            "petName": { "type": "string" },
+            "character": { "type": "string" }
+          }
+        },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email", "role"]
@@ -177,6 +187,21 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["sentence", "explanation", "type", "choices"]
+    },
+    "PetSystem": {
+      "title": "PetSystem",
+      "description": "Full state of a user's pet system",
+      "type": "object",
+      "properties": {
+        "points": { "type": "number" },
+        "inventory": { "type": "array", "items": { "type": "string" } },
+        "outfit": { "type": "string" },
+        "background": { "type": "string" },
+        "unlockedSlots": { "type": "number" },
+        "pets": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["points", "inventory", "pets"]
     }
   },
   "firestore": {
@@ -192,6 +217,7 @@
     "/analysisHistory/{historyId}": { "schema": "AnalysisHistory", "description": "User's text analysis history" },
     "/evaluations/{uid}": { "schema": "Evaluation", "description": "Teacher evaluations of students" },
     "/assignments/{assignmentId}": { "schema": "Assignment", "description": "Student assignments/notices" },
-    "/studySessions/{sessionId}": { "schema": "StudySession", "description": "Student game playtime records" }
+    "/studySessions/{sessionId}": { "schema": "StudySession", "description": "Student game playtime records" },
+    "/petSystems/{uid}": { "schema": "PetSystem", "description": "User's pet system state" }
   }
 }

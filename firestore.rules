@@ -92,13 +92,17 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         (request.auth.token.email == "lizzieshere1@gmail.com" && request.auth.token.email_verified == true));
+      return isAuthenticated() && (
+        (request.auth.token.email == "lizzieshere1@gmail.com") ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher'))
+      );
     }
 
     function isTeacher() {
       return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
     }
 
@@ -112,12 +116,21 @@ service cloud.firestore {
              data.uid is string && data.uid.size() <= 128 &&
              data.email is string && isValidEmail(data.email) &&
              data.role in ['teacher', 'student', 'admin'] &&
-             (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
-             (!('alias' in data) || (data.alias is string && data.alias.size() <= 100)) &&
-             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 2000)) &&
+             (!('name' in data) || data.name == null || (data.name is string && data.name.size() <= 100)) &&
+             (!('alias' in data) || data.alias == null || (data.alias is string && data.alias.size() <= 100)) &&
+             (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 2000)) &&
              (!('isNameSet' in data) || data.isNameSet is bool) &&
-             (!('teacherNote' in data) || (data.teacherNote is string && data.teacherNote.size() <= 2000)) &&
-             (!('createdAt' in data) || data.createdAt is timestamp);
+             (!('teacherNote' in data) || data.teacherNote == null || (data.teacherNote is string && data.teacherNote.size() <= 2000)) &&
+             (!('petStats' in data) || (
+               data.petStats is map && 
+               data.petStats.points is number &&
+               data.petStats.totalXP is number &&
+               data.petStats.highestLevel is number &&
+               data.petStats.petName is string &&
+               data.petStats.character is string
+             )) &&
+             (!('createdAt' in data) || data.createdAt is timestamp) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
     function isValidStudent(data) {
@@ -147,7 +160,7 @@ service cloud.firestore {
       return data.keys().hasAll(['studentId', 'date', 'status', 'updatedAt']) &&
              data.studentId is string &&
              data.date is string && data.date.matches("^\\d{4}-\\d{2}-\\d{2}$") &&
-             data.status in ['present', 'absent', 'late'] &&
+             data.status in ['present', 'absent', 'late', 'early', 'makeup'] &&
              data.updatedAt is timestamp &&
              (!('teacherUid' in data) || data.teacherUid is string);
     }
@@ -157,13 +170,15 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{uid} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && (isOwner(uid) || isTeacher() || isAdmin());
       // Allow authenticated user to create their own profile/document
       allow create: if isOwner(uid) && isValidUser(request.resource.data);
       allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
         isAdmin() ||
-        (isOwner(uid) && 
-         request.resource.data.role == resource.data.role && 
+        (isOwner(uid) && (
+          request.resource.data.role == resource.data.role ||
+          (request.auth.token.email == "lizzieshere1@gmail.com" && request.resource.data.role == 'teacher')
+        ) && 
          // Student cannot change their own teacherNote
          (resource.data.role != 'student' || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['teacherNote']))
         ) ||
@@ -175,12 +190,7 @@ service cloud.firestore {
     }
 
     match /students/{studentId} {
-      allow read: if isAuthenticated(); // Allow listing students for assignment/attendance views
-      allow create: if isAuthenticated() && isValidStudent(request.resource.data) && 
-                    (isTeacher() || isAdmin());
-      allow update: if isAuthenticated() && isValidStudent(request.resource.data) && 
-                    (isTeacher() || isAdmin());
-      allow delete: if isAuthenticated() && (isTeacher() || isAdmin());
+      allow read, write: if isAuthenticated() && (isTeacher() || isAdmin());
     }
 
     match /wordbooks/{wordbookId} {
@@ -225,6 +235,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (
         isTeacher() || 
         isAdmin() || 
+        (resource != null && resource.data.studentId == request.auth.uid) ||
         attendanceId.startsWith(request.auth.uid)
       );
       allow create: if isAuthenticated() && isValidAttendance(request.resource.data) && 
@@ -282,6 +293,10 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isTeacher() || isAdmin());
       allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid && isValidStudySession(request.resource.data);
       allow update, delete: if isAdmin();
+    }
+
+    match /petSystems/{uid} {
+      allow read, write: if isAuthenticated() && (isOwner(uid) || isTeacher() || isAdmin());
     }
   }
 }
