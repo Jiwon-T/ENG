@@ -129,8 +129,13 @@ export async function signIn() {
     const result = await signInWithPopup(auth, googleProvider);
     // Profile sync will be handled by onAuthStateChanged in App.tsx
     return result.user;
-  } catch (error) {
-    console.error('Error signing in Google helper:', error);
+  } catch (error: any) {
+    console.error('Firebase Google Login Error:', {
+      code: error.code,
+      message: error.message,
+      userAgent: navigator.userAgent,
+      isIframe: window.self !== window.top
+    });
     throw error;
   }
 }

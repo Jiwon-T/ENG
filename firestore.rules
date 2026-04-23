@@ -101,9 +101,11 @@ service cloud.firestore {
     }
 
     function isTeacher() {
-      return isAuthenticated() &&
+      return isAdmin() || (
+        isAuthenticated() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher'
+      );
     }
 
     function isValidEmail(email) {
@@ -170,21 +172,18 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{uid} {
-      allow read: if isAuthenticated() && (isOwner(uid) || isTeacher() || isAdmin());
+      allow read: if isAuthenticated() && (isOwner(uid) || isTeacher());
       // Allow authenticated user to create their own profile/document
       allow create: if isOwner(uid) && isValidUser(request.resource.data);
       allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
-        isAdmin() ||
+        isTeacher() ||
         (isOwner(uid) && (
           request.resource.data.role == resource.data.role ||
           (request.auth.token.email == "lizzieshere1@gmail.com" && request.resource.data.role == 'teacher')
         ) && 
          // Student cannot change their own teacherNote
          (resource.data.role != 'student' || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['teacherNote']))
-        ) ||
-        (isTeacher() && 
-         resource.data.role == 'student' && 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['alias', 'teacherNote']))
+        )
       );
       allow delete: if isAdmin();
     }
@@ -234,14 +233,13 @@ service cloud.firestore {
     match /attendance/{attendanceId} {
       allow read: if isAuthenticated() && (
         isTeacher() || 
-        isAdmin() || 
         (resource != null && resource.data.studentId == request.auth.uid) ||
-        attendanceId.startsWith(request.auth.uid)
+        attendanceId.matches("^" + request.auth.uid + ".*")
       );
       allow create: if isAuthenticated() && isValidAttendance(request.resource.data) && 
-                    (request.resource.data.studentId == request.auth.uid || isTeacher() || isAdmin());
+                    (request.resource.data.studentId == request.auth.uid || isTeacher());
       allow update: if isAuthenticated() && isValidAttendance(request.resource.data) && 
-                    (isTeacher() || isAdmin());
+                    isTeacher();
       allow delete: if isAdmin();
     }
 

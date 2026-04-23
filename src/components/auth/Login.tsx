@@ -9,20 +9,55 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | React.ReactNode>('');
   const [success, setSuccess] = useState('');
 
   const handleGoogleLogin = async () => {
     try {
+      setError('');
       const isKakaoTalk = /KAKAOTALK/i.test(navigator.userAgent);
       if (isKakaoTalk) {
         setError('카카오톡 인앱 브라우저에서는 구글 로그인이 제한될 수 있습니다. 상단 혹은 하단의 메뉴를 통해 "다른 브라우저로 열기"를 선택하시거나, 이메일/비밀번호 로그인을 이용해 주세요.');
         return;
       }
       await signIn();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login failed:', error);
-      setError('구글 로그인 중 오류가 발생했습니다.');
+      
+      if (error?.code === 'auth/popup-blocked') {
+        setError('브라우저의 팝업 차단이 설정되어 있습니다. 팝업을 허용해 주시거나, 화면을 길게 눌러 "새 탭에서 열기"를 이용해 보세요.');
+      } else if (error?.code === 'auth/popup-closed-by-user') {
+        setError('로그인 창이 닫혔습니다. 다시 시도해 주세요.');
+      } else if (error?.code === 'auth/cancelled-popup-request') {
+        // Ignore duplicate requests
+      } else if (error?.code === 'auth/network-request-failed') {
+        setError('네트워크 연결이 원활하지 않습니다. 인터넷 연결을 확인해 주세요.');
+      } else if (error?.code === 'auth/internal-error' || error?.message?.includes('cross-origin') || error?.message?.includes('storage-access')) {
+        setError(
+          <div className="flex flex-col gap-2 items-center">
+            <span>브라우저 보안 설정으로 인해 로그인이 차단되었습니다.</span>
+            <span className="text-[10px] text-slate-500 text-center">사파리나 크롬의 '크로스 사이트 추적 방지' 설정 때문일 수 있습니다. 다른 브라우저를 사용하거나 아래 버튼을 눌러 새 창에서 시도해 주세요.</span>
+            <button 
+              onClick={() => window.open(window.location.href, '_blank')}
+              className="text-[11px] underline underline-offset-2 text-pastel-pink-600 hover:text-pastel-pink-700 font-bold"
+            >
+              새 창에서 로그인하기 ↗
+            </button>
+          </div> as any
+        );
+      } else {
+        setError(
+          <div className="flex flex-col gap-2 items-center">
+            <span>구글 로그인 중 오류가 발생했습니다.</span>
+            <button 
+              onClick={() => window.open(window.location.href, '_blank')}
+              className="text-[11px] underline underline-offset-2 text-pastel-pink-600 hover:text-pastel-pink-700 font-bold"
+            >
+              로그인이 안 되나요? 새 창에서 열기 ↗
+            </button>
+          </div> as any
+        );
+      }
     }
   };
 
