@@ -233,15 +233,13 @@ export default function App() {
           }
         } catch (error: any) {
           console.error('Failed to manage user profile:', error);
-          if (error.code === 'permission-denied' || error.message?.includes('permission')) {
-             // Fallback profile if rules are being strict during provisioning
-             setProfile({
-               uid: firebaseUser.uid,
-               email: firebaseUser.email || '',
-               name: firebaseUser.displayName || '사용자',
-               role: firebaseUser.email === 'lizzieshere1@gmail.com' ? 'teacher' : 'student'
-             });
-          }
+          // Fallback profile for any load failure to keep the app functional
+          setProfile({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            name: firebaseUser.displayName || '사용자',
+            role: firebaseUser.email === 'lizzieshere1@gmail.com' ? 'teacher' : 'student'
+          });
         }
       } else {
         setProfile(null);

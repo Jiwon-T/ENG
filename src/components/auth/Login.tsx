@@ -32,6 +32,21 @@ export default function Login() {
         // Ignore duplicate requests
       } else if (error?.code === 'auth/network-request-failed') {
         setError('네트워크 연결이 원활하지 않습니다. 인터넷 연결을 확인해 주세요.');
+      } else if (error?.code === 'auth/unauthorized-domain') {
+        setError(
+          <div className="flex flex-col gap-2 items-center">
+            <span className="text-red-600">승인되지 않은 도메인입니다.</span>
+            <span className="text-[10px] text-slate-500 text-center leading-normal">
+              Firebase 콘솔 &gt; Authentication &gt; Settings 에서<br />
+              아래 도메인을 '승인된 도메인'에 추가해야 합니다:
+            </span>
+            <div className="flex items-center gap-2 w-full mt-1">
+              <code className="flex-1 text-[10px] font-mono bg-slate-100 p-2 rounded-lg border border-slate-200 select-all break-all">
+                {window.location.hostname}
+              </code>
+            </div>
+          </div> as any
+        );
       } else if (error?.code === 'auth/internal-error' || error?.message?.includes('cross-origin') || error?.message?.includes('storage-access')) {
         setError(
           <div className="flex flex-col gap-2 items-center">
