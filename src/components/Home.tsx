@@ -32,23 +32,23 @@ export default function Home({ onNavigate, userRole, hasNewAssignment }: HomePro
     },
     {
       id: 'analyzer',
-      title: '지문 분석기',
-      description: '영어 지문을 분석해 보세요.',
+      title: '지문 분석기 [선생님]',
+      description: '영어 지문을 분석해 보세요. (AI 분석)',
       icon: <Languages className="text-blue-500 w-4 h-4 md:w-8 md:h-8" />,
       color: 'bg-blue-50',
       borderColor: 'border-blue-100',
       textColor: 'text-blue-600',
-      show: true
+      show: userRole === 'teacher' || userRole === 'admin'
     },
     {
       id: 'generator',
-      title: '문제 생성기',
-      description: '다양한 유형의 변형 문제를 생성합니다.',
+      title: '문제 생성기 [선생님]',
+      description: '다양한 유형의 변형 문제를 생성합니다. (AI 생성)',
       icon: <Sparkles className="text-amber-500 w-4 h-4 md:w-8 md:h-8" />,
       color: 'bg-amber-50',
       borderColor: 'border-amber-100',
       textColor: 'text-amber-600',
-      show: true
+      show: userRole === 'teacher' || userRole === 'admin'
     },
     {
       id: 'pet',

@@ -437,12 +437,14 @@ export default function App() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-1">
-                <MenuNavItem 
-                  icon={<History size={18} />} 
-                  label="보관소" 
-                  onClick={() => { setCurrentView('archive'); setIsMenuOpen(false); }}
-                  active={currentView === 'archive'}
-                />
+                {(profile?.role === 'teacher' || profile?.role === 'admin') && (
+                  <MenuNavItem 
+                    icon={<History size={18} />} 
+                    label="보관소" 
+                    onClick={() => { setCurrentView('archive'); setIsMenuOpen(false); }}
+                    active={currentView === 'archive'}
+                  />
+                )}
                 <MenuNavItem 
                   icon={<BarChart3 size={18} />} 
                   label="학습 리포트" 
@@ -558,7 +560,7 @@ export default function App() {
             >
               <PetHome onBack={() => setCurrentView('home')} />
             </motion.div>
-          ) : currentView === 'analyzer' ? (
+          ) : currentView === 'analyzer' && (profile?.role === 'teacher' || profile?.role === 'admin') ? (
             <motion.div
               key="analyzer"
               initial={{ opacity: 0, y: 20 }}
@@ -643,7 +645,7 @@ export default function App() {
                 </AnimatePresence>
               </main>
             </motion.div>
-          ) : currentView === 'generator' ? (
+          ) : currentView === 'generator' && (profile?.role === 'teacher' || profile?.role === 'admin') ? (
             <motion.div
               key="generator"
               initial={{ opacity: 0, y: 20 }}
@@ -779,7 +781,7 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
             >
-              <TeacherRoom />
+              <TeacherRoom onNavigate={setCurrentView} />
             </motion.div>
           ) : currentView === 'vocab' || currentView === 'grammar' ? (
             <motion.div
@@ -799,7 +801,7 @@ export default function App() {
             >
               <LearningReport />
             </motion.div>
-          ) : currentView === 'archive' ? (
+          ) : currentView === 'archive' && (profile?.role === 'teacher' || profile?.role === 'admin') ? (
             <motion.div
               key="archive"
               initial={{ opacity: 0, x: 20 }}

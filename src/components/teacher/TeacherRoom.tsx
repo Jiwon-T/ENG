@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Calendar, ClipboardList, Plus, Search, MoreVertical, Phone, GraduationCap, Clock, MessageSquare, Trash2, Save, X, FileSpreadsheet, BookOpen, BarChart3, Sparkles, FileText } from 'lucide-react';
+import { Users, Calendar, ClipboardList, Plus, Search, MoreVertical, Phone, GraduationCap, Clock, MessageSquare, Trash2, Save, X, FileSpreadsheet, BookOpen, BarChart3, Sparkles, FileText, Languages, History } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, getDocs, writeBatch } from 'firebase/firestore';
 
@@ -26,7 +26,11 @@ interface StudentUser {
   };
 }
 
-export default function TeacherRoom() {
+interface TeacherRoomProps {
+  onNavigate?: (view: any) => void;
+}
+
+export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
   const [activeTab, setActiveTab] = useState<'students' | 'wordbook' | 'grammar' | 'reports'>('students');
   const [students, setStudents] = useState<StudentUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,6 +122,28 @@ export default function TeacherRoom() {
           <TabButton active={activeTab === 'wordbook'} onClick={() => setActiveTab('wordbook')} icon={<BookOpen size={18} />} label="단어장 관리" />
           <TabButton active={activeTab === 'grammar'} onClick={() => setActiveTab('grammar')} icon={<Sparkles size={18} />} label="문법 세트 관리" />
           <TabButton active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} icon={<BarChart3 size={18} />} label="학습 리포트" />
+          <div className="w-px h-6 bg-slate-100 mx-2 self-center hidden md:block" />
+          <button
+            onClick={() => onNavigate?.('analyzer')}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-blue-500 hover:bg-blue-50 transition-all whitespace-nowrap"
+          >
+            <Languages size={18} />
+            지문 분석기
+          </button>
+          <button
+            onClick={() => onNavigate?.('generator')}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-amber-500 hover:bg-amber-50 transition-all whitespace-nowrap"
+          >
+            <Sparkles size={18} />
+            문제 생성기
+          </button>
+          <button
+            onClick={() => onNavigate?.('archive')}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-50 transition-all whitespace-nowrap"
+          >
+            <History size={18} />
+            보관소
+          </button>
         </div>
       </header>
 
