@@ -312,6 +312,11 @@ export default function LearningReport() {
     
     if (isCorrect) {
       setReviewScore(prev => prev + 1);
+      // Automatically mark as reviewed if answered correctly in the review quiz
+      const word = reviewWords[currentReviewIndex];
+      if (word.sessionId) {
+        markIncorrectAnswerReviewed(word.sessionId, word.word).catch(console.error);
+      }
     }
     
     setTimeout(() => {
@@ -341,10 +346,10 @@ export default function LearningReport() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12">
-      <header className="mb-12 flex justify-between items-end">
+    <div className="max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12">
+      <header className="mb-8 md:mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 mb-2 tracking-tight flex items-center gap-3">
+          <h1 className="text-3xl md:text-4xl font-black text-slate-900 mb-2 tracking-tight flex items-center gap-3">
             나만의 학습 리포트
             {stats.hasNewAssignment && (
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white animate-bounce shadow-lg shadow-red-200">
@@ -357,20 +362,20 @@ export default function LearningReport() {
       </header>
 
       {/* Assignments Section */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm mb-12">
-        <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+      <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-12">
+        <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
           <ClipboardList className="text-blue-500" size={20} />
           과제
         </h3>
         
         <div className="space-y-4">
           {paginatedAssignments.map((item) => (
-            <div key={item.id} className={`p-6 rounded-3xl border transition-all ${item.isNew ? 'bg-blue-50 border-blue-100 shadow-md shadow-blue-50' : item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+            <div key={item.id} className={`p-5 md:p-6 rounded-2xl md:rounded-3xl border transition-all ${item.isNew ? 'bg-blue-50 border-blue-100 shadow-md shadow-blue-50' : item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${item.isNew ? 'bg-blue-500 animate-pulse' : item.isDone ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    {item.createdAt && formatDateWithDay(item.createdAt.toDate())} {item.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {item.createdAt && formatDateWithDay(item.createdAt.toDate())}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -386,11 +391,11 @@ export default function LearningReport() {
                     }`}
                   >
                     <CheckCircle2 size={12} />
-                    {item.isDone ? '완료됨' : '미완료'}
+                    {item.isDone ? '완료' : '미완료'}
                   </button>
                 </div>
               </div>
-              <p className={`text-slate-700 font-medium leading-relaxed whitespace-pre-wrap ${item.isDone ? 'opacity-50 line-through' : ''}`}>
+              <p className={`text-slate-700 text-sm md:text-base font-medium leading-relaxed whitespace-pre-wrap ${item.isDone ? 'opacity-50 line-through' : ''}`}>
                 {item.content}
               </p>
             </div>
@@ -437,7 +442,7 @@ export default function LearningReport() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-16">
         <StatCard 
           icon={<BookOpen className="text-blue-500" />} 
           label="학습한 단어" 
@@ -453,28 +458,28 @@ export default function LearningReport() {
         <StatCard 
           icon={<TrendingUp className="text-pastel-pink-500" />} 
           label="학습 성취도" 
-          value={userRole === 'teacher' ? '선생님은 항상 최고예요! ✒️' : stats.evaluation} 
+          value={userRole === 'teacher' ? '선생님은 최고예요!' : stats.evaluation} 
           color="bg-pastel-pink-50" 
           isEvaluation
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mb-8">
+        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
             <BarChart3 className="text-pastel-pink-500" size={20} />
-            주간 학습 추이 (최근 7일)
+            주간 학습 추이
           </h3>
-          <div className="h-48 flex items-end justify-between gap-2 px-4">
+          <div className="h-40 flex items-end justify-between gap-1.5 md:gap-2 px-1 md:px-4">
             {stats.weeklyTrend.map((val, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                <div className="text-[10px] font-bold text-slate-400 mb-1">{val > 0 ? `${val}개` : ''}</div>
+              <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
+                <div className="text-[9px] md:text-[10px] font-bold text-slate-400 mb-0.5">{val > 0 ? `${val}개` : ''}</div>
                 <motion.div 
                   initial={{ height: 0 }}
                   animate={{ height: `${(val / maxTrend) * 100}%` }}
-                  className="w-full bg-pastel-pink-100 rounded-t-lg hover:bg-pastel-pink-200 transition-colors min-h-[4px]"
+                  className="w-full bg-pastel-pink-100 rounded-t-md md:rounded-t-lg hover:bg-pastel-pink-200 transition-colors min-h-[4px]"
                 />
-                <span className="text-[10px] font-bold text-slate-400">
+                <span className="text-[9px] md:text-[10px] font-bold text-slate-400">
                   {getDayLabel(i)}
                 </span>
               </div>
@@ -482,21 +487,21 @@ export default function LearningReport() {
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
             <Calendar className="text-emerald-500" size={20} />
-            주간 출석 현황 (최근 7일)
+            주간 출석 현황
           </h3>
-          <div className="h-48 flex items-end justify-between gap-2 px-4">
+          <div className="h-40 flex items-end justify-between gap-1.5 md:gap-2 px-1 md:px-4">
             {stats.weeklyAttendanceTrend.map((val, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                <div className="text-[10px] font-bold text-slate-400 mb-1">{val === 1 ? '출석' : ''}</div>
+              <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
+                <div className="text-[9px] md:text-[10px] font-bold text-slate-400 mb-0.5">{val === 1 ? '출석' : ''}</div>
                 <motion.div 
                   initial={{ height: 0 }}
                   animate={{ height: val === 1 ? '100%' : '10%' }}
-                  className={`w-full rounded-t-lg transition-colors ${val === 1 ? 'bg-emerald-100 hover:bg-emerald-200' : 'bg-slate-50'}`}
+                  className={`w-full rounded-t-md md:rounded-t-lg transition-colors ${val === 1 ? 'bg-emerald-100 hover:bg-emerald-200' : 'bg-slate-50'}`}
                 />
-                <span className="text-[10px] font-bold text-slate-400">
+                <span className="text-[9px] md:text-[10px] font-bold text-slate-400">
                   {getDayLabel(i)}
                 </span>
               </div>
@@ -506,44 +511,50 @@ export default function LearningReport() {
       </div>
 
       {/* Activity Log Section */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm mb-16">
-        <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+      <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
+        <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
           <TrendingUp className="text-pastel-pink-500" size={20} />
           학습 활동 로그
         </h3>
         <div className="space-y-3">
           {paginatedSessions.length > 0 ? (
             paginatedSessions.map((session, idx) => (
-              <div key={idx} className="bg-slate-50 p-4 rounded-2xl flex justify-between items-center hover:bg-slate-100 transition-all">
+              <div key={idx} className="bg-slate-50 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 hover:bg-slate-100 transition-all">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm">
+                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm shrink-0">
                     {session.type === 'quiz' && <CheckCircle2 size={18} />}
                     {session.type === 'flashcard' && <BookOpen size={18} />}
                     {session.type === 'match' && <Gamepad2 size={18} />}
                     {session.type === 'conjugation' && <TrendingUp size={18} />}
                   </div>
                   <div>
-                    <div className="font-bold text-slate-900 text-sm">{session.wordbookTitle}</div>
+                    <div className="font-bold text-slate-900 text-sm line-clamp-1">{session.wordbookTitle}</div>
                     <div className="text-[10px] text-slate-400 font-medium">
                       {session.type === 'quiz' ? '객관식 퀴즈' : session.type === 'flashcard' ? '플래시카드' : session.type === 'match' ? '매치 게임' : '3단 변화 챌린지'} 
                       {' '}• {session.category === 'grammar' ? '문법' : '단어'} 
-                      {' '}• {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleString() : '방금 전'}
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-black text-pastel-pink-500 text-sm">{session.duration}초</div>
-                  {session.score !== undefined && (
-                    <div className="text-[10px] font-bold text-emerald-500">
+                <div className="w-full sm:w-auto flex sm:flex-col justify-between sm:items-end">
+                  <div className="font-black text-pastel-pink-500 text-[11px] sm:text-sm">{session.duration}초</div>
+                  {session.score !== undefined ? (
+                    <div className="text-[10px] font-bold text-emerald-500 whitespace-nowrap">
                       정답: {session.score}/{session.totalItems}
                     </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-400 font-medium sm:hidden">
+                      {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleDateString() : '방금 전'}
+                    </div>
                   )}
+                  <div className="hidden sm:block text-[9px] text-slate-400 font-medium mt-0.5">
+                    {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '방금 전'}
+                  </div>
                 </div>
               </div>
             ))
           ) : (
             <div className="py-12 text-center text-slate-300 italic text-sm bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-              최근 기록된 학습 활동이 아직 없습니다.
+              기록된 학습 활동이 아직 없습니다.
             </div>
           )}
         </div>
@@ -580,21 +591,21 @@ export default function LearningReport() {
       </div>
 
       {/* Incorrect Answers Section */}
-      <div id="incorrect-answers-section" className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm mb-16">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+      <div id="incorrect-answers-section" className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
             <XCircle className="text-rose-500" size={20} />
             오답 노트
-            {allIncorrectAnswers.length > 0 && (
-              <span className="text-xs font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded-full">
-                총 {allIncorrectAnswers.length}개
+            {activeIncorrectAnswers.length > 0 && (
+              <span className="text-[10px] md:text-xs font-bold text-rose-500 bg-rose-50 px-2 py-1 rounded-full">
+                {activeIncorrectAnswers.length}개
               </span>
             )}
           </h3>
-          {allIncorrectAnswers.length > 0 && (
+          {activeIncorrectAnswers.length > 0 && (
             <button
               onClick={startReviewQuiz}
-              className="flex items-center gap-2 px-4 py-2 bg-rose-500 text-white rounded-xl text-xs font-black hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 md:px-4 md:py-2 bg-rose-500 text-white rounded-xl text-xs font-black hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all"
             >
               <RotateCcw size={14} />
               오답 다시 풀기
@@ -605,47 +616,47 @@ export default function LearningReport() {
         <div className="space-y-4">
           {paginatedWrongAnswers.length > 0 ? (
             paginatedWrongAnswers.map((ans, idx) => (
-              <div key={idx} className="p-5 bg-rose-50/30 rounded-3xl border border-rose-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div key={idx} className="p-4 md:p-5 bg-rose-50/30 rounded-2xl md:rounded-3xl border border-rose-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-black text-rose-400 bg-white px-2 py-0.5 rounded-md border border-rose-100 uppercase tracking-tighter">
+                    <span className="text-[9px] md:text-[10px] font-black text-rose-400 bg-white px-2 py-0.5 rounded-md border border-rose-100 uppercase tracking-tighter line-clamp-1">
                       {ans.wordbookTitle}
                     </span>
-                    <span className="text-[10px] font-bold text-slate-400">
+                    <span className="text-[9px] md:text-[10px] font-bold text-slate-400">
                       {ans.createdAt?.toMillis ? new Date(ans.createdAt.toMillis()).toLocaleDateString() : '방금 전'}
                     </span>
                   </div>
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-lg font-black text-slate-900">
+                  <div className="flex items-baseline flex-wrap gap-2 md:gap-3">
+                    <span className="text-base md:text-lg font-black text-slate-900 leading-tight">
                       {ans.quizSentence ? (
-                        <span className="italic">"{ans.quizSentence}"</span>
+                        <span className="italic block md:inline">"{ans.quizSentence}"</span>
                       ) : (
                         ans.word
                       )}
                     </span>
-                    {!ans.quizSentence && <span className="text-sm font-bold text-slate-500">{ans.meaning}</span>}
+                    {!ans.quizSentence && <span className="text-xs md:text-sm font-bold text-slate-500">{ans.meaning}</span>}
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-4 bg-white/50 p-3 rounded-2xl border border-rose-50">
-                    <div className="text-center px-4 border-r border-rose-100">
-                      <div className="text-[10px] font-black text-rose-400 uppercase mb-0.5">내가 고른 답</div>
-                      <div className="text-sm font-bold text-rose-600">{ans.userChoice}</div>
+                <div className="flex items-center justify-between md:justify-end gap-3 md:gap-4 mt-1 md:mt-0">
+                  <div className="flex items-center gap-2 md:gap-4 bg-white/50 p-2 md:p-3 rounded-xl md:rounded-2xl border border-rose-50 flex-1 md:flex-none">
+                    <div className="text-center px-2 md:px-4 border-r border-rose-100 flex-1 md:flex-none">
+                      <div className="text-[9px] md:text-[10px] font-black text-rose-400 uppercase mb-0.5">선택</div>
+                      <div className="text-xs md:text-sm font-bold text-rose-600 line-clamp-1">{ans.userChoice}</div>
                     </div>
-                    <div className="text-center px-4">
-                      <div className="text-[10px] font-black text-emerald-400 uppercase mb-0.5">정답</div>
-                      <div className="text-sm font-bold text-emerald-600">{ans.correctAnswer}</div>
+                    <div className="text-center px-2 md:px-4 flex-1 md:flex-none">
+                      <div className="text-[9px] md:text-[10px] font-black text-emerald-400 uppercase mb-0.5">정답</div>
+                      <div className="text-xs md:text-sm font-bold text-emerald-600 line-clamp-1">{ans.correctAnswer}</div>
                     </div>
                   </div>
                   <button
                     onClick={() => handleRemoveIncorrect(ans)}
                     disabled={processingId === `${ans.sessionId}-${ans.word}`}
-                    className={`p-3 rounded-2xl border transition-all shadow-sm group ${
+                    className={`p-3 md:p-3.5 rounded-xl md:rounded-2xl border transition-all shadow-sm group shrink-0 ${
                       processingId === `${ans.sessionId}-${ans.word}`
                         ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-wait'
                         : 'bg-white text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 hover:border-emerald-100 cursor-pointer'
                     }`}
-                    title="복습 완료 (목록에서 제거)"
+                    title="복습 완료"
                   >
                     {processingId === `${ans.sessionId}-${ans.word}` ? (
                       <div className="w-5 h-5 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
@@ -699,18 +710,18 @@ export default function LearningReport() {
 
       {/* Review Quiz Modal/Overlay */}
       {isReviewQuizOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-slate-900/40 backdrop-blur-sm">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="w-full max-w-xl bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-white/20"
+            className="w-full max-w-xl bg-white rounded-[2rem] md:rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 max-h-[90vh] flex flex-col"
           >
-            <div className="p-8 border-b border-slate-50 flex justify-between items-center">
+            <div className="p-5 md:p-8 border-b border-slate-50 flex justify-between items-center shrink-0">
               <div>
-                <h2 className="text-xl font-black text-slate-900 tracking-tight">오답 다시 풀기</h2>
-                <div className="flex items-center gap-2 mt-1">
+                <h2 className="text-lg md:text-xl font-black text-slate-900 tracking-tight">오답 다시 풀기</h2>
+                <div className="flex items-center gap-2 mt-0.5 md:mt-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
+                  <span className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
                     Focus Mode • {currentReviewIndex + 1} / {reviewWords.length}
                   </span>
                 </div>
@@ -723,28 +734,36 @@ export default function LearningReport() {
               </button>
             </div>
 
-            <div className="p-8">
+            <div className="p-6 md:p-8 overflow-y-auto">
               {!isReviewFinished ? (
-                <div className="space-y-8">
-                  <div className="text-center py-10 px-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 relative overflow-hidden group">
+                <div className="space-y-6 md:space-y-8">
+                  <div className="text-center py-8 md:py-10 px-4 md:px-6 bg-slate-50 rounded-2xl md:rounded-[2.5rem] border border-slate-100 relative overflow-hidden group">
                     <div className="relative z-10">
-                      <div className="text-sm font-black text-rose-400 uppercase tracking-widest mb-4">
+                      <div className="text-[10px] md:text-sm font-black text-rose-400 uppercase tracking-widest mb-3 md:mb-4">
                         {reviewWords[currentReviewIndex].wordbookTitle}
                       </div>
-                      <div className="text-3xl font-black text-slate-900 leading-tight mb-2">
+                      <div className="text-2xl md:text-3xl font-black text-slate-900 leading-tight mb-2">
                         {reviewWords[currentReviewIndex].quizSentence ? (
-                          <div className="text-2xl italic">"{reviewWords[currentReviewIndex].quizSentence}"</div>
+                          <div className="text-xl md:text-2xl italic leading-relaxed">"{reviewWords[currentReviewIndex].quizSentence}"</div>
                         ) : (
                           reviewWords[currentReviewIndex].word
                         )}
                       </div>
-                      <div className="text-slate-400 font-bold">
-                        {reviewWords[currentReviewIndex].quizSentence ? (
-                          <span className="text-xs">힌트: {reviewWords[currentReviewIndex].word} ({reviewWords[currentReviewIndex].meaning})</span>
-                        ) : (
-                          `뜻: ${reviewWords[currentReviewIndex].meaning}`
+                      <AnimatePresence>
+                        {reviewResult !== null && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="text-slate-400 font-bold text-xs md:text-sm mt-3"
+                          >
+                            {reviewWords[currentReviewIndex].quizSentence ? (
+                              <span className="text-[11px] md:text-xs">정답 힌트: {reviewWords[currentReviewIndex].word} ({reviewWords[currentReviewIndex].meaning})</span>
+                            ) : (
+                              `뜻: ${reviewWords[currentReviewIndex].meaning}`
+                            )}
+                          </motion.div>
                         )}
-                      </div>
+                      </AnimatePresence>
                     </div>
                   </div>
 
@@ -754,7 +773,7 @@ export default function LearningReport() {
                         key={idx}
                         onClick={() => handleReviewAnswer(idx)}
                         disabled={reviewResult !== null}
-                        className={`w-full p-6 text-left rounded-[1.5rem] font-bold text-sm transition-all border-2 ${
+                        className={`w-full p-4 md:p-6 text-left rounded-xl md:rounded-[1.5rem] font-bold text-xs md:text-sm transition-all border-2 ${
                           selectedReviewOption === idx
                             ? reviewResult === 'correct'
                               ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-lg shadow-emerald-100'
@@ -765,7 +784,7 @@ export default function LearningReport() {
                         }`}
                       >
                         <div className="flex justify-between items-center">
-                          <span>{option}</span>
+                          <span className="leading-tight">{option}</span>
                           {selectedReviewOption === idx && (
                             reviewResult === 'correct' ? <CheckCircle2 size={18} /> : <XCircle size={18} />
                           )}
@@ -778,40 +797,40 @@ export default function LearningReport() {
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-12 px-6">
-                  <div className="w-24 h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-8 relative">
-                    <Trophy className="text-rose-500" size={48} />
+                <div className="text-center py-8 md:py-12 px-4 md:px-6">
+                  <div className="w-20 h-20 md:w-24 md:h-24 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6 md:mb-8 relative">
+                    <Trophy className="text-rose-500" size={40} md:size={48} />
                     <motion.div 
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
-                      className="absolute -top-1 -right-1 bg-emerald-500 text-white p-2 rounded-full shadow-lg"
+                      className="absolute -top-1 -right-1 bg-emerald-500 text-white p-1.5 md:p-2 rounded-full shadow-lg"
                     >
-                      <CheckCircle2 size={20} />
+                      <CheckCircle2 size={16} md:size={20} />
                     </motion.div>
                   </div>
                   
-                  <h3 className="text-3xl font-black text-slate-900 mb-2">복습 완료!</h3>
-                  <p className="text-slate-500 font-medium mb-8">
+                  <h3 className="text-2xl md:text-3xl font-black text-slate-900 mb-2">복습 완료!</h3>
+                  <p className="text-slate-500 font-medium mb-6 md:mb-8 text-sm md:text-base">
                     총 <span className="text-rose-500 font-black">{reviewWords.length}</span>문제 중 <span className="text-emerald-500 font-black">{reviewScore}</span>문제를 맞혔습니다.
                   </p>
 
-                  <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100 mb-6">
-                    <div className="text-emerald-600 font-black text-lg">
+                  <div className="bg-emerald-50 p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-emerald-100 mb-6">
+                    <div className="text-emerald-600 font-black text-base md:text-lg">
                        🎉 +{reviewScore * 8} 포인트를 획득했어요!
                     </div>
-                    <div className="text-emerald-500 font-bold">
+                    <div className="text-emerald-500 font-bold text-sm">
                        +{reviewScore * 15} XP를 획득했어요!
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 mb-10">
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">정답률</div>
-                    <div className="text-4xl font-black text-slate-900">{Math.round((reviewScore / reviewWords.length) * 100)}%</div>
+                  <div className="bg-slate-50 p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 mb-8 md:mb-10">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 md:mb-2">정답률</div>
+                    <div className="text-3xl md:text-4xl font-black text-slate-900">{Math.round((reviewScore / reviewWords.length) * 100)}%</div>
                   </div>
 
                   <button
                     onClick={() => setIsReviewQuizOpen(false)}
-                    className="w-full py-5 bg-rose-500 text-white rounded-[2rem] font-black hover:bg-rose-600 shadow-xl shadow-rose-200 transition-all flex items-center justify-center gap-3 group"
+                    className="w-full py-4 md:py-5 bg-rose-500 text-white rounded-xl md:rounded-[2rem] font-black hover:bg-rose-600 shadow-xl shadow-rose-200 transition-all flex items-center justify-center gap-3 group"
                   >
                     리포트로 돌아가기
                     <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
@@ -878,13 +897,13 @@ export default function LearningReport() {
 
 function StatCard({ icon, label, value, color, isEvaluation }: { icon: React.ReactNode; label: string; value: string; color: string; isEvaluation?: boolean }) {
   return (
-    <div className={`p-8 rounded-[2.5rem] ${color} border border-white/50 shadow-sm flex flex-col gap-4 ${isEvaluation ? 'md:col-span-1' : ''}`}>
-      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
-        {icon}
+    <div className={`p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] ${color} border border-white/50 shadow-sm flex md:flex-col items-center md:items-start gap-4 ${isEvaluation ? 'md:col-span-1' : ''}`}>
+      <div className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl md:rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+        {React.cloneElement(icon as React.ReactElement, { size: 20 })}
       </div>
       <div>
-        <div className="text-sm font-bold text-slate-500 mb-1">{label}</div>
-        <div className={`${isEvaluation ? 'text-base' : 'text-3xl'} font-black text-slate-900 leading-tight`}>{value}</div>
+        <div className="text-[10px] md:text-sm font-bold text-slate-500 mb-0.5 md:mb-1">{label}</div>
+        <div className={`${isEvaluation ? 'text-sm md:text-base' : 'text-xl md:text-3xl'} font-black text-slate-900 leading-tight`}>{value}</div>
       </div>
     </div>
   );
