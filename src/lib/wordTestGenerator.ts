@@ -557,8 +557,8 @@ export const generateIrregularVerbTest = async (
       borders: {
         top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
         bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
-        left: { style: BorderStyle.NONE },
-        right: { style: BorderStyle.NONE },
+        left: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+        right: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
       }
     });
 
@@ -590,8 +590,8 @@ export const generateIrregularVerbTest = async (
         borders: {
           top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
           bottom: showBottomBorder ? { style: BorderStyle.SINGLE, size: 4, color: "DDDDDD" } : { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
-          left: { style: BorderStyle.NONE },
-          right: { style: BorderStyle.NONE },
+          left: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+          right: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
         }
       });
 
@@ -610,8 +610,8 @@ export const generateIrregularVerbTest = async (
         borders: {
           top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
           bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
-          left: { style: BorderStyle.NONE },
-          right: { style: BorderStyle.NONE },
+          left: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+          right: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
         }
       });
 
