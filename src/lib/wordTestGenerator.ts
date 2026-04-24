@@ -174,7 +174,7 @@ export const generateWordTest = async (
                       text: testType === 'en-to-ko' ? (leftWord.meaning || "") : (leftWord.word || ""),
                       size: 20,
                       bold: true,
-                      color: "FF4D6D"
+                      color: "000000"
                     })
                   ] : [],
                   alignment: AlignmentType.LEFT,
@@ -237,7 +237,7 @@ export const generateWordTest = async (
                       text: testType === 'en-to-ko' ? (rightWord.meaning || "") : (rightWord.word || ""),
                       size: 20,
                       bold: true,
-                      color: "FF4D6D"
+                      color: "000000"
                     })
                   ] : [],
                   alignment: AlignmentType.LEFT,
@@ -620,13 +620,13 @@ export const generateIrregularVerbTest = async (
         children: [
           createCell((i + 1).toString(), 6),
           createBaseCell(leftWord),
-          createCell(isAnswerKey ? leftWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF4D6D" : undefined, !isAnswerKey),
-          createCell(isAnswerKey ? leftWord.pastParticiple : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF4D6D" : undefined, !isAnswerKey),
+          createCell(isAnswerKey ? leftWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
+          createCell(isAnswerKey ? leftWord.pastParticiple : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
           
           createCell(rightWord ? (i + halfCount + 1).toString() : "", 6),
           rightWord ? createBaseCell(rightWord) : createCell("", 24),
-          createCell(rightWord && isAnswerKey ? rightWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF4D6D" : undefined, rightWord && !isAnswerKey),
-          createCell(rightWord && isAnswerKey ? rightWord.pastParticiple : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF4D6D" : undefined, rightWord && !isAnswerKey),
+          createCell(rightWord && isAnswerKey ? rightWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
+          createCell(rightWord && isAnswerKey ? rightWord.pastParticiple : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
         ]
       }));
     }
