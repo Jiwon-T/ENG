@@ -352,7 +352,11 @@ export const PetService = {
       });
 
       if (!apiResponse.ok) {
-        throw new Error("Failed to teach word");
+        const errorData = await apiResponse.json().catch(() => ({}));
+        if (apiResponse.status === 503 || errorData.error?.includes("503") || errorData.error?.includes("high demand")) {
+          throw new Error("지금은 펫이 조금 바빠요. 잠시 후 다시 시도해주세요!");
+        }
+        throw new Error(errorData.error || "Failed to teach word");
       }
 
       const { text: responseText } = await apiResponse.json();
@@ -382,7 +386,7 @@ export const PetService = {
       };
     } catch (e) {
       console.error('Teach word failed:', e);
-      return { success: false, reaction: '', remembered: '', newState: state, message: '교육 중 오류가 발생했어요.' };
+      return { success: false, reaction: '', remembered: '', newState: state, message: '교육에 실패했어요.' };
     }
   },
 

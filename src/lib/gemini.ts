@@ -248,7 +248,11 @@ export async function analyzeEnglishText(
 
     if (!apiResponse.ok) {
       const errorData = await apiResponse.json();
-      throw new Error(errorData.error || "Gemini API 호출 실패");
+      const errorMessage = errorData.error || "";
+      if (apiResponse.status === 503 || errorMessage.includes("503") || errorMessage.includes("high demand")) {
+        throw new Error("현재 AI 서비스 이용자가 많습니다. 잠시 후 다시 시도해주세요.");
+      }
+      throw new Error(errorMessage || "Gemini API 호출 실패");
     }
 
     const { text: responseText } = await apiResponse.json();

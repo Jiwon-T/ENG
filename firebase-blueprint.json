@@ -166,11 +166,13 @@
         "uid": { "type": "string" },
         "wordbookId": { "type": "string" },
         "wordbookTitle": { "type": "string" },
-        "type": { "type": "string", "enum": ["quiz", "flashcard", "match", "conjugation"] },
+        "type": { "type": "string", "enum": ["quiz", "flashcard", "match", "conjugation", "test"] },
         "category": { "type": "string", "enum": ["word", "grammar"] },
         "duration": { "type": "number" },
         "score": { "type": "number" },
         "totalItems": { "type": "number" },
+        "dayStart": { "type": "number" },
+        "dayEnd": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "wordbookId", "type", "category", "duration"]

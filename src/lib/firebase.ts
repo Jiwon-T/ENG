@@ -360,11 +360,13 @@ export async function recordStudySession(data: {
   uid: string;
   wordbookId: string;
   wordbookTitle: string;
-  type: 'quiz' | 'flashcard' | 'match' | 'conjugation';
+  type: 'quiz' | 'flashcard' | 'match' | 'conjugation' | 'test';
   category: 'word' | 'grammar';
   duration: number; // in seconds
   score?: number;
   totalItems?: number;
+  dayStart?: number;
+  dayEnd?: number;
   incorrectAnswers?: {
     word: string;
     meaning: string;

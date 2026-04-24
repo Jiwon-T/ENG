@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, CheckCircle2, Circle, ChevronRight, Sparkles, Trophy, Volume2, RotateCcw, ChevronLeft, Gamepad2, Timer, X, Info } from 'lucide-react';
+import VocabularyTest from './VocabularyTest';
+import { BookOpen, CheckCircle2, Circle, ChevronRight, Sparkles, Trophy, Volume2, RotateCcw, ChevronLeft, Gamepad2, Timer, X, Info, GraduationCap, AlertCircle } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType, recordStudySession } from '../../lib/firebase';
 import { PetService } from '../../lib/petService';
-import { collection, query, where, onSnapshot, doc, setDoc, Timestamp, getDocs, orderBy, limit, addDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, setDoc, Timestamp, getDocs, orderBy, limit, addDoc, getDoc } from 'firebase/firestore';
 
 interface Wordbook {
   id: string;
@@ -85,7 +86,10 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
   const [sessionWords, setSessionWords] = useState<Word[]>([]);
 
   // Focus & Confirm states
-  const [pendingMode, setPendingMode] = useState<'flashcard' | 'quiz' | 'match' | 'conjugation' | null>(null);
+  const [pendingMode, setPendingMode] = useState<'flashcard' | 'quiz' | 'match' | 'conjugation' | 'test' | null>(null);
+  const [isTestMode, setIsTestMode] = useState(false);
+  const [testRange, setTestRange] = useState({ start: 1, end: 1 });
+  const [testWords, setTestWords] = useState<Word[]>([]);
   const [isFocusedMode, setIsFocusedMode] = useState(false);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [earnedPoints, setEarnedPoints] = useState(0);
@@ -381,11 +385,86 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     setIsFocusedMode(true);
   };
 
+  const startTestPreparation = async () => {
+    // Range setting already happens in the modal, we'll finalize it here
+    const isGrammar = selectedWordbook?.category === 'grammar' || selectedWordbook?.type === 'irregular';
+    const daySize = isGrammar ? 10 : (selectedWordbook?.defaultUnitSize || 47);
+    
+    // For relative grammar, we need to apply the same concept-only logic for indexing
+    let baseWords = words;
+    if (selectedWordbook?.type === 'relative-grammar') {
+      baseWords = words.filter(w => !w.word.includes('(___)'));
+    }
+    
+    const startIndex = (testRange.start - 1) * daySize;
+    const endIndex = testRange.end * daySize;
+    let rangeWords = baseWords.slice(startIndex, endIndex);
+    
+    if (rangeWords.length === 0) {
+      alert('선택한 범위에 단어가 없습니다.');
+      return;
+    }
+
+    // Pre-fetch examples for relative-grammar or if it's a grammar set that uses them
+    const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || 
+                              selectedWordbook?.title?.includes('관계부사');
+    
+    if (isRelativeGrammar && selectedWordbook) {
+      const concepts = rangeWords;
+      const exampleFetches = concepts.map(async (concept) => {
+        const examplesRef = collection(db, `wordbooks/${selectedWordbook.id}/words/${concept.id}/examples`);
+        const snapshot = await getDocs(examplesRef);
+        
+        return snapshot.docs.map(doc => {
+          const exampleData = doc.data();
+          return {
+            ...concept,
+            id: `${concept.id}_${doc.id}`,
+            quizSentence: exampleData.sentence,
+            quizExplanation: exampleData.explanation,
+            quizChoices: exampleData.choices || [],
+          } as Word;
+        });
+      });
+
+      const fetchResults = await Promise.all(exampleFetches);
+      const allPotentialExamples = fetchResults.flat();
+
+      if (allPotentialExamples.length > 0) {
+        // Use all available examples from these concepts
+        rangeWords = allPotentialExamples;
+      }
+    }
+
+    // Check daily limit
+    const today = new Date().toISOString().split('T')[0];
+    const stored = localStorage.getItem('testLimit');
+    const rangeKey = `${selectedWordbook?.id}-${isGrammar ? 'unit' : 'day'}${testRange.start}-${testRange.end}`;
+    
+    if (stored) {
+      const data = JSON.parse(stored);
+      if (data.date === today) {
+        const count = (data.counts && data.counts[rangeKey]) || 0;
+        if (count >= 3) {
+          alert('오늘은 이 테스트를 더 이상 볼 수 없어요. 내일 다시 도전해보세요!');
+          setPendingMode(null);
+          return;
+        }
+      }
+    }
+
+    setTestWords(rangeWords);
+    setIsTestMode(true);
+    setPendingMode(null);
+    setIsFocusedMode(true);
+  };
+
   const handleConfirmStart = () => {
     if (pendingMode === 'match') startMatchGame();
     else if (pendingMode === 'quiz') startQuiz();
     else if (pendingMode === 'flashcard') startFlashcards();
     else if (pendingMode === 'conjugation') startConjugationChallenge();
+    else if (pendingMode === 'test') startTestPreparation();
     setPendingMode(null);
   };
 
@@ -867,8 +946,8 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
 
     try {
       // Get user name
-      const userDoc = await getDocs(query(collection(db, 'users'), where('uid', '==', auth.currentUser.uid)));
-      const userName = userDoc.docs[0]?.data()?.name || '익명';
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      const userName = userDoc.data()?.name || '익명';
 
       await addDoc(collection(db, 'matchLeaderboard'), {
         wordbookId: selectedWordbook.id,
@@ -882,7 +961,8 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     }
   };
 
-  const daySize = selectedWordbook?.defaultUnitSize || 47;
+  const isGrammar = selectedWordbook?.category === 'grammar' || selectedWordbook?.type === 'irregular';
+  const daySize = isGrammar ? 10 : (selectedWordbook?.defaultUnitSize || 47);
   let totalChunks = Math.ceil(words.length / daySize);
   let displayedWords = words.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
 
@@ -892,10 +972,10 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
     totalChunks = Math.ceil(conceptsOnly.length / daySize);
     displayedWords = conceptsOnly.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
   } else if (selectedWordbook?.type === 'complement-grammar') {
-    if (daySize >= 26) {
+    if (daySize >= 26 && !isGrammar) { // isGrammar = true for grammar, but complement-grammar had special 3 day logic
       totalChunks = 1;
       displayedWords = words; 
-    } else {
+    } else if (!isGrammar) {
       totalChunks = 3;
       if (currentChunk === 0) displayedWords = words.slice(0, 7);
       else if (currentChunk === 1) displayedWords = words.slice(7, 17);
@@ -923,9 +1003,46 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
                 <Sparkles size={40} />
               </div>
               <h3 className="text-2xl font-black text-slate-900 mb-2">학습을 시작할까요?</h3>
-              <p className="text-slate-500 font-medium mb-8">
-                {pendingMode === 'flashcard' ? '플래시카드' : pendingMode === 'quiz' ? '객관식 퀴즈' : pendingMode === 'match' ? '매치 게임' : '3단 변화 챌린지'} 모드로 이동하여 학습에 집중합니다.
-              </p>
+              {pendingMode === 'test' ? (
+                <div className="space-y-4 mb-8">
+                  <p className="text-slate-500 font-medium">테스트 범위를 설정해주세요.</p>
+                  <div className="flex items-center justify-center gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase">시작</label>
+                      <select 
+                        value={testRange.start}
+                        onChange={(e) => setTestRange(prev => ({ ...prev, start: Math.min(Number(e.target.value), prev.end) }))}
+                        className="w-20 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none"
+                      >
+                        {Array.from({ length: totalChunks }).map((_, i) => (
+                          <option key={i} value={i + 1}>{isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <span className="text-slate-300 mt-5 font-black">~</span>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase">종료</label>
+                      <select 
+                        value={testRange.end}
+                        onChange={(e) => setTestRange(prev => ({ ...prev, end: Math.max(Number(e.target.value), prev.start) }))}
+                        className="w-20 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none"
+                      >
+                        {Array.from({ length: totalChunks }).map((_, i) => (
+                          <option key={i} value={i + 1}>{isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-[10px] font-black text-amber-500 bg-amber-50 py-2 rounded-lg">
+                    <AlertCircle size={10} className="inline mr-1" />
+                    테스트는 하루에 최대 3회만 응시 가능합니다.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-slate-500 font-medium mb-8">
+                  {pendingMode === 'flashcard' ? '플래시카드' : pendingMode === 'quiz' ? '객관식 퀴즈' : pendingMode === 'match' ? '매치 게임' : '3단 변화 챌린지'} 모드로 이동하여 학습에 집중합니다.
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={() => setPendingMode(null)}
@@ -956,7 +1073,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
                   </div>
                   <div>
                     <h2 className="text-xl font-black text-slate-900">{selectedWordbook?.title}</h2>
-                    <p className="text-xs font-bold text-slate-400">Day {currentChunk + 1} 집중 학습 모드</p>
+                    <p className="text-xs font-bold text-slate-400">{isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`} 집중 학습 모드</p>
                   </div>
                 </div>
                 <button
@@ -1493,6 +1610,19 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
                     </button>
                   </div>
                 </div>
+              ) : isTestMode ? (
+                <VocabularyTest 
+                  words={testWords}
+                  dayRange={testRange}
+                  onClose={() => {
+                    setIsTestMode(false);
+                    setIsFocusedMode(false);
+                  }}
+                  wordbookId={selectedWordbook?.id || ''}
+                  wordbookTitle={selectedWordbook?.title || ''}
+                  category={selectedWordbook?.category || 'word'}
+                  type={selectedWordbook?.type}
+                />
               ) : null}
             </div>
           </div>
@@ -1587,15 +1717,21 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
                 </button>
                 <button
                   onClick={() => setPendingMode('match')}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all flex items-center gap-1 md:gap-2 bg-white text-slate-400 border border-slate-100 hover:bg-slate-50`}
+                  className="px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all flex items-center gap-1 md:gap-2 bg-white text-slate-400 border border-slate-100 hover:bg-slate-50"
                 >
                   <Gamepad2 size={isMobile ? 12 : 14} />
                   매치 게임
                 </button>
-                <div className="flex items-center gap-2 md:gap-3 px-3 md:px-4 py-1.5 md:py-2 bg-white rounded-full border border-slate-100 shadow-sm">
-                  <Trophy size={isMobile ? 12 : 16} className="text-amber-400" />
-                  <span className="text-[10px] md:text-xs font-black text-slate-600">{progressPercent}%</span>
-                </div>
+                <button
+                  onClick={() => {
+                    setTestRange({ start: currentChunk + 1, end: currentChunk + 1 });
+                    setPendingMode('test');
+                  }}
+                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all flex items-center gap-1 md:gap-2 bg-blue-600 text-white shadow-lg shadow-blue-200 hover:scale-105`}
+                >
+                  <GraduationCap size={isMobile ? 12 : 14} />
+                  테스트
+                </button>
               </div>
             </div>
 
@@ -1630,7 +1766,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
                         : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
                     }`}
                   >
-                    Day {i + 1}
+                    {isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}
                   </button>
                 ))}
               </div>
@@ -1650,7 +1786,7 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
                       '동사원형 / 둘 다 가능 동사 (9개)'
                     ) : selectedWordbook?.type === 'conversion-grammar' ? (
                       '4형식 동사의 3형식 전치사 전환 규칙을 학습합니다.'
-                    ) : `Day ${currentChunk + 1}의 단어들을 학습합니다.`}
+                    ) : `${isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`}의 단어들을 학습합니다.`}
                   </p>
                 </div>
               </div>
