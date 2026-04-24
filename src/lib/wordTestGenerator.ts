@@ -26,13 +26,22 @@ export const generateWordTest = async (
         size: 100,
         type: WidthType.PERCENTAGE,
       },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 4, color: "333333" },
+        bottom: { style: BorderStyle.SINGLE, size: 4, color: "333333" },
+        left: { style: BorderStyle.SINGLE, size: 4, color: "333333" },
+        right: { style: BorderStyle.SINGLE, size: 4, color: "333333" },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+        insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      },
       rows: [
         new TableRow({
-          height: { value: 800, rule: HeightRule.ATLEAST },
+          height: { value: 900, rule: HeightRule.ATLEAST },
           children: [
             new TableCell({
               width: { size: 15, type: WidthType.PERCENTAGE },
               verticalAlign: VerticalAlign.CENTER,
+              shading: { fill: "F1F5F9" },
               children: [
                 new Paragraph({
                   alignment: AlignmentType.CENTER,
@@ -40,7 +49,8 @@ export const generateWordTest = async (
                     new TextRun({
                       text: "지원T",
                       bold: true,
-                      size: 20,
+                      size: 24,
+                      color: "FF4D6D"
                     }),
                   ],
                 }),
@@ -56,7 +66,7 @@ export const generateWordTest = async (
                     new TextRun({
                       text: title,
                       bold: true,
-                      size: 26,
+                      size: 28,
                     }),
                   ],
                 }),
@@ -67,6 +77,7 @@ export const generateWordTest = async (
                       text: subtitle,
                       bold: true,
                       size: 22,
+                      color: "64748B"
                     }),
                   ],
                 }),
@@ -79,13 +90,25 @@ export const generateWordTest = async (
                 new Paragraph({
                   children: [
                     new TextRun({ 
-                      text: `이름: ${studentName}`, 
+                      text: `이름: ${studentName || '__________'}`, 
                       size: 22,
                       bold: true 
                     }),
                   ],
                   alignment: AlignmentType.LEFT,
-                  spacing: { before: 80, after: 80 },
+                  indent: { left: 200 },
+                }),
+                new Paragraph({
+                  children: [
+                    new TextRun({ 
+                      text: isAnswerKey ? "(정답지)" : "점수: ______ / ______", 
+                      size: 16,
+                      color: isAnswerKey ? "DC2626" : "64748B"
+                    }),
+                  ],
+                  alignment: AlignmentType.LEFT,
+                  indent: { left: 200 },
+                  spacing: { before: 100 },
                 }),
               ],
             }),
@@ -101,75 +124,132 @@ export const generateWordTest = async (
 
       wordRows.push(
         new TableRow({
-          height: { value: 450, rule: HeightRule.ATLEAST },
+          height: { value: 650, rule: HeightRule.ATLEAST },
           children: [
+            // LEFT SIDE
+            // Index
             new TableCell({
-              width: { size: 50, type: WidthType.PERCENTAGE },
+              width: { size: 4, type: WidthType.PERCENTAGE },
               verticalAlign: VerticalAlign.CENTER,
+              children: [new Paragraph({ children: [new TextRun({ text: `${i + 1}`, size: 18, color: "888888" })], alignment: AlignmentType.CENTER })],
               borders: {
-                top: { style: BorderStyle.NONE },
-                bottom: { style: BorderStyle.NONE },
+                top: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
                 left: { style: BorderStyle.NONE },
                 right: { style: BorderStyle.NONE },
-              },
+              }
+            }),
+            // Question (Word or Meaning)
+            new TableCell({
+              width: { size: 21, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
               children: [
                 new Paragraph({
                   children: [
-                    new TextRun({ text: `${i + 1}. `, size: 22 }),
                     new TextRun({ 
-                      text: testType === 'en-to-ko' ? leftWord.word : leftWord.meaning, 
+                      text: testType === 'en-to-ko' ? (leftWord.word || "") : (leftWord.meaning || ""), 
                       size: 22,
-                      color: isAnswerKey && testType === 'en-to-ko' ? "666666" : undefined,
-                      bold: isAnswerKey && testType === 'ko-to-en' ? true : false
-                    }),
-                    isAnswerKey ? new TextRun({
-                      text: `  ${testType === 'en-to-ko' ? leftWord.meaning : leftWord.word}`,
-                      size: 22,
-                      bold: testType === 'en-to-ko' ? true : false,
-                      color: testType === 'ko-to-en' ? "666666" : "000000"
-                    }) : new TextRun({ 
-                      text: " ____________________", 
-                      size: 22, 
-                      color: "999999" 
-                    }),
+                      bold: true,
+                      color: isAnswerKey && testType === 'en-to-ko' ? "666666" : "000000"
+                    })
                   ],
-                  spacing: { before: 80, after: 80 },
+                  indent: { left: 100 },
                 }),
               ],
-            }),
-            new TableCell({
-              width: { size: 50, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
               borders: {
-                top: { style: BorderStyle.NONE },
-                bottom: { style: BorderStyle.NONE },
+                top: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
                 left: { style: BorderStyle.NONE },
                 right: { style: BorderStyle.NONE },
-              },
+              }
+            }),
+            // Answer Blank
+            new TableCell({
+              width: { size: 25, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              children: [
+                new Paragraph({
+                  children: isAnswerKey ? [
+                    new TextRun({
+                      text: testType === 'en-to-ko' ? (leftWord.meaning || "") : (leftWord.word || ""),
+                      size: 20,
+                      bold: true,
+                      color: "DC2626"
+                    })
+                  ] : [],
+                  alignment: AlignmentType.LEFT,
+                  indent: { left: 40 },
+                }),
+              ],
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
+                bottom: { style: BorderStyle.SINGLE, size: 4, color: "DDDDDD" }, // The "Blank" line
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.SINGLE, size: 4, color: "333333" }, // Center divider
+              }
+            }),
+
+            // RIGHT SIDE
+            // Index
+            new TableCell({
+              width: { size: 4, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              children: rightWord ? [new Paragraph({ children: [new TextRun({ text: `${i + 2}`, size: 18, color: "888888" })], alignment: AlignmentType.CENTER })] : [],
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              }
+            }),
+            // Question
+            new TableCell({
+              width: { size: 21, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
               children: rightWord ? [
                 new Paragraph({
                   children: [
-                    new TextRun({ text: `${i + 2}. `, size: 22 }),
                     new TextRun({ 
-                      text: testType === 'en-to-ko' ? rightWord.word : rightWord.meaning, 
+                      text: testType === 'en-to-ko' ? (rightWord.word || "") : (rightWord.meaning || ""), 
                       size: 22,
-                      color: isAnswerKey && testType === 'en-to-ko' ? "666666" : undefined,
-                      bold: isAnswerKey && testType === 'ko-to-en' ? true : false
-                    }),
-                    isAnswerKey ? new TextRun({
-                      text: `  ${testType === 'en-to-ko' ? rightWord.meaning : rightWord.word}`,
-                      size: 22,
-                      bold: testType === 'en-to-ko' ? true : false,
-                      color: testType === 'ko-to-en' ? "666666" : "000000"
-                    }) : new TextRun({ 
-                      text: " ____________________", 
-                      size: 22, 
-                      color: "999999" 
-                    }),
+                      bold: true,
+                      color: isAnswerKey && testType === 'en-to-ko' ? "666666" : "000000"
+                    })
                   ],
-                  spacing: { before: 80, after: 80 },
+                  indent: { left: 100 },
                 }),
               ] : [],
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              }
+            }),
+            // Answer Blank
+            new TableCell({
+              width: { size: 25, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              children: rightWord ? [
+                new Paragraph({
+                  children: isAnswerKey ? [
+                    new TextRun({
+                      text: testType === 'en-to-ko' ? (rightWord.meaning || "") : (rightWord.word || ""),
+                      size: 20,
+                      bold: true,
+                      color: "DC2626"
+                    })
+                  ] : [],
+                  alignment: AlignmentType.LEFT,
+                  indent: { left: 40 },
+                }),
+              ] : [],
+              borders: {
+                top: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
+                bottom: { style: BorderStyle.SINGLE, size: 4, color: "DDDDDD" }, // The "Blank" line
+                left: { style: BorderStyle.NONE },
+                right: { style: BorderStyle.NONE },
+              }
             }),
           ],
         })
@@ -179,11 +259,11 @@ export const generateWordTest = async (
     const wordTable = new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       borders: {
-        top: { style: BorderStyle.NONE },
-        bottom: { style: BorderStyle.NONE },
+        top: { style: BorderStyle.SINGLE, size: 2, color: "333333" },
+        bottom: { style: BorderStyle.SINGLE, size: 2, color: "333333" },
         left: { style: BorderStyle.NONE },
         right: { style: BorderStyle.NONE },
-        insideHorizontal: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
         insideVertical: { style: BorderStyle.NONE },
       },
       rows: wordRows,
@@ -471,22 +551,28 @@ export const generateIrregularVerbTest = async (
     // Table Header Row
     const createHeaderCell = (text: string, width: number) => new TableCell({
       width: { size: width, type: WidthType.PERCENTAGE },
-      shading: { fill: "FFF1F2" }, // Pastel pink background
+      shading: { fill: "F8FAFC" }, // Light slate background
       verticalAlign: VerticalAlign.CENTER,
-      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text, bold: true, size: 18 })] })]
+      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text, bold: true, size: 18, color: "334155" })] })],
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 2, color: "333333" },
+        bottom: { style: BorderStyle.SINGLE, size: 2, color: "333333" },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+      }
     });
 
     rows.push(new TableRow({
-      height: { value: 400, rule: HeightRule.ATLEAST },
+      height: { value: 450, rule: HeightRule.ATLEAST },
       children: [
-        createHeaderCell("", 4), // Index
-        createHeaderCell("현재형", 18),
-        createHeaderCell("과거형", 14),
-        createHeaderCell("과거분사", 14),
-        createHeaderCell("", 4), // Index 2
-        createHeaderCell("현재형", 18),
-        createHeaderCell("과거형", 14),
-        createHeaderCell("과거분사", 14),
+        createHeaderCell("№", 4),
+        createHeaderCell("현재형 (+뜻)", 25),
+        createHeaderCell("과거형", 10),
+        createHeaderCell("과거분사", 11),
+        createHeaderCell("№", 4),
+        createHeaderCell("현재형 (+뜻)", 25),
+        createHeaderCell("과거형", 10),
+        createHeaderCell("과거분사", 11),
       ]
     }));
 
@@ -494,42 +580,53 @@ export const generateIrregularVerbTest = async (
       const leftWord = words[i];
       const rightWord = words[i + halfCount];
 
-      const createCell = (text: string, width: number, align = AlignmentType.CENTER, bold: boolean = false, color?: string) => new TableCell({
+      const createCell = (text: string, width: number, align = AlignmentType.CENTER, bold: boolean = false, color?: string, showBottomBorder: boolean = false) => new TableCell({
         width: { size: width, type: WidthType.PERCENTAGE },
         verticalAlign: VerticalAlign.CENTER,
         children: [new Paragraph({ 
           alignment: align, 
           children: [new TextRun({ text, size: 18, bold, color })] 
-        })]
+        })],
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: "F1F5F9" },
+          bottom: showBottomBorder ? { style: BorderStyle.SINGLE, size: 4, color: "DDDDDD" } : { style: BorderStyle.SINGLE, size: 1, color: "F1F5F9" },
+          left: { style: BorderStyle.NONE },
+          right: { style: BorderStyle.NONE },
+        }
       });
 
       const createBaseCell = (word: any) => new TableCell({
-        width: { size: 18, type: WidthType.PERCENTAGE },
+        width: { size: 25, type: WidthType.PERCENTAGE },
         verticalAlign: VerticalAlign.CENTER,
         children: [
           new Paragraph({ 
             alignment: AlignmentType.CENTER, 
-            children: [new TextRun({ text: word.word, bold: true, size: 18 })] 
-          }),
-          new Paragraph({ 
-            alignment: AlignmentType.CENTER, 
-            children: [new TextRun({ text: word.meaning, size: 16, color: "666666" })] 
+            children: [
+              new TextRun({ text: word.word, bold: true, size: 18 }),
+              new TextRun({ text: `  (${word.meaning})`, size: 14, color: "666666" })
+            ] 
           })
-        ]
+        ],
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: "F1F5F9" },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: "F1F5F9" },
+          left: { style: BorderStyle.NONE },
+          right: { style: BorderStyle.NONE },
+        }
       });
 
       rows.push(new TableRow({
-        height: { value: 600, rule: HeightRule.ATLEAST },
+        height: { value: 650, rule: HeightRule.ATLEAST },
         children: [
-          createCell((i + 1).toString(), 4), // Left Index
+          createCell((i + 1).toString(), 4),
           createBaseCell(leftWord),
-          createCell(isAnswerKey ? leftWord.past : "", 14, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF0000" : undefined),
-          createCell(isAnswerKey ? leftWord.pastParticiple : "", 14, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF0000" : undefined),
+          createCell(isAnswerKey ? leftWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "DC2626" : undefined, !isAnswerKey),
+          createCell(isAnswerKey ? leftWord.pastParticiple : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "DC2626" : undefined, !isAnswerKey),
           
-          createCell(rightWord ? (i + halfCount + 1).toString() : "", 4), // Right Index
-          rightWord ? createBaseCell(rightWord) : createCell("", 18),
-          createCell(rightWord && isAnswerKey ? rightWord.past : "", 14, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF0000" : undefined),
-          createCell(rightWord && isAnswerKey ? rightWord.pastParticiple : "", 14, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF0000" : undefined),
+          createCell(rightWord ? (i + halfCount + 1).toString() : "", 4),
+          rightWord ? createBaseCell(rightWord) : createCell("", 25),
+          createCell(rightWord && isAnswerKey ? rightWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "DC2626" : undefined, rightWord && !isAnswerKey),
+          createCell(rightWord && isAnswerKey ? rightWord.pastParticiple : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "DC2626" : undefined, rightWord && !isAnswerKey),
         ]
       }));
     }
