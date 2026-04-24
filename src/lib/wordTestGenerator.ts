@@ -103,7 +103,7 @@ export const generateWordTest = async (
                     new TextRun({ 
                       text: isAnswerKey ? "(정답지)" : "점수: ______ / ______", 
                       size: 16,
-                      color: isAnswerKey ? "DC2626" : "64748B"
+                      color: isAnswerKey ? "FF4D6D" : "64748B"
                     }),
                   ],
                   alignment: AlignmentType.LEFT,
@@ -150,15 +150,15 @@ export const generateWordTest = async (
                       text: testType === 'en-to-ko' ? (leftWord.word || "") : (leftWord.meaning || ""), 
                       size: 22,
                       bold: true,
-                      color: isAnswerKey && testType === 'en-to-ko' ? "666666" : "000000"
+                      color: isAnswerKey && testType === 'en-to-ko' ? "888888" : "000000"
                     })
                   ],
                   indent: { left: 100 },
                 }),
               ],
               borders: {
-                top: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
-                bottom: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
+                top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
                 left: { style: BorderStyle.NONE },
                 right: { style: BorderStyle.NONE },
               }
@@ -174,7 +174,7 @@ export const generateWordTest = async (
                       text: testType === 'en-to-ko' ? (leftWord.meaning || "") : (leftWord.word || ""),
                       size: 20,
                       bold: true,
-                      color: "DC2626"
+                      color: "FF4D6D"
                     })
                   ] : [],
                   alignment: AlignmentType.LEFT,
@@ -182,10 +182,10 @@ export const generateWordTest = async (
                 }),
               ],
               borders: {
-                top: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
-                bottom: { style: BorderStyle.SINGLE, size: 4, color: "DDDDDD" }, // The "Blank" line
+                top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+                bottom: { style: BorderStyle.SINGLE, size: 4, color: "FFB3C1" }, // The "Blank" line
                 left: { style: BorderStyle.NONE },
-                right: { style: BorderStyle.SINGLE, size: 4, color: "333333" }, // Center divider
+                right: { style: BorderStyle.SINGLE, size: 4, color: "FF4D6D" }, // Center divider
               }
             }),
 
@@ -196,8 +196,8 @@ export const generateWordTest = async (
               verticalAlign: VerticalAlign.CENTER,
               children: rightWord ? [new Paragraph({ children: [new TextRun({ text: `${i + 2}`, size: 18, color: "888888" })], alignment: AlignmentType.CENTER })] : [],
               borders: {
-                top: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
-                bottom: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
+                top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
                 left: { style: BorderStyle.NONE },
                 right: { style: BorderStyle.NONE },
               }
@@ -213,15 +213,15 @@ export const generateWordTest = async (
                       text: testType === 'en-to-ko' ? (rightWord.word || "") : (rightWord.meaning || ""), 
                       size: 22,
                       bold: true,
-                      color: isAnswerKey && testType === 'en-to-ko' ? "666666" : "000000"
+                      color: isAnswerKey && testType === 'en-to-ko' ? "888888" : "000000"
                     })
                   ],
                   indent: { left: 100 },
                 }),
               ] : [],
               borders: {
-                top: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
-                bottom: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
+                top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+                bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
                 left: { style: BorderStyle.NONE },
                 right: { style: BorderStyle.NONE },
               }
@@ -237,7 +237,7 @@ export const generateWordTest = async (
                       text: testType === 'en-to-ko' ? (rightWord.meaning || "") : (rightWord.word || ""),
                       size: 20,
                       bold: true,
-                      color: "DC2626"
+                      color: "FF4D6D"
                     })
                   ] : [],
                   alignment: AlignmentType.LEFT,
@@ -245,8 +245,8 @@ export const generateWordTest = async (
                 }),
               ] : [],
               borders: {
-                top: { style: BorderStyle.SINGLE, size: 1, color: "F5F5F5" },
-                bottom: { style: BorderStyle.SINGLE, size: 4, color: "DDDDDD" }, // The "Blank" line
+                top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+                bottom: { style: BorderStyle.SINGLE, size: 4, color: "FFB3C1" }, // The "Blank" line
                 left: { style: BorderStyle.NONE },
                 right: { style: BorderStyle.NONE },
               }
@@ -551,28 +551,28 @@ export const generateIrregularVerbTest = async (
     // Table Header Row
     const createHeaderCell = (text: string, width: number) => new TableCell({
       width: { size: width, type: WidthType.PERCENTAGE },
-      shading: { fill: "F8FAFC" }, // Light slate background
+      shading: { fill: "FFF1F2" }, // Pastel Pink background
       verticalAlign: VerticalAlign.CENTER,
-      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text, bold: true, size: 18, color: "334155" })] })],
+      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text, bold: true, size: 18, color: "FF4D6D" })] })],
       borders: {
-        top: { style: BorderStyle.SINGLE, size: 2, color: "333333" },
-        bottom: { style: BorderStyle.SINGLE, size: 2, color: "333333" },
+        top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+        bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
         left: { style: BorderStyle.NONE },
         right: { style: BorderStyle.NONE },
       }
     });
 
     rows.push(new TableRow({
-      height: { value: 450, rule: HeightRule.ATLEAST },
+      height: { value: 500, rule: HeightRule.ATLEAST },
       children: [
-        createHeaderCell("№", 4),
-        createHeaderCell("현재형 (+뜻)", 25),
+        createHeaderCell("№", 6),
+        createHeaderCell("현재형 (+뜻)", 24),
         createHeaderCell("과거형", 10),
-        createHeaderCell("과거분사", 11),
-        createHeaderCell("№", 4),
-        createHeaderCell("현재형 (+뜻)", 25),
+        createHeaderCell("과거분사", 10),
+        createHeaderCell("№", 6),
+        createHeaderCell("현재형 (+뜻)", 24),
         createHeaderCell("과거형", 10),
-        createHeaderCell("과거분사", 11),
+        createHeaderCell("과거분사", 10),
       ]
     }));
 
@@ -588,15 +588,15 @@ export const generateIrregularVerbTest = async (
           children: [new TextRun({ text, size: 18, bold, color })] 
         })],
         borders: {
-          top: { style: BorderStyle.SINGLE, size: 1, color: "F1F5F9" },
-          bottom: showBottomBorder ? { style: BorderStyle.SINGLE, size: 4, color: "DDDDDD" } : { style: BorderStyle.SINGLE, size: 1, color: "F1F5F9" },
+          top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+          bottom: showBottomBorder ? { style: BorderStyle.SINGLE, size: 4, color: "DDDDDD" } : { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
           left: { style: BorderStyle.NONE },
           right: { style: BorderStyle.NONE },
         }
       });
 
       const createBaseCell = (word: any) => new TableCell({
-        width: { size: 25, type: WidthType.PERCENTAGE },
+        width: { size: 24, type: WidthType.PERCENTAGE },
         verticalAlign: VerticalAlign.CENTER,
         children: [
           new Paragraph({ 
@@ -608,31 +608,39 @@ export const generateIrregularVerbTest = async (
           })
         ],
         borders: {
-          top: { style: BorderStyle.SINGLE, size: 1, color: "F1F5F9" },
-          bottom: { style: BorderStyle.SINGLE, size: 1, color: "F1F5F9" },
+          top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
           left: { style: BorderStyle.NONE },
           right: { style: BorderStyle.NONE },
         }
       });
 
       rows.push(new TableRow({
-        height: { value: 650, rule: HeightRule.ATLEAST },
+        height: { value: 700, rule: HeightRule.ATLEAST },
         children: [
-          createCell((i + 1).toString(), 4),
+          createCell((i + 1).toString(), 6),
           createBaseCell(leftWord),
-          createCell(isAnswerKey ? leftWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "DC2626" : undefined, !isAnswerKey),
-          createCell(isAnswerKey ? leftWord.pastParticiple : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "DC2626" : undefined, !isAnswerKey),
+          createCell(isAnswerKey ? leftWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF4D6D" : undefined, !isAnswerKey),
+          createCell(isAnswerKey ? leftWord.pastParticiple : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF4D6D" : undefined, !isAnswerKey),
           
-          createCell(rightWord ? (i + halfCount + 1).toString() : "", 4),
-          rightWord ? createBaseCell(rightWord) : createCell("", 25),
-          createCell(rightWord && isAnswerKey ? rightWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "DC2626" : undefined, rightWord && !isAnswerKey),
-          createCell(rightWord && isAnswerKey ? rightWord.pastParticiple : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "DC2626" : undefined, rightWord && !isAnswerKey),
+          createCell(rightWord ? (i + halfCount + 1).toString() : "", 6),
+          rightWord ? createBaseCell(rightWord) : createCell("", 24),
+          createCell(rightWord && isAnswerKey ? rightWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF4D6D" : undefined, rightWord && !isAnswerKey),
+          createCell(rightWord && isAnswerKey ? rightWord.pastParticiple : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF4D6D" : undefined, rightWord && !isAnswerKey),
         ]
       }));
     }
 
     const mainTable = new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+        bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+        insideVertical: { style: BorderStyle.NONE },
+      },
       rows: rows
     });
 
