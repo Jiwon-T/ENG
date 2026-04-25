@@ -52,7 +52,7 @@ export default function Home({ onNavigate, userRole, hasNewAssignment }: HomePro
     },
     {
       id: 'pet',
-      title: '펫 키우기',
+      title: '펫 (Beta)',
       description: '학습으로 포인트를 모아 나만의 펫을 키워보세요.',
       icon: <Dog className="text-emerald-500 w-4 h-4 md:w-8 md:h-8" />,
       color: 'bg-emerald-50',
