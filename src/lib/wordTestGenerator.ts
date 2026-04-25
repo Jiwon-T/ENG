@@ -694,6 +694,18 @@ export const generateWordbookTable = async (
         },
       },
       children: [
+        // Header Text (지원T)
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          children: [
+            new TextRun({
+              text: "지원T",
+              size: 20,
+              color: "666666", // Natural grey
+            }),
+          ],
+          spacing: { after: 200 },
+        }),
         // Title
         new Paragraph({
           alignment: AlignmentType.CENTER,
