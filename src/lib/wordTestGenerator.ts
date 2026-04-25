@@ -666,3 +666,192 @@ export const generateIrregularVerbTest = async (
     saveAs(answerBlob, `${paperTitle}_${studentName}_3단변화_정답지.docx`);
   }
 };
+
+export const generateWordbookTable = async (
+  title: string,
+  words: any[],
+  options: {
+    paperTitle?: string;
+    wordbookType?: string;
+    unitSize?: number;
+    startDay?: number;
+  } = {}
+) => {
+  const { paperTitle = '단어장', wordbookType, unitSize, startDay } = options;
+
+  const isIrregular = wordbookType === 'irregular';
+
+  const doc = new Document({
+    sections: [{
+      properties: {
+        page: {
+          margin: {
+            top: 720,
+            bottom: 720,
+            left: 720,
+            right: 720,
+          },
+        },
+      },
+      children: [
+        // Title
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [
+            new TextRun({
+              text: title,
+              bold: true,
+              size: 48,
+              color: "FF4D6D",
+            }),
+          ],
+          spacing: { after: 600 },
+        }),
+        // Table
+        new Table({
+          width: {
+            size: 100,
+            type: WidthType.PERCENTAGE,
+          },
+          rows: [
+            // Header Row
+            new TableRow({
+              height: { value: 600, rule: HeightRule.ATLEAST },
+              children: [
+                new TableCell({
+                  width: { size: 12, type: WidthType.PERCENTAGE }, // Increased slightly for Day text
+                  shading: { fill: "FFF1F2" },
+                  verticalAlign: VerticalAlign.CENTER,
+                  children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "No.", bold: true, color: "FF4D6D", size: 22 })] })],
+                  borders: {
+                    top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                    bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                    left: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                    right: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                  },
+                }),
+                new TableCell({
+                  width: { size: isIrregular ? 20 : 25, type: WidthType.PERCENTAGE },
+                  shading: { fill: "FFF1F2" },
+                  verticalAlign: VerticalAlign.CENTER,
+                  children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: isIrregular ? "원형 (Base)" : "단어 (Word)", bold: true, color: "FF4D6D", size: 22 })] })],
+                  borders: {
+                    top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                    bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                    left: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                    right: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                  },
+                }),
+                ...(isIrregular ? [
+                  new TableCell({
+                    width: { size: 16, type: WidthType.PERCENTAGE },
+                    shading: { fill: "FFF1F2" },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "과거형", bold: true, color: "FF4D6D", size: 22 })] })],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                      bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                    },
+                  }),
+                  new TableCell({
+                    width: { size: 16, type: WidthType.PERCENTAGE },
+                    shading: { fill: "FFF1F2" },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "과거분사", bold: true, color: "FF4D6D", size: 22 })] })],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                      bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                    },
+                  }),
+                ] : []),
+                new TableCell({
+                  width: { size: isIrregular ? 36 : 63, type: WidthType.PERCENTAGE },
+                  shading: { fill: "FFF1F2" },
+                  verticalAlign: VerticalAlign.CENTER,
+                  children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "뜻 (Meaning)", bold: true, color: "FF4D6D", size: 22 })] })],
+                  borders: {
+                    top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                    bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                    left: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                    right: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                  },
+                }),
+              ],
+            }),
+            // Data Rows
+            ...words.map((word, index) => {
+              let noText = (index + 1).toString();
+              if (unitSize && startDay) {
+                const globalIndex = ((startDay - 1) * unitSize) + index;
+                const dayNum = Math.floor(globalIndex / unitSize) + 1;
+                const dayIdx = (globalIndex % unitSize) + 1;
+                noText = `Day ${dayNum} - ${dayIdx}`;
+              }
+
+              return new TableRow({
+                height: { value: 650, rule: HeightRule.ATLEAST },
+                children: [
+                  new TableCell({
+                    verticalAlign: VerticalAlign.CENTER,
+                    shading: index % 2 === 0 ? undefined : { fill: "FFF9FA" },
+                    children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: noText, size: noText.length > 5 ? 16 : 20, color: "666666" })] })],
+                    borders: {
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                    },
+                  }),
+                  new TableCell({
+                    verticalAlign: VerticalAlign.CENTER,
+                    shading: index % 2 === 0 ? undefined : { fill: "FFF9FA" },
+                    children: [new Paragraph({ indent: { left: 240 }, children: [new TextRun({ text: word.word || "", bold: true, size: 24 })] })],
+                    borders: {
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                    },
+                  }),
+                  ...(isIrregular ? [
+                    new TableCell({
+                      verticalAlign: VerticalAlign.CENTER,
+                      shading: index % 2 === 0 ? undefined : { fill: "FFF9FA" },
+                      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: word.past || "", size: 22, bold: true, color: "000000" })] })],
+                      borders: {
+                        bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                        right: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                      },
+                    }),
+                    new TableCell({
+                      verticalAlign: VerticalAlign.CENTER,
+                      shading: index % 2 === 0 ? undefined : { fill: "FFF9FA" },
+                      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: word.pastParticiple || "", size: 22, bold: true, color: "000000" })] })],
+                      borders: {
+                        bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                        right: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                      },
+                    }),
+                  ] : []),
+                  new TableCell({
+                    verticalAlign: VerticalAlign.CENTER,
+                    shading: index % 2 === 0 ? undefined : { fill: "FFF9FA" },
+                    children: [new Paragraph({ indent: { left: 240 }, children: [new TextRun({ text: word.meaning || "", size: 22, color: "444444" })] })],
+                    borders: {
+                      bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                    },
+                  }),
+                ],
+              });
+            }),
+          ],
+        }),
+      ],
+    }],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, `${paperTitle}_단어표.docx`);
+};

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, Plus, Search, Trash2, Edit3, FileSpreadsheet, X, CheckCircle2, Circle, GripVertical, FileText, Download } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, writeBatch, getDocs, orderBy } from 'firebase/firestore';
-import { generateWordTest, generateMultipleChoiceQuiz, generateIrregularVerbTest } from '../../lib/wordTestGenerator';
+import { generateWordTest, generateMultipleChoiceQuiz, generateIrregularVerbTest, generateWordbookTable } from '../../lib/wordTestGenerator';
 import {
   DndContext,
   closestCenter,
@@ -107,6 +107,14 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     unitSize: 40,
     startDay: 1,
     endDay: 1
+  });
+
+  // Print Wordbook states
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printConfig, setPrintConfig] = useState({
+    startDay: 1,
+    endDay: 1,
+    unitSize: 40
   });
 
   const sensors = useSensors(
@@ -609,6 +617,36 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     }
   };
 
+  const handlePrintWordbook = async () => {
+    if (!selectedWordbook || words.length === 0) return;
+    
+    const startIndex = (printConfig.startDay - 1) * printConfig.unitSize;
+    const endIndex = printConfig.endDay * printConfig.unitSize;
+    const selectedWords = words.slice(startIndex, endIndex);
+
+    if (selectedWords.length === 0) {
+      alert('선택된 범위에 단어가 없습니다.');
+      return;
+    }
+
+    try {
+      await generateWordbookTable(
+        `${selectedWordbook.title} (DAY ${printConfig.startDay}-${printConfig.endDay})`,
+        selectedWords,
+        {
+          paperTitle: selectedWordbook.title,
+          wordbookType: selectedWordbook.type,
+          unitSize: printConfig.unitSize,
+          startDay: printConfig.startDay
+        }
+      );
+      setIsPrintModalOpen(false);
+    } catch (error) {
+      console.error('Failed to print wordbook:', error);
+      alert('출력 중 오류가 발생했습니다.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {!selectedWordbook ? (
@@ -682,6 +720,21 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
               >
                 <FileText size={16} />
                 시험지 만들기
+              </button>
+              <button 
+                onClick={() => {
+                  if (selectedWordbook) {
+                    setPrintConfig({
+                      ...printConfig,
+                      unitSize: selectedWordbook.defaultUnitSize || 40
+                    });
+                    setIsPrintModalOpen(true);
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-pink-50 text-pastel-pink-600 rounded-xl font-bold text-sm hover:bg-pink-100 transition-all border border-pastel-pink-100"
+              >
+                <Download size={16} />
+                단어장 출력하기
               </button>
               <button onClick={() => setIsBulkAddOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-all">
                 <FileSpreadsheet size={16} />
@@ -1427,6 +1480,92 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 <Download size={18} />
                 {testPaperConfig.quizType === 'multiple-choice' ? '퀴즈 다운로드' : 
                  testPaperConfig.quizType === 'irregular-writing' ? '3단 변화 시험지 다운로드' : '시험지 다운로드'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Print Wordbook Modal */}
+      {isPrintModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 bg-slate-900/40 backdrop-blur-sm">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl p-10"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black text-slate-900">단어장 출력 설정</h2>
+              <button onClick={() => setIsPrintModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-6 mb-8">
+              <div className="p-4 bg-pastel-pink-50 rounded-2xl border border-pastel-pink-100">
+                <p className="text-xs font-bold text-pastel-pink-600 mb-3 ml-1">출력할 범위를 DAY 단위로 지정해주세요.</p>
+                
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-pastel-pink-400 uppercase mb-1 ml-1">학습 단위 (DAY당 단어)</label>
+                    <input
+                      type="number"
+                      value={printConfig.unitSize}
+                      onChange={(e) => setPrintConfig({ ...printConfig, unitSize: parseInt(e.target.value) || 1 })}
+                      className="w-full px-4 py-3 bg-white border border-pastel-pink-100 rounded-xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-pastel-pink-400 uppercase mb-1 ml-1">총 DAY 수</label>
+                    <div className="px-4 py-3 bg-white border border-pastel-pink-100 rounded-xl font-bold text-pastel-pink-600 text-sm">
+                      약 {Math.ceil(words.length / printConfig.unitSize)} DAYS
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-pastel-pink-400 uppercase mb-1 ml-1">시작 DAY</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={printConfig.startDay}
+                      onChange={(e) => setPrintConfig({ ...printConfig, startDay: parseInt(e.target.value) || 1 })}
+                      className="w-full px-4 py-3 bg-white border border-pastel-pink-100 rounded-xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-pastel-pink-400 uppercase mb-1 ml-1">종료 DAY</label>
+                    <input
+                      type="number"
+                      min={printConfig.startDay}
+                      value={printConfig.endDay}
+                      onChange={(e) => setPrintConfig({ ...printConfig, endDay: parseInt(e.target.value) || 1 })}
+                      className="w-full px-4 py-3 bg-white border border-pastel-pink-100 rounded-xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 text-[11px] font-bold text-pastel-pink-400 text-center bg-white/50 py-2 rounded-lg">
+                  선택 범위: {((printConfig.startDay - 1) * printConfig.unitSize) + 1}번 ~ {Math.min(printConfig.endDay * printConfig.unitSize, words.length)}번 단어
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setIsPrintModalOpen(false)} 
+                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm transition-all hover:bg-slate-200"
+              >
+                취소
+              </button>
+              <button 
+                onClick={handlePrintWordbook}
+                disabled={printConfig.startDay > printConfig.endDay}
+                className="flex-1 py-4 bg-pastel-pink-500 text-white rounded-2xl font-bold shadow-lg shadow-pastel-pink-200 flex items-center justify-center gap-2 disabled:opacity-50 text-sm transition-all hover:bg-pastel-pink-600"
+              >
+                <Download size={18} />
+                워드 다운로드
               </button>
             </div>
           </motion.div>

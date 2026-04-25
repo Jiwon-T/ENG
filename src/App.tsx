@@ -87,14 +87,14 @@ class ErrorBoundary extends (Component as any) {
 }
 
 // Lazy load heavy components
-const Login = lazy(() => import('./components/auth/Login'));
-const Home = lazy(() => import('./components/Home'));
-const AnalysisView = lazy(() => import('./components/AnalysisView'));
-const TeacherRoom = lazy(() => import('./components/teacher/TeacherRoom'));
-const WordbookView = lazy(() => import('./components/student/WordbookView'));
-const LearningReport = lazy(() => import('./components/student/LearningReport'));
-const ArchiveView = lazy(() => import('./components/student/ArchiveView'));
-const PetHome = lazy(() => import('./components/pet/PetHome'));
+const Login = lazy(() => import('./components/auth/Login.tsx'));
+const Home = lazy(() => import('./components/Home.tsx'));
+const AnalysisView = lazy(() => import('./components/AnalysisView.tsx'));
+const TeacherRoom = lazy(() => import('./components/teacher/TeacherRoom.tsx'));
+const WordbookView = lazy(() => import('./components/student/WordbookView.tsx'));
+const LearningReport = lazy(() => import('./components/student/LearningReport.tsx'));
+const ArchiveView = lazy(() => import('./components/student/ArchiveView.tsx'));
+const PetHome = lazy(() => import('./components/pet/PetHome.tsx'));
 
 type View = 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'tutor' | 'report' | 'archive' | 'teacher-room' | 'pet';
 
