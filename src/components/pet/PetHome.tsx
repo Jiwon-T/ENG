@@ -21,12 +21,15 @@ const SHOP_ITEMS = {
     { id: 'star_hat', name: '별 모자', price: 80, icon: '⭐' },
     { id: 'muji_cape', name: '무지개 망토', price: 120, icon: '🌈' },
     { id: 'crown', name: '왕관', price: 200, icon: '👑' },
-    { id: 'uniform', name: '교복', price: 150, icon: '👔' }
+    { id: 'uniform', name: '교복', price: 150, icon: '👔' },
+    { id: 'sunglasses', name: '선글라스', price: 100, icon: '😎' },
+    { id: 'flower', name: '머리핀', price: 60, icon: '🌸' }
   ],
   consumables: [
     { id: 'cookie', name: '쿠키', price: 30, xp: 5, icon: '🍪' },
     { id: 'cake', name: '딸기케이크', price: 60, xp: 15, icon: '🍰' },
     { id: 'candy', name: '별사탕', price: 100, xp: 30, icon: '🍬' },
+    { id: 'macaron', name: '마카롱', price: 50, xp: 10, icon: '🍭' },
     { id: 'coffee', name: '커피', price: 40, energy: 30, icon: '☕' },
     { id: 'energy_drink', name: '에너지드링크', price: 70, energy: 60, icon: '⚡' }
   ],

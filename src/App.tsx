@@ -790,7 +790,11 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
             >
-              <WordbookView isMobile={isMobile} category={currentView === 'grammar' ? 'grammar' : 'word'} />
+              <WordbookView 
+                isMobile={isMobile} 
+                category={currentView === 'grammar' ? 'grammar' : 'word'} 
+                onNavigate={setCurrentView}
+              />
             </motion.div>
           ) : currentView === 'report' ? (
             <motion.div

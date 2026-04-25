@@ -40,7 +40,7 @@ interface Progress {
 
 import { COMPLEMENT_QUIZ_DATA, GrammarWord } from '../../lib/grammarSets';
 
-export default function WordbookView({ isMobile, category = 'word' }: { isMobile?: boolean; category?: 'word' | 'grammar' }) {
+export default function WordbookView({ isMobile, category = 'word', onNavigate }: { isMobile?: boolean; category?: 'word' | 'grammar'; onNavigate?: (view: any) => void }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [selectedWordbook, setSelectedWordbook] = useState<Wordbook | null>(null);
   const [words, setWords] = useState<Word[]>([]);
@@ -1617,6 +1617,11 @@ export default function WordbookView({ isMobile, category = 'word' }: { isMobile
                   onClose={() => {
                     setIsTestMode(false);
                     setIsFocusedMode(false);
+                  }}
+                  onNavigateToReport={() => {
+                    setIsTestMode(false);
+                    setIsFocusedMode(false);
+                    onNavigate?.('report');
                   }}
                   wordbookId={selectedWordbook?.id || ''}
                   wordbookTitle={selectedWordbook?.title || ''}

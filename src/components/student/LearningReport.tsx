@@ -281,19 +281,26 @@ export default function LearningReport() {
       // Fallback logic for old records without saved choices
       const choices = [current.correctAnswer];
       
-      // Pick 3 random distractors from other wrong answers or placeholders
-      const otherAnswers = words
-        .filter(w => w.correctAnswer !== current.correctAnswer)
-        .map(w => w.correctAnswer);
+      // Try to find distractors from ANY session history meanings
+      const sessionMeanings = stats.sessionHistory.flatMap(s => 
+        (s.incorrectAnswers || []).map((a: any) => a.correctAnswer)
+      );
       
-      const distractors = [...new Set(otherAnswers)].sort(() => Math.random() - 0.5);
+      const otherMeanings = [
+        ...new Set([
+          ...words.map(w => w.correctAnswer),
+          ...sessionMeanings
+        ])
+      ].filter(m => m !== current.correctAnswer);
+      
+      const distractors = otherMeanings.sort(() => Math.random() - 0.5);
       choices.push(...distractors.slice(0, 3));
       
-      // Fill with generic distractors if needed
-      const fillers = ['알 수 없음', '모르겠어요', '공부 중', '복습 필요'];
+      // If still not enough, use a slightly more professional set or just leave it
+      const fallbackMeanings = ['뜻을 확인하세요', '복습이 필요합니다', '학습 중인 단어', '정답 확인'];
       while (choices.length < 4) {
-        const filler = fillers[Math.floor(Math.random() * fillers.length)];
-        if (!choices.includes(filler)) choices.push(filler);
+        const fallback = fallbackMeanings[Math.floor(Math.random() * fallbackMeanings.length)];
+        if (!choices.includes(fallback)) choices.push(fallback);
       }
       
       setReviewOptions(choices.sort(() => Math.random() - 0.5));
@@ -526,11 +533,12 @@ export default function LearningReport() {
                     {session.type === 'flashcard' && <BookOpen size={18} />}
                     {session.type === 'match' && <Gamepad2 size={18} />}
                     {session.type === 'conjugation' && <TrendingUp size={18} />}
+                    {session.type === 'test' && <Trophy size={18} className="text-pastel-pink-500" />}
                   </div>
                   <div>
                     <div className="font-bold text-slate-900 text-sm line-clamp-1">{session.wordbookTitle}</div>
                     <div className="text-[10px] text-slate-400 font-medium">
-                      {session.type === 'quiz' ? '객관식 퀴즈' : session.type === 'flashcard' ? '플래시카드' : session.type === 'match' ? '매치 게임' : '3단 변화 챌린지'} 
+                      {session.type === 'quiz' ? '객관식 퀴즈' : session.type === 'flashcard' ? '플래시카드' : session.type === 'match' ? '매치 게임' : session.type === 'test' ? '단원 테스트' : '3단 변화 챌린지'} 
                       {' '}• {session.category === 'grammar' ? '문법' : '단어'} 
                     </div>
                   </div>

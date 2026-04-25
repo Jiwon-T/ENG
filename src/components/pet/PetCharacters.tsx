@@ -33,6 +33,8 @@ export const KuromiSVG = ({ stage, outfit, className }: CharacterProps) => {
       {outfit === 'pink_ribbon' && <div className="absolute top-0 right-0 text-xl">🎀</div>}
       {outfit === 'star_hat' && <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-2xl">⭐</div>}
       {outfit === 'crown' && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-3xl">👑</div>}
+      {outfit === 'sunglasses' && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xl">😎</div>}
+      {outfit === 'flower' && <div className="absolute top-2 right-4 text-xl">🌸</div>}
     </div>
   );
 };
@@ -59,6 +61,8 @@ export const MyMelodySVG = ({ stage, outfit, className }: CharacterProps) => {
       </svg>
       {outfit === 'pink_ribbon' && <div className="absolute top-4 right-4 text-xl">🎀</div>}
       {outfit === 'crown' && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-3xl">👑</div>}
+      {outfit === 'sunglasses' && <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-xl">😎</div>}
+      {outfit === 'flower' && <div className="absolute top-10 right-4 text-xl">🌸</div>}
     </div>
   );
 };
@@ -83,6 +87,8 @@ export const CinnamorollSVG = ({ stage, outfit, className }: CharacterProps) => 
       </svg>
       {outfit === 'star_hat' && <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-2xl">⭐</div>}
       {outfit === 'crown' && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-3xl">👑</div>}
+      {outfit === 'sunglasses' && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xl">😎</div>}
+      {outfit === 'flower' && <div className="absolute top-4 left-1/2 text-xl">🌸</div>}
     </div>
   );
 };
@@ -111,6 +117,8 @@ export const MolangSVG = ({ stage, outfit, className }: CharacterProps) => {
       </svg>
       {outfit === 'pink_ribbon' && <div className="absolute top-1/2 left-0 text-xl">🎀</div>}
       {outfit === 'crown' && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-3xl">👑</div>}
+      {outfit === 'sunglasses' && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xl">😎</div>}
+      {outfit === 'flower' && <div className="absolute top-6 right-6 text-xl">🌸</div>}
     </div>
   );
 };
@@ -137,6 +145,8 @@ export const MangBearSVG = ({ stage, outfit, className }: CharacterProps) => {
       </svg>
       {outfit === 'muji_cape' && <div className="absolute inset-0 bg-gradient-to-r from-red-400 via-yellow-400 to-blue-400 opacity-30 rounded-full" />}
       {outfit === 'crown' && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-3xl">👑</div>}
+      {outfit === 'sunglasses' && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xl">😎</div>}
+      {outfit === 'flower' && <div className="absolute top-4 right-4 text-xl">🌸</div>}
     </div>
   );
 };

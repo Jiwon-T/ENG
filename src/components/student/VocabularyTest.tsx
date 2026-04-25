@@ -22,7 +22,7 @@ interface TestResult {
   score: number;
   total: number;
   correctCount: number;
-  incorrectWords: { word: string; meaning: string; userChoice: string; correctAnswer: string }[];
+  incorrectWords: { word: string; meaning: string; userChoice: string; correctAnswer: string; choices: string[] }[];
   date: string;
 }
 
@@ -30,6 +30,7 @@ interface VocabularyTestProps {
   words: Word[];
   dayRange: { start: number; end: number };
   onClose: () => void;
+  onNavigateToReport?: () => void;
   wordbookId: string;
   wordbookTitle: string;
   category: 'word' | 'grammar';
@@ -38,17 +39,24 @@ interface VocabularyTestProps {
 
 type TestPhase = 'intro' | 'info' | 'phase1' | 'phase2' | 'feedback' | 'result';
 
-export default function VocabularyTest({ words, dayRange, onClose, wordbookId, wordbookTitle, category, type }: VocabularyTestProps) {
+export default function VocabularyTest({ words, dayRange, onClose, onNavigateToReport, wordbookId, wordbookTitle, category, type }: VocabularyTestProps) {
   const [phase, setPhase] = useState<TestPhase>('intro');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [options, setOptions] = useState<string[]>([]);
   const [score, setScore] = useState(0);
   const [incorrectWords, setIncorrectWords] = useState<TestResult['incorrectWords']>([]);
+  const scoreRef = React.useRef(0);
+  const incorrectWordsRef = React.useRef<TestResult['incorrectWords']>([]);
+  const finishingRef = React.useRef(false);
+  const isMovingToNextRef = React.useRef(false);
+  const isAnsweringRef = React.useRef(false);
+  const currentCorrectAnswerRef = React.useRef<string>('');
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [timer, setTimer] = useState(7); // Phase 1: 7s, Phase 2: 8s
   const [attemptCount, setAttemptCount] = useState(1);
   const [previousRecord, setPreviousRecord] = useState<{ date: string; score: number } | null>(null);
+  const [startTime, setStartTime] = useState<number>(Date.now());
 
   // Constants
   const PHASE1_TIME = 7;
@@ -61,12 +69,6 @@ export default function VocabularyTest({ words, dayRange, onClose, wordbookId, w
   const [shuffledWords, setShuffledWords] = useState<Word[]>([]);
 
   useEffect(() => {
-    // Shuffle words for test
-    if (words.length > 0) {
-      const randomized = [...words].sort(() => Math.random() - 0.5);
-      setShuffledWords(randomized);
-    }
-
     // Get attempt history and limit
     const today = new Date().toISOString().split('T')[0];
     const stored = localStorage.getItem('testLimit');
@@ -130,45 +132,14 @@ export default function VocabularyTest({ words, dayRange, onClose, wordbookId, w
     };
 
     fetchPreviousRecord();
-  }, [wordbookId, auth.currentUser?.uid, dayRange.start, dayRange.end]); // Fixed dependencies
-
-  // Timer logic
-  useEffect(() => {
-    let interval: any;
-    if (phase === 'phase1' || phase === 'phase2') {
-      interval = setInterval(() => {
-        setTimer(prev => {
-          if (prev <= 0.1) {
-            handleTimeout();
-            return 0;
-          }
-          return prev - 0.1;
-        });
-      }, 100);
-    } else if (phase === 'feedback') {
-      interval = setInterval(() => {
-        setTimer(prev => {
-          if (prev <= 0.1) {
-            goToNextQuestion();
-            return 0;
-          }
-          return prev - 0.1;
-        });
-      }, 100);
-    }
-    return () => clearInterval(interval);
-  }, [phase, currentIndex, shuffledWords.length]); // Added length to dependencies to refresh on shuffle
-
-  const handleTimeout = () => {
-    if (phase === 'phase1') {
-      startPhase2();
-    } else if (phase === 'phase2') {
-      handleAnswer(-1); // Timeout is incorrect
-    }
-  };
+  }, [wordbookId, auth.currentUser?.uid, dayRange.start, dayRange.end, words]); // Added words to dependencies
 
   const startTest = () => {
-    if (shuffledWords.length === 0) return;
+    if (words.length === 0) return;
+
+    // Shuffle words ONLY when test starts
+    const randomized = [...words].sort(() => Math.random() - 0.5);
+    setShuffledWords(randomized);
 
     // Increment attempt in localStorage
     const today = new Date().toISOString().split('T')[0];
@@ -186,26 +157,22 @@ export default function VocabularyTest({ words, dayRange, onClose, wordbookId, w
     
     setCurrentIndex(0);
     setScore(0);
+    scoreRef.current = 0;
     setIncorrectWords([]);
-    startPhase1();
-  };
-
-  const startPhase1 = useCallback(() => {
-    if (shuffledWords.length === 0) return;
+    incorrectWordsRef.current = [];
+    finishingRef.current = false;
+    isMovingToNextRef.current = false;
+    isAnsweringRef.current = false;
+    setStartTime(Date.now());
+    
+    // Set initial phase
     setPhase('phase1');
     setTimer(PHASE1_TIME);
     setSelectedOption(null);
     setIsCorrect(null);
-  }, [shuffledWords.length, PHASE1_TIME]);
-
-  const startPhase2 = () => {
-    if (shuffledWords.length === 0) return;
-    generateOptions(currentIndex);
-    setPhase('phase2');
-    setTimer(PHASE2_TIME);
   };
 
-  const generateOptions = (index: number) => {
+  const generateOptions = useCallback((index: number) => {
     const correctWord = shuffledWords[index];
     if (!correctWord) return;
     
@@ -258,12 +225,104 @@ export default function VocabularyTest({ words, dayRange, onClose, wordbookId, w
       otherOptions = shuffledWords.filter(w => w.id !== correctWord.id).map(w => w.meaning);
     }
     
-    const allOptions = [correctOption, ...otherOptions.sort(() => Math.random() - 0.5).slice(0, 3)].sort(() => Math.random() - 0.5);
+    const optionCount = category === 'grammar' ? 4 : 6;
+    const allOptions = [correctOption, ...otherOptions.sort(() => Math.random() - 0.5).slice(0, optionCount - 1)].sort(() => Math.random() - 0.5);
+    currentCorrectAnswerRef.current = correctOption;
     setOptions(allOptions);
-  };
+  }, [shuffledWords, type, wordbookTitle]);
 
-  const handleAnswer = (optionIndex: number) => {
-    if (phase !== 'phase2' || selectedOption !== null) return;
+  const startPhase1 = useCallback(() => {
+    if (shuffledWords.length === 0) return;
+    setPhase('phase1');
+    setTimer(PHASE1_TIME);
+    setSelectedOption(null);
+    setIsCorrect(null);
+  }, [shuffledWords.length]);
+
+  const startPhase2 = useCallback(() => {
+    if (shuffledWords.length === 0) return;
+    generateOptions(currentIndex);
+    setPhase('phase2');
+    setTimer(PHASE2_TIME);
+  }, [shuffledWords, currentIndex, generateOptions]);
+
+  const finishTest = useCallback(async () => {
+    // Guard against multiple calls
+    if (finishingRef.current || phase === 'result') return; 
+    finishingRef.current = true;
+    
+    // Copy the latest values to local variables to ensure they don't change
+    const finalScoreValue = scoreRef.current;
+    const finalIncorrectWords = [...incorrectWordsRef.current];
+    const totalCount = shuffledWords.length;
+    
+    // Transition to result phase IMMEDIATELY
+    setPhase('result');
+    
+    // Make sure state is synced for the UI
+    setScore(finalScoreValue);
+    setIncorrectWords(finalIncorrectWords);
+    
+    const finalScorePercent = Math.round((finalScoreValue / Math.max(1, totalCount)) * 100);
+    const duration = Math.floor((Date.now() - startTime) / 1000);
+    
+    // Record to Firebase
+    if (auth.currentUser) {
+      try {
+        const points = finalScoreValue * 10; 
+        const xp = finalScoreValue * 20;
+        
+        PetService.addPoints(points, auth.currentUser.uid);
+        PetService.addXP(xp, auth.currentUser.uid);
+
+        await recordStudySession({
+          uid: auth.currentUser.uid,
+          wordbookId,
+          wordbookTitle,
+          type: 'test',
+          category: category as 'word' | 'grammar',
+          duration,
+          score: finalScoreValue,
+          totalItems: totalCount,
+          incorrectAnswers: finalIncorrectWords,
+          dayStart: dayRange.start,
+          dayEnd: dayRange.end
+        });
+      } catch (err) {
+        console.error('Failed to finish test session:', err);
+      }
+    }
+
+    // Update previous record locally
+    const now = new Date();
+    setPreviousRecord({
+      date: `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+      score: finalScorePercent
+    });
+  }, [phase, shuffledWords.length, startTime, wordbookId, wordbookTitle, category, dayRange.start, dayRange.end]);
+
+  const goToNextQuestion = useCallback(() => {
+    // Safety guard
+    if (phase !== 'feedback' || isMovingToNextRef.current) return;
+    
+    if (currentIndex < shuffledWords.length - 1) {
+      isMovingToNextRef.current = true;
+      setCurrentIndex(prev => prev + 1);
+      setPhase('phase1');
+      setTimer(PHASE1_TIME);
+      setSelectedOption(null);
+      setIsCorrect(null);
+      isAnsweringRef.current = false;
+      // Reset the lock in the next tick after phase change
+      setTimeout(() => { isMovingToNextRef.current = false; }, 100);
+    } else {
+      finishTest();
+    }
+  }, [phase, currentIndex, shuffledWords.length, finishTest]);
+
+  const handleAnswer = useCallback((optionIndex: number) => {
+    if (phase !== 'phase2' || selectedOption !== null || isAnsweringRef.current) return;
+    isAnsweringRef.current = true;
     
     const correctWord = shuffledWords[currentIndex];
     if (!correctWord) return;
@@ -277,35 +336,7 @@ export default function VocabularyTest({ words, dayRange, onClose, wordbookId, w
     const isModalGrammar = type === 'modal-grammar';
     const isRelativeGrammar = type === 'relative-grammar' || wordbookTitle.includes('관계부사');
     
-    let correctAnswer: string;
-    if (isRelativeGrammar && correctWord.quizChoices) {
-      correctAnswer = correctWord.quizChoices[0];
-    } else if (isConversionGrammar) {
-      const getLabelFromPattern = (p: string) => {
-        if (p === 'to') return '동사 O to + 간접목적어';
-        if (p === 'for') return '동사 O for + 간접목적어';
-        if (p === 'of') return '동사 O of + 간접목적어';
-        if (p === 'impossible') return '3형식 전환 불가';
-        return p || '';
-      };
-      correctAnswer = getLabelFromPattern(correctWord.pattern || '');
-    } else if (isComplementGrammar) {
-      correctAnswer = correctWord.distractors?.[0] || '';
-    } else if (isToIngGrammar) {
-      const getLabel = (p: string) => {
-        if (p === 'to부정사만 목적어로 오는 동사') return `${correctWord.word} to V`;
-        if (p === '동명사만 목적어로 오는 동사') return `${correctWord.word} Ving`;
-        if (p === '둘다 목적어로 오고 의미도 같은 동사') return `둘 다 가능하고 의미도 같음`;
-        if (p === '둘다 오지만 의미는 다른 동사') return `둘 다 가능하고 의미 달라짐`;
-        return p || '';
-      };
-      correctAnswer = getLabel(correctWord.pattern || '');
-    } else if (isIrregular) {
-      correctAnswer = `${correctWord.past} - ${correctWord.pastParticiple}`;
-    } else {
-      correctAnswer = correctWord.meaning;
-    }
-
+    const correctAnswer = currentCorrectAnswerRef.current;
     const userAnswer = optionIndex === -1 ? '시간 초과' : options[optionIndex];
     const correct = userAnswer === correctAnswer || (isRelativeGrammar && (
       (correctAnswer === 'how' && userAnswer === 'the way') ||
@@ -314,64 +345,58 @@ export default function VocabularyTest({ words, dayRange, onClose, wordbookId, w
     
     setIsCorrect(correct);
     if (correct) {
-      setScore(prev => prev + 1);
+      scoreRef.current += 1;
+      setScore(scoreRef.current);
     } else {
-      setIncorrectWords(prev => [...prev, {
+      const newIncorrect = {
         word: correctWord.quizSentence || correctWord.word,
         meaning: correctAnswer,
         userChoice: userAnswer,
-        correctAnswer: correctAnswer
-      }]);
+        correctAnswer: correctAnswer,
+        choices: [...options]
+      };
+      incorrectWordsRef.current = [...incorrectWordsRef.current, newIncorrect];
+      setIncorrectWords(incorrectWordsRef.current);
     }
     
     setPhase('feedback');
     setTimer(FEEDBACK_TIME);
-  };
+  }, [phase, selectedOption, currentIndex, shuffledWords, options, type, wordbookTitle]);
 
-  const goToNextQuestion = useCallback(() => {
-    if (currentIndex < shuffledWords.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-      startPhase1();
-    } else {
-      finishTest();
+  const handleTimeout = useCallback(() => {
+    if (phase === 'phase1') {
+      startPhase2();
+    } else if (phase === 'phase2') {
+      handleAnswer(-1); // Timeout is incorrect
     }
-  }, [currentIndex, shuffledWords.length, startPhase1]);
+  }, [phase, startPhase2, handleAnswer]);
 
-  const finishTest = () => {
-    const finalScore = Math.round((score / shuffledWords.length) * 100);
-    
-    // Record to Firebase
-    if (auth.currentUser) {
-      const points = score * 10; // Extra points for test
-      const xp = score * 20;
-      
-      PetService.addPoints(points, auth.currentUser.uid);
-      PetService.addXP(xp, auth.currentUser.uid);
-
-      recordStudySession({
-        uid: auth.currentUser.uid,
-        wordbookId,
-        wordbookTitle,
-        type: 'test',
-        category: 'word',
-        duration: 0,
-        score: score,
-        totalItems: shuffledWords.length,
-        incorrectAnswers: incorrectWords,
-        dayStart: dayRange.start,
-        dayEnd: dayRange.end
-      });
+  // Timer logic
+  useEffect(() => {
+    let interval: any;
+    if (phase === 'phase1' || phase === 'phase2') {
+      interval = setInterval(() => {
+        setTimer(prev => {
+          if (prev <= 0.1) {
+            handleTimeout();
+            return 0;
+          }
+          return prev - 0.1;
+        });
+      }, 100);
+    } else if (phase === 'feedback') {
+      interval = setInterval(() => {
+        setTimer(prev => {
+          if (prev <= 0.1) {
+            goToNextQuestion();
+            return 0;
+          }
+          return prev - 0.1;
+        });
+      }, 100);
     }
-
-    setPhase('result');
-
-    // Update previous record locally for immediate use if user tries again
-    const now = new Date();
-    setPreviousRecord({
-      date: `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
-      score: finalScore
-    });
-  };
+    return () => clearInterval(interval);
+  }, [phase, currentIndex, shuffledWords.length, goToNextQuestion, handleTimeout]); // Added length to dependencies to refresh on shuffle
 
   const speak = (text: string) => {
     if ('speechSynthesis' in window) {
@@ -398,9 +423,9 @@ export default function VocabularyTest({ words, dayRange, onClose, wordbookId, w
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [phase, currentIndex, selectedOption]);
+  }, [phase, currentIndex, selectedOption, goToNextQuestion, handleAnswer, startPhase2]);
 
-  const percentage = Math.round((score / shuffledWords.length) * 100);
+  const percentage = Math.max(0, Math.round((score / Math.max(1, shuffledWords.length)) * 100));
   const isGoalAchieved = percentage >= 90;
 
   return (
@@ -471,7 +496,7 @@ export default function VocabularyTest({ words, dayRange, onClose, wordbookId, w
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center sm:gap-20">
                 <span className="sm:w-32 text-slate-400 text-sm md:text-2xl">제한시간</span>
-                <span className="text-[#FF6B9D]">빠르게 (7초)</span>
+                <span className="text-[#FF6B9D]">7초</span>
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center sm:gap-20">
                 <span className="sm:w-32 text-slate-400 text-sm md:text-2xl">목표점수</span>
@@ -564,7 +589,7 @@ export default function VocabularyTest({ words, dayRange, onClose, wordbookId, w
             </h2>
 
             <div className="w-full bg-white/5 rounded-3xl p-4 md:p-8 border border-white/10 backdrop-blur-md">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-6">
+              <div className={`grid grid-cols-1 ${options.length > 4 ? 'sm:grid-cols-2 lg:grid-cols-3' : 'sm:grid-cols-2'} gap-3 md:gap-6`}>
                 {options.map((option, idx) => {
                   const isCorrectAnswer = option === shuffledWords[currentIndex]?.meaning;
                   const isSelected = selectedOption === idx;
@@ -681,11 +706,15 @@ export default function VocabularyTest({ words, dayRange, onClose, wordbookId, w
             <div className="flex flex-col gap-3">
               <button
                 onClick={() => {
-                  onClose();
+                  if (onNavigateToReport) {
+                    onNavigateToReport();
+                  } else {
+                    onClose();
+                  }
                 }}
                 className="w-full py-4 md:py-6 bg-slate-200 text-slate-600 rounded-xl md:rounded-3xl font-black text-base md:text-lg hover:bg-slate-300 transition-colors"
               >
-                오답 즉시 복습
+                오답 복습하러 가기
               </button>
               <div className="grid grid-cols-2 gap-3">
                 <button

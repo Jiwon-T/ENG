@@ -95,16 +95,16 @@ service cloud.firestore {
       return isAuthenticated() && (
         (request.auth.token.email == "lizzieshere1@gmail.com") ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher'))
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'teacher'])
       );
     }
 
     function isTeacher() {
-      return isAdmin() || (
-        isAuthenticated() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher'
+      return isAuthenticated() && (
+        (request.auth.token.email == "lizzieshere1@gmail.com") ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher') ||
+        isAdmin()
       );
     }
 
@@ -157,6 +157,7 @@ service cloud.firestore {
              (!('totalItems' in data) || data.totalItems is number) &&
              (!('dayStart' in data) || data.dayStart is number) &&
              (!('dayEnd' in data) || data.dayEnd is number) &&
+             (!('incorrectAnswers' in data) || data.incorrectAnswers is list) &&
              (!('createdAt' in data) || data.createdAt is timestamp);
     }
 
@@ -290,9 +291,13 @@ service cloud.firestore {
     }
 
     match /studySessions/{sessionId} {
-      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isTeacher() || isAdmin());
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isTeacher());
       allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid && isValidStudySession(request.resource.data);
-      allow update, delete: if isAdmin();
+      allow update: if isAuthenticated() && (
+        (resource.data.uid == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['incorrectAnswers'])) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
     }
 
     match /petSystems/{uid} {
