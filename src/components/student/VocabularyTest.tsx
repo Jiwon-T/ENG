@@ -199,12 +199,12 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
     const isComplementGrammar = type === 'complement-grammar';
     const isConversionGrammar = type === 'conversion-grammar';
     const isModalGrammar = type === 'modal-grammar';
-    const isRelativeGrammar = type === 'relative-grammar' || wordbookTitle.includes('관계부사');
+    const isRelativeGrammar = type === 'relative-grammar' || wordbookTitle.includes('관계부사') || !!correctWord.quizChoices;
     
     let correctOption: string;
     let otherOptions: string[];
 
-    if (isRelativeGrammar && correctWord.quizChoices) {
+    if (correctWord.quizChoices && correctWord.quizChoices.length > 0) {
       correctOption = correctWord.quizChoices[0];
       otherOptions = correctWord.quizChoices.slice(1);
     } else if (isConversionGrammar) {
@@ -395,7 +395,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
     const isComplementGrammar = type === 'complement-grammar';
     const isConversionGrammar = type === 'conversion-grammar';
     const isModalGrammar = type === 'modal-grammar';
-    const isRelativeGrammar = type === 'relative-grammar' || wordbookTitle.includes('관계부사');
+    const isRelativeGrammar = type === 'relative-grammar' || wordbookTitle.includes('관계부사') || !!correctWord.quizChoices;
     
     const correctAnswer = currentCorrectAnswerRef.current;
     const userAnswer = optionIndex === -1 ? '시간 초과' : options[optionIndex];
@@ -591,7 +591,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
         {phase === 'phase1' && (
           <motion.div
             key="phase1"
-            className="flex flex-col items-center gap-4 md:gap-8 w-full max-w-4xl px-4"
+            className="flex flex-col items-center gap-4 md:gap-8 w-full max-w-5xl px-4"
           >
             <h2 className="text-2xl md:text-4xl font-bold text-slate-400 mb-2 md:mb-4">
               <span className="text-[#C084FC] text-3xl md:text-5xl">{currentIndex + 1}</span>
@@ -601,7 +601,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
 
             <div 
               onClick={startPhase2}
-              className="w-full bg-white rounded-2xl shadow-2xl p-8 md:p-24 relative flex items-center justify-center min-h-[250px] md:min-h-[400px] cursor-pointer"
+              className="w-full bg-white rounded-2xl shadow-2xl p-6 md:p-12 lg:p-20 relative flex items-center justify-center min-h-[250px] md:min-h-[400px] cursor-pointer overflow-hidden"
             >
               <button 
                 onClick={(e) => {
@@ -616,7 +616,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
                 <Volume2 size={24} className="md:w-10 md:h-10" />
               </button>
 
-              <h1 className="text-4xl md:text-8xl font-black text-slate-800 tracking-tight text-center break-words px-4">
+              <h1 className="text-2xl sm:text-3xl md:text-5xl lg:text-6xl font-black text-slate-800 tracking-tight text-center break-words px-4 leading-tight">
                 {shuffledWords[currentIndex]?.quizSentence || shuffledWords[currentIndex]?.word || ''}
               </h1>
 
@@ -659,7 +659,9 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
 
             <div className="text-center mb-2 md:mb-4">
               <h1 className="text-3xl md:text-6xl font-black text-white mb-2">
-                {shuffledWords[currentIndex]?.word || ''}
+                {(type === 'relative-grammar' || wordbookTitle.includes('관계부사') || !!shuffledWords[currentIndex]?.quizChoices) 
+                  ? '' 
+                  : (shuffledWords[currentIndex]?.word || '')}
               </h1>
               {type === 'irregular' && (
                 <span className="inline-block px-4 py-1 bg-[#FF6B9D] text-white rounded-full text-sm md:text-xl font-bold">

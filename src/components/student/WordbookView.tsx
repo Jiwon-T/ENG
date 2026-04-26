@@ -294,7 +294,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     setIncorrectAnswers([]);
 
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || 
-                              selectedWordbook?.title?.includes('관계부사');
+                              selectedWordbook?.title?.includes('관계부사') ||
+                              selectedWordbook?.title?.includes('that');
     
     if (isRelativeGrammar) {
       // Collect all available examples from all concepts in the current chunk
@@ -433,7 +434,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
 
     // Pre-fetch examples for relative-grammar or if it's a grammar set that uses them
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || 
-                              selectedWordbook?.title?.includes('관계부사');
+                              selectedWordbook?.title?.includes('관계부사') ||
+                              selectedWordbook?.title?.includes('that');
     
     if (isRelativeGrammar && selectedWordbook) {
       const concepts = rangeWords;
@@ -457,8 +459,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       const allPotentialExamples = fetchResults.flat();
 
       if (allPotentialExamples.length > 0) {
-        // Use all available examples from these concepts
-        rangeWords = allPotentialExamples;
+        // Use a random subset of 25 examples if there are many
+        const shuffled = shuffleArray(allPotentialExamples);
+        rangeWords = shuffled.slice(0, 25);
       }
     }
 
