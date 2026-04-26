@@ -39,6 +39,16 @@ interface VocabularyTestProps {
 
 type TestPhase = 'intro' | 'info' | 'phase1' | 'phase2' | 'feedback' | 'result';
 
+// Helper to shuffle array
+function shuffleArray<T>(array: T[]): T[] {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+}
+
 export default function VocabularyTest({ words, dayRange, onClose, onNavigateToReport, wordbookId, wordbookTitle, category, type }: VocabularyTestProps) {
   const [phase, setPhase] = useState<TestPhase>('intro');
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -67,6 +77,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
 
   // Initialize test data
   const [shuffledWords, setShuffledWords] = useState<Word[]>([]);
+  const [conjugationSteps, setConjugationSteps] = useState<number[]>([]);
 
   useEffect(() => {
     // Get attempt history and limit
@@ -140,6 +151,13 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
     // Shuffle words ONLY when test starts
     const randomized = [...words].sort(() => Math.random() - 0.5);
     setShuffledWords(randomized);
+    
+    // Initialize steps for irregular test (randomly 0/1 for each word)
+    if (type === 'irregular') {
+      setConjugationSteps(randomized.map(() => Math.floor(Math.random() * 2)));
+    } else {
+      setConjugationSteps([]);
+    }
 
     // Increment attempt in localStorage
     const today = new Date().toISOString().split('T')[0];
@@ -218,18 +236,61 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
       correctOption = getLabel(correctWord.pattern || '');
       otherOptions = allPatterns.filter(p => p !== (correctWord.pattern || '')).map(getLabel);
     } else if (isIrregular) {
-      correctOption = `${correctWord.past} - ${correctWord.pastParticiple}`;
-      otherOptions = shuffledWords.filter(w => w.id !== correctWord.id).map(w => `${w.past} - ${w.pastParticiple}`);
+      const step = conjugationSteps[index] || 0;
+      correctOption = step === 0 ? (correctWord.past || '') : (correctWord.pastParticiple || '');
+      
+      const distractorsSet = new Set<string>();
+      
+      // 1. Word-specific distractors (HIGHEST PRIORITY)
+      const teacherDistractors = Array.isArray(correctWord.distractors) 
+        ? correctWord.distractors 
+        : (typeof correctWord.distractors === 'string' 
+            ? (correctWord.distractors as string).split(',').map(s => s.trim()).filter(Boolean)
+            : []);
+            
+      if (teacherDistractors.length > 0) {
+        shuffleArray<string>(teacherDistractors).forEach(d => {
+          if (distractorsSet.size < 10) distractorsSet.add(d);
+        });
+      }
+      
+      // 2. Same word different forms
+      const otherForm = step === 0 ? correctWord.pastParticiple : correctWord.past;
+      if (otherForm && otherForm !== correctOption) distractorsSet.add(otherForm);
+      if (correctWord.word && correctWord.word !== correctOption) distractorsSet.add(correctWord.word);
+      
+      // 3. Same pattern words
+      if (correctWord.pattern) {
+        const samePatternWords = shuffledWords.filter(w => w.id !== correctWord.id && w.pattern === correctWord.pattern);
+        shuffleArray<Word>(samePatternWords).forEach(w => {
+          const f = step === 0 ? w.past : w.pastParticiple;
+          if (f && f !== correctOption) distractorsSet.add(f);
+        });
+      }
+
+      // 4. Other irregular verbs
+      const otherWords = shuffledWords.filter(w => w.id !== correctWord.id);
+      const otherForms: string[] = otherWords
+        .map(w => step === 0 ? w.past : w.pastParticiple)
+        .filter((f): f is string => !!f && f !== correctOption);
+      
+      shuffleArray<string>([...new Set(otherForms)]).forEach(f => {
+        if (distractorsSet.size < 20) distractorsSet.add(f);
+      });
+
+      otherOptions = Array.from(distractorsSet).filter(o => o !== correctOption);
     } else {
       correctOption = correctWord.meaning;
       otherOptions = shuffledWords.filter(w => w.id !== correctWord.id).map(w => w.meaning);
     }
     
     const optionCount = category === 'grammar' ? 4 : 6;
-    const allOptions = [correctOption, ...otherOptions.sort(() => Math.random() - 0.5).slice(0, optionCount - 1)].sort(() => Math.random() - 0.5);
+    // otherOptions is already prioritized since it comes from a Set populated in priority order
+    const selectedDistractors = otherOptions.slice(0, optionCount - 1);
+    const allOptions = shuffleArray([correctOption, ...selectedDistractors]);
     currentCorrectAnswerRef.current = correctOption;
     setOptions(allOptions);
-  }, [shuffledWords, type, wordbookTitle]);
+  }, [shuffledWords, type, wordbookTitle, conjugationSteps]);
 
   const startPhase1 = useCallback(() => {
     if (shuffledWords.length === 0) return;
@@ -558,6 +619,14 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
               <h1 className="text-4xl md:text-8xl font-black text-slate-800 tracking-tight text-center break-words px-4">
                 {shuffledWords[currentIndex]?.quizSentence || shuffledWords[currentIndex]?.word || ''}
               </h1>
+
+              {type === 'irregular' && (
+                <div className="absolute bottom-4 left-0 right-0 flex justify-center md:bottom-8">
+                  <span className="px-4 py-1.5 md:px-6 md:py-2 bg-[#FF6B9D] text-white rounded-full text-sm md:text-xl font-black shadow-lg animate-bounce">
+                    {conjugationSteps[currentIndex] === 0 ? "과거형(Past)을 생각하세요!" : "과거분사(P.P)를 생각하세요!"}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="w-full max-w-2xl text-center space-y-4 md:space-y-6">
@@ -588,10 +657,21 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
               <span className="text-slate-600 text-3xl md:text-5xl">{shuffledWords.length}</span>
             </h2>
 
+            <div className="text-center mb-2 md:mb-4">
+              <h1 className="text-3xl md:text-6xl font-black text-white mb-2">
+                {shuffledWords[currentIndex]?.word || ''}
+              </h1>
+              {type === 'irregular' && (
+                <span className="inline-block px-4 py-1 bg-[#FF6B9D] text-white rounded-full text-sm md:text-xl font-bold">
+                  {conjugationSteps[currentIndex] === 0 ? "과거형(Past) 선택" : "과거분사(P.P) 선택"}
+                </span>
+              )}
+            </div>
+
             <div className="w-full bg-white/5 rounded-3xl p-4 md:p-8 border border-white/10 backdrop-blur-md">
               <div className={`grid grid-cols-1 ${options.length > 4 ? 'sm:grid-cols-2 lg:grid-cols-3' : 'sm:grid-cols-2'} gap-3 md:gap-6`}>
                 {options.map((option, idx) => {
-                  const isCorrectAnswer = option === shuffledWords[currentIndex]?.meaning;
+                  const isCorrectAnswer = option === currentCorrectAnswerRef.current;
                   const isSelected = selectedOption === idx;
                   
                   let bgColor = "bg-white/10";

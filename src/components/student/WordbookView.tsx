@@ -40,6 +40,16 @@ interface Progress {
 
 import { COMPLEMENT_QUIZ_DATA, GrammarWord } from '../../lib/grammarSets';
 
+// Helper to shuffle array
+function shuffleArray<T>(array: T[]): T[] {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+}
+
 export default function WordbookView({ isMobile, category = 'word', onNavigate }: { isMobile?: boolean; category?: 'word' | 'grammar'; onNavigate?: (view: any) => void }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [selectedWordbook, setSelectedWordbook] = useState<Wordbook | null>(null);
@@ -250,25 +260,24 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   };
 
   const startMatchGame = () => {
-    if (displayedWords.length === 0) return;
+    if (words.length === 0) return;
     
-    const shuffledPool = [...displayedWords].sort(() => Math.random() - 0.5);
+    // Use all words from current selection onwards or whole pool to satisfy sessionUnitSize
+    const startFrom = currentChunk * daySize;
+    const pool: Word[] = words.length <= sessionUnitSize ? words : 
+                 (words.length - startFrom >= sessionUnitSize ? words.slice(startFrom) : words);
+    
+    const shuffledPool = shuffleArray(pool);
     const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
     setSessionWords(selectedSessionWords);
 
     const cards: any[] = [];
-    selectedSessionWords.forEach(w => {
+    selectedSessionWords.forEach((w: Word) => {
       cards.push({ id: `${w.id}_word`, content: w.word, type: 'word', matched: false, wordId: w.id });
       cards.push({ id: `${w.id}_meaning`, content: w.meaning, type: 'meaning', matched: false, wordId: w.id });
     });
 
-    // Shuffle
-    for (let i = cards.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [cards[i], cards[j]] = [cards[j], cards[i]];
-    }
-
-    setMatchCards(cards);
+    setMatchCards(shuffleArray(cards));
     setSelectedMatchCard(null);
     setMatchStartTime(Date.now());
     setSessionStartTime(Date.now());
@@ -281,7 +290,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   };
 
   const startQuiz = async () => {
-    if (displayedWords.length === 0) return;
+    if (words.length === 0) return;
     setIncorrectAnswers([]);
 
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || 
@@ -317,7 +326,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       }
 
       // Final pool: pick from entire book but limit by sessionUnitSize
-      const shuffled = allPotentialExamples.sort(() => Math.random() - 0.5);
+      const shuffled = shuffleArray(allPotentialExamples);
       const selectedSessionWords = shuffled.slice(0, sessionUnitSize);
       
       setSessionWords(selectedSessionWords);
@@ -331,8 +340,12 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       setSessionStartTime(Date.now());
       generateQuizOptions(0, selectedSessionWords);
     } else {
-      // Normal Wordbook: Pick sessionUnitSize random words from the current pool
-      const shuffledPool = [...displayedWords].sort(() => Math.random() - 0.5);
+      // Normal Wordbook: Pick sessionUnitSize random words from the relevant pool
+      const startFrom = currentChunk * daySize;
+      const pool: Word[] = words.length <= sessionUnitSize ? words : 
+                   (words.length - startFrom >= sessionUnitSize ? words.slice(startFrom) : words);
+      
+      const shuffledPool = shuffleArray(pool);
       const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
       
       setSessionWords(selectedSessionWords);
@@ -349,9 +362,14 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   };
 
   const startFlashcards = () => {
-    if (displayedWords.length === 0) return;
+    if (words.length === 0) return;
     setIncorrectAnswers([]);
-    const shuffledPool = [...displayedWords].sort(() => Math.random() - 0.5);
+    
+    const startFrom = currentChunk * daySize;
+    const pool: Word[] = words.length <= sessionUnitSize ? words : 
+                 (words.length - startFrom >= sessionUnitSize ? words.slice(startFrom) : words);
+                 
+    const shuffledPool = shuffleArray(pool);
     const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
     setSessionWords(selectedSessionWords);
     
@@ -366,9 +384,17 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   };
 
   const startConjugationChallenge = () => {
-    if (displayedWords.length === 0) return;
+    if (words.length === 0) return;
     setIncorrectAnswers([]);
-    const shuffledPool = [...displayedWords].sort(() => Math.random() - 0.5);
+    
+    // Respect sessionUnitSize by pulling from a larger pool if necessary
+    const startFrom = currentChunk * daySize;
+    // If starting from current chunk doesn't have enough words, use the whole book
+    // Otherwise, use all words from current chunk to the end as the shuffle pool
+    const pool: Word[] = words.length <= sessionUnitSize ? words : 
+                 (words.length - startFrom >= sessionUnitSize ? words.slice(startFrom) : words);
+
+    const shuffledPool = shuffleArray(pool);
     const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
     setSessionWords(selectedSessionWords);
     
@@ -580,9 +606,15 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       const distractors = new Set<string>();
       
       // 0. Word-specific distractors prioritized
-      if (correctWord.distractors && correctWord.distractors.length > 0) {
+      const teacherDistractors = Array.isArray(correctWord.distractors) 
+        ? correctWord.distractors 
+        : (typeof correctWord.distractors === 'string' 
+            ? (correctWord.distractors as string).split(',').map(s => s.trim()).filter(Boolean)
+            : []);
+
+      if (teacherDistractors.length > 0) {
         // Form pairs from specific distractors + correct forms
-        const forms = [correctWord.past, correctWord.pastParticiple, ...correctWord.distractors];
+        const forms = [correctWord.past, correctWord.pastParticiple, ...teacherDistractors];
         for (let i = 0; i < forms.length; i++) {
           if (distractors.size >= 12) break;
           const d1 = forms[i];
@@ -632,9 +664,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     
     const options = [correctOption];
     
-    // Shuffle other options and pick 3
-    const shuffledOthers = [...otherOptions].sort(() => Math.random() - 0.5);
-    options.push(...shuffledOthers.slice(0, 3));
+    // Pick first 3 from otherOptions (already prioritized if it's irregular)
+    options.push(...otherOptions.slice(0, 3));
     
     // Fill if not enough
     while (options.length < 4) {
@@ -642,7 +673,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     }
     
     // Shuffle all options
-    setQuizOptions(options.sort(() => Math.random() - 0.5));
+    setQuizOptions(shuffleArray(options));
     setSelectedOption(null);
     setIsCorrect(null);
   };
@@ -748,9 +779,14 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     distractors.add(correctAnswer!);
 
     // 0. Word-specific distractors prioritized correctly
-    if (correctWord.distractors && correctWord.distractors.length > 0) {
-      const specific = correctWord.distractors;
-      const shuffledSpecific = [...specific].sort(() => Math.random() - 0.5);
+    const teacherDistractors = Array.isArray(correctWord.distractors) 
+      ? correctWord.distractors 
+      : (typeof correctWord.distractors === 'string' 
+          ? (correctWord.distractors as string).split(',').map(s => s.trim()).filter(Boolean)
+          : []);
+
+    if (teacherDistractors.length > 0) {
+      const shuffledSpecific = shuffleArray<string>(teacherDistractors);
       for (const d of shuffledSpecific) {
         if (distractors.size >= 4) break;
         distractors.add(d);
@@ -759,8 +795,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
 
     // 0.5. Custom distractors from teacher (for the whole wordbook)
     if (distractors.size < 4 && selectedWordbook?.customDistractors && selectedWordbook.customDistractors.length > 0) {
-      const custom = selectedWordbook.customDistractors;
-      const shuffledCustom = [...custom].sort(() => Math.random() - 0.5);
+      const custom: string[] = selectedWordbook.customDistractors;
+      const shuffledCustom = shuffleArray<string>(custom);
       for (const d of shuffledCustom) {
         if (distractors.size >= 4) break;
         distractors.add(d);
@@ -781,11 +817,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
 
     // 4. Forms from verbs with the same pattern
     const samePatternWords = words.filter(w => w.id !== correctWord.id && w.pattern === correctWord.pattern);
-    const samePatternForms = samePatternWords
+    const samePatternForms: string[] = samePatternWords
       .map(w => step === 0 ? w.past : w.pastParticiple)
       .filter((f): f is string => !!f && f !== correctAnswer);
     
-    const shuffledPatternForms = samePatternForms.sort(() => Math.random() - 0.5);
+    const shuffledPatternForms = shuffleArray<string>(samePatternForms);
     for (const f of shuffledPatternForms) {
       if (distractors.size >= 4) break;
       distractors.add(f);
@@ -793,23 +829,23 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
 
     // 5. Any other irregular forms
     const otherWords = words.filter(w => w.id !== correctWord.id);
-    const otherForms = otherWords
+    const otherForms: string[] = otherWords
       .map(w => step === 0 ? w.past : w.pastParticiple)
       .filter((f): f is string => !!f && f !== correctAnswer);
     
     const uniqueOtherForms = otherForms.filter((v, i, a) => a.indexOf(v) === i);
-    const shuffledOthers = uniqueOtherForms.sort(() => Math.random() - 0.5);
+    const shuffledOthers = shuffleArray<string>(uniqueOtherForms);
     for (const f of shuffledOthers) {
       if (distractors.size >= 4) break;
       distractors.add(f);
     }
     
-    const options = Array.from(distractors);
+    const options: string[] = Array.from(distractors);
     while (options.length < 4) {
       options.push("???");
     }
-
-    setConjugationOptions(options.sort(() => Math.random() - 0.5));
+    
+    setConjugationOptions(shuffleArray(options));
     setSelectedOption(null);
     setIsCorrect(null);
   };
