@@ -420,7 +420,7 @@ export const generateMultipleChoiceQuiz = async (
         children: [
           new TextRun({ text: `${index + 1}. `, size: 22, bold: true }),
           new TextRun({ 
-            text: (isRelative || isConceptGrammar) ? item.word : `${item.word} (${item.meaning})`, 
+            text: (isRelative || isConceptGrammar || wordbookType === 'irregular') ? item.word : item.word, 
             size: 24, 
             bold: true 
           }),
