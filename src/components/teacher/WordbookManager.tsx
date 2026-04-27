@@ -776,7 +776,15 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 텍스트 일괄 등록으로 만들기
               </button>
               <button
-                onClick={() => setIsInstantTestModalOpen(true)}
+                onClick={() => {
+                  setTestPaperConfig({
+                    ...testPaperConfig,
+                    title: '',
+                    subtitle: '1회독',
+                    studentName: ''
+                  });
+                  setIsInstantTestModalOpen(true);
+                }}
                 className="py-4 bg-blue-50 text-blue-600 rounded-3xl font-bold text-sm hover:bg-blue-100 transition-all flex items-center justify-center gap-2 border border-blue-100"
               >
                 <FileText size={18} />
@@ -1347,7 +1355,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">학생 이름</label>
                     <input
@@ -1365,6 +1373,16 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                       value={testPaperConfig.title}
                       onChange={(e) => setTestPaperConfig({ ...testPaperConfig, title: e.target.value })}
                       placeholder="예: 단어 퀴즈"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">소제목 (회독 등)</label>
+                    <input
+                      type="text"
+                      value={testPaperConfig.subtitle}
+                      onChange={(e) => setTestPaperConfig({ ...testPaperConfig, subtitle: e.target.value })}
+                      placeholder="예: 1회독"
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
                     />
                   </div>
