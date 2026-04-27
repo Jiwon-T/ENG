@@ -49,6 +49,15 @@ interface Word {
   order?: number;
 }
 
+function shuffleArray<T>(array: T[]): T[] {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+}
+
 export default function WordbookManager({ category = 'word' }: { category?: 'word' | 'grammar' }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [selectedWordbook, setSelectedWordbook] = useState<Wordbook | null>(null);
@@ -95,6 +104,8 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
   // Test paper states
   const [isTestPaperModalOpen, setIsTestPaperModalOpen] = useState(false);
+  const [isInstantTestModalOpen, setIsInstantTestModalOpen] = useState(false);
+  const [instantTestText, setInstantTestText] = useState('');
   const [testPaperConfig, setTestPaperConfig] = useState({
     title: '',
     subtitle: '1회독',
@@ -647,6 +658,97 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     }
   };
 
+  const handleGenerateInstantTest = async () => {
+    if (!instantTestText.trim()) return;
+
+    let title = testPaperConfig.title || '즉석 단어 시험';
+    const wordsToProcess: Word[] = [];
+
+    let remainingText = instantTestText.trim();
+    const titleMatch = remainingText.match(/^단어장 제목\s*:\s*(.*)$/m);
+    if (titleMatch) {
+      title = titleMatch[1].trim();
+      remainingText = remainingText.replace(titleMatch[0], '').trim();
+    }
+
+    const records: string[][] = [];
+    let currentRecord: string[] = [];
+    let currentField = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < remainingText.length; i++) {
+      const char = remainingText[i];
+      if (char === '"') { inQuotes = !inQuotes; continue; }
+      if (inQuotes) {
+        currentField += char;
+      } else {
+        if (char === '\t') {
+          currentRecord.push(currentField.trim());
+          currentField = '';
+        } else if (char === '\n') {
+          currentRecord.push(currentField.trim());
+          if (currentRecord.some(f => f !== '')) records.push(currentRecord);
+          currentRecord = [];
+          currentField = '';
+        } else if (char === ' ' && remainingText[i+1] === ' ') {
+          currentRecord.push(currentField.trim());
+          currentField = '';
+          while (i + 1 < remainingText.length && remainingText[i+1] === ' ') i++;
+        } else {
+          currentField += char;
+        }
+      }
+    }
+    if (currentField || currentRecord.length > 0) {
+      currentRecord.push(currentField.trim());
+      if (currentRecord.some(f => f !== '')) records.push(currentRecord);
+    }
+
+    records.forEach((parts, idx) => {
+      if (parts.length < 2 && parts[0]) {
+        const firstSpaceIndex = parts[0].indexOf(' ');
+        if (firstSpaceIndex !== -1) {
+          const word = parts[0].substring(0, firstSpaceIndex).trim();
+          const meaning = parts[0].substring(firstSpaceIndex + 1).trim();
+          wordsToProcess.push({ id: `tmp-${idx}`, word, meaning });
+        }
+      } else if (parts.length >= 2) {
+        wordsToProcess.push({
+          id: `tmp-${idx}`,
+          word: parts[0],
+          meaning: parts[1],
+          example: parts[2] || ''
+        });
+      }
+    });
+
+    if (wordsToProcess.length === 0) {
+      alert('출제할 단어를 찾지 못했습니다. 단어 뜻 순서로 입력해주세요.');
+      return;
+    }
+
+    const shuffledWords = shuffleArray(wordsToProcess);
+
+    try {
+      await generateWordTest(
+        title,
+        testPaperConfig.subtitle,
+        shuffledWords,
+        {
+          testType: testPaperConfig.testType,
+          includeAnswerKey: testPaperConfig.includeAnswerKey,
+          paperTitle: title,
+          studentName: testPaperConfig.studentName
+        }
+      );
+      setIsInstantTestModalOpen(false);
+      setInstantTestText('');
+    } catch (error) {
+      console.error('Failed to generate instant test:', error);
+      alert('시험지 생성 중 오류가 발생했습니다.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {!selectedWordbook ? (
@@ -672,6 +774,13 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
               >
                 <FileSpreadsheet size={18} />
                 텍스트 일괄 등록으로 만들기
+              </button>
+              <button
+                onClick={() => setIsInstantTestModalOpen(true)}
+                className="py-4 bg-blue-50 text-blue-600 rounded-3xl font-bold text-sm hover:bg-blue-100 transition-all flex items-center justify-center gap-2 border border-blue-100"
+              >
+                <FileText size={18} />
+                외부 단어로 즉석 시험지 만들기
               </button>
             </div>
 
@@ -1200,6 +1309,107 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
             <div className="flex gap-3">
               <button onClick={() => setIsBulkAddOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold">취소</button>
               <button onClick={handleBulkAddWords} className="flex-1 py-4 bg-pastel-pink-500 text-white rounded-2xl font-bold shadow-lg shadow-pastel-pink-200">등록하기</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Instant Test Paper Modal */}
+      {isInstantTestModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 bg-slate-900/40 backdrop-blur-sm">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="max-w-2xl w-full bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh]"
+          >
+            <div className="flex justify-between items-center p-8 pb-4 border-b border-slate-50">
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <FileText className="text-blue-500" />
+                외부 단어로 즉석 시험지 만들기
+              </h2>
+              <button onClick={() => setIsInstantTestModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-8 pt-4 no-scrollbar">
+              <div className="space-y-6">
+                <div>
+                  <div className="flex justify-between items-end mb-2">
+                    <label className="block text-xs font-black text-slate-400 uppercase tracking-wider ml-1">단어 입력 (단어 뜻 순서)</label>
+                    <span className="text-[10px] text-slate-400 font-medium italic">탭(Tab)이나 엔터(Enter), 또는 공백 2개로 구분</span>
+                  </div>
+                  <textarea
+                    value={instantTestText}
+                    onChange={(e) => setInstantTestText(e.target.value)}
+                    placeholder="apple 사과&#10;banana 바나나&#10;cherry 체리"
+                    className="w-full h-48 px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-[2rem] focus:ring-4 focus:ring-blue-100 focus:border-blue-200 outline-none font-medium text-sm resize-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">학생 이름</label>
+                    <input
+                      type="text"
+                      value={testPaperConfig.studentName}
+                      onChange={(e) => setTestPaperConfig({ ...testPaperConfig, studentName: e.target.value })}
+                      placeholder="이름 입력"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">시험지 제목</label>
+                    <input
+                      type="text"
+                      value={testPaperConfig.title}
+                      onChange={(e) => setTestPaperConfig({ ...testPaperConfig, title: e.target.value })}
+                      placeholder="예: 단어 퀴즈"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">시험 유형</label>
+                    <select
+                      value={testPaperConfig.testType}
+                      onChange={(e) => setTestPaperConfig({ ...testPaperConfig, testType: e.target.value as any })}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                    >
+                      <option value="en-to-ko">영어 → 뜻</option>
+                      <option value="ko-to-en">뜻 → 영어</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px] mt-auto">
+                    <button 
+                      onClick={() => setTestPaperConfig({ ...testPaperConfig, includeAnswerKey: !testPaperConfig.includeAnswerKey })}
+                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.includeAnswerKey ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
+                    >
+                      {testPaperConfig.includeAnswerKey && <CheckCircle2 size={14} />}
+                    </button>
+                    <span className="font-bold text-slate-700 text-xs">정답지 포함하기</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 pt-0 flex gap-3 mt-4">
+              <button 
+                onClick={() => setIsInstantTestModalOpen(false)} 
+                className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm"
+              >
+                취소
+              </button>
+              <button 
+                onClick={handleGenerateInstantTest}
+                disabled={!instantTestText.trim()}
+                className="flex-1 py-4 bg-blue-500 text-white rounded-2xl font-bold shadow-lg shadow-blue-200 flex items-center justify-center gap-2 disabled:opacity-50 text-sm transition-all hover:bg-blue-600"
+              >
+                <Download size={18} />
+                즉석 시험지 다운로드
+              </button>
             </div>
           </motion.div>
         </div>
