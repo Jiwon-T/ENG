@@ -154,6 +154,28 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     setIncorrectAnswers([]);
   };
 
+  const isGrammar = selectedWordbook?.category === 'grammar' || selectedWordbook?.type === 'irregular';
+  const daySize = isGrammar ? 10 : (selectedWordbook?.defaultUnitSize || 47);
+  let totalChunks: number = Math.ceil(words.length / daySize);
+  let displayedWords: Word[] = words.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
+
+  if (selectedWordbook?.type === 'relative-grammar') {
+    // For relative-grammar, we only show concepts in the list, hiding sentences with blanks
+    const conceptsOnly: Word[] = words.filter(w => !w.word.includes('(___)'));
+    totalChunks = Math.ceil(conceptsOnly.length / daySize);
+    displayedWords = conceptsOnly.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
+  } else if (selectedWordbook?.type === 'complement-grammar') {
+    if (daySize >= 26 && !isGrammar) { // isGrammar = true for grammar, but complement-grammar had special 3 day logic
+      totalChunks = 1;
+      displayedWords = words; 
+    } else if (!isGrammar) {
+      totalChunks = 3;
+      if (currentChunk === 0) displayedWords = words.slice(0, 7);
+      else if (currentChunk === 1) displayedWords = words.slice(7, 17);
+      else displayedWords = words.slice(17, 26);
+    }
+  }
+
   useEffect(() => {
     const q = query(collection(db, 'wordbooks'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -262,12 +284,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   const startMatchGame = () => {
     if (words.length === 0) return;
     
-    // Use all words from current selection onwards or whole pool to satisfy sessionUnitSize
-    const startFrom = currentChunk * daySize;
-    const pool: Word[] = words.length <= sessionUnitSize ? words : 
-                 (words.length - startFrom >= sessionUnitSize ? words.slice(startFrom) : words);
-    
-    const shuffledPool = shuffleArray(pool);
+    // Use only words from the current Day/Set
+    const shuffledPool = shuffleArray(displayedWords);
     const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
     setSessionWords(selectedSessionWords);
 
@@ -341,12 +359,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       setSessionStartTime(Date.now());
       generateQuizOptions(0, selectedSessionWords);
     } else {
-      // Normal Wordbook: Pick sessionUnitSize random words from the relevant pool
-      const startFrom = currentChunk * daySize;
-      const pool: Word[] = words.length <= sessionUnitSize ? words : 
-                   (words.length - startFrom >= sessionUnitSize ? words.slice(startFrom) : words);
-      
-      const shuffledPool = shuffleArray(pool);
+      // Normal Wordbook: Pick sessionUnitSize random words from the CURRENT Day/Set
+      const shuffledPool = shuffleArray(displayedWords);
       const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
       
       setSessionWords(selectedSessionWords);
@@ -366,11 +380,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     if (words.length === 0) return;
     setIncorrectAnswers([]);
     
-    const startFrom = currentChunk * daySize;
-    const pool: Word[] = words.length <= sessionUnitSize ? words : 
-                 (words.length - startFrom >= sessionUnitSize ? words.slice(startFrom) : words);
-                 
-    const shuffledPool = shuffleArray(pool);
+    // Use only words from the current Day/Set
+    const shuffledPool = shuffleArray(displayedWords);
     const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
     setSessionWords(selectedSessionWords);
     
@@ -388,14 +399,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     if (words.length === 0) return;
     setIncorrectAnswers([]);
     
-    // Respect sessionUnitSize by pulling from a larger pool if necessary
-    const startFrom = currentChunk * daySize;
-    // If starting from current chunk doesn't have enough words, use the whole book
-    // Otherwise, use all words from current chunk to the end as the shuffle pool
-    const pool: Word[] = words.length <= sessionUnitSize ? words : 
-                 (words.length - startFrom >= sessionUnitSize ? words.slice(startFrom) : words);
-
-    const shuffledPool = shuffleArray(pool);
+    // Use only words from the current Day/Set
+    const shuffledPool = shuffleArray(displayedWords);
     const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
     setSessionWords(selectedSessionWords);
     
@@ -999,28 +1004,6 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       console.error('Failed to save match score:', error);
     }
   };
-
-  const isGrammar = selectedWordbook?.category === 'grammar' || selectedWordbook?.type === 'irregular';
-  const daySize = isGrammar ? 10 : (selectedWordbook?.defaultUnitSize || 47);
-  let totalChunks = Math.ceil(words.length / daySize);
-  let displayedWords = words.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
-
-  if (selectedWordbook?.type === 'relative-grammar') {
-    // For relative-grammar, we only show concepts in the list, hiding sentences with blanks
-    const conceptsOnly = words.filter(w => !w.word.includes('(___)'));
-    totalChunks = Math.ceil(conceptsOnly.length / daySize);
-    displayedWords = conceptsOnly.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
-  } else if (selectedWordbook?.type === 'complement-grammar') {
-    if (daySize >= 26 && !isGrammar) { // isGrammar = true for grammar, but complement-grammar had special 3 day logic
-      totalChunks = 1;
-      displayedWords = words; 
-    } else if (!isGrammar) {
-      totalChunks = 3;
-      if (currentChunk === 0) displayedWords = words.slice(0, 7);
-      else if (currentChunk === 1) displayedWords = words.slice(7, 17);
-      else displayedWords = words.slice(17, 26);
-    }
-  }
 
   const learnedCount = words.filter(w => progress[w.id] === 'learned').length;
   const progressPercent = words.length > 0 ? Math.round((learnedCount / words.length) * 100) : 0;
