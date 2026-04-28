@@ -293,13 +293,13 @@ export const generateWordTest = async (
   // Generate Test Paper
   const testDoc = createDocument(false);
   const testBlob = await Packer.toBlob(testDoc);
-  saveAs(testBlob, `${paperTitle}_${studentName}_테스트.docx`);
+  saveAs(testBlob, `${paperTitle}_${subtitle}_${studentName}_테스트.docx`);
 
   // Generate Answer Key if requested
   if (includeAnswerKey) {
     const answerDoc = createDocument(true);
     const answerBlob = await Packer.toBlob(answerDoc);
-    saveAs(answerBlob, `${paperTitle}_${studentName}_정답지.docx`);
+    saveAs(answerBlob, `${paperTitle}_${subtitle}_${studentName}_정답지.docx`);
   }
 };
 
@@ -486,12 +486,12 @@ export const generateMultipleChoiceQuiz = async (
 
   const testDoc = createDocument(false);
   const testBlob = await Packer.toBlob(testDoc);
-  saveAs(testBlob, `${paperTitle}_${studentName}_객관식_퀴즈.docx`);
+  saveAs(testBlob, `${paperTitle}_${subtitle}_${studentName}_객관식_퀴즈.docx`);
 
   if (includeAnswerKey) {
     const answerDoc = createDocument(true);
     const answerBlob = await Packer.toBlob(answerDoc);
-    saveAs(answerBlob, `${paperTitle}_${studentName}_객관식_정답지.docx`);
+    saveAs(answerBlob, `${paperTitle}_${subtitle}_${studentName}_객관식_정답지.docx`);
   }
 };
 
@@ -658,12 +658,12 @@ export const generateIrregularVerbTest = async (
 
   const testDoc = createDocument(false);
   const testBlob = await Packer.toBlob(testDoc);
-  saveAs(testBlob, `${paperTitle}_${studentName}_3단변화_테스트.docx`);
+  saveAs(testBlob, `${paperTitle}_${subtitle}_${studentName}_3단변화_테스트.docx`);
 
   if (includeAnswerKey) {
     const answerDoc = createDocument(true);
     const answerBlob = await Packer.toBlob(answerDoc);
-    saveAs(answerBlob, `${paperTitle}_${studentName}_3단변화_정답지.docx`);
+    saveAs(answerBlob, `${paperTitle}_${subtitle}_${studentName}_3단변화_정답지.docx`);
   }
 };
 
