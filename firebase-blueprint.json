@@ -197,7 +197,8 @@
       "properties": {
         "points": { "type": "number" },
         "inventory": { "type": "array", "items": { "type": "string" } },
-        "outfit": { "type": "string" },
+        "clothing": { "type": "string" },
+        "accessory": { "type": "string" },
         "background": { "type": "string" },
         "unlockedSlots": { "type": "number" },
         "pets": { "type": "array" },

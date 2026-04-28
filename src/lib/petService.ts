@@ -29,7 +29,8 @@ export interface PetSystemState {
   currentPetSlot: number;
   points: number;
   inventory: string[];
-  outfit: string | null;
+  clothing: string | null;
+  accessory: string | null;
   background: string;
   unlockedSlots: number;
   pets: PetData[];
@@ -39,7 +40,8 @@ const getInitialState = (): PetSystemState => ({
   currentPetSlot: 1,
   points: 0,
   inventory: [],
-  outfit: null,
+  clothing: null,
+  accessory: null,
   background: 'default',
   unlockedSlots: 1,
   pets: [
@@ -86,6 +88,14 @@ export const PetService = {
         if (p.maxEnergy === undefined) p.maxEnergy = 100;
         if (p.learnedPhrases === undefined) p.learnedPhrases = [];
       });
+
+      // Split outfit into clothing and accessory (migration)
+      if (parsed.clothing === undefined) {
+        const isClothing = (id: string) => ['uniform', 'muji_cape'].includes(id);
+        parsed.clothing = isClothing(parsed.outfit) ? parsed.outfit : null;
+        parsed.accessory = !isClothing(parsed.outfit) ? parsed.outfit : null;
+        delete parsed.outfit;
+      }
       
       return parsed;
     } catch (e) {
@@ -216,7 +226,7 @@ export const PetService = {
     return state;
   },
 
-  purchaseItem(id: string, price: number, category: 'outfit' | 'background' | 'consumable', uid: string): { success: boolean; newState: PetSystemState; message: string } {
+  purchaseItem(id: string, price: number, category: 'clothing' | 'accessory' | 'background' | 'consumable', uid: string): { success: boolean; newState: PetSystemState; message: string } {
     const state = this.getState(uid);
     if (state.points < price) {
       return { success: false, newState: state, message: '포인트가 부족해요!' };
@@ -235,6 +245,7 @@ export const PetService = {
        if (id === 'cookie') xpGain = 5;
        if (id === 'cake') xpGain = 15;
        if (id === 'candy') xpGain = 30;
+       if (id === 'macaron') xpGain = 10;
        
        // Energy items
        if (id === 'coffee' || id === 'energy_drink') {
@@ -280,10 +291,17 @@ export const PetService = {
     return { success: true, newState: state, message: '구매 완료!' };
   },
 
-  applyItem(id: string, category: 'outfit' | 'background', uid: string): PetSystemState {
+  applyItem(id: string, category: 'clothing' | 'accessory' | 'background', uid: string): PetSystemState {
     const state = this.getState(uid);
-    if (category === 'outfit') state.outfit = id;
-    if (category === 'background') state.background = id;
+    if (category === 'clothing') {
+      state.clothing = state.clothing === id ? null : id; // Toggle
+    }
+    if (category === 'accessory') {
+      state.accessory = state.accessory === id ? null : id; // Toggle
+    }
+    if (category === 'background') {
+      state.background = id;
+    }
     this.saveState(state, uid);
     return state;
   },

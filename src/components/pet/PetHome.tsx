@@ -17,28 +17,30 @@ const CHARACTER_OPTIONS: { id: PetCharacterType, name: string }[] = [
 
 const SHOP_ITEMS = {
   outfits: [
-    { id: 'pink_ribbon', name: '핑크 리본', price: 50, icon: '🎀' },
-    { id: 'star_hat', name: '별 모자', price: 80, icon: '⭐' },
-    { id: 'muji_cape', name: '무지개 망토', price: 120, icon: '🌈' },
-    { id: 'crown', name: '왕관', price: 200, icon: '👑' },
-    { id: 'uniform', name: '교복', price: 150, icon: '👔' },
-    { id: 'sunglasses', name: '선글라스', price: 100, icon: '😎' },
-    { id: 'flower', name: '머리핀', price: 60, icon: '🌸' }
+    { id: 'uniform', name: '교복', price: 150, icon: '👔', category: 'clothing' },
+    { id: 'muji_cape', name: '무지개 망토', price: 120, icon: '🌈', category: 'clothing' }
+  ],
+  accessories: [
+    { id: 'pink_ribbon', name: '리본', price: 50, icon: '🎀', category: 'accessory' },
+    { id: 'star_hat', name: '별핀', price: 80, icon: '⭐', category: 'accessory' },
+    { id: 'crown', name: '왕관', price: 200, icon: '👑', category: 'accessory' },
+    { id: 'sunglasses', name: '선글라스', price: 100, icon: '😎', category: 'accessory' },
+    { id: 'flower', name: '꽃핀', price: 60, icon: '🌸', category: 'accessory' }
   ],
   consumables: [
-    { id: 'cookie', name: '쿠키', price: 30, xp: 5, icon: '🍪' },
-    { id: 'cake', name: '딸기케이크', price: 60, xp: 15, icon: '🍰' },
-    { id: 'candy', name: '별사탕', price: 100, xp: 30, icon: '🍬' },
-    { id: 'macaron', name: '마카롱', price: 50, xp: 10, icon: '🍭' },
-    { id: 'coffee', name: '커피', price: 40, energy: 30, icon: '☕' },
-    { id: 'energy_drink', name: '에너지드링크', price: 70, energy: 60, icon: '⚡' }
+    { id: 'cookie', name: '쿠키', price: 30, xp: 5, icon: '🍪', category: 'consumable' },
+    { id: 'cake', name: '딸기케이크', price: 60, xp: 15, icon: '🍰', category: 'consumable' },
+    { id: 'candy', name: '별사탕', price: 100, xp: 30, icon: '🍬', category: 'consumable' },
+    { id: 'macaron', name: '마카롱', price: 50, xp: 10, icon: '🍭', category: 'consumable' },
+    { id: 'coffee', name: '커피', price: 40, energy: 30, icon: '☕', category: 'consumable' },
+    { id: 'energy_drink', name: '에너지드링크', price: 70, energy: 60, icon: '⚡', category: 'consumable' }
   ],
   backgrounds: [
-    { id: 'default', name: '기본 보금자리', price: 0, icon: '🏠' },
-    { id: 'pink_cushion', name: '핑크 쿠션', price: 80, icon: '🛋️' },
-    { id: 'bed', name: '작은 침대', price: 150, icon: '🛏️' },
-    { id: 'star_room', name: '별빛 방', price: 300, icon: '✨' },
-    { id: 'desk', name: '미니 책상', price: 200, icon: '📝' }
+    { id: 'default', name: '기본 보금자리', price: 0, icon: '🏠', category: 'background' },
+    { id: 'pink_cushion', name: '핑크 쿠션', price: 80, icon: '🛋️', category: 'background' },
+    { id: 'bed', name: '작은 침대', price: 150, icon: '🛏️', category: 'background' },
+    { id: 'star_room', name: '별빛 방', price: 300, icon: '✨', category: 'background' },
+    { id: 'desk', name: '미니 책상', price: 200, icon: '📝', category: 'background' }
   ]
 };
 
@@ -385,7 +387,9 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
                      <PetCharacter 
                        character={currentPet.character} 
                        stage={PetService.getStage(currentPet.level)} 
-                       outfit={state.outfit}
+                       clothing={state.clothing}
+                       accessory={state.accessory}
+                       background={state.background}
                      />
                      <AnimatePresence>
                         {teachFeedback && (
@@ -511,7 +515,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
                   </h3>
                </div>
                
-               <div className="flex-1 overflow-y-auto p-6">
+               <div className="flex-1 overflow-y-auto p-6 max-h-[500px] scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                   {activeTab === 'snacks' && (
                     <div className="space-y-8">
                        <section>
@@ -532,7 +536,15 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
                           <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">예쁜 옷</h4>
                           <div className="space-y-2">
                              {SHOP_ITEMS.outfits.map(item => (
-                               <ShopItem key={item.id} item={item} onBuy={() => handlePurchase(item, 'outfit')} isOwned={state.inventory.includes(item.id)} />
+                               <ShopItem key={item.id} item={item} onBuy={() => handlePurchase(item, item.category)} isOwned={state.inventory.includes(item.id)} />
+                             ))}
+                          </div>
+                       </section>
+                       <section>
+                          <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">액세서리</h4>
+                          <div className="space-y-2">
+                             {SHOP_ITEMS.accessories.map(item => (
+                               <ShopItem key={item.id} item={item} onBuy={() => handlePurchase(item, item.category)} isOwned={state.inventory.includes(item.id)} />
                              ))}
                           </div>
                        </section>
@@ -540,7 +552,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
                           <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">보금자리</h4>
                           <div className="space-y-2">
                              {SHOP_ITEMS.backgrounds.map(item => (
-                               <ShopItem key={item.id} item={item} onBuy={() => handlePurchase(item, 'background')} isOwned={state.inventory.includes(item.id) || item.price === 0} />
+                               <ShopItem key={item.id} item={item} onBuy={() => handlePurchase(item, item.category)} isOwned={state.inventory.includes(item.id) || item.price === 0} />
                              ))}
                           </div>
                        </section>
@@ -554,21 +566,33 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
                       ) : (
                         <div className="grid grid-cols-2 gap-4">
                           {state.inventory.map(id => {
-                            const outfit = SHOP_ITEMS.outfits.find(i => i.id === id);
+                            const clothing = SHOP_ITEMS.outfits.find(i => i.id === id);
+                            const accessory = SHOP_ITEMS.accessories.find(i => i.id === id);
                             const bg = SHOP_ITEMS.backgrounds.find(i => i.id === id);
-                            const item = outfit || bg;
+                            const item = clothing || accessory || bg;
                             if (!item) return null;
-                            const isOutfit = !!outfit;
+                            
+                            const isEquipped = state.clothing === id || state.accessory === id || state.background === id;
+                            
                             return (
                               <button
                                 key={id}
-                                onClick={() => user && PetService.applyItem(id, isOutfit ? 'outfit' : 'background', user.uid)}
-                                className={`p-4 rounded-2xl border-2 transition-all ${
-                                  state.outfit === id || state.background === id ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 bg-slate-50'
+                                onClick={() => {
+                                  if (!user) return;
+                                  const newState = PetService.applyItem(id, item.category as any, user.uid);
+                                  setState({ ...newState });
+                                }}
+                                className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center ${
+                                  isEquipped 
+                                    ? 'border-pastel-pink-300 bg-pastel-pink-50' 
+                                    : 'border-slate-100 bg-slate-50 hover:border-slate-200'
                                 }`}
                               >
                                 <div className="text-3xl mb-2">{item.icon}</div>
                                 <div className="text-xs font-bold text-slate-700">{item.name}</div>
+                                {isEquipped && (
+                                  <div className="mt-2 text-[10px] font-black text-pastel-pink-500">장착중</div>
+                                )}
                               </button>
                             );
                           })}
