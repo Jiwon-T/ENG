@@ -683,6 +683,170 @@ export const generateIrregularVerbTest = async (
   }
 };
 
+export const generateVerbFormMemorizationTest = async (
+  title: string,
+  subtitle: string,
+  entries: any[],
+  options: {
+    includeAnswerKey: boolean;
+    paperTitle?: string;
+    studentName?: string;
+    shuffle?: boolean;
+  }
+) => {
+  const { includeAnswerKey, paperTitle = '문법 암기 테스트', studentName = '', shuffle = false } = options;
+
+  const displayEntries = shuffle ? [...entries].sort(() => Math.random() - 0.5) : entries;
+
+  const createDocument = (isAnswerKey: boolean) => {
+    // Header Table
+    const headerTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          height: { value: 800, rule: HeightRule.ATLEAST },
+          children: [
+            new TableCell({
+              width: { size: 15, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "지원T", bold: true, size: 20, color: "FF4D6D" })] })],
+            }),
+            new TableCell({
+              width: { size: 55, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              children: [
+                new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: title, bold: true, size: 26 })] }),
+                new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: subtitle, bold: true, size: 20, color: "666666" })] }),
+              ],
+            }),
+            new TableCell({
+              width: { size: 30, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: `이름: ${studentName || '__________'}`, size: 20, bold: true })],
+                  alignment: AlignmentType.LEFT,
+                  indent: { left: 200 }
+                }),
+                new Paragraph({
+                  children: [new TextRun({ text: isAnswerKey ? "(정답지)" : "점수: ______", size: 16, color: "64748B" })],
+                  alignment: AlignmentType.LEFT,
+                  indent: { left: 200 },
+                  spacing: { before: 100 }
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const rows: TableRow[] = [];
+
+    // Table Header Row
+    const createHeaderCell = (text: string, width: number) => new TableCell({
+      width: { size: width, type: WidthType.PERCENTAGE },
+      shading: { fill: "F8FAFC" },
+      verticalAlign: VerticalAlign.CENTER,
+      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text, bold: true, size: 18, color: "334155" })] })],
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 2, color: "334155" },
+        bottom: { style: BorderStyle.SINGLE, size: 2, color: "334155" },
+        left: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
+        right: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
+      }
+    });
+
+    rows.push(new TableRow({
+      height: { value: 500, rule: HeightRule.ATLEAST },
+      children: [
+        createHeaderCell("동사(Verb)", 15),
+        createHeaderCell("1형식 동사", 17),
+        createHeaderCell("2형식 동사", 17),
+        createHeaderCell("3형식 동사", 17),
+        createHeaderCell("4형식 동사", 17),
+        createHeaderCell("5형식 동사", 17),
+      ]
+    }));
+
+    displayEntries.forEach((entry) => {
+      const createCell = (text: string | undefined, hasContent: boolean) => new TableCell({
+        width: { size: 17, type: WidthType.PERCENTAGE },
+        verticalAlign: VerticalAlign.CENTER,
+        shading: hasContent ? undefined : { fill: "F1F5F9" }, // Grey out cells that don't have meanings in the image
+        children: [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: (isAnswerKey && text) ? [new TextRun({ text, size: 18 })] : []
+          })
+        ],
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
+          left: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
+          right: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
+        }
+      });
+
+      rows.push(new TableRow({
+        height: { value: 550, rule: HeightRule.ATLEAST },
+        children: [
+          new TableCell({
+            width: { size: 15, type: WidthType.PERCENTAGE },
+            verticalAlign: VerticalAlign.CENTER,
+            children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: entry.verb, bold: true, size: 18 })] })],
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
+              left: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
+              right: { style: BorderStyle.SINGLE, size: 1, color: "CBD5E1" },
+            }
+          }),
+          createCell(entry.form1, !!entry.form1),
+          createCell(entry.form2, !!entry.form2),
+          createCell(entry.form3, !!entry.form3),
+          createCell(entry.form4, !!entry.form4),
+          createCell(entry.form5, !!entry.form5),
+        ]
+      }));
+    });
+
+    const mainTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: rows
+    });
+
+    return new Document({
+      sections: [{
+        properties: { 
+          page: { 
+            margin: { top: 720, bottom: 720, left: 400, right: 400 },
+            size: {
+              orientation: PageOrientation.LANDSCAPE,
+            },
+          },
+        },
+        children: [
+          headerTable,
+          new Paragraph({ spacing: { before: 200 } }),
+          mainTable
+        ],
+      }],
+    });
+  };
+
+  const baseName = [paperTitle, subtitle, studentName].filter(Boolean).join('_');
+  const testDoc = createDocument(false);
+  const testBlob = await Packer.toBlob(testDoc);
+  saveAs(testBlob, `${baseName}_암기_테스트.docx`);
+
+  if (includeAnswerKey) {
+    const answerDoc = createDocument(true);
+    const answerBlob = await Packer.toBlob(answerDoc);
+    saveAs(answerBlob, `${baseName}_암기_정답지.docx`);
+  }
+};
+
 export const generateWordbookTable = async (
   title: string,
   words: any[],

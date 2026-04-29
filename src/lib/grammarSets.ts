@@ -129,7 +129,7 @@ export async function seedObjectPatternGrammar() {
 export const COMPLEMENT_QUIZ_DATA = [
   { verb: "call", type: "명형", label: "call O 명사/형용사", desc: "~를 -이라고 부르다" },
   { verb: "make", type: "명형+사역", label: "make O 명사/형용사 또는 동사원형", desc: "둘 다 가능 (의미 다름)" },
-  { verb: "keep", type: "명형", label: "keep O 명사/형용사", desc: "~을 -한 상태로 유지하다" },
+  { verb: "keep", type: "명형/V-ing", label: "keep O 명사/형용사 / V-ing 둘 다 가능", desc: "~을 -한 상태로 유지하다" },
   { verb: "think", type: "명형", label: "think O 명사/형용사", desc: "~를 -이라고 생각하다" },
   { verb: "believe", type: "명형", label: "believe O 명사/형용사", desc: "~를 -라고 믿다" },
   { verb: "consider", type: "명형", label: "consider O 명사/형용사", desc: "~을 -이라고 여기다" },
@@ -144,7 +144,7 @@ export const COMPLEMENT_QUIZ_DATA = [
   { verb: "allow", type: "to V", label: "allow O to V", desc: "~가 -하는 것을 허락하다" },
   { verb: "force", type: "to V", label: "force O to V", desc: "~가 -하도록 강요하다" },
   { verb: "get", type: "to V", label: "get O to V", desc: "~가 -하게 시키다 (준사역)" },
-  { verb: "have", type: "동사원형", label: "have O 동사원형", desc: "사역동사: ~에게 -하게 하다" },
+  { verb: "have", type: "동사원형/V-ing", label: "have O 동사원형 / V-ing 둘 다 가능", desc: "사역동사: ~에게 -하게 하다" },
   { verb: "let", type: "동사원형", label: "let O 동사원형", desc: "사역동사: ~가 -하도록 허락하다" },
   { verb: "help", type: "동사원형/to V", label: "help O 동사원형 / to V 둘 다 가능", desc: "준사역동사: 의미 차이 없음" },
   { verb: "see", type: "동사원형/V-ing", label: "see O 동사원형 / V-ing 둘 다 가능", desc: "지각동사: 완료 vs 진행 의미 차이" },
@@ -1382,24 +1382,32 @@ export const VERB_FORM_GRAMMAR_DATA = [
   { word: 'matter', meaning: '중요하다', pattern: '1세트: 1형식 전용', set: 1 },
   { word: 'rise', meaning: '오르다', pattern: '1세트: 1형식 전용', set: 1 },
   { word: 'fall', meaning: '떨어지다', pattern: '1세트: 1형식 전용', set: 1 },
+  { word: 'work', meaning: '작동되다 / 효과가 있다', pattern: '1세트: 1형식 전용', set: 1 },
+  { word: 'last', meaning: '계속되다', pattern: '1세트: 1형식 전용', set: 1 },
   { word: 'seem', meaning: '~하게 보이다', pattern: '2세트: 2형식 전용', set: 2 },
   { word: 'appear', meaning: '~하게 보이다', pattern: '2세트: 2형식 전용', set: 2 },
   { word: 'remain', meaning: '계속해서 C이다', pattern: '2세트: 2형식 전용', set: 2 },
+  { word: 'stand', meaning: '계속해서 C인 상태에 있다', pattern: '2세트: 2형식 전용', set: 2 },
+  { word: 'lie', meaning: '계속해서 C이다', pattern: '2세트: 2형식 전용', set: 2 },
+  { word: 'stay', meaning: '머무르다 / ~한 채로 있다', pattern: '2세트: 2형식 전용', set: 2 },
   { word: 'grow', meaning: '자라다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
-  { word: 'stay', meaning: '머무르다 / ~한 채로 있다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
   { word: 'run', meaning: '달리다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
   { word: 'go', meaning: '가다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
   { word: 'come', meaning: '오다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
-  { word: 'smell', meaning: '~한 냄새가 나다 / ~의 냄새를 맡다', pattern: '4세트: 2형식 vs 3형식', set: 4 },
-  { word: 'taste', meaning: '~한 맛이 나다 / ~의 맛을 보다', pattern: '4세트: 2형식 vs 3형식', set: 4 },
-  { word: 'feel', meaning: '~한 느낌이 나다 / ~를 느끼다', pattern: '4세트: 2형식 vs 3형식', set: 4 },
-  { word: 'look', meaning: '~하게 보이다 / 바라보다', pattern: '4세트: 2형식 vs 3형식', set: 4 },
-  { word: 'turn', meaning: '~하게 되다 / 돌리다 / 뒤집다', pattern: '4세트: 2형식 vs 3형식', set: 4 },
+  { word: 'turn', meaning: '~하게 되다 / 돌리다 / 뒤집다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
+  { word: 'smell', meaning: '~한 냄새가 나다 / ~의 냄새를 맡다', pattern: '4세트: 감각 동사', set: 4 },
+  { word: 'taste', meaning: '~한 맛이 나다 / ~의 맛을 보다', pattern: '4세트: 감각 동사', set: 4 },
+  { word: 'feel', meaning: '~한 느낌이 나다 / ~를 느끼다', pattern: '4세트: 감각 동사', set: 4 },
+  { word: 'look', meaning: '~하게 보이다 / 바라보다', pattern: '4세트: 감각 동사', set: 4 },
+  { word: 'sound', meaning: '~하게 들리다', pattern: '4세트: 감각 동사', set: 4 },
   { word: 'discuss', meaning: '~에 대해 토론하다', pattern: '5세트: 3형식 전용', set: 5 },
   { word: 'enter', meaning: '~에 들어가다', pattern: '5세트: 3형식 전용', set: 5 },
   { word: 'resemble', meaning: '~와 닮다', pattern: '5세트: 3형식 전용', set: 5 },
   { word: 'marry', meaning: '~와 결혼하다', pattern: '5세트: 3형식 전용', set: 5 },
   { word: 'mention', meaning: '~에 대해 언급하다', pattern: '5세트: 3형식 전용', set: 5 },
+  { word: 'attend', meaning: '~에 참석하다', pattern: '5세트: 3형식 전용', set: 5 },
+  { word: 'reach', meaning: '도달하다 / ~로 손을 뻗다', pattern: '5세트: 3형식 전용', set: 5 },
+  { word: 'approach', meaning: '다가오다', pattern: '5세트: 3형식 전용', set: 5 },
 ];
 
 export async function seedVerbFormGrammar() {
@@ -1444,6 +1452,8 @@ export async function seedVerbFormGrammar() {
   
   // Add new
   const addBatch = writeBatch(db);
+  const quizPool = (await import('./verbFormQuizPool')).VERB_FORM_QUIZ_POOL;
+
   for (let i = 0; i < VERB_FORM_GRAMMAR_DATA.length; i++) {
     const item = VERB_FORM_GRAMMAR_DATA[i];
     const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
@@ -1454,6 +1464,19 @@ export async function seedVerbFormGrammar() {
       order: i,
       set: item.set
     });
+
+    // Seed associated quiz questions from the pool as examples (match by verb AND set)
+    const verbQuestions = quizPool.filter(q => q.verb === item.word && q.set === item.set);
+    for (const q of verbQuestions) {
+      const exRef = doc(collection(db, `wordbooks/${wordbookId}/words/${newDocRef.id}/examples`));
+      addBatch.set(exRef, {
+        sentence: q.sentence,
+        explanation: q.explanation,
+        type: 'A', 
+        choices: [q.choices[q.answer], ...q.choices.filter((_, idx) => idx !== q.answer)],
+        createdAt: Timestamp.now()
+      });
+    }
   }
   await addBatch.commit();
 }

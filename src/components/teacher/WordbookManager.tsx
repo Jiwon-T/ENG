@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, Plus, Search, Trash2, Edit3, FileSpreadsheet, X, CheckCircle2, Circle, GripVertical, FileText, Download } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, writeBatch, getDocs, orderBy } from 'firebase/firestore';
-import { generateWordTest, generateMultipleChoiceQuiz, generateIrregularVerbTest, generateWordbookTable } from '../../lib/wordTestGenerator';
+import { generateWordTest, generateMultipleChoiceQuiz, generateIrregularVerbTest, generateWordbookTable, generateVerbFormMemorizationTest } from '../../lib/wordTestGenerator';
 import { MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
 import { VERB_FORM_QUIZ_POOL } from '../../lib/verbFormQuizPool';
+import { VERB_FORM_TABLE_DATA } from '../../lib/verbFormTableData';
 import {
   DndContext,
   closestCenter,
@@ -32,7 +33,7 @@ interface Wordbook {
   createdBy: string;
   createdAt: any;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'verb-form-grammar';
   category?: 'word' | 'grammar';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -116,11 +117,12 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     wordCount: 20,
     includeAnswerKey: true,
     testType: 'en-to-ko' as 'en-to-ko' | 'ko-to-en',
-    quizType: 'standard' as 'standard' | 'multiple-choice' | 'irregular-writing',
+    quizType: 'standard' as 'standard' | 'multiple-choice' | 'irregular-writing' | 'memorization-table',
     selectionMode: 'range' as 'random' | 'range',
     unitSize: 40,
     startDay: 1,
-    endDay: 1
+    endDay: 1,
+    shuffleVerbs: false
   });
 
   // Print Wordbook states
@@ -531,6 +533,21 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       return;
     }
     
+    if (testPaperConfig.quizType === 'memorization-table' && selectedWordbook.type === 'verb-form-grammar') {
+      await generateVerbFormMemorizationTest(
+        testPaperConfig.title || selectedWordbook.title,
+        testPaperConfig.subtitle,
+        VERB_FORM_TABLE_DATA,
+        {
+          includeAnswerKey: testPaperConfig.includeAnswerKey,
+          studentName: testPaperConfig.studentName,
+          shuffle: testPaperConfig.shuffleVerbs
+        }
+      );
+      setIsTestPaperModalOpen(false);
+      return;
+    }
+
     if (testPaperConfig.quizType === 'multiple-choice') {
       try {
         let wordsForQuiz: any[] = selectedWords;
@@ -595,23 +612,31 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         }
 
         if (selectedWordbook.type === 'verb-form-grammar') {
-          const activeSets = Array.from(new Set(selectedWords.map(w => (w as any).set))).filter(s => s !== undefined);
-          if (activeSets.length > 0) {
-            const applicableQuestions = VERB_FORM_QUIZ_POOL.filter(q => activeSets.includes(q.set));
-            if (applicableQuestions.length > 0) {
-              const shuffledPool = [...applicableQuestions].sort(() => 0.5 - Math.random());
-              const targetCount = testPaperConfig.selectionMode === 'random' ? testPaperConfig.wordCount : selectedWords.length;
-              const finalQuestions = shuffledPool.slice(0, Math.min(targetCount, shuffledPool.length));
-              
-              wordsForQuiz = finalQuestions.map(q => ({
-                word: q.sentence,
-                meaning: q.choices[q.answer],
-                distractors: q.choices.filter((_, idx) => idx !== q.answer),
-                question: q.question,
-                explanation: q.explanation
-              }));
-            }
+          const allExamples: any[] = [];
+          
+          for (const concept of selectedWords) {
+            const examplesRef = collection(db, `wordbooks/${selectedWordbook.id}/words/${concept.id}/examples`);
+            const snap = await getDocs(examplesRef);
+            snap.docs.forEach(doc => {
+              const data = doc.data();
+              const choices = data.choices || [];
+              allExamples.push({
+                word: data.sentence,
+                meaning: choices[0],
+                distractors: choices.slice(1),
+                explanation: data.explanation,
+                id: doc.id
+              });
+            });
           }
+
+          if (allExamples.length === 0) {
+            alert('출제할 예문이 없습니다. 먼저 예문을 등록해주세요.');
+            return;
+          }
+
+          const shuffledEx = allExamples.sort(() => 0.5 - Math.random());
+          wordsForQuiz = shuffledEx.slice(0, Math.min(testPaperConfig.wordCount, allExamples.length));
         }
 
         await generateMultipleChoiceQuiz(
@@ -979,7 +1004,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     )}
                   </div>
                   <div className="flex gap-1">
-                    {selectedWordbook.type === 'relative-grammar' && (
+                    {(selectedWordbook.type === 'relative-grammar' || selectedWordbook.type === 'verb-form-grammar') && (
                       <button 
                         onClick={() => {
                           setCurrentWordForExamples(word);
@@ -1572,6 +1597,14 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                         3단 변화 쓰기
                       </button>
                     )}
+                    {selectedWordbook?.type === 'verb-form-grammar' && (
+                      <button
+                        onClick={() => setTestPaperConfig({ ...testPaperConfig, quizType: 'memorization-table' })}
+                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${testPaperConfig.quizType === 'memorization-table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                      >
+                        암기용 (표)
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex bg-slate-100 p-1 rounded-xl">
@@ -1767,6 +1800,30 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     <span className="font-bold text-slate-700 text-xs">정답지 포함하기</span>
                   </div>
                 )}
+
+                {testPaperConfig.quizType === 'memorization-table' && (
+                  <div className="flex gap-4">
+                    <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px]">
+                      <button 
+                        onClick={() => setTestPaperConfig({ ...testPaperConfig, includeAnswerKey: !testPaperConfig.includeAnswerKey })}
+                        className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.includeAnswerKey ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
+                      >
+                        {testPaperConfig.includeAnswerKey && <CheckCircle2 size={14} />}
+                      </button>
+                      <span className="font-bold text-slate-700 text-xs text-nowrap">정답지 포함하기</span>
+                    </div>
+
+                    <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px]">
+                      <button 
+                        onClick={() => setTestPaperConfig({ ...testPaperConfig, shuffleVerbs: !testPaperConfig.shuffleVerbs })}
+                        className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.shuffleVerbs ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
+                      >
+                        {testPaperConfig.shuffleVerbs && <CheckCircle2 size={14} />}
+                      </button>
+                      <span className="font-bold text-slate-700 text-xs text-nowrap">단어 순서 랜덤</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1774,7 +1831,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
               <button onClick={() => setIsTestPaperModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm">취소</button>
               <button 
                 onClick={handleGenerateTestPaper} 
-                disabled={testPaperConfig.selectionMode === 'range' ? (testPaperConfig.startDay > testPaperConfig.endDay) : (testPaperConfig.wordCount <= 0)}
+                disabled={testPaperConfig.quizType === 'memorization-table' ? false : (testPaperConfig.selectionMode === 'range' ? (testPaperConfig.startDay > testPaperConfig.endDay) : (testPaperConfig.wordCount <= 0))}
                 className="flex-1 py-4 bg-blue-500 text-white rounded-2xl font-bold shadow-lg shadow-blue-200 flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
               >
                 <Download size={18} />
