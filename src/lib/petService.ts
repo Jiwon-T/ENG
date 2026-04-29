@@ -434,6 +434,62 @@ export const PetService = {
     }
   },
 
+  async handleChat(text: string, history: { role: 'user' | 'model', parts: { text: string }[] }[], uid: string): Promise<{ success: boolean; reaction: string; newState: PetSystemState; message?: string }> {
+    const state = this.getState(uid);
+    const pet = state.pets.find(p => p.slot === state.currentPetSlot);
+    
+    if (!pet) return { success: false, reaction: '', newState: state };
+    
+    if (pet.energy < 10) {
+      return { success: false, reaction: '', newState: state, message: '펫이 너무 지쳤어요. 체력을 회복시켜주세요!' };
+    }
+
+    try {
+      const apiResponse = await fetch("/api/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gemini-3-flash-preview",
+          contents: [
+            ...history,
+            { role: "user", parts: [{ text }] }
+          ],
+          config: {
+            systemInstruction: `너는 귀여운 펫 캐릭터야. 사용자와 대화를 나누고 있어.\n너의 현재 지능 레벨은 ${pet.level}이야. (최대 100)\n너의 이름은 "${pet.name}"이고, 캐릭터 종류는 "${pet.character}"이야.\n\n너가 이전에 배운 말들(참고용): ${pet.learnedPhrases.map(p => p.remembered).join(', ')}\n\n레벨에 따른 말투 가이드:\n- Lv 1~20: 옹알이 위주, 단어 위주, 이모티콘 많음\n- Lv 21~40: 어린 아이 말투, 호기심 많음\n- Lv 41~60: 활발한 청소년 말투, 농담도 함\n- Lv 61~80: 의젓한 어른 말투, 배려심 깊음\n- Lv 81~100: 매우 지혜롭고 영어를 섞어 쓰며 깊은 대화 가능\n\n대화 원칙:\n1. 1~2문장으로 짧고 친근하게 답변해.\n2. 사용자의 말을 잘 경청하고 공감해줘.\n3. 레벨에 맞는 단어 선택을 해.\n4. JSON으로만 응답: {"response": "대화 답변"}`,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                response: { type: "STRING" }
+              },
+              required: ["response"]
+            }
+          }
+        })
+      });
+
+      if (!apiResponse.ok) {
+        throw new Error("Chat failed");
+      }
+
+      const { text: responseText } = await apiResponse.json();
+      const data = JSON.parse(responseText);
+      
+      pet.energy -= 10;
+      this.saveState(state, uid);
+      
+      const { newState } = this.addXP(10, uid);
+      return { 
+        success: true, 
+        reaction: data.response, 
+        newState 
+      };
+    } catch (e) {
+      console.error('Chat failed:', e);
+      return { success: false, reaction: '', newState: state, message: '대화에 실패했어요.' };
+    }
+  },
+
   async syncFromProfile(uid: string, profileData: any): Promise<PetSystemState> {
     const state = this.getState(uid);
     const pet = state.pets.find(p => p.slot === state.currentPetSlot);

@@ -48,15 +48,26 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   const [state, setState] = useState<PetSystemState | null>(null);
   const [showSelector, setShowSelector] = useState(false);
   const [activeTab, setActiveTab] = useState<'main' | 'shop' | 'outfit' | 'teach' | 'snacks'>('main');
+  const [teachSubTab, setTeachSubTab] = useState<'teach' | 'chat'>('teach');
   const [hearts, setHearts] = useState<{ id: number, x: number, y: number }[]>([]);
   const [teachInput, setTeachInput] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'model', text: string }[]>([]);
   const [teachFeedback, setTeachFeedback] = useState<string | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState('');
   const [currentSpeech, setCurrentSpeech] = useState('');
   const [isTeaching, setIsTeaching] = useState(false);
+  const [isChatting, setIsChatting] = useState(false);
   const interactionRef = React.useRef<HTMLDivElement>(null);
+  const chatEndRef = React.useRef<HTMLDivElement>(null);
   const petViewRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, isChatting]);
 
   useEffect(() => {
     if (activeTab !== 'main' && window.innerWidth < 1024) {
@@ -303,14 +314,46 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
     }, 2000);
   };
 
+  const handleChat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || !currentPet || isChatting || !user) return;
+    
+    const userMsg = chatInput.trim();
+    setChatInput('');
+    setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setIsChatting(true);
+    
+    // Convert to format for API
+    const history = chatMessages.slice(-6).map(msg => ({
+      role: msg.role,
+      parts: [{ text: msg.text }]
+    }));
+    
+    const result = await PetService.handleChat(userMsg, history, user.uid);
+    
+    if (result.success) {
+      setChatMessages(prev => [...prev, { role: 'model', text: result.reaction }]);
+      setCurrentSpeech(result.reaction);
+      setState(result.newState);
+      
+      const oldLevel = currentPet.level;
+      const newLevel = result.newState.pets.find(p => p.slot === result.newState.currentPetSlot)?.level || 1;
+      if (newLevel > oldLevel) triggerLevelUp();
+    } else {
+      setChatMessages(prev => [...prev, { role: 'model', text: result.message || '대화가 끊겼어요...' }]);
+    }
+    
+    setIsChatting(false);
+  };
+
   const getPetSpeech = () => {
     if (!currentPet) return '';
     const lv = currentPet.level;
-    if (lv <= 10) return ['...', '음냐', '냐~'][Math.floor(Math.random() * 3)];
-    if (lv <= 30) return ['안녕', '배고파', '놀자'][Math.floor(Math.random() * 3)];
-    if (lv <= 50) return ['오늘도 공부했어?', '간식 줘!'][Math.floor(Math.random() * 2)];
-    if (lv <= 80) return ['오늘 열심히 했으니까 간식 하나만 더 줘~'];
-    if (lv <= 99) return ['Good job today! 나 칭찬해줘'];
+    if (lv <= 10) return ['...', '음냐', '냐!'][Math.floor(Math.random() * 3)];
+    if (lv <= 30) return ['안녕!', '배고파..', '놀자~!'][Math.floor(Math.random() * 3)];
+    if (lv <= 50) return ['오늘도 공부했어?', '간식 주세요!'][Math.floor(Math.random() * 2)];
+    if (lv <= 80) return ['오늘 열심히 했으니까 간식 하나만 더 줘!', '공부 잘 했어?'];
+    if (lv <= 99) return ['Good job today! 나 칭찬해줘', '오늘도 공부 많이 한 거지?'];
     return "오늘도 열심히 공부했네! I'm so proud of you 🎉";
   };
 
@@ -530,6 +573,23 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
                   </h3>
                </div>
                
+                {activeTab === 'teach' && (
+                  <div className="flex bg-slate-50 p-1 mx-4 sm:mx-6 mt-4 rounded-xl border border-slate-100">
+                    <button 
+                      onClick={() => setTeachSubTab('teach')}
+                      className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${teachSubTab === 'teach' ? 'bg-white text-pastel-pink-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      말 가르치기
+                    </button>
+                    <button 
+                      onClick={() => setTeachSubTab('chat')}
+                      className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${teachSubTab === 'chat' ? 'bg-white text-pastel-pink-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      대화하기
+                    </button>
+                  </div>
+                )}
+               
                <div className="flex-1 overflow-y-auto p-6 max-h-[500px] scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                   {activeTab === 'snacks' && (
                     <div className="space-y-8">
@@ -617,26 +677,81 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
                   )}
 
                   {activeTab === 'teach' && (
-                    <form onSubmit={handleTeach} className="space-y-6">
-                       <div>
-                          <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">따라할 말 가르치기</label>
+                    teachSubTab === 'teach' ? (
+                      <form onSubmit={handleTeach} className="space-y-6">
+                         <div>
+                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">따라할 말 가르치기</label>
+                            <input 
+                              type="text" 
+                              value={teachInput}
+                              onChange={(e) => setTeachInput(e.target.value)}
+                              placeholder="예: 오늘도 화이팅!"
+                              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-pastel-pink-200 outline-none text-sm font-bold"
+                            />
+                         </div>
+                         <button 
+                            type="submit"
+                            disabled={isTeaching}
+                            className="w-full py-4 bg-pastel-pink-500 text-white rounded-2xl font-black shadow-lg shadow-pastel-pink-100 flex flex-col items-center leading-tight disabled:opacity-50"
+                          >
+                             <span>{isTeaching ? '배우는 중...' : '가르치기 (+20 XP)'}</span>
+                             <span className="text-[10px] font-bold opacity-80 mt-1">체력 20 소모</span>
+                          </button>
+                      </form>
+                    ) : (
+                      <div className="flex flex-col h-[400px]">
+                        <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                          {chatMessages.length === 0 && (
+                            <div className="text-center py-10">
+                              <MessageCircle className="mx-auto text-slate-200 mb-2" size={40} />
+                              <p className="text-xs font-bold text-slate-400">{currentPet.name}에게 말을 걸어보세요!</p>
+                            </div>
+                          )}
+                          {chatMessages.map((msg, i) => (
+                            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                              <div className={`max-w-[80%] p-3 rounded-2xl text-sm font-medium ${
+                                msg.role === 'user' 
+                                  ? 'bg-pastel-pink-500 text-white rounded-tr-none' 
+                                  : 'bg-slate-100 text-slate-700 rounded-tl-none'
+                               }`}>
+                                {msg.text}
+                              </div>
+                            </div>
+                          ))}
+                          {isChatting && (
+                            <div className="flex justify-start">
+                              <div className="bg-slate-100 p-3 rounded-2xl rounded-tl-none text-slate-400">
+                                <div className="flex gap-1">
+                                  <div className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+                                  <div className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                                  <div className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          <div ref={chatEndRef} />
+                        </div>
+                        <form onSubmit={handleChat} className="relative mt-auto">
                           <input 
-                            type="text" 
-                            value={teachInput}
-                            onChange={(e) => setTeachInput(e.target.value)}
-                            placeholder="예: 오늘도 화이팅!"
-                            className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-pastel-pink-200 outline-none text-sm font-bold"
+                            type="text"
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            placeholder="메시지를 입력하세요..."
+                            className="w-full p-4 pr-12 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-pastel-pink-200 outline-none text-sm font-bold"
                           />
-                       </div>
-                       <button 
-                          type="submit"
-                          disabled={isTeaching}
-                          className="w-full py-4 bg-pastel-pink-500 text-white rounded-2xl font-black shadow-lg shadow-pastel-pink-100 flex flex-col items-center leading-tight disabled:opacity-50"
-                        >
-                           <span>{isTeaching ? '배우는 중...' : '가르치기 (+20 XP)'}</span>
-                           <span className="text-[10px] font-bold opacity-80 mt-1">체력 20 소모</span>
-                        </button>
-                    </form>
+                          <button 
+                            type="submit"
+                            disabled={isChatting || !chatInput.trim()}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-pastel-pink-500 disabled:opacity-30"
+                          >
+                            <Check size={20} />
+                          </button>
+                          <p className="text-[9px] text-slate-400 font-bold mt-2 text-center opacity-70">
+                            대화 한 번에 체력 10이 소모되고 10 XP를 얻어요.
+                          </p>
+                        </form>
+                      </div>
+                    )
                   )}
 
                   {activeTab === 'main' && (
