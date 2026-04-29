@@ -11,7 +11,7 @@ interface Wordbook {
   title: string;
   description: string;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'verb-form-grammar';
   category?: 'word' | 'grammar';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -40,6 +40,7 @@ interface Progress {
 
 import { COMPLEMENT_QUIZ_DATA, GrammarWord } from '../../lib/grammarSets';
 import { MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
+import { VERB_FORM_QUIZ_POOL } from '../../lib/verbFormQuizPool';
 
 // Helper to shuffle array
 function shuffleArray<T>(array: T[]): T[] {
@@ -184,6 +185,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     else if (currentChunk === 3) displayedWords = words.slice(30, 37);
     else if (currentChunk === 4) displayedWords = words.slice(37, 42);
     else displayedWords = words.slice(42, 48);
+  } else if (selectedWordbook?.type === 'verb-form-grammar') {
+    totalChunks = 5;
+    displayedWords = words.filter(w => (w as any).set === currentChunk + 1);
   }
 
   useEffect(() => {
@@ -402,6 +406,42 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       setIsFocusedMode(true);
       setSessionStartTime(Date.now());
       generateQuizOptions(0, selectedSessionWords);
+    } else if (selectedWordbook?.type === 'verb-form-grammar') {
+      const currentSet = currentChunk + 1;
+      const setQuizPool = VERB_FORM_QUIZ_POOL.filter(q => q.set === currentSet);
+      
+      if (setQuizPool.length === 0) {
+        alert('이 세트에는 퀴즈 데이터가 없습니다.');
+        return;
+      }
+
+      const quizWords: Word[] = setQuizPool.map(q => {
+        const correct = q.choices[q.answer];
+        const others = q.choices.filter((_, idx) => idx !== q.answer);
+        return {
+          id: `verb_form_quiz_${q.id}`,
+          word: q.sentence,
+          meaning: correct,
+          quizSentence: q.sentence,
+          quizExplanation: q.explanation,
+          quizChoices: [correct, ...others],
+          quizCategory: 'grammar'
+        } as any;
+      });
+
+      const shuffled = shuffleArray(quizWords);
+      const selectedSessionWords = shuffled.slice(0, sessionUnitSize);
+
+      setSessionWords(selectedSessionWords);
+      setQuizIndex(0);
+      setQuizScore(0);
+      setIsQuizFinished(false);
+      setIsQuizMode(true);
+      setIsMatchMode(false);
+      setIsFlashcardMode(false);
+      setIsFocusedMode(true);
+      setSessionStartTime(Date.now());
+      generateQuizOptions(0, selectedSessionWords);
     } else {
       // Normal Wordbook: Pick sessionUnitSize random words from the CURRENT Day/Set
       const shuffledPool = shuffleArray(displayedWords);
@@ -485,32 +525,58 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || 
                               selectedWordbook?.title?.includes('관계부사') ||
                               selectedWordbook?.title?.includes('that');
+    const isVerbFormGrammar = selectedWordbook?.type === 'verb-form-grammar';
     
-    if (isRelativeGrammar && selectedWordbook) {
-      const concepts = rangeWords;
-      const exampleFetches = concepts.map(async (concept) => {
-        const examplesRef = collection(db, `wordbooks/${selectedWordbook.id}/words/${concept.id}/examples`);
-        const snapshot = await getDocs(examplesRef);
+    if ((isRelativeGrammar || isVerbFormGrammar) && selectedWordbook) {
+      if (isVerbFormGrammar) {
+        // Collect quiz pool for the selected range of sets
+        let allPool: any[] = [];
+        for (let s = testRange.start; s <= testRange.end; s++) {
+          allPool = [...allPool, ...VERB_FORM_QUIZ_POOL.filter(q => q.set === s)];
+        }
         
-        return snapshot.docs.map(doc => {
-          const exampleData = doc.data();
-          return {
-            ...concept,
-            id: `${concept.id}_${doc.id}`,
-            quizSentence: exampleData.sentence,
-            quizExplanation: exampleData.explanation,
-            quizChoices: exampleData.choices || [],
-          } as Word;
+        if (allPool.length > 0) {
+          const transformed = allPool.map(q => {
+            const correct = q.choices[q.answer];
+            const others = q.choices.filter((_, idx) => idx !== q.answer);
+            return {
+              id: `verb_form_quiz_${q.id}`,
+              word: q.sentence,
+              meaning: correct,
+              quizSentence: q.sentence,
+              quizExplanation: q.explanation,
+              quizChoices: [correct, ...others],
+              quizCategory: 'grammar'
+            } as any;
+          });
+          rangeWords = shuffleArray(transformed);
+        }
+      } else {
+        const concepts = rangeWords;
+        const exampleFetches = concepts.map(async (concept) => {
+          const examplesRef = collection(db, `wordbooks/${selectedWordbook.id}/words/${concept.id}/examples`);
+          const snapshot = await getDocs(examplesRef);
+          
+          return snapshot.docs.map(doc => {
+            const exampleData = doc.data();
+            return {
+              ...concept,
+              id: `${concept.id}_${doc.id}`,
+              quizSentence: exampleData.sentence,
+              quizExplanation: exampleData.explanation,
+              quizChoices: exampleData.choices || [],
+            } as Word;
+          });
         });
-      });
 
-      const fetchResults = await Promise.all(exampleFetches);
-      const allPotentialExamples = fetchResults.flat();
+        const fetchResults = await Promise.all(exampleFetches);
+        const allPotentialExamples = fetchResults.flat();
 
-      if (allPotentialExamples.length > 0) {
-        // Use a random subset of 25 examples if there are many
-        const shuffled = shuffleArray(allPotentialExamples);
-        rangeWords = shuffled.slice(0, 25);
+        if (allPotentialExamples.length > 0) {
+          // Use a random subset of 25 examples if there are many
+          const shuffled = shuffleArray(allPotentialExamples);
+          rangeWords = shuffled.slice(0, 25);
+        }
       }
     }
 
@@ -570,27 +636,24 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     const isComplementGrammar = selectedWordbook?.type === 'complement-grammar';
     const isConversionGrammar = selectedWordbook?.type === 'conversion-grammar';
     const isModalGrammar = selectedWordbook?.type === 'modal-grammar';
+    const isVerbFormGrammar = selectedWordbook?.type === 'verb-form-grammar';
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.title?.includes('관계부사');
     
     let correctOption: string;
     let otherOptions: string[];
 
-    if (isRelativeGrammar || isModalGrammar) {
+    if (isRelativeGrammar || isModalGrammar || isVerbFormGrammar) {
       // Use choices from the prepared quiz sentence
       const choices = correctWord.quizChoices || [];
-      // The first choice is traditionally the correct one in the pool definition, 
-      // but in MODAL_QUIZ_POOL it uses 'answer' index.
-      // Wait, let's look at MODAL_QUIZ_POOL structure.
-      // It has 'choices' array and 'answer' index.
       
-      if (isModalGrammar) {
+      if (isModalGrammar || isVerbFormGrammar) {
         // Find the actual correct option using the answer index from the pool
-        const originalQuestion = MODAL_QUIZ_POOL.find(q => `modal_quiz_${q.id}` === correctWord.id);
+        const pool = isModalGrammar ? MODAL_QUIZ_POOL : VERB_FORM_QUIZ_POOL;
+        const originalQuestion = (pool as any[]).find(q => (isModalGrammar ? `modal_quiz_${q.id}` : `verb_form_quiz_${q.id}`) === correctWord.id);
         if (originalQuestion) {
           correctOption = originalQuestion.choices[originalQuestion.answer];
-          otherOptions = originalQuestion.choices.filter((_, idx) => idx !== originalQuestion.answer);
+          otherOptions = originalQuestion.choices.filter((_: any, idx: number) => idx !== originalQuestion.answer);
         } else {
-          // Fallback if not found
           correctOption = (correctWord.quizChoices || [])[0] || '';
           otherOptions = (correctWord.quizChoices || []).slice(1);
         }
@@ -738,12 +801,17 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     const isComplementGrammar = selectedWordbook?.type === 'complement-grammar';
     const isConversionGrammar = selectedWordbook?.type === 'conversion-grammar';
     const isModalGrammar = selectedWordbook?.type === 'modal-grammar';
+    const isVerbFormGrammar = selectedWordbook?.type === 'verb-form-grammar';
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.title?.includes('관계부사');
     
     let correctAnswer: string;
     if (isRelativeGrammar) {
       // In relative grammar, the first element of quizChoices is always the correct one
       correctAnswer = sessionWords[quizIndex].quizChoices?.[0] || '';
+    } else if (isModalGrammar || isVerbFormGrammar) {
+      const pool = isModalGrammar ? MODAL_QUIZ_POOL : VERB_FORM_QUIZ_POOL;
+      const originalQuestion = (pool as any[]).find(q => (isModalGrammar ? `modal_quiz_${q.id}` : `verb_form_quiz_${q.id}`) === sessionWords[quizIndex].id);
+      correctAnswer = originalQuestion ? originalQuestion.choices[originalQuestion.answer] : '';
     } else if (isConversionGrammar) {
       const p = sessionWords[quizIndex].pattern || '';
       if (p === 'to') correctAnswer = '동사 O to + 간접목적어';
@@ -1866,6 +1934,12 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                       currentChunk === 3 ? '4세트(used to / would): 과거 습관 및 상태 구별 (7개)' :
                       currentChunk === 4 ? '5세트(조동사 + have p.p.): 과거 추측 및 후회 표현 (5개)' :
                       '6세트(관용 표현): would like, had better 등 핵심 표현 (6개)'
+                    ) : selectedWordbook?.type === 'verb-form-grammar' ? (
+                      currentChunk === 0 ? '1세트: 1형식 전용 동사 (happen, occur, rise, matter 등)' :
+                      currentChunk === 1 ? '2세트: 2형식 전용 동사 (seem, appear, remain 등)' :
+                      currentChunk === 2 ? '3세트: 1형식 vs 2형식 겸용 (grow, stay, run, go, come 등)' :
+                      currentChunk === 3 ? '4세트: 2형식 vs 3형식 겸용 (smell, taste, feel, look, turn 등)' :
+                      '5세트: 3형식 전용 동사 (discuss, enter, resemble 등)'
                     ) : selectedWordbook?.type === 'conversion-grammar' ? (
                       '4형식 동사의 3형식 전치사 전환 규칙을 학습합니다.'
                     ) : `${isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`}의 단어들을 학습합니다.`}
@@ -1911,7 +1985,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                               Grammar Concept
                             </span>
                           )}
-                          {selectedWordbook.type === 'modal-grammar' && (
+                          {(selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'verb-form-grammar') && (
                             <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 text-[8px] md:text-[10px] font-black rounded uppercase tracking-tighter">
                               GRAMMAR CONCEPT
                             </span>

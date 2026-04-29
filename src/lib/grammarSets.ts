@@ -1376,6 +1376,88 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
   }
 ];
 
+export const VERB_FORM_GRAMMAR_DATA = [
+  { word: 'happen', meaning: '일어나다', pattern: '1세트: 1형식 전용', set: 1 },
+  { word: 'occur', meaning: '일어나다', pattern: '1세트: 1형식 전용', set: 1 },
+  { word: 'matter', meaning: '중요하다', pattern: '1세트: 1형식 전용', set: 1 },
+  { word: 'rise', meaning: '오르다', pattern: '1세트: 1형식 전용', set: 1 },
+  { word: 'fall', meaning: '떨어지다', pattern: '1세트: 1형식 전용', set: 1 },
+  { word: 'seem', meaning: '~하게 보이다', pattern: '2세트: 2형식 전용', set: 2 },
+  { word: 'appear', meaning: '~하게 보이다', pattern: '2세트: 2형식 전용', set: 2 },
+  { word: 'remain', meaning: '계속해서 C이다', pattern: '2세트: 2형식 전용', set: 2 },
+  { word: 'grow', meaning: '자라다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
+  { word: 'stay', meaning: '머무르다 / ~한 채로 있다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
+  { word: 'run', meaning: '달리다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
+  { word: 'go', meaning: '가다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
+  { word: 'come', meaning: '오다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
+  { word: 'smell', meaning: '~한 냄새가 나다 / ~의 냄새를 맡다', pattern: '4세트: 2형식 vs 3형식', set: 4 },
+  { word: 'taste', meaning: '~한 맛이 나다 / ~의 맛을 보다', pattern: '4세트: 2형식 vs 3형식', set: 4 },
+  { word: 'feel', meaning: '~한 느낌이 나다 / ~를 느끼다', pattern: '4세트: 2형식 vs 3형식', set: 4 },
+  { word: 'look', meaning: '~하게 보이다 / 바라보다', pattern: '4세트: 2형식 vs 3형식', set: 4 },
+  { word: 'turn', meaning: '~하게 되다 / 돌리다 / 뒤집다', pattern: '4세트: 2형식 vs 3형식', set: 4 },
+  { word: 'discuss', meaning: '~에 대해 토론하다', pattern: '5세트: 3형식 전용', set: 5 },
+  { word: 'enter', meaning: '~에 들어가다', pattern: '5세트: 3형식 전용', set: 5 },
+  { word: 'resemble', meaning: '~와 닮다', pattern: '5세트: 3형식 전용', set: 5 },
+  { word: 'marry', meaning: '~와 결혼하다', pattern: '5세트: 3형식 전용', set: 5 },
+  { word: 'mention', meaning: '~에 대해 언급하다', pattern: '5세트: 3형식 전용', set: 5 },
+];
+
+export async function seedVerbFormGrammar() {
+  const wordbooksRef = collection(db, 'wordbooks');
+  const q = query(wordbooksRef, where('type', '==', 'verb-form-grammar'));
+  const snapshot = await getDocs(q);
+
+  let wordbookId: string;
+
+  if (snapshot.empty) {
+    const docRef = await addDoc(wordbooksRef, {
+      title: '1, 2, 3형식 대표 동사',
+      description: '동사의 형식에 따른 의미 변화를 학습합니다.',
+      createdBy: 'system',
+      isPublic: true,
+      type: 'verb-form-grammar',
+      category: 'grammar',
+      createdAt: Timestamp.now(),
+      order: 3
+    });
+    wordbookId = docRef.id;
+  } else {
+    wordbookId = snapshot.docs[0].id;
+    await setDoc(doc(db, 'wordbooks', wordbookId), { 
+      type: 'verb-form-grammar',
+      category: 'grammar',
+      createdBy: 'system',
+      description: '동사의 형식에 따른 의미 변화를 학습합니다.',
+      isPublic: true
+    }, { merge: true });
+  }
+
+  const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
+  const existingWords = await getDocs(wordsRef);
+  
+  // Delete existing to force re-sync
+  const deleteBatch = writeBatch(db);
+  for (const d of existingWords.docs) {
+    deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
+  }
+  await deleteBatch.commit();
+  
+  // Add new
+  const addBatch = writeBatch(db);
+  for (let i = 0; i < VERB_FORM_GRAMMAR_DATA.length; i++) {
+    const item = VERB_FORM_GRAMMAR_DATA[i];
+    const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
+    addBatch.set(newDocRef, {
+      word: item.word,
+      meaning: item.meaning,
+      pattern: item.pattern,
+      order: i,
+      set: item.set
+    });
+  }
+  await addBatch.commit();
+}
+
 export async function seedRelativeGrammar() {
   if ((window as any)._relativeSeeded) return;
   (window as any)._relativeSeeded = true;

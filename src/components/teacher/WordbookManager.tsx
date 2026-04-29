@@ -5,6 +5,7 @@ import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebas
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, writeBatch, getDocs, orderBy } from 'firebase/firestore';
 import { generateWordTest, generateMultipleChoiceQuiz, generateIrregularVerbTest, generateWordbookTable } from '../../lib/wordTestGenerator';
 import { MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
+import { VERB_FORM_QUIZ_POOL } from '../../lib/verbFormQuizPool';
 import {
   DndContext,
   closestCenter,
@@ -577,6 +578,26 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
           const activeSets = Array.from(new Set(selectedWords.map(w => (w as any).set))).filter(s => s !== undefined);
           if (activeSets.length > 0) {
             const applicableQuestions = MODAL_QUIZ_POOL.filter(q => activeSets.includes(q.set));
+            if (applicableQuestions.length > 0) {
+              const shuffledPool = [...applicableQuestions].sort(() => 0.5 - Math.random());
+              const targetCount = testPaperConfig.selectionMode === 'random' ? testPaperConfig.wordCount : selectedWords.length;
+              const finalQuestions = shuffledPool.slice(0, Math.min(targetCount, shuffledPool.length));
+              
+              wordsForQuiz = finalQuestions.map(q => ({
+                word: q.sentence,
+                meaning: q.choices[q.answer],
+                distractors: q.choices.filter((_, idx) => idx !== q.answer),
+                question: q.question,
+                explanation: q.explanation
+              }));
+            }
+          }
+        }
+
+        if (selectedWordbook.type === 'verb-form-grammar') {
+          const activeSets = Array.from(new Set(selectedWords.map(w => (w as any).set))).filter(s => s !== undefined);
+          if (activeSets.length > 0) {
+            const applicableQuestions = VERB_FORM_QUIZ_POOL.filter(q => activeSets.includes(q.set));
             if (applicableQuestions.length > 0) {
               const shuffledPool = [...applicableQuestions].sort(() => 0.5 - Math.random());
               const targetCount = testPaperConfig.selectionMode === 'random' ? testPaperConfig.wordCount : selectedWords.length;
