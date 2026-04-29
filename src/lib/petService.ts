@@ -33,8 +33,15 @@ export interface PetSystemState {
   accessory: string | null;
   background: string;
   unlockedSlots: number;
+  lastResetDate?: string;
   pets: PetData[];
 }
+
+export const getKSTDateString = () => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul'
+  }).format(new Date());
+};
 
 const getInitialState = (): PetSystemState => ({
   currentPetSlot: 1,
@@ -44,6 +51,7 @@ const getInitialState = (): PetSystemState => ({
   accessory: null,
   background: 'default',
   unlockedSlots: 1,
+  lastResetDate: getKSTDateString(),
   pets: [
     {
       slot: 1,
@@ -76,31 +84,49 @@ export const PetService = {
   getState(uid?: string): PetSystemState {
     const key = uid ? `${STORAGE_KEY}_${uid}` : STORAGE_KEY;
     const saved = localStorage.getItem(key);
-    if (!saved) return getInitialState();
-    try {
-      const parsed = JSON.parse(saved);
-      // Migration or validation
-      if (!parsed.pets || parsed.pets.length === 0) return getInitialState();
-      
-      // Ensure energy exists (migration)
-      parsed.pets.forEach((p: any) => {
-        if (p.energy === undefined) p.energy = 100;
-        if (p.maxEnergy === undefined) p.maxEnergy = 100;
-        if (p.learnedPhrases === undefined) p.learnedPhrases = [];
-      });
+    let state: PetSystemState;
 
-      // Split outfit into clothing and accessory (migration)
-      if (parsed.clothing === undefined) {
-        const isClothing = (id: string) => ['uniform', 'muji_cape'].includes(id);
-        parsed.clothing = isClothing(parsed.outfit) ? parsed.outfit : null;
-        parsed.accessory = !isClothing(parsed.outfit) ? parsed.outfit : null;
-        delete parsed.outfit;
+    if (!saved) {
+      state = getInitialState();
+    } else {
+      try {
+        state = JSON.parse(saved);
+        // Migration or validation
+        if (!state.pets || state.pets.length === 0) {
+          state = getInitialState();
+        } else {
+          // Ensure energy exists (migration)
+          state.pets.forEach((p: any) => {
+            if (p.energy === undefined) p.energy = 100;
+            if (p.maxEnergy === undefined) p.maxEnergy = 100;
+            if (p.learnedPhrases === undefined) p.learnedPhrases = [];
+          });
+
+          // Split outfit into clothing and accessory (migration)
+          if ((state as any).clothing === undefined) {
+            const isClothing = (id: string) => ['uniform', 'muji_cape'].includes(id);
+            const outfit = (state as any).outfit;
+            state.clothing = isClothing(outfit) ? outfit : null;
+            state.accessory = !isClothing(outfit) ? outfit : null;
+            delete (state as any).outfit;
+          }
+        }
+      } catch (e) {
+        state = getInitialState();
       }
-      
-      return parsed;
-    } catch (e) {
-      return getInitialState();
     }
+
+    // Daily Energy Reset Logic (KST)
+    const today = getKSTDateString();
+    if (state.lastResetDate !== today) {
+      state.pets.forEach(p => {
+        p.energy = p.maxEnergy || 100;
+      });
+      state.lastResetDate = today;
+      this.saveState(state, uid);
+    }
+
+    return state;
   },
 
   saveState(state: PetSystemState, uid?: string) {

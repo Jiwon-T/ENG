@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Heart, Star, ShoppingBag, MessageCircle, Ruler, Shirt, ChevronLeft, RefreshCcw, Sparkles, Trophy, CheckCircle2, Pencil, Check, X } from 'lucide-react';
-import { PetService, PetSystemState, PetCharacterType, PetData } from '../../lib/petService';
+import { PetService, PetSystemState, PetCharacterType, PetData, getKSTDateString } from '../../lib/petService';
 import { PetCharacter } from './PetCharacters';
 import confetti from 'canvas-confetti';
 import { auth } from '../../lib/firebase';
@@ -69,6 +69,21 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     onAuthStateChanged(auth, (firebaseUser) => setUser(firebaseUser));
   }, []);
+
+  // Daily Reset Real-time Check
+  useEffect(() => {
+    if (!user || !state) return;
+
+    const interval = setInterval(() => {
+      const today = getKSTDateString();
+      if (state.lastResetDate !== today) {
+        const newState = PetService.getState(user.uid);
+        setState({ ...newState });
+      }
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [user, state?.lastResetDate]);
 
   useEffect(() => {
     if (!user) return;
@@ -296,7 +311,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
     if (lv <= 50) return ['오늘도 공부했어?', '간식 줘!'][Math.floor(Math.random() * 2)];
     if (lv <= 80) return ['오늘 열심히 했으니까 간식 하나만 더 줘~'];
     if (lv <= 99) return ['Good job today! 나 칭찬해줘'];
-    return "오늘도 지원T랑 열심히 공부했어! I'm so proud of you 🎉";
+    return "오늘도 열심히 공부했네! I'm so proud of you 🎉";
   };
 
   if (!state || !currentPet) return null;
@@ -533,7 +548,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
                   {activeTab === 'shop' && (
                     <div className="space-y-8">
                        <section>
-                          <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">예쁜 옷</h4>
+                          <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">의상</h4>
                           <div className="space-y-2">
                              {SHOP_ITEMS.outfits.map(item => (
                                <ShopItem key={item.id} item={item} onBuy={() => handlePurchase(item, item.category)} isOwned={state.inventory.includes(item.id)} />
