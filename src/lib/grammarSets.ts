@@ -1,4 +1,4 @@
-import { collection, addDoc, Timestamp, query, where, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, query, where, getDocs, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 
 export interface GrammarWord {
@@ -72,42 +72,58 @@ export async function seedObjectPatternGrammar() {
   let wordbookId: string;
 
   if (snapshot.empty) {
-    const docRef = await addDoc(wordbooksRef, {
-      title: 'to부정사와 동명사 목적어',
-      description: '목적어로 to부정사가 오는지 동명사가 오는지 학습합니다.',
-      createdBy: 'system',
-      isPublic: true,
-      type: 'to-ing-grammar',
-      category: 'grammar',
-      createdAt: Timestamp.now(),
-      order: 0
-    });
-    wordbookId = docRef.id;
+    const fallbackQ = query(wordbooksRef, where('title', '==', 'to부정사와 동명사 목적어'));
+    const fallbackSnap = await getDocs(fallbackQ);
+    if (!fallbackSnap.empty) {
+      wordbookId = fallbackSnap.docs[0].id;
+    } else {
+      const docRef = await addDoc(wordbooksRef, {
+        title: 'to부정사와 동명사 목적어',
+        description: '목적어로 to부정사가 오는지 동명사가 오는지 학습합니다.',
+        createdBy: 'system',
+        isPublic: true,
+        type: 'to-ing-grammar',
+        category: 'grammar',
+        createdAt: Timestamp.now(),
+        order: 0
+      });
+      wordbookId = docRef.id;
+    }
   } else {
     wordbookId = snapshot.docs[0].id;
-    // Update missing fields but keep existing title if user renamed it
-    await setDoc(doc(db, 'wordbooks', wordbookId), { 
-      type: 'to-ing-grammar',
-      category: 'grammar',
-      createdBy: 'system',
-      description: '목적어로 to부정사가 오는지 동명사가 오는지 학습합니다.'
-    }, { merge: true });
   }
+  
+  await setDoc(doc(db, 'wordbooks', wordbookId), { 
+    type: 'to-ing-grammar',
+    category: 'grammar',
+    createdBy: 'system',
+    description: '목적어로 to부정사가 오는지 동명사가 오는지 학습합니다.',
+    isPublic: true
+  }, { merge: true });
 
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  if (existingWords.empty) {
-    for (let i = 0; i < objectPatternData.length; i++) {
-      const item = objectPatternData[i];
-      await addDoc(wordsRef, {
-        word: item.word,
-        meaning: item.meaning,
-        pattern: item.pattern,
-        order: i
-      });
-    }
+  // Delete existing to force re-sync
+  const deleteBatch = writeBatch(db);
+  for (const d of existingWords.docs) {
+    deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
   }
+  await deleteBatch.commit();
+  
+  // Add new
+  const addBatch = writeBatch(db);
+  for (let i = 0; i < objectPatternData.length; i++) {
+    const item = objectPatternData[i];
+    const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
+    addBatch.set(newDocRef, {
+      word: item.word,
+      meaning: item.meaning,
+      pattern: item.pattern,
+      order: i
+    });
+  }
+  await addBatch.commit();
 }
 
 export const COMPLEMENT_QUIZ_DATA = [
@@ -151,17 +167,10 @@ export async function seedComplementGrammar() {
   let wordbookId: string;
 
   if (snapshot.empty) {
-    // Check if it exists with old title but no type (for transitional period)
-    const oldTitleQ = query(wordbooksRef, where('title', '==', '5형식 목적격 보어 퀴즈'));
-    const oldSnapshot = await getDocs(oldTitleQ);
-
-    if (!oldSnapshot.empty) {
-      wordbookId = oldSnapshot.docs[0].id;
-      await setDoc(doc(db, 'wordbooks', wordbookId), {
-        type: 'complement-grammar',
-        category: 'grammar',
-        createdBy: 'system'
-      }, { merge: true });
+    const fallbackQ = query(wordbooksRef, where('title', '==', '5형식 목적격 보어 퀴즈'));
+    const fallbackSnap = await getDocs(fallbackQ);
+    if (!fallbackSnap.empty) {
+      wordbookId = fallbackSnap.docs[0].id;
     } else {
       const docRef = await addDoc(wordbooksRef, {
         title: '5형식 목적격 보어 퀴즈',
@@ -177,29 +186,40 @@ export async function seedComplementGrammar() {
     }
   } else {
     wordbookId = snapshot.docs[0].id;
-    await setDoc(doc(db, 'wordbooks', wordbookId), { 
-      type: 'complement-grammar',
-      category: 'grammar',
-      createdBy: 'system',
-      description: '동사별로 어떤 목적격 보어가 오는지 학습합니다.'
-    }, { merge: true });
   }
+  
+  await setDoc(doc(db, 'wordbooks', wordbookId), { 
+    type: 'complement-grammar',
+    category: 'grammar',
+    createdBy: 'system',
+    description: '동사별로 어떤 목적격 보어가 오는지 학습합니다.',
+    isPublic: true
+  }, { merge: true });
 
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  if (existingWords.empty) {
-    for (let i = 0; i < COMPLEMENT_QUIZ_DATA.length; i++) {
-      const item = COMPLEMENT_QUIZ_DATA[i];
-      await addDoc(wordsRef, {
-        word: item.verb,
-        meaning: item.desc,
-        pattern: item.type,
-        distractors: [item.label],
-        order: i
-      });
-    }
+  // Delete existing to force re-sync
+  const deleteBatch = writeBatch(db);
+  for (const d of existingWords.docs) {
+    deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
   }
+  await deleteBatch.commit();
+  
+  // Add new
+  const addBatch = writeBatch(db);
+  for (let i = 0; i < COMPLEMENT_QUIZ_DATA.length; i++) {
+    const item = COMPLEMENT_QUIZ_DATA[i];
+    const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
+    addBatch.set(newDocRef, {
+      word: item.verb,
+      meaning: item.desc,
+      pattern: item.type,
+      distractors: [item.label],
+      order: i
+    });
+  }
+  await addBatch.commit();
 }
 
 export const CONVERSION_GRAMMAR_DATA = [
@@ -233,69 +253,138 @@ export const CONVERSION_GRAMMAR_DATA = [
 ];
 
 export const MODAL_GRAMMAR_DATA = [
-  // POINT 5 — 조동사 + have + p.p.
-  { word: 'may[might] + have p.p.', meaning: '~했을 수도 있다', pattern: '조동사 + have p.p.', distractors: ['~했음이 틀림없다', '~했을 리가 없다', '~했어야 했다'] },
-  { word: 'must + have p.p.', meaning: '~했음이 틀림없다', pattern: '조동사 + have p.p.', distractors: ['~했을 수도 있다', '~했을 리가 없다', '~했을 수도 있었다'] },
-  { word: 'can\'t + have p.p.', meaning: '~했을 리가 없다', pattern: '조동사 + have p.p.', distractors: ['~했음이 틀림없다', '~했을 수도 있다', '~하는 것이 낫다'] },
-  { word: 'should + have p.p.', meaning: '~했어야 했다 (하지만 하지 않았다)', pattern: '조동사 + have p.p.', distractors: ['~했을 수도 있었다', '~했음이 틀림없다', '~했을 수도 있다'] },
-  { word: 'could + have p.p.', meaning: '~했을 수도 있었다 (하지만 하지 않았다)', pattern: '조동사 + have p.p.', distractors: ['~했어야 했다', '~했을 리가 없다', '~했음이 틀림없다'] },
-  
-  // POINT 6 — 조동사 관용 표현
-  { word: 'would like + 명사', meaning: '~을 원하다', pattern: '조동사 관용 표현', distractors: ['~하고 싶다', '(차라리) ~하겠다', '~하는 편이 좋다'] },
-  { word: 'would like to + 동사원형', meaning: '~하고 싶다', pattern: '조동사 관용 표현', distractors: ['~을 원하다', '~하는 것이 낫다', '~하는 것도 당연하다'] },
-  { word: 'would rather + 동사원형', meaning: '(차라리) ~하겠다', pattern: '조동사 관용 표현', distractors: ['~하고 싶다', '~하는 편이 좋다', '~하는 것이 낫다'] },
-  { word: 'may well + 동사원형', meaning: '(~하는 것도) 당연하다', pattern: '조동사 관용 표현', distractors: ['~하는 편이 좋다', '(차라리) ~하겠다', '~하고 싶다'] },
-  { word: 'may as well + 동사원형', meaning: '~하는 편이 좋다', pattern: '조동사 관용 표현', distractors: ['(~하는 것도) 당연하다', '~하는 것이 낫다', '~을 원하다'] },
-  { word: 'had better + 동사원형', meaning: '~하는 것이 낫다', pattern: '조동사 관용 표현', distractors: ['~하는 편이 좋다', '~하고 싶다', '(차라리) ~하겠다'] },
+  // 1세트 — can / may / will 의미 구별
+  { word: 'can (능력)', meaning: '~할 수 있다 (= be able to)', pattern: 'can / may / will', set: 1, example: 'John can run 50 meters in 7 seconds.' },
+  { word: 'can (가능)', meaning: '~할 가능성이 있다', pattern: 'can / may / will', set: 1, example: 'Miracles can happen anytime.' },
+  { word: 'can (허가)', meaning: '~해도 된다', pattern: 'can / may / will', set: 1, example: 'You can use my scissors.' },
+  { word: 'can (요청)', meaning: '~해주겠니?', pattern: 'can / may / will', set: 1, example: 'Can you answer the phone?' },
+  { word: "can't (추측)", meaning: '~일 리가 없다', pattern: 'can / may / will', set: 1, example: 'That can\'t be Matt. Matt is much taller.' },
+  { word: 'could (추측)', meaning: '~일 수도 있다', pattern: 'can / may / will', set: 1, example: 'He could be at home.' },
+  { word: 'could (과거/정중한 요청)', meaning: 'can의 과거형 / can보다 정중한 요청', pattern: 'can / may / will', set: 1, example: 'Could you give me some advice, please?' },
+  { word: 'may (허가)', meaning: '~해도 된다', pattern: 'can / may / will', set: 1, example: 'You may eat a piece of cake.' },
+  { word: 'may (약한 추측)', meaning: '~일지도 모른다', pattern: 'can / may / will', set: 1, example: 'We may need boxes.' },
+  { word: 'might (추측)', meaning: 'may보다 불확실한 추측, ~일지도 모른다', pattern: 'can / may / will', set: 1, example: 'She might have a cold or the flu.' },
+  { word: 'will (미래)', meaning: '~할 것이다 (= be going to)', pattern: 'can / may / will', set: 1, example: 'I will enter high school next year.' },
+  { word: 'will (의지)', meaning: '~하겠다', pattern: 'can / may / will', set: 1, example: 'We will always tell the truth.' },
+  { word: 'will (요청)', meaning: '~해주겠니?', pattern: 'can / may / will', set: 1, example: 'Will you open the door?' },
+  { word: 'would (정중한 요청)', meaning: 'will보다 정중한 요청', pattern: 'can / may / will', set: 1, example: 'Would you please be quiet?' },
+
+  // 2세트 — must / should 의미 구별
+  { word: 'must (강한 의무)', meaning: '~해야 한다 (= have to)', pattern: 'must / should', set: 2, example: 'You must submit your assignment by e-mail.' },
+  { word: 'must not (강한 금지)', meaning: '~해서는 안 된다', pattern: 'must / should', set: 2, example: 'We must not break the law.' },
+  { word: "don't have to (불필요)", meaning: '~할 필요가 없다', pattern: 'must / should', set: 2, example: 'You don\'t have to turn off the radio.' },
+  { word: 'must (강한 추측)', meaning: '~임이 틀림없다', pattern: 'must / should', set: 2, example: 'The interview must be long.' },
+  { word: "can't (강한 추측 부정)", meaning: '~일 리가 없다 (must 강한 추측의 부정형)', pattern: 'must / should', set: 2, example: 'The interview can\'t be long.' },
+  { word: 'should (충고·의무)', meaning: '~해야 한다 (= ought to)', pattern: 'must / should', set: 2, example: 'We should help other people.' },
+  { word: 'must vs should 구별', meaning: 'must = 강제성 있는 의무 / should = 약한 의무', pattern: 'must / should', set: 2, example: 'You must follow the traffic rules. / You should wear dark clothes at the funeral.' },
+
+  // 3세트 — should 생략 동사
+  { word: 'suggest', meaning: '제안하다 (that절에 should + 동사원형, should 생략 가능)', pattern: 'should 생략', set: 3 },
+  { word: 'recommend', meaning: '추천하다', pattern: 'should 생략', set: 3 },
+  { word: 'insist', meaning: '주장하다', pattern: 'should 생략', set: 3 },
+  { word: 'request', meaning: '요청하다', pattern: 'should 생략', set: 3 },
+  { word: 'require', meaning: '요구하다', pattern: 'should 생략', set: 3 },
+  { word: 'demand', meaning: '요구하다', pattern: 'should 생략', set: 3 },
+  { word: 'order', meaning: '명령하다', pattern: 'should 생략', set: 3 },
+  { word: 'I suggested that Janet (should) be the class president.', meaning: '제안 동사(suggest)의 should 생략 예문', pattern: 'should 생략 예문', set: 3 },
+  { word: 'He insisted that we (should) report the lost wallet to the police.', meaning: '주장 동사(insist)의 should 생략 예문', pattern: 'should 생략 예문', set: 3 },
+
+  // 4세트 — used to / would 구별
+  { word: 'used to (과거의 습관)', meaning: '~하곤 했다', pattern: 'used to / would', set: 4, example: 'Helen used to go to church when she was young.' },
+  { word: 'used to (과거의 상태)', meaning: '~이었다 (상태 표현 가능)', pattern: 'used to / would', set: 4, example: 'There used to be a bridge here two years ago.' },
+  { word: "didn't use to", meaning: '~하지 않곤 했다', pattern: 'used to / would', set: 4, example: 'I didn\'t use to eat onions, but I like them now.' },
+  { word: 'be used to + 동사원형', meaning: '~하는 데 사용되다 (수동태)', pattern: 'used to / would', set: 4, example: 'This knife is used to cut bread.' },
+  { word: 'be used to + V-ing/명사', meaning: '~에 익숙하다', pattern: 'used to / would', set: 4, example: 'I am used to eating spicy food.' },
+  { word: 'would (과거의 습관)', meaning: '~하곤 했다 (습관만 가능, 상태 불가)', pattern: 'used to / would', set: 4, example: 'We would go camping every summer when we were children.' },
+  { word: 'would vs used to 구별', meaning: 'would = 과거 습관만 / used to = 과거 습관 + 상태 모두 가능', pattern: 'used to / would', set: 4, example: 'James (would X / used to O) be short, but he is tall now.' },
+
+  // 5세트 — 조동사 + have + p.p.
+  { word: 'may[might] + have p.p.', meaning: '~했을 수도 있다 (약한 추측)', pattern: '조동사 + have p.p.', set: 5, example: 'I may have sent the wrong file.' },
+  { word: 'must + have p.p.', meaning: '~했음이 틀림없다 (강한 추측)', pattern: '조동사 + have p.p.', set: 5, example: 'That tree must have fallen during the storm.' },
+  { word: "can't + have p.p.", meaning: '~했을 리가 없다 (강한 추측 부정)', pattern: '조동사 + have p.p.', set: 5, example: 'The neighbors can\'t have moved already.' },
+  { word: 'should + have p.p.', meaning: '~했어야 했다, 하지만 하지 않았다 (후회·유감)', pattern: '조동사 + have p.p.', set: 5, example: 'You should have asked me before throwing it away.' },
+  { word: 'could + have p.p.', meaning: '~했을 수도 있었다, 하지만 하지 않았다 (후회·유감)', pattern: '조동사 + have p.p.', set: 5, example: 'We could have traveled abroad, but we stayed home.' },
+
+  // 6세트 — 조동사 관용 표현
+  { word: 'would like + 명사', meaning: '~을 원하다 / 부정형: wouldn\'t like', pattern: '관용 표현', set: 6, example: 'I would like a room with a balcony.' },
+  { word: 'would like to + 동사원형', meaning: '~하고 싶다 / 부정형: wouldn\'t like to', pattern: '관용 표현', set: 6, example: 'I would like to play tennis.' },
+  { word: 'would rather + 동사원형', meaning: '(차라리) ~하겠다 / 부정형: would rather not', pattern: '관용 표현', set: 6, example: 'I would rather visit Spain than France.' },
+  { word: 'may well + 동사원형', meaning: '(~하는 것도) 당연하다 / 부정형: may well not', pattern: '관용 표현', set: 6, example: 'They may well think so.' },
+  { word: 'may as well + 동사원형', meaning: '~하는 편이 좋다 / 부정형: may as well not', pattern: '관용 표현', set: 6, example: 'You may as well try the new program.' },
+  { word: 'had better + 동사원형', meaning: '~하는 것이 낫다 / 부정형: had better not', pattern: '관용 표현', set: 6, example: 'You had better save the money.' },
 ];
 
 export async function seedModalGrammar() {
-  if ((window as any)._modalSeeded) return;
-  (window as any)._modalSeeded = true;
-
   const wordbooksRef = collection(db, 'wordbooks');
   const q = query(wordbooksRef, where('type', '==', 'modal-grammar'));
   const snapshot = await getDocs(q);
 
-  let wordbookId: string;
+  // Also check for legacy duplicates by title and delete them if they have wrong type
+  const titleQ = query(wordbooksRef, where('title', '==', '조동사'));
+  const titleSnap = await getDocs(titleQ);
+  
+  let wordbookId: string = '';
 
-  if (snapshot.empty) {
-    const docRef = await addDoc(wordbooksRef, {
-      title: '조동사',
-      description: '조동사 + have p.p. 및 관용 표현을 학습합니다.',
-      createdBy: 'system',
-      isPublic: true,
-      type: 'modal-grammar',
-      category: 'grammar',
-      createdAt: Timestamp.now(),
-      order: 2
-    });
-    wordbookId = docRef.id;
-  } else {
-    wordbookId = snapshot.docs[0].id;
-    await setDoc(doc(db, 'wordbooks', wordbookId), { 
-      type: 'modal-grammar',
-      category: 'grammar',
-      createdBy: 'system',
-      description: '조동사 + have p.p. 및 관용 표현을 학습합니다.'
-    }, { merge: true });
+  for (const docSnap of titleSnap.docs) {
+    if (docSnap.data().type !== 'modal-grammar') {
+      await deleteDoc(docSnap.ref);
+    } else {
+      wordbookId = docSnap.id;
+    }
   }
+
+  if (!wordbookId) {
+    if (!snapshot.empty) {
+      wordbookId = snapshot.docs[0].id;
+    } else {
+      const docRef = await addDoc(wordbooksRef, {
+        title: '조동사',
+        description: '조동사 문법을 학습합니다.',
+        createdBy: 'system',
+        isPublic: true,
+        type: 'modal-grammar',
+        category: 'grammar',
+        createdAt: Timestamp.now(),
+        order: 2
+      });
+      wordbookId = docRef.id;
+    }
+  }
+
+  // Final update to ensure metadata is sync'd
+  await setDoc(doc(db, 'wordbooks', wordbookId), { 
+    type: 'modal-grammar',
+    category: 'grammar',
+    createdBy: 'system',
+    description: '조동사 문법을 학습합니다.',
+    isPublic: true
+  }, { merge: true });
 
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  if (existingWords.empty) {
-    for (let i = 0; i < MODAL_GRAMMAR_DATA.length; i++) {
-      const item = MODAL_GRAMMAR_DATA[i];
-      await addDoc(wordsRef, {
-        word: item.word,
-        meaning: item.meaning,
-        pattern: item.pattern,
-        distractors: item.distractors,
-        order: i
-      });
-    }
+  // Delete existing to force re-sync with newest data structure
+  const deleteBatch = writeBatch(db);
+  for (const d of existingWords.docs) {
+    deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
   }
+  await deleteBatch.commit();
+  
+  // Add new
+  const addBatch = writeBatch(db);
+  for (let i = 0; i < MODAL_GRAMMAR_DATA.length; i++) {
+    const item = MODAL_GRAMMAR_DATA[i];
+    const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
+    addBatch.set(newDocRef, {
+      word: item.word,
+      meaning: item.meaning,
+      pattern: item.pattern,
+      example: item.example || '',
+      order: i,
+      set: (item as any).set 
+    });
+  }
+  await addBatch.commit();
 }
 
 export async function seedConversionGrammar() {
@@ -334,17 +423,26 @@ export async function seedConversionGrammar() {
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  if (existingWords.empty) {
-    for (let i = 0; i < CONVERSION_GRAMMAR_DATA.length; i++) {
-      const item = CONVERSION_GRAMMAR_DATA[i];
-      await addDoc(wordsRef, {
-        word: item.word,
-        meaning: item.meaning,
-        pattern: item.pattern,
-        order: i
-      });
-    }
+  // Delete existing to force re-sync
+  const deleteBatch = writeBatch(db);
+  for (const d of existingWords.docs) {
+    deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
   }
+  await deleteBatch.commit();
+  
+  // Add new
+  const addBatch = writeBatch(db);
+  for (let i = 0; i < CONVERSION_GRAMMAR_DATA.length; i++) {
+    const item = CONVERSION_GRAMMAR_DATA[i];
+    const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
+    addBatch.set(newDocRef, {
+      word: item.word,
+      meaning: item.meaning,
+      pattern: item.pattern,
+      order: i
+    });
+  }
+  await addBatch.commit();
 }
 
 export const RELATIVE_GRAMMAR_CONCEPTS = [

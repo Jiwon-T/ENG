@@ -213,14 +213,13 @@ export default function App() {
             
             setProfile(data);
             
-            // If student hasn't set their name yet, show the modal
+            if (data.role === 'teacher' || data.role === 'admin') {
+              setTimeout(runTeacherSeeding, 1000); // Defer seeding
+            }
+            
             if (data.role === 'student' && !data.isNameSet) {
               setNewName(data.alias || data.name || '');
               setShowNameEditModal(true);
-            }
-
-            if (data.role === 'teacher') {
-              setTimeout(runTeacherSeeding, 1000); // Defer seeding
             }
           } else {
             console.warn('User doc still does not exist after ensureUserDocExists');

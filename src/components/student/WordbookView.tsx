@@ -39,6 +39,7 @@ interface Progress {
 }
 
 import { COMPLEMENT_QUIZ_DATA, GrammarWord } from '../../lib/grammarSets';
+import { MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
 
 // Helper to shuffle array
 function shuffleArray<T>(array: T[]): T[] {
@@ -174,6 +175,15 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       else if (currentChunk === 1) displayedWords = words.slice(7, 17);
       else displayedWords = words.slice(17, 26);
     }
+  } else if (selectedWordbook?.type === 'modal-grammar') {
+    totalChunks = 6;
+    // Boundaries: 14, 21, 30, 37, 42, 48
+    if (currentChunk === 0) displayedWords = words.slice(0, 14);
+    else if (currentChunk === 1) displayedWords = words.slice(14, 21);
+    else if (currentChunk === 2) displayedWords = words.slice(21, 30);
+    else if (currentChunk === 3) displayedWords = words.slice(30, 37);
+    else if (currentChunk === 4) displayedWords = words.slice(37, 42);
+    else displayedWords = words.slice(42, 48);
   }
 
   useEffect(() => {
@@ -358,6 +368,40 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       setIsFocusedMode(true);
       setSessionStartTime(Date.now());
       generateQuizOptions(0, selectedSessionWords);
+    } else if (selectedWordbook?.type === 'modal-grammar') {
+      // Filter quiz pool by current set (currentChunk + 1)
+      const currentSet = currentChunk + 1;
+      const setQuizPool = MODAL_QUIZ_POOL.filter(q => q.set === currentSet);
+      
+      if (setQuizPool.length === 0) {
+        alert('이 세트에는 퀴즈 데이터가 없습니다.');
+        return;
+      }
+
+      // Format quiz pool into Word interface for consistency
+      const quizWords: Word[] = setQuizPool.map(q => ({
+        id: `modal_quiz_${q.id}`,
+        word: q.sentence, // We'll display sentence in front
+        meaning: q.choices[q.answer], // Set correct meaning for match logic
+        quizSentence: q.sentence,
+        quizExplanation: q.explanation,
+        quizChoices: q.choices,
+        quizCategory: 'grammar'
+      } as any));
+
+      const shuffled = shuffleArray(quizWords);
+      const selectedSessionWords = shuffled.slice(0, sessionUnitSize);
+
+      setSessionWords(selectedSessionWords);
+      setQuizIndex(0);
+      setQuizScore(0);
+      setIsQuizFinished(false);
+      setIsQuizMode(true);
+      setIsMatchMode(false);
+      setIsFlashcardMode(false);
+      setIsFocusedMode(true);
+      setSessionStartTime(Date.now());
+      generateQuizOptions(0, selectedSessionWords);
     } else {
       // Normal Wordbook: Pick sessionUnitSize random words from the CURRENT Day/Set
       const shuffledPool = shuffleArray(displayedWords);
@@ -531,11 +575,30 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     let correctOption: string;
     let otherOptions: string[];
 
-    if (isRelativeGrammar) {
+    if (isRelativeGrammar || isModalGrammar) {
       // Use choices from the prepared quiz sentence
       const choices = correctWord.quizChoices || [];
-      correctOption = choices[0] || '';
-      otherOptions = choices.slice(1);
+      // The first choice is traditionally the correct one in the pool definition, 
+      // but in MODAL_QUIZ_POOL it uses 'answer' index.
+      // Wait, let's look at MODAL_QUIZ_POOL structure.
+      // It has 'choices' array and 'answer' index.
+      
+      if (isModalGrammar) {
+        // Find the actual correct option using the answer index from the pool
+        const originalQuestion = MODAL_QUIZ_POOL.find(q => `modal_quiz_${q.id}` === correctWord.id);
+        if (originalQuestion) {
+          correctOption = originalQuestion.choices[originalQuestion.answer];
+          otherOptions = originalQuestion.choices.filter((_, idx) => idx !== originalQuestion.answer);
+        } else {
+          // Fallback if not found
+          correctOption = (correctWord.quizChoices || [])[0] || '';
+          otherOptions = (correctWord.quizChoices || []).slice(1);
+        }
+      } else {
+        // For relative grammar, it was already mapped such that choices[0] is correct
+        correctOption = (correctWord.quizChoices || [])[0] || '';
+        otherOptions = (correctWord.quizChoices || []).slice(1);
+      }
     } else if (isConversionGrammar) {
       const allLabels = [
         '동사 O to + 간접목적어',
@@ -586,26 +649,6 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       otherOptions = allPatterns
         .filter(p => p !== (correctWord.pattern || ''))
         .map(getLabel);
-    } else if (isModalGrammar) {
-      correctOption = correctWord.meaning;
-      
-      // Get fixed distractors from the word data
-      const fixedDistractors = correctWord.distractors || [];
-      
-      // Get random meanings from the current set as potential distractors
-      const otherMeanings = currentWords
-        .filter(w => w.id !== correctWord.id)
-        .map(w => w.meaning);
-      
-      // User request: At least one distractor should be a random meaning from the set
-      const randomSetDistractor = otherMeanings[Math.floor(Math.random() * otherMeanings.length)];
-      
-      const combinedDistractors = new Set<string>();
-      if (randomSetDistractor) combinedDistractors.add(randomSetDistractor);
-      fixedDistractors.forEach(d => combinedDistractors.add(d));
-      
-      otherOptions = Array.from(combinedDistractors).filter(d => d !== correctOption);
-      if (otherOptions.length > 3) otherOptions = otherOptions.slice(0, 3);
     } else if (isIrregular) {
       // For irregular, test the past - participle pair
       correctOption = `${correctWord.past} - ${correctWord.pastParticiple}`;
@@ -1173,11 +1216,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                             </div>
                           )}
                           <h3 className={`${isMobile ? 'text-2xl' : 'text-5xl'} font-black text-slate-900 text-center leading-tight`}>
-                            {(selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.title?.includes('관계부사'))
+                            {(selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.title?.includes('관계부사'))
                               ? sessionWords[quizIndex].quizSentence 
                               : sessionWords[quizIndex].word}
                           </h3>
-                          {(selectedWordbook?.type !== 'relative-grammar' && !selectedWordbook?.title?.includes('관계부사')) && (
+                          {(selectedWordbook?.type !== 'relative-grammar' && selectedWordbook?.type !== 'modal-grammar' && !selectedWordbook?.title?.includes('관계부사')) && (
                             <button 
                               onClick={() => speak(sessionWords[quizIndex].word)}
                               className="p-2 md:p-3 bg-slate-50 text-slate-400 rounded-xl hover:text-pastel-pink-500 transition-colors"
@@ -1256,7 +1299,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                           })}
                         </div>
 
-                        { (selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.title?.includes('관계부사')) && selectedOption !== null && (
+                          { (selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.title?.includes('관계부사')) && selectedOption !== null && (
                           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                             <motion.div 
                               initial={{ opacity: 0 }}
@@ -1525,6 +1568,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                     >
                       {/* Front */}
                       <div className={`absolute inset-0 backface-hidden bg-white ${isMobile ? 'rounded-2xl p-6' : 'rounded-[3rem] p-10'} border-2 border-pastel-pink-100 shadow-xl flex flex-col items-center justify-center`}>
+                        {selectedWordbook?.type === 'modal-grammar' && (
+                          <div className="absolute top-6 px-3 py-1 bg-indigo-100 text-indigo-600 text-[10px] font-black rounded-lg uppercase tracking-wider">
+                            GRAMMAR CONCEPT
+                          </div>
+                        )}
                         <div className={`${isMobile ? 'text-3xl' : 'text-5xl'} font-black text-slate-900 mb-4 md:mb-6`}>{currentWord.word}</div>
                         <button 
                           onClick={(e) => {
@@ -1811,6 +1859,13 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                       currentChunk === 0 ? '명사/형용사 보어 동사 (7개)' :
                       currentChunk === 1 ? 'to V 보어 동사 (10개)' :
                       '동사원형 / 둘 다 가능 동사 (9개)'
+                    ) : selectedWordbook?.type === 'modal-grammar' ? (
+                      currentChunk === 0 ? '1세트(can/may/will): 능력, 허가, 요청, 추측 등 의미 구별 (14개)' :
+                      currentChunk === 1 ? '2세트(must/should): 의무, 금지, 불필요, 추측 등 강도 구별 (7개)' :
+                      currentChunk === 2 ? '3세트(should 생략): 제안, 주장, 요구 동사 및 예문 (9개)' :
+                      currentChunk === 3 ? '4세트(used to / would): 과거 습관 및 상태 구별 (7개)' :
+                      currentChunk === 4 ? '5세트(조동사 + have p.p.): 과거 추측 및 후회 표현 (5개)' :
+                      '6세트(관용 표현): would like, had better 등 핵심 표현 (6개)'
                     ) : selectedWordbook?.type === 'conversion-grammar' ? (
                       '4형식 동사의 3형식 전치사 전환 규칙을 학습합니다.'
                     ) : `${isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`}의 단어들을 학습합니다.`}
@@ -1856,6 +1911,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                               Grammar Concept
                             </span>
                           )}
+                          {selectedWordbook.type === 'modal-grammar' && (
+                            <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 text-[8px] md:text-[10px] font-black rounded uppercase tracking-tighter">
+                              GRAMMAR CONCEPT
+                            </span>
+                          )}
                         </div>
                         {selectedWordbook.type === 'irregular' ? (
                           <div className="space-y-0.5">
@@ -1865,6 +1925,17 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                             <div className={`${isMobile ? 'text-[10px]' : 'text-sm'} font-medium ${progress[word.id] === 'learned' ? 'text-emerald-600/70' : 'text-slate-500'}`}>
                               {word.meaning}
                             </div>
+                          </div>
+                        ) : selectedWordbook.type === 'modal-grammar' ? (
+                          <div className="space-y-0.5">
+                            <div className={`${isMobile ? 'text-[10px]' : 'text-sm'} font-medium ${progress[word.id] === 'learned' ? 'text-emerald-600/70' : 'text-slate-500'}`}>
+                              {word.meaning}
+                            </div>
+                            {word.example && (
+                              <div className={`${isMobile ? 'text-[9px]' : 'text-xs'} font-bold text-indigo-500 italic`}>
+                                Ex: {word.example}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className={`${isMobile ? 'text-[10px]' : 'text-sm'} font-medium ${progress[word.id] === 'learned' ? 'text-emerald-600/70' : 'text-slate-500'}`}>

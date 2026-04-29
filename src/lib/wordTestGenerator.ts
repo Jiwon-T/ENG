@@ -290,16 +290,19 @@ export const generateWordTest = async (
     });
   };
 
+  // Create safe filename
+  const baseName = [paperTitle, subtitle, studentName].filter(Boolean).join('_');
+  
   // Generate Test Paper
   const testDoc = createDocument(false);
   const testBlob = await Packer.toBlob(testDoc);
-  saveAs(testBlob, `${paperTitle}_${subtitle}_${studentName}_테스트.docx`);
+  saveAs(testBlob, `${baseName}_테스트.docx`);
 
   // Generate Answer Key if requested
   if (includeAnswerKey) {
     const answerDoc = createDocument(true);
     const answerBlob = await Packer.toBlob(answerDoc);
-    saveAs(answerBlob, `${paperTitle}_${subtitle}_${studentName}_정답지.docx`);
+    saveAs(answerBlob, `${baseName}_정답지.docx`);
   }
 };
 
@@ -366,6 +369,7 @@ export const generateMultipleChoiceQuiz = async (
       let distractors: string[] = [];
       let correctAnswer = "";
       let questionPrefix = "";
+      let displayWord = item.word;
 
       if (wordbookType === 'irregular') {
         const isPast = (index % 2 === 0);
@@ -406,6 +410,12 @@ export const generateMultipleChoiceQuiz = async (
         const choices = item.distractors || [];
         correctAnswer = choices[0] || '';
         distractors = choices.slice(1);
+      } else if (wordbookType === 'modal-grammar') {
+        correctAnswer = item.meaning;
+        distractors = item.distractors || [];
+        // Strip trailing parentheses content (hints like (수동태), (추측), etc.)
+        questionPrefix = (item.question || "").replace(/\s*\([^)]+\)$/, "").trim();
+        displayWord = (item.word || "").replace(/\s*\([^)]+\)$/, "").trim();
       } else {
         correctAnswer = item.meaning;
         distractors = allPatterns.filter(p => p !== correctAnswer).sort(() => 0.5 - Math.random()).slice(0, 3);
@@ -420,7 +430,7 @@ export const generateMultipleChoiceQuiz = async (
         children: [
           new TextRun({ text: `${index + 1}. `, size: 22, bold: true }),
           new TextRun({ 
-            text: (isRelative || isConceptGrammar || wordbookType === 'irregular') ? item.word : item.word, 
+            text: displayWord, 
             size: 24, 
             bold: true 
           }),
@@ -430,10 +440,10 @@ export const generateMultipleChoiceQuiz = async (
         keepNext: true,
       }));
 
-      if (isAnswerKey && isRelative && item.meaning) {
+      if (isAnswerKey && (isRelative || wordbookType === 'modal-grammar') && (item.explanation || (isRelative && item.meaning))) {
         quizElements.push(new Paragraph({
           children: [
-            new TextRun({ text: `   💡 해설: ${item.meaning}`, size: 18, italics: true, color: "666666" })
+            new TextRun({ text: `   💡 해설: ${item.explanation || item.meaning}`, size: 18, italics: true, color: "666666" })
           ],
           spacing: { before: 40, after: 40 }
         }));
@@ -484,14 +494,17 @@ export const generateMultipleChoiceQuiz = async (
     });
   };
 
+  // Create safe filename
+  const baseName = [paperTitle, subtitle, studentName].filter(Boolean).join('_');
+
   const testDoc = createDocument(false);
   const testBlob = await Packer.toBlob(testDoc);
-  saveAs(testBlob, `${paperTitle}_${subtitle}_${studentName}_객관식_퀴즈.docx`);
+  saveAs(testBlob, `${baseName}_객관식_퀴즈.docx`);
 
   if (includeAnswerKey) {
     const answerDoc = createDocument(true);
     const answerBlob = await Packer.toBlob(answerDoc);
-    saveAs(answerBlob, `${paperTitle}_${subtitle}_${studentName}_객관식_정답지.docx`);
+    saveAs(answerBlob, `${baseName}_객관식_정답지.docx`);
   }
 };
 
@@ -656,14 +669,17 @@ export const generateIrregularVerbTest = async (
     });
   };
 
+  // Create safe filename
+  const baseName = [paperTitle, subtitle, studentName].filter(Boolean).join('_');
+
   const testDoc = createDocument(false);
   const testBlob = await Packer.toBlob(testDoc);
-  saveAs(testBlob, `${paperTitle}_${subtitle}_${studentName}_3단변화_테스트.docx`);
+  saveAs(testBlob, `${baseName}_3단변화_테스트.docx`);
 
   if (includeAnswerKey) {
     const answerDoc = createDocument(true);
     const answerBlob = await Packer.toBlob(answerDoc);
-    saveAs(answerBlob, `${paperTitle}_${subtitle}_${studentName}_3단변화_정답지.docx`);
+    saveAs(answerBlob, `${baseName}_3단변화_정답지.docx`);
   }
 };
 
@@ -865,5 +881,6 @@ export const generateWordbookTable = async (
   });
 
   const blob = await Packer.toBlob(doc);
-  saveAs(blob, `${paperTitle}_단어표.docx`);
+  const fileName = [title, "단어표"].filter(Boolean).join('_');
+  saveAs(blob, `${fileName}.docx`);
 };

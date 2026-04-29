@@ -1,4 +1,4 @@
-import { collection, addDoc, Timestamp, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, query, where, getDocs, doc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 
 export interface IrregularVerb {
@@ -124,25 +124,31 @@ export async function seedIrregularVerbs() {
     }, { merge: true });
   }
 
-  // Add words
+  // Add/Sync words
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  if (existingWords.empty) {
-    for (let i = 0; i < irregularVerbsData.length; i++) {
-      const verb = irregularVerbsData[i];
-      await addDoc(wordsRef, {
-        word: verb.base,
-        past: verb.past,
-        pastParticiple: verb.pastParticiple,
-        meaning: verb.meaning,
-        pattern: verb.pattern,
-        distractors: verb.distractors || [],
-        order: i
-      });
-    }
-    console.log('Irregular verbs seeded successfully');
-  } else {
-    console.log('Irregular verbs already exist');
+  // Force re-sync
+  const deleteBatch = writeBatch(db);
+  for (const d of existingWords.docs) {
+    deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
   }
+  await deleteBatch.commit();
+  
+  const addBatch = writeBatch(db);
+  for (let i = 0; i < irregularVerbsData.length; i++) {
+    const verb = irregularVerbsData[i];
+    const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
+    addBatch.set(newDocRef, {
+      word: verb.base,
+      past: verb.past,
+      pastParticiple: verb.pastParticiple,
+      meaning: verb.meaning,
+      pattern: verb.pattern,
+      distractors: verb.distractors || [],
+      order: i
+    });
+  }
+  await addBatch.commit();
+  console.log('Irregular verbs sync successful');
 }

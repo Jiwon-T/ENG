@@ -4,6 +4,7 @@ import { BookOpen, Plus, Search, Trash2, Edit3, FileSpreadsheet, X, CheckCircle2
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, writeBatch, getDocs, orderBy } from 'firebase/firestore';
 import { generateWordTest, generateMultipleChoiceQuiz, generateIrregularVerbTest, generateWordbookTable } from '../../lib/wordTestGenerator';
+import { MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
 import {
   DndContext,
   closestCenter,
@@ -30,7 +31,7 @@ interface Wordbook {
   createdBy: string;
   createdAt: any;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar';
   category?: 'word' | 'grammar';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -76,6 +77,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const [editPatternValue, setEditPatternValue] = useState('');
   const [editImageUrlValue, setEditImageUrlValue] = useState('');
   const [editDistractorsValue, setEditDistractorsValue] = useState('');
+  const [editExampleValue, setEditExampleValue] = useState('');
 
   // Edit wordbook states
   const [editingWordbook, setEditingWordbook] = useState<Wordbook | null>(null);
@@ -398,10 +400,11 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         updatedAt: Timestamp.now()
       };
 
-      if (selectedWordbook.type === 'irregular') {
+      if (selectedWordbook.type === 'irregular' || selectedWordbook.type === 'modal-grammar') {
         updateData.past = editPastValue.trim();
         updateData.pastParticiple = editPastParticipleValue.trim();
         updateData.pattern = editPatternValue.trim();
+        updateData.example = editExampleValue.trim();
         updateData.distractors = editDistractorsValue.split(',').map(s => s.trim()).filter(s => !!s);
       }
 
@@ -529,7 +532,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     
     if (testPaperConfig.quizType === 'multiple-choice') {
       try {
-        let wordsForQuiz = selectedWords;
+        let wordsForQuiz: any[] = selectedWords;
 
         // Special handling for relative-grammar: use examples instead of concepts
         if (selectedWordbook.type === 'relative-grammar') {
@@ -568,6 +571,26 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
           const shuffledEx = allExamples.sort(() => 0.5 - Math.random());
           wordsForQuiz = shuffledEx.slice(0, Math.min(targetCount, allExamples.length));
+        }
+
+        if (selectedWordbook.type === 'modal-grammar') {
+          const activeSets = Array.from(new Set(selectedWords.map(w => (w as any).set))).filter(s => s !== undefined);
+          if (activeSets.length > 0) {
+            const applicableQuestions = MODAL_QUIZ_POOL.filter(q => activeSets.includes(q.set));
+            if (applicableQuestions.length > 0) {
+              const shuffledPool = [...applicableQuestions].sort(() => 0.5 - Math.random());
+              const targetCount = testPaperConfig.selectionMode === 'random' ? testPaperConfig.wordCount : selectedWords.length;
+              const finalQuestions = shuffledPool.slice(0, Math.min(targetCount, shuffledPool.length));
+              
+              wordsForQuiz = finalQuestions.map(q => ({
+                word: q.sentence,
+                meaning: q.choices[q.answer],
+                distractors: q.choices.filter((_, idx) => idx !== q.answer),
+                question: q.question,
+                explanation: q.explanation
+              }));
+            }
+          }
         }
 
         await generateMultipleChoiceQuiz(
@@ -916,6 +939,11 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                         <div className="text-sm font-black text-blue-500">{word.past} - {word.pastParticiple}</div>
                         <div className="text-sm text-slate-500 font-medium whitespace-pre-wrap">{word.meaning}</div>
                       </div>
+                    ) : selectedWordbook.type === 'modal-grammar' ? (
+                      <div className="space-y-0.5">
+                        <div className="text-sm font-black text-pastel-pink-500">{word.meaning}</div>
+                        {word.example && <div className="text-xs text-slate-400 font-medium italic">Ex: {word.example}</div>}
+                      </div>
                     ) : (
                       <div className="text-sm text-slate-500 font-medium whitespace-pre-wrap">
                         {selectedWordbook.type === 'relative-grammar' && word.word.includes('(___)') ? (
@@ -952,6 +980,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                         setEditPatternValue(word.pattern || '');
                         setEditImageUrlValue(word.imageUrl || '');
                         setEditDistractorsValue(word.distractors?.join(', ') || '');
+                        setEditExampleValue((word as any).example || '');
                       }}
                       className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
                     >
@@ -1191,6 +1220,28 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold resize-none"
                 />
               </div>
+              {selectedWordbook?.type === 'modal-grammar' && (
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">문법 패턴 (예: 능력, 허가)</label>
+                    <input
+                      type="text"
+                      value={editPatternValue}
+                      onChange={(e) => setEditPatternValue(e.target.value)}
+                      className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">예문</label>
+                    <textarea
+                      value={editExampleValue}
+                      onChange={(e) => setEditExampleValue(e.target.value)}
+                      rows={2}
+                      className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold resize-none"
+                    />
+                  </div>
+                </div>
+              )}
               {selectedWordbook?.type === 'irregular' && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
