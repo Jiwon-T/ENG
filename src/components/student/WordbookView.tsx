@@ -185,7 +185,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     else if (currentChunk === 4) displayedWords = words.slice(37, 42);
     else displayedWords = words.slice(42, 48);
   } else if (selectedWordbook?.type === 'verb-form-grammar') {
-    totalChunks = 5;
+    totalChunks = 6;
     displayedWords = words.filter(w => (w as any).set === currentChunk + 1);
   }
 
@@ -1915,11 +1915,12 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                       currentChunk === 4 ? '5세트(조동사 + have p.p.): 과거 추측 및 후회 표현 (5개)' :
                       '6세트(관용 표현): would like, had better 등 핵심 표현 (6개)'
                     ) : selectedWordbook?.type === 'verb-form-grammar' ? (
-                      currentChunk === 0 ? '1세트: 1형식 전용 동사 (happen, occur, rise, matter 등)' :
-                      currentChunk === 1 ? '2세트: 2형식 전용 동사 (seem, appear, remain, stay 등)' :
-                      currentChunk === 2 ? '3세트: 1형식 vs 2형식 겸용 (grow, run, go, come, turn 등)' :
-                      currentChunk === 3 ? '4세트: 감각 동사 (smell, taste, feel, look, sound 등)' :
-                      '5세트: 3형식 전용 동사 (discuss, enter, resemble, marry 등)'
+                      currentChunk === 0 ? '1세트: be 동사와 1형식 대표 동사' :
+                      currentChunk === 1 ? '2세트: seem류 동사 (인식)' :
+                      currentChunk === 2 ? '3세트: 감각동사' :
+                      currentChunk === 3 ? '4세트: become형 동사 (변화)' :
+                      currentChunk === 4 ? '5세트: remain형 동사 (상태)' :
+                      '6세트: dream 동사 (뒤에 전치사 불가)'
                     ) : selectedWordbook?.type === 'conversion-grammar' ? (
                       '4형식 동사의 3형식 전치사 전환 규칙을 학습합니다.'
                     ) : `${isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`}의 단어들을 학습합니다.`}

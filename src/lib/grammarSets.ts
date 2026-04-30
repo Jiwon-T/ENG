@@ -1417,15 +1417,15 @@ export const VERB_FORM_GRAMMAR_DATA = [
   { word: 'lie', meaning: '~한 채로 있다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
 
   // 6세트: dream 동사 (뒤에 전치사 불가)
-  { word: 'discuss', meaning: '~에 대해 토론하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
-  { word: 'resemble', meaning: '~와 닮다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
-  { word: 'reach', meaning: '~에 도달하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
-  { word: 'enter', meaning: '~에 들어가다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
-  { word: 'attend', meaning: '~에 참석하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
-  { word: 'approach', meaning: '~에 다가가다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
-  { word: 'answer', meaning: '~에 답하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
-  { word: 'mention', meaning: '~에 대해 언급하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
-  { word: 'marry', meaning: '~와 결혼하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
+  { word: 'discuss', meaning: '~에 대해 토론하다', pattern: '6세트: dream 동사 (뒤에 전치사 불가)', set: 6 },
+  { word: 'resemble', meaning: '~와 닮다', pattern: '6세트: dream 동사 (뒤에 전치사 불가)', set: 6 },
+  { word: 'reach', meaning: '~에 도달하다', pattern: '6세트: dream 동사 (뒤에 전치사 불가)', set: 6 },
+  { word: 'enter', meaning: '~에 들어가다', pattern: '6세트: dream 동사 (뒤에 전치사 불가)', set: 6 },
+  { word: 'attend', meaning: '~에 참석하다', pattern: '6세트: dream 동사 (뒤에 전치사 불가)', set: 6 },
+  { word: 'approach', meaning: '~에 다가가다', pattern: '6세트: dream 동사 (뒤에 전치사 불가)', set: 6 },
+  { word: 'answer', meaning: '~에 답하다', pattern: '6세트: dream 동사 (뒤에 전치사 불가)', set: 6 },
+  { word: 'mention', meaning: '~에 대해 언급하다', pattern: '6세트: dream 동사 (뒤에 전치사 불가)', set: 6 },
+  { word: 'marry', meaning: '~와 결혼하다', pattern: '6세트: dream 동사 (뒤에 전치사 불가)', set: 6 },
 ];
 
 export async function seedVerbFormGrammar() {
