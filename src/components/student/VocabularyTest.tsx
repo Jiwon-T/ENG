@@ -148,8 +148,10 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
   const startTest = () => {
     if (words.length === 0) return;
 
-    // Shuffle words ONLY when test starts
-    const randomized = [...words].sort(() => Math.random() - 0.5);
+    // Shuffle words ONLY when test starts, except for verb-form-grammar
+    const randomized = type === 'verb-form-grammar' 
+      ? [...words] 
+      : [...words].sort(() => Math.random() - 0.5);
     setShuffledWords(randomized);
     
     // Initialize steps for irregular test (randomly 0/1 for each word)

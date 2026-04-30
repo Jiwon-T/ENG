@@ -517,15 +517,17 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
     if (testPaperConfig.selectionMode === 'random') {
       // Shuffle and pick words
-      const shuffled = [...words].sort(() => 0.5 - Math.random());
+      const isVerbForm = selectedWordbook.type === 'verb-form-grammar';
+      const shuffled = isVerbForm ? [...words] : [...words].sort(() => 0.5 - Math.random());
       selectedWords = shuffled.slice(0, Math.min(testPaperConfig.wordCount, words.length));
     } else {
       // Range selection by DAY
       const startIndex = (testPaperConfig.startDay - 1) * testPaperConfig.unitSize;
       const endIndex = testPaperConfig.endDay * testPaperConfig.unitSize;
       const rangeWords = words.slice(startIndex, endIndex);
-      // Shuffle words within the range
-      selectedWords = [...rangeWords].sort(() => 0.5 - Math.random());
+      // Shuffle words within the range (except for verb-form-grammar)
+      const isVerbForm = selectedWordbook.type === 'verb-form-grammar';
+      selectedWords = isVerbForm ? [...rangeWords] : [...rangeWords].sort(() => 0.5 - Math.random());
     }
 
     if (selectedWords.length === 0) {
@@ -635,8 +637,9 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
             return;
           }
 
-          const shuffledEx = allExamples.sort(() => 0.5 - Math.random());
-          wordsForQuiz = shuffledEx.slice(0, Math.min(testPaperConfig.wordCount, allExamples.length));
+          const isVerbForm = selectedWordbook.type === 'verb-form-grammar';
+          const processedEx = isVerbForm ? allExamples : allExamples.sort(() => 0.5 - Math.random());
+          wordsForQuiz = processedEx.slice(0, Math.min(testPaperConfig.wordCount, allExamples.length));
         }
 
         await generateMultipleChoiceQuiz(

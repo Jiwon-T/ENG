@@ -518,7 +518,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
               quizCategory: 'grammar'
             } as any;
           });
-          rangeWords = shuffleArray(transformed);
+          rangeWords = transformed;
         }
       } else {
         const concepts = rangeWords;

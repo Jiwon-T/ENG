@@ -1377,37 +1377,55 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
 ];
 
 export const VERB_FORM_GRAMMAR_DATA = [
-  { word: 'happen', meaning: '일어나다', pattern: '1세트: 1형식 전용', set: 1 },
-  { word: 'occur', meaning: '일어나다', pattern: '1세트: 1형식 전용', set: 1 },
-  { word: 'matter', meaning: '중요하다', pattern: '1세트: 1형식 전용', set: 1 },
-  { word: 'rise', meaning: '오르다', pattern: '1세트: 1형식 전용', set: 1 },
-  { word: 'fall', meaning: '떨어지다', pattern: '1세트: 1형식 전용', set: 1 },
-  { word: 'work', meaning: '작동되다 / 효과가 있다', pattern: '1세트: 1형식 전용', set: 1 },
-  { word: 'last', meaning: '계속되다', pattern: '1세트: 1형식 전용', set: 1 },
-  { word: 'seem', meaning: '~하게 보이다', pattern: '2세트: 2형식 전용', set: 2 },
-  { word: 'appear', meaning: '~하게 보이다', pattern: '2세트: 2형식 전용', set: 2 },
-  { word: 'remain', meaning: '계속해서 C이다', pattern: '2세트: 2형식 전용', set: 2 },
-  { word: 'stand', meaning: '계속해서 C인 상태에 있다', pattern: '2세트: 2형식 전용', set: 2 },
-  { word: 'lie', meaning: '계속해서 C이다', pattern: '2세트: 2형식 전용', set: 2 },
-  { word: 'stay', meaning: '머무르다 / ~한 채로 있다', pattern: '2세트: 2형식 전용', set: 2 },
-  { word: 'grow', meaning: '자라다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
-  { word: 'run', meaning: '달리다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
-  { word: 'go', meaning: '가다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
-  { word: 'come', meaning: '오다 / ~하게 되다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
-  { word: 'turn', meaning: '~하게 되다 / 돌리다 / 뒤집다', pattern: '3세트: 1형식 vs 2형식', set: 3 },
-  { word: 'smell', meaning: '~한 냄새가 나다 / ~의 냄새를 맡다', pattern: '4세트: 감각 동사', set: 4 },
-  { word: 'taste', meaning: '~한 맛이 나다 / ~의 맛을 보다', pattern: '4세트: 감각 동사', set: 4 },
-  { word: 'feel', meaning: '~한 느낌이 나다 / ~를 느끼다', pattern: '4세트: 감각 동사', set: 4 },
-  { word: 'look', meaning: '~하게 보이다 / 바라보다', pattern: '4세트: 감각 동사', set: 4 },
-  { word: 'sound', meaning: '~하게 들리다', pattern: '4세트: 감각 동사', set: 4 },
-  { word: 'discuss', meaning: '~에 대해 토론하다', pattern: '5세트: 3형식 전용', set: 5 },
-  { word: 'enter', meaning: '~에 들어가다', pattern: '5세트: 3형식 전용', set: 5 },
-  { word: 'resemble', meaning: '~와 닮다', pattern: '5세트: 3형식 전용', set: 5 },
-  { word: 'marry', meaning: '~와 결혼하다', pattern: '5세트: 3형식 전용', set: 5 },
-  { word: 'mention', meaning: '~에 대해 언급하다', pattern: '5세트: 3형식 전용', set: 5 },
-  { word: 'attend', meaning: '~에 참석하다', pattern: '5세트: 3형식 전용', set: 5 },
-  { word: 'reach', meaning: '도달하다 / ~로 손을 뻗다', pattern: '5세트: 3형식 전용', set: 5 },
-  { word: 'approach', meaning: '다가오다', pattern: '5세트: 3형식 전용', set: 5 },
+  // 1세트: be 동사와 1형식 대표 동사
+  { word: 'be', meaning: '~이다, 있다', pattern: '1세트: be 동사와 1형식 대표 동사', set: 1 },
+  { word: 'happen', meaning: '일어나다', pattern: '1세트: be 동사와 1형식 대표 동사', set: 1 },
+  { word: 'occur', meaning: '일어나다', pattern: '1세트: be 동사와 1형식 대표 동사', set: 1 },
+  { word: 'matter', meaning: '중요하다', pattern: '1세트: be 동사와 1형식 대표 동사', set: 1 },
+  { word: 'count', meaning: '중요하다', pattern: '1세트: be 동사와 1형식 대표 동사', set: 1 },
+  { word: 'work', meaning: '작동되다 / 효과가 있다', pattern: '1세트: be 동사와 1형식 대표 동사', set: 1 },
+  { word: 'do', meaning: '충분하다 / 적절하다', pattern: '1세트: be 동사와 1형식 대표 동사', set: 1 },
+  { word: 'pay', meaning: '이익이 되다 / 수지가 맞다', pattern: '1세트: be 동사와 1형식 대표 동사', set: 1 },
+  { word: 'last', meaning: '계속되다', pattern: '1세트: be 동사와 1형식 대표 동사', set: 1 },
+  { word: 'rise', meaning: '오르다', pattern: '1세트: be 동사와 1형식 대표 동사', set: 1 },
+
+  // 2세트: seem류 동사 (인식)
+  { word: 'seem', meaning: '~하게 보이다', pattern: '2세트: seem류 동사 (인식)', set: 2 },
+  { word: 'appear', meaning: '~하게 보이다', pattern: '2세트: seem류 동사 (인식)', set: 2 },
+
+  // 3세트: 감각동사
+  { word: 'look', meaning: '~하게 보이다', pattern: '3세트: 감각동사', set: 3 },
+  { word: 'sound', meaning: '~하게 들리다', pattern: '3세트: 감각동사', set: 3 },
+  { word: 'smell', meaning: '~한 냄새가 나다', pattern: '3세트: 감각동사', set: 3 },
+  { word: 'taste', meaning: '~한 맛이 나다', pattern: '3세트: 감각동사', set: 3 },
+  { word: 'feel', meaning: '~한 느낌이 나다', pattern: '3세트: 감각동사', set: 3 },
+
+  // 4세트: become형 동사 (변화)
+  { word: 'get', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
+  { word: 'grow', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
+  { word: 'go', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
+  { word: 'come', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
+  { word: 'run', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
+  { word: 'turn', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
+  { word: 'fall', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
+
+  // 5세트: remain형 동사 (상태)
+  { word: 'remain', meaning: '~한 상태로 남다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
+  { word: 'keep', meaning: '~한 상태를 유지하다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
+  { word: 'stay', meaning: '~한 채로 있다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
+  { word: 'stand', meaning: '~한 상태에 있다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
+  { word: 'lie', meaning: '~한 채로 있다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
+
+  // 6세트: dream 동사 (뒤에 전치사 불가)
+  { word: 'discuss', meaning: '~에 대해 토론하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
+  { word: 'resemble', meaning: '~와 닮다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
+  { word: 'reach', meaning: '~에 도달하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
+  { word: 'enter', meaning: '~에 들어가다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
+  { word: 'attend', meaning: '~에 참석하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
+  { word: 'approach', meaning: '~에 다가가다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
+  { word: 'answer', meaning: '~에 답하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
+  { word: 'mention', meaning: '~에 대해 언급하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
+  { word: 'marry', meaning: '~와 결혼하다', pattern: '6세트: 뒤에 전치사 불가 (3형식 타동사)', set: 6 },
 ];
 
 export async function seedVerbFormGrammar() {
