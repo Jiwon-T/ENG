@@ -5,6 +5,9 @@ import { BookOpen, CheckCircle2, Circle, ChevronRight, Sparkles, Trophy, Volume2
 import { db, auth, handleFirestoreError, OperationType, recordStudySession } from '../../lib/firebase';
 import { PetService } from '../../lib/petService';
 import { collection, query, where, onSnapshot, doc, setDoc, Timestamp, getDocs, orderBy, limit, addDoc, getDoc } from 'firebase/firestore';
+import { COMPLEMENT_QUIZ_DATA, GrammarWord } from '../../lib/grammarSets';
+import { MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
+import { VERB_FORM_QUIZ_POOL } from '../../lib/verbFormQuizPool';
 
 interface Wordbook {
   id: string;
@@ -37,10 +40,6 @@ interface Word {
 interface Progress {
   [wordId: string]: 'learned' | 'mastered' | 'unlearned';
 }
-
-import { COMPLEMENT_QUIZ_DATA, GrammarWord } from '../../lib/grammarSets';
-import { MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
-import { VERB_FORM_QUIZ_POOL } from '../../lib/verbFormQuizPool';
 
 // Helper to shuffle array
 function shuffleArray<T>(array: T[]): T[] {

@@ -1,0 +1,23 @@
+{
+  "short_name": "지원T",
+  "name": "지원T - 학습 관리 서비스",
+  "description": "지원T 학생들을 위한 학습 관리 서비스",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff1f5",
+  "theme_color": "#ff4d7e"
+}
