@@ -536,10 +536,16 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     }
     
     if (testPaperConfig.quizType === 'memorization-table' && selectedWordbook.type === 'verb-form-grammar') {
+      // Use selected words to filter and order the memorization table data
+      const tableData = selectedWords.map(sw => {
+        const found = VERB_FORM_TABLE_DATA.find(v => v.verb === sw.word);
+        return found || { verb: sw.word };
+      });
+
       await generateVerbFormMemorizationTest(
         testPaperConfig.title || selectedWordbook.title,
         testPaperConfig.subtitle,
-        VERB_FORM_TABLE_DATA,
+        tableData,
         {
           includeAnswerKey: testPaperConfig.includeAnswerKey,
           studentName: testPaperConfig.studentName,

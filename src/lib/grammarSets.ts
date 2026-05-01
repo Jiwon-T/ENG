@@ -1403,16 +1403,16 @@ export const VERB_FORM_GRAMMAR_DATA = [
   // 4세트: become형 동사 (변화)
   { word: 'get', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
   { word: 'grow', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
+  { word: 'turn', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
+  { word: 'run', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
   { word: 'go', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
   { word: 'come', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
-  { word: 'run', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
-  { word: 'turn', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
   { word: 'fall', meaning: '~하게 되다', pattern: '4세트: become형 동사 (변화)', set: 4 },
 
   // 5세트: remain형 동사 (상태)
+  { word: 'stay', meaning: '~한 채로 있다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
   { word: 'remain', meaning: '~한 상태로 남다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
   { word: 'keep', meaning: '~한 상태를 유지하다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
-  { word: 'stay', meaning: '~한 채로 있다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
   { word: 'stand', meaning: '~한 상태에 있다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
   { word: 'lie', meaning: '~한 채로 있다', pattern: '5세트: remain형 동사 (상태)', set: 5 },
 

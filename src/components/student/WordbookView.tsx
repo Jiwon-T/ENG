@@ -328,12 +328,10 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                               selectedWordbook?.title?.includes('관계부사') ||
                               selectedWordbook?.title?.includes('that');
     
-    if (isRelativeGrammar || selectedWordbook?.type === 'verb-form-grammar') {
+    if (isRelativeGrammar) {
       // Collect all available examples from all concepts
-      // For verb-form-grammar, the user wants ALL sets mixed randomly
-      // For relative-grammar, it traditionally used displayedWords (chunk-specific)
       let allPotentialExamples: Word[] = [];
-      const concepts = selectedWordbook?.type === 'verb-form-grammar' ? words : displayedWords;
+      const concepts = displayedWords;
       
       const exampleFetches = concepts.map(async (concept) => {
         const examplesRef = collection(db, `wordbooks/${selectedWordbook.id}/words/${concept.id}/examples`);
@@ -377,10 +375,12 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       setIsFocusedMode(true);
       setSessionStartTime(Date.now());
       generateQuizOptions(0, selectedSessionWords);
-    } else if (selectedWordbook?.type === 'modal-grammar') {
+    } else if (selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'verb-form-grammar') {
+      const isVerbForm = selectedWordbook?.type === 'verb-form-grammar';
       // Filter quiz pool by current set (currentChunk + 1)
       const currentSet = currentChunk + 1;
-      const setQuizPool = MODAL_QUIZ_POOL.filter(q => q.set === currentSet);
+      const pool = isVerbForm ? VERB_FORM_QUIZ_POOL : MODAL_QUIZ_POOL;
+      const setQuizPool = pool.filter(q => q.set === currentSet);
       
       if (setQuizPool.length === 0) {
         alert('이 세트에는 퀴즈 데이터가 없습니다.');
@@ -389,7 +389,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
 
       // Format quiz pool into Word interface for consistency
       const quizWords: Word[] = setQuizPool.map(q => ({
-        id: `modal_quiz_${q.id}`,
+        id: isVerbForm ? `verb_form_quiz_${q.id}` : `modal_quiz_${q.id}`,
         word: q.sentence, // We'll display sentence in front
         meaning: q.choices[q.answer], // Set correct meaning for match logic
         quizSentence: q.sentence,
@@ -839,8 +839,13 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       setIncorrectAnswers(prev => [...prev, newIncorrect]);
     }
 
-    // Don't auto-advance for relative grammar to show explanation
-    if (selectedWordbook?.type === 'relative-grammar') {
+    // Don't auto-advance for grammar types that show explanation modal
+    const showExplanationModal = selectedWordbook?.type === 'relative-grammar' || 
+                                  selectedWordbook?.type === 'modal-grammar' || 
+                                  selectedWordbook?.type === 'verb-form-grammar' || 
+                                  selectedWordbook?.title?.includes('관계부사');
+    
+    if (showExplanationModal) {
       return;
     }
 
@@ -861,7 +866,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       generateQuizOptions(quizIndex + 1);
     } else {
       setIsQuizFinished(true);
-      finishSession('quiz', quizScore, sessionWords.length);
+      // Pass the current state score and incorrect answers
+      finishSession('quiz', quizScore, sessionWords.length, incorrectAnswers);
     }
   };
 
@@ -1264,11 +1270,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                             </div>
                           )}
                           <h3 className={`${isMobile ? 'text-2xl' : 'text-5xl'} font-black text-slate-900 text-center leading-tight`}>
-                            {(selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.title?.includes('관계부사'))
+                            {(selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.title?.includes('관계부사'))
                               ? sessionWords[quizIndex].quizSentence 
                               : sessionWords[quizIndex].word}
                           </h3>
-                          {(selectedWordbook?.type !== 'relative-grammar' && selectedWordbook?.type !== 'modal-grammar' && !selectedWordbook?.title?.includes('관계부사')) && (
+                          {(selectedWordbook?.type !== 'relative-grammar' && selectedWordbook?.type !== 'modal-grammar' && selectedWordbook?.type !== 'verb-form-grammar' && !selectedWordbook?.title?.includes('관계부사')) && (
                             <button 
                               onClick={() => speak(sessionWords[quizIndex].word)}
                               className="p-2 md:p-3 bg-slate-50 text-slate-400 rounded-xl hover:text-pastel-pink-500 transition-colors"
@@ -1347,7 +1353,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                           })}
                         </div>
 
-                          { (selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.title?.includes('관계부사')) && selectedOption !== null && (
+                          { (selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.title?.includes('관계부사')) && selectedOption !== null && (
                           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                             <motion.div 
                               initial={{ opacity: 0 }}
@@ -1900,27 +1906,48 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                 <div className={`${isMobile ? 'w-10 h-10 text-xl' : 'w-12 h-12 text-2xl'} bg-pastel-pink-100 rounded-xl md:rounded-2xl flex items-center justify-center`}>
                   ✒️
                 </div>
-                <div>
-                  <h2 className={`${isMobile ? 'text-lg' : 'text-2xl'} font-black text-slate-900`}>단어 리스트</h2>
-                  <p className="text-[10px] md:text-sm font-bold text-slate-400">
+                <div className="flex-1">
+                  <h2 className={`${isMobile ? 'text-xl' : 'text-3xl'} font-black text-slate-900 tracking-tight flex items-center gap-2 mb-1`}>
                     {selectedWordbook?.type === 'complement-grammar' ? (
-                      currentChunk === 0 ? '명사/형용사 보어 동사 (7개)' :
-                      currentChunk === 1 ? 'to V 보어 동사 (10개)' :
-                      '동사원형 / 둘 다 가능 동사 (9개)'
+                      currentChunk === 0 ? '명사/형용사 보어' :
+                      currentChunk === 1 ? 'to V 보어' :
+                      '동사원형 / 둘 다 가능'
                     ) : selectedWordbook?.type === 'modal-grammar' ? (
-                      currentChunk === 0 ? '1세트(can/may/will): 능력, 허가, 요청, 추측 등 의미 구별 (14개)' :
-                      currentChunk === 1 ? '2세트(must/should): 의무, 금지, 불필요, 추측 등 강도 구별 (7개)' :
-                      currentChunk === 2 ? '3세트(should 생략): 제안, 주장, 요구 동사 및 예문 (9개)' :
-                      currentChunk === 3 ? '4세트(used to / would): 과거 습관 및 상태 구별 (7개)' :
-                      currentChunk === 4 ? '5세트(조동사 + have p.p.): 과거 추측 및 후회 표현 (5개)' :
-                      '6세트(관용 표현): would like, had better 등 핵심 표현 (6개)'
+                      currentChunk === 0 ? '능력/허가/요청 (can, may, will)' :
+                      currentChunk === 1 ? '의무/금지/추측 (must, should)' :
+                      currentChunk === 2 ? '제안/주장/요구 (should 생략)' :
+                      currentChunk === 3 ? '과거 습관 (used to, would)' :
+                      currentChunk === 4 ? '조동사 + have p.p.' :
+                      '조동사 관용 표현'
+                    ) : selectedWordbook?.type === 'verb-form-grammar' ? (
+                      currentChunk === 0 ? 'be 동사 & 1형식 대표' :
+                      currentChunk === 1 ? 'seem류 동사 (인식)' :
+                      currentChunk === 2 ? '감각동사' :
+                      currentChunk === 3 ? 'become형 동사 (변화)' :
+                      currentChunk === 4 ? 'remain형 동사 (상태)' :
+                      'dream 동사 (전치사 불가)'
+                    ) : (isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`)}
+                  </h2>
+                  <p className="text-xs md:text-sm font-bold text-slate-400 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-pastel-pink-400 animate-pulse" />
+                    {selectedWordbook?.type === 'complement-grammar' ? (
+                      currentChunk === 0 ? '명사나 형용사를 보어로 취하는 동사 (7개)' :
+                      currentChunk === 1 ? 'to 부정사를 보어로 취하는 동사 (10개)' :
+                      '동사원형 또는 둘 다 가능한 동사 (9개)'
+                    ) : selectedWordbook?.type === 'modal-grammar' ? (
+                      currentChunk === 0 ? '1세트: 능력, 허가, 요청, 추측 등 의미 구별 (14개)' :
+                      currentChunk === 1 ? '2세트: 의무, 금지, 불필요, 추측 등 강도 구별 (7개)' :
+                      currentChunk === 2 ? '3세트: 제안, 주장, 요구 동사 및 예문 (9개)' :
+                      currentChunk === 3 ? '4세트: 과거 습관 및 상태 구별 (7개)' :
+                      currentChunk === 4 ? '5세트: 과거 추측 및 후회 표현 (5개)' :
+                      '6세트: would like, had better 등 핵심 표현 (6개)'
                     ) : selectedWordbook?.type === 'verb-form-grammar' ? (
                       currentChunk === 0 ? '1세트: be 동사와 1형식 대표 동사' :
                       currentChunk === 1 ? '2세트: seem류 동사 (인식)' :
                       currentChunk === 2 ? '3세트: 감각동사' :
                       currentChunk === 3 ? '4세트: become형 동사 (변화)' :
                       currentChunk === 4 ? '5세트: remain형 동사 (상태)' :
-                      '6세트: dream 동사 (뒤에 전치사 불가)'
+                      '6세트: dream 동사 (뒤에 전치사 불가/3형식 타동사)'
                     ) : selectedWordbook?.type === 'conversion-grammar' ? (
                       '4형식 동사의 3형식 전치사 전환 규칙을 학습합니다.'
                     ) : `${isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`}의 단어들을 학습합니다.`}
