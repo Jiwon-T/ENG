@@ -14,7 +14,7 @@ interface Wordbook {
   title: string;
   description: string;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'verb-form-grammar';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'verb-form-grammar' | 'grammar-cramming';
   category?: 'word' | 'grammar';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -156,11 +156,14 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   };
 
   const isGrammar = selectedWordbook?.category === 'grammar' || selectedWordbook?.type === 'irregular';
-  const daySize = isGrammar ? 10 : (selectedWordbook?.defaultUnitSize || 47);
+  const daySize = selectedWordbook?.type === 'grammar-cramming' ? 999 : (isGrammar ? 10 : (selectedWordbook?.defaultUnitSize || 47));
   let totalChunks: number = Math.ceil(words.length / daySize);
   let displayedWords: Word[] = words.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
 
-  if (selectedWordbook?.type === 'relative-grammar') {
+  if (selectedWordbook?.type === 'grammar-cramming') {
+    totalChunks = 6; // Based on the 6 sets in the pool
+    displayedWords = words.filter(w => (w as any).set === currentChunk + 1);
+  } else if (selectedWordbook?.type === 'relative-grammar') {
     // For relative-grammar, we only show concepts in the list, hiding sentences with blanks
     const conceptsOnly: Word[] = words.filter(w => !w.word.includes('(___)'));
     totalChunks = Math.ceil(conceptsOnly.length / daySize);
@@ -365,6 +368,28 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       const shuffled = shuffleArray(allPotentialExamples);
       const selectedSessionWords = shuffled.slice(0, sessionUnitSize);
       
+      setSessionWords(selectedSessionWords);
+      setQuizIndex(0);
+      setQuizScore(0);
+      setIsQuizFinished(false);
+      setIsQuizMode(true);
+      setIsMatchMode(false);
+      setIsFlashcardMode(false);
+      setIsFocusedMode(true);
+      setSessionStartTime(Date.now());
+      generateQuizOptions(0, selectedSessionWords);
+    } else if (selectedWordbook?.type === 'grammar-cramming') {
+      // For grammar-cramming, the data is already in words subcollection but formatted for quiz
+      const shuffled = shuffleArray(displayedWords);
+      const selectedSessionWords = shuffled.slice(0, sessionUnitSize).map(w => ({
+        ...w,
+        quizSentence: (w as any).quizSentence || w.word,
+        quizQuestion: (w as any).quizQuestion || '',
+        quizChoices: (w as any).quizChoices || [],
+        quizExplanation: (w as any).quizExplanation || '',
+        quizCategory: 'grammar'
+      }));
+
       setSessionWords(selectedSessionWords);
       setQuizIndex(0);
       setQuizScore(0);
@@ -843,6 +868,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     const showExplanationModal = selectedWordbook?.type === 'relative-grammar' || 
                                   selectedWordbook?.type === 'modal-grammar' || 
                                   selectedWordbook?.type === 'verb-form-grammar' || 
+                                  selectedWordbook?.type === 'grammar-cramming' ||
                                   selectedWordbook?.title?.includes('관계부사');
     
     if (showExplanationModal) {
@@ -1269,8 +1295,13 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                               />
                             </div>
                           )}
+                          {selectedWordbook?.type === 'grammar-cramming' && (sessionWords[quizIndex] as any).quizQuestion && (
+                            <p className="text-xs md:text-sm font-bold text-blue-500 bg-blue-50 px-4 py-2 rounded-full mb-[-1rem]">
+                              {(sessionWords[quizIndex] as any).quizQuestion}
+                            </p>
+                          )}
                           <h3 className={`${isMobile ? 'text-2xl' : 'text-5xl'} font-black text-slate-900 text-center leading-tight`}>
-                            {(selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.title?.includes('관계부사'))
+                            {(selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.type === 'grammar-cramming' || selectedWordbook?.title?.includes('관계부사'))
                               ? sessionWords[quizIndex].quizSentence 
                               : sessionWords[quizIndex].word}
                           </h3>
@@ -1307,7 +1338,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                               );
                             })();
 
-                            const isCorrectAnswer = relativeCorrect || meaningMatch || pastMatch || complementMatch || patternMatch;
+                            const grammarCrammingMatch = selectedWordbook?.type === 'grammar-cramming' && option === sessionWords[quizIndex].meaning;
+
+                            const isCorrectAnswer = relativeCorrect || meaningMatch || pastMatch || complementMatch || patternMatch || grammarCrammingMatch;
 
                             return (
                               <button
@@ -1353,7 +1386,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                           })}
                         </div>
 
-                          { (selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.title?.includes('관계부사')) && selectedOption !== null && (
+                          { (selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.type === 'grammar-cramming' || selectedWordbook?.title?.includes('관계부사')) && selectedOption !== null && (
                           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                             <motion.div 
                               initial={{ opacity: 0 }}
@@ -1967,7 +2000,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                     }`}
                   >
                     <div className="flex items-center gap-3 md:gap-4">
-                      {selectedWordbook.type !== 'relative-grammar' && (
+                      {selectedWordbook.type !== 'relative-grammar' && selectedWordbook.type !== 'grammar-cramming' && (
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1993,7 +2026,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                               Grammar Concept
                             </span>
                           )}
-                          {(selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'verb-form-grammar') && (
+                          {(selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'verb-form-grammar' || selectedWordbook.type === 'grammar-cramming') && (
                             <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 text-[8px] md:text-[10px] font-black rounded uppercase tracking-tighter">
                               GRAMMAR CONCEPT
                             </span>
@@ -2007,6 +2040,12 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                             <div className={`${isMobile ? 'text-[10px]' : 'text-sm'} font-medium ${progress[word.id] === 'learned' ? 'text-emerald-600/70' : 'text-slate-500'}`}>
                               {word.meaning}
                             </div>
+                          </div>
+                        ) : selectedWordbook.type === 'grammar-cramming' ? (
+                          <div className="space-y-0.5">
+                             <div className={`${isMobile ? 'text-[10px]' : 'text-sm'} font-medium text-slate-400 italic`}>
+                               퀴즈에서 문제 확인 가능 (보안)
+                             </div>
                           </div>
                         ) : selectedWordbook.type === 'modal-grammar' ? (
                           <div className="space-y-0.5">

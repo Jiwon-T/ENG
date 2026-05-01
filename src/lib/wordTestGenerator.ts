@@ -410,12 +410,14 @@ export const generateMultipleChoiceQuiz = async (
         const choices = item.distractors || [];
         correctAnswer = choices[0] || '';
         distractors = choices.slice(1);
-      } else if (wordbookType === 'modal-grammar' || wordbookType === 'verb-form-grammar') {
+      } else if (wordbookType === 'modal-grammar' || wordbookType === 'verb-form-grammar' || wordbookType === 'grammar-cramming') {
         correctAnswer = item.meaning;
-        distractors = item.distractors || [];
+        distractors = (wordbookType === 'grammar-cramming') 
+          ? (item.quizChoices || []).filter((c: string) => c !== item.meaning)
+          : (item.distractors || []);
         // Strip trailing parentheses content from question/sentence if needed
-        questionPrefix = (item.question || "").replace(/\s*\([^)]+\)$/, "").trim();
-        displayWord = (item.word || "").replace(/\s*\([^)]+\)$/, "").trim();
+        questionPrefix = (item.quizQuestion || item.question || "").replace(/\s*\([^)]+\)$/, "").trim();
+        displayWord = (item.quizSentence || item.word || "").replace(/\s*\([^)]+\)$/, "").trim();
       } else {
         correctAnswer = item.meaning;
         distractors = allPatterns.filter(p => p !== correctAnswer).sort(() => 0.5 - Math.random()).slice(0, 3);
@@ -440,10 +442,10 @@ export const generateMultipleChoiceQuiz = async (
         keepNext: true,
       }));
 
-      if (isAnswerKey && (isRelative || wordbookType === 'modal-grammar' || wordbookType === 'verb-form-grammar') && (item.explanation || (isRelative && item.meaning))) {
+      if (isAnswerKey && (isRelative || ['modal-grammar', 'verb-form-grammar', 'grammar-cramming'].includes(wordbookType || '')) && (item.explanation || item.quizExplanation || (isRelative && item.meaning))) {
         quizElements.push(new Paragraph({
           children: [
-            new TextRun({ text: `   💡 해설: ${item.explanation || item.meaning}`, size: 18, italics: true, color: "666666" })
+            new TextRun({ text: `   💡 해설: ${item.quizExplanation || item.explanation || item.meaning}`, size: 18, italics: true, color: "666666" })
           ],
           spacing: { before: 40, after: 40 }
         }));

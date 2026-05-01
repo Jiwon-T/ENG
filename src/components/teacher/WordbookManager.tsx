@@ -7,6 +7,7 @@ import { generateWordTest, generateMultipleChoiceQuiz, generateIrregularVerbTest
 import { MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
 import { VERB_FORM_QUIZ_POOL } from '../../lib/verbFormQuizPool';
 import { VERB_FORM_TABLE_DATA } from '../../lib/verbFormTableData';
+import { GRAMMAR_CRAMMING_POOL } from '../../lib/grammarCrammingPool';
 import {
   DndContext,
   closestCenter,
@@ -33,7 +34,7 @@ interface Wordbook {
   createdBy: string;
   createdAt: any;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'verb-form-grammar';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'verb-form-grammar' | 'grammar-cramming';
   category?: 'word' | 'grammar';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -81,6 +82,15 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const [editDistractorsValue, setEditDistractorsValue] = useState('');
   const [editExampleValue, setEditExampleValue] = useState('');
 
+  // Grammar Cramming states
+  const [editQuizSentence, setEditQuizSentence] = useState('');
+  const [editQuizQuestion, setEditQuizQuestion] = useState('');
+  const [editQuizChoices, setEditQuizChoices] = useState('');
+  const [editQuizAnswerIndex, setEditQuizAnswerIndex] = useState(0);
+  const [editQuizExplanation, setEditQuizExplanation] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editSet, setEditSet] = useState(1);
+
   // Edit wordbook states
   const [editingWordbook, setEditingWordbook] = useState<Wordbook | null>(null);
   const [editWbTitleValue, setEditWbTitleValue] = useState('');
@@ -92,6 +102,15 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const [newWord, setNewWord] = useState('');
   const [newMeaning, setNewMeaning] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
+
+  // Grammar Cramming new word states
+  const [newQuizSentence, setNewQuizSentence] = useState('');
+  const [newQuizQuestion, setNewQuizQuestion] = useState('');
+  const [newQuizChoices, setNewQuizChoices] = useState('');
+  const [newQuizAnswerIndex, setNewQuizAnswerIndex] = useState(0);
+  const [newQuizExplanation, setNewQuizExplanation] = useState('');
+  const [newCategory, setNewCategory] = useState('');
+  const [newSet, setNewSet] = useState(1);
 
   // Delete confirmation states
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string; type: 'wordbook' | 'word' } | null>(null);
@@ -178,7 +197,10 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       orderBy('order', 'asc')
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setWords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Word)));
+      const fetchedWords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Word));
+      // Sort in-memory to ensure correct order
+      fetchedWords.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      setWords(fetchedWords);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, `wordbooks/${selectedWordbook.id}/words`);
     });
@@ -411,6 +433,16 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         updateData.distractors = editDistractorsValue.split(',').map(s => s.trim()).filter(s => !!s);
       }
 
+      if (selectedWordbook.type === 'grammar-cramming') {
+        updateData.quizSentence = editQuizSentence.trim();
+        updateData.quizQuestion = editQuizQuestion.trim();
+        updateData.quizChoices = editQuizChoices.split(',').map(s => s.trim()).filter(s => !!s);
+        updateData.quizAnswerIndex = editQuizAnswerIndex;
+        updateData.quizExplanation = editQuizExplanation.trim();
+        updateData.category = editCategory.trim();
+        updateData.set = editSet;
+      }
+
       await updateDoc(doc(db, `wordbooks/${selectedWordbook.id}/words`, editingWord.id), updateData);
       setEditingWord(null);
     } catch (error) {
@@ -436,16 +468,35 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       // Get current max order
       const maxOrder = words.length > 0 ? Math.max(...words.map(w => (w as any).order || 0)) : -1;
       
-      await addDoc(collection(db, `wordbooks/${selectedWordbook.id}/words`), {
+      const wordData: any = {
         word: newWord.trim(),
         meaning: newMeaning.trim(),
         imageUrl: newImageUrl.trim(),
         order: maxOrder + 1,
         createdAt: Timestamp.now()
-      });
+      };
+
+      if (selectedWordbook.type === 'grammar-cramming') {
+        wordData.quizSentence = newQuizSentence.trim();
+        wordData.quizQuestion = newQuizQuestion.trim();
+        wordData.quizChoices = newQuizChoices.split(',').map(s => s.trim()).filter(s => !!s);
+        wordData.quizAnswerIndex = newQuizAnswerIndex;
+        wordData.quizExplanation = newQuizExplanation.trim();
+        wordData.category = newCategory.trim();
+        wordData.set = newSet;
+      }
+
+      await addDoc(collection(db, `wordbooks/${selectedWordbook.id}/words`), wordData);
       setNewWord('');
       setNewMeaning('');
       setNewImageUrl('');
+      setNewQuizSentence('');
+      setNewQuizQuestion('');
+      setNewQuizChoices('');
+      setNewQuizAnswerIndex(0);
+      setNewQuizExplanation('');
+      setNewCategory('');
+      setNewSet(1);
       setIsIndividualAddOpen(false);
     } catch (error) {
       console.error('Failed to add word:', error);
@@ -517,17 +568,29 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
     if (testPaperConfig.selectionMode === 'random') {
       // Shuffle and pick words
-      const isVerbForm = selectedWordbook.type === 'verb-form-grammar';
-      const shuffled = isVerbForm ? [...words] : [...words].sort(() => 0.5 - Math.random());
+      const shuffled = [...words].sort(() => 0.5 - Math.random());
       selectedWords = shuffled.slice(0, Math.min(testPaperConfig.wordCount, words.length));
     } else {
-      // Range selection by DAY
-      const startIndex = (testPaperConfig.startDay - 1) * testPaperConfig.unitSize;
-      const endIndex = testPaperConfig.endDay * testPaperConfig.unitSize;
-      const rangeWords = words.slice(startIndex, endIndex);
-      // Shuffle words within the range (except for verb-form-grammar)
-      const isVerbForm = selectedWordbook.type === 'verb-form-grammar';
-      selectedWords = isVerbForm ? [...rangeWords] : [...rangeWords].sort(() => 0.5 - Math.random());
+      // Range selection
+      if (selectedWordbook?.type === 'grammar-cramming') {
+        const startSet = testPaperConfig.startDay;
+        const endSet = testPaperConfig.endDay;
+        selectedWords = words.filter(w => {
+          const set = (w as any).set;
+          return set >= startSet && set <= endSet;
+        });
+      } else {
+        // Range selection by DAY
+        const startIndex = (testPaperConfig.startDay - 1) * testPaperConfig.unitSize;
+        const endIndex = testPaperConfig.endDay * testPaperConfig.unitSize;
+        selectedWords = words.slice(startIndex, endIndex);
+      }
+      
+      // Respect shuffle option if available (default true for random mode, but random mode handled above)
+      // For range mode, only shuffle if explicit toggle is on
+      if (testPaperConfig.shuffleVerbs) {
+        selectedWords = [...selectedWords].sort(() => 0.5 - Math.random());
+      }
     }
 
     if (selectedWords.length === 0) {
@@ -977,7 +1040,9 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 <div key={word.id} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center">
                   <div>
                     <div className="flex items-center gap-2">
-                      <div className="text-lg font-black text-slate-900">{word.word}</div>
+                      <div className="text-lg font-black text-slate-900">
+                        {selectedWordbook.type === 'grammar-cramming' ? (word as any).quizSentence || word.word : word.word}
+                      </div>
                       {selectedWordbook.type === 'irregular' && word.pattern && (
                         <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 text-[10px] font-black rounded uppercase tracking-tighter">
                           {word.pattern}
@@ -991,7 +1056,10 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     </div>
                     {selectedWordbook.type === 'irregular' ? (
                       <div className="space-y-0.5">
-                        <div className="text-sm font-black text-blue-500">{word.past} - {word.pastParticiple}</div>
+                        <div className="text-sm font-black text-blue-500">
+                          {selectedWordbook.type === 'grammar-cramming' && word.word !== (word as any).quizSentence ? `개념: ${word.word} | ` : ''}
+                          {word.past} - {word.pastParticiple}
+                        </div>
                         <div className="text-sm text-slate-500 font-medium whitespace-pre-wrap">{word.meaning}</div>
                       </div>
                     ) : selectedWordbook.type === 'modal-grammar' ? (
@@ -1003,6 +1071,12 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                       <div className="text-sm text-slate-500 font-medium whitespace-pre-wrap">
                         {selectedWordbook.type === 'relative-grammar' && word.word.includes('(___)') ? (
                           <span className="text-orange-500 font-bold">이 항목은 문장 형태입니다. 삭제 후 특정 개념의 [예문 관리] 버튼을 통해 등록해주세요.</span>
+                        ) : selectedWordbook.type === 'grammar-cramming' ? (
+                          <div className="space-y-1">
+                            <div className="text-xs font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded inline-block">개념: {word.word}</div>
+                            <div className="text-sm text-slate-600">정답: <span className="font-bold text-slate-900">{word.meaning}</span></div>
+                            <div className="text-[10px] text-slate-400 font-medium italic">해설: {(word as any).quizExplanation}</div>
+                          </div>
                         ) : word.meaning}
                       </div>
                     )}
@@ -1036,6 +1110,15 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                         setEditImageUrlValue(word.imageUrl || '');
                         setEditDistractorsValue(word.distractors?.join(', ') || '');
                         setEditExampleValue((word as any).example || '');
+                        
+                        // Grammar Cramming
+                        setEditQuizSentence((word as any).quizSentence || '');
+                        setEditQuizQuestion((word as any).quizQuestion || '');
+                        setEditQuizChoices((word as any).quizChoices?.join(', ') || '');
+                        setEditQuizAnswerIndex((word as any).quizAnswerIndex || 0);
+                        setEditQuizExplanation((word as any).quizExplanation || '');
+                        setEditCategory((word as any).category || '');
+                        setEditSet((word as any).set || 1);
                       }}
                       className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
                     >
@@ -1256,7 +1339,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
             <h2 className="text-2xl font-black text-slate-900 mb-6">단어 수정</h2>
-            <div className="space-y-4 mb-6">
+            <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">단어</label>
                 <input
@@ -1339,6 +1422,43 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   </div>
                 </div>
               )}
+              {selectedWordbook?.type === 'grammar-cramming' && (
+                <div className="space-y-4 pt-4 border-t border-slate-100">
+                  <h4 className="font-black text-indigo-500 text-sm">벼락치기 문제 상세</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">카테고리</label>
+                      <input type="text" value={editCategory} onChange={(e) => setEditCategory(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">세트 (일차)</label>
+                      <input type="number" value={editSet} onChange={(e) => setEditSet(parseInt(e.target.value) || 1)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">문제 문장 (빈칸 (___) 포함)</label>
+                    <textarea value={editQuizSentence} onChange={(e) => setEditQuizSentence(e.target.value)} rows={2} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm resize-none" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">질문 텍스트</label>
+                    <input type="text" value={editQuizQuestion} onChange={(e) => setEditQuizQuestion(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">객관식 선택지 (쉼표 구분)</label>
+                    <input type="text" value={editQuizChoices} onChange={(e) => setEditQuizChoices(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">정답 인덱스 (0부터)</label>
+                      <input type="number" value={editQuizAnswerIndex} onChange={(e) => setEditQuizAnswerIndex(parseInt(e.target.value) || 0)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">해설</label>
+                    <textarea value={editQuizExplanation} onChange={(e) => setEditQuizExplanation(e.target.value)} rows={2} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm resize-none" />
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">이미지 URL (선택)</label>
                 <input
@@ -1363,7 +1483,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
             <h2 className="text-2xl font-black text-slate-900 mb-6">단어 추가</h2>
-            <div className="space-y-4 mb-6">
+            <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">단어</label>
                 <input
@@ -1384,6 +1504,43 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold resize-none"
                 />
               </div>
+              {selectedWordbook?.type === 'grammar-cramming' && (
+                <div className="space-y-4 pt-4 border-t border-slate-100">
+                  <h4 className="font-black text-indigo-500 text-sm">벼락치기 문제 상세</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">카테고리</label>
+                      <input type="text" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">세트 (일차)</label>
+                      <input type="number" value={newSet} onChange={(e) => setNewSet(parseInt(e.target.value) || 1)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">문제 문장 (빈칸 (___) 포함)</label>
+                    <textarea value={newQuizSentence} onChange={(e) => setNewQuizSentence(e.target.value)} rows={2} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm resize-none" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">질문 텍스트</label>
+                    <input type="text" value={newQuizQuestion} onChange={(e) => setNewQuizQuestion(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">객관식 선택지 (쉼표 구분)</label>
+                    <input type="text" value={newQuizChoices} onChange={(e) => setNewQuizChoices(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">정답 인덱스 (0부터)</label>
+                      <input type="number" value={newQuizAnswerIndex} onChange={(e) => setNewQuizAnswerIndex(parseInt(e.target.value) || 0)} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1">해설</label>
+                    <textarea value={newQuizExplanation} onChange={(e) => setNewQuizExplanation(e.target.value)} rows={2} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold text-sm resize-none" />
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">이미지 URL (선택)</label>
                 <input
@@ -1670,61 +1827,110 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
                 {testPaperConfig.selectionMode === 'range' ? (
                   <div className="space-y-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">학습 단위 (DAY당 단어)</label>
-                        <input
-                          type="number"
-                          value={testPaperConfig.unitSize}
-                          onChange={(e) => setTestPaperConfig({ ...testPaperConfig, unitSize: parseInt(e.target.value) || 1 })}
-                          className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">총 DAY 수</label>
-                        <div className="p-2.5 bg-white border border-blue-100 rounded-lg font-bold text-blue-600 text-sm">
-                          약 {Math.ceil(words.length / testPaperConfig.unitSize)} DAYS
+                    {selectedWordbook?.type === 'grammar-cramming' ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">시작 세트</label>
+                          <select
+                            value={testPaperConfig.startDay}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 1;
+                              setTestPaperConfig({ 
+                                ...testPaperConfig, 
+                                startDay: val,
+                                subtitle: `${val}세트 - ${testPaperConfig.endDay}세트`
+                              });
+                            }}
+                            className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                          >
+                            {[1, 2, 3, 4, 5, 6].map(s => (
+                              <option key={s} value={s}>{s}세트</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">종료 세트</label>
+                          <select
+                            value={testPaperConfig.endDay}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 1;
+                              setTestPaperConfig({ 
+                                ...testPaperConfig, 
+                                endDay: val,
+                                subtitle: `${testPaperConfig.startDay}세트 - ${val}세트`
+                              });
+                            }}
+                            className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                          >
+                            {[1, 2, 3, 4, 5, 6].filter(s => s >= testPaperConfig.startDay).map(s => (
+                              <option key={s} value={s}>{s}세트</option>
+                            ))}
+                          </select>
                         </div>
                       </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">시작 DAY</label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={testPaperConfig.startDay}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value) || 1;
-                            setTestPaperConfig({ 
-                              ...testPaperConfig, 
-                              startDay: val,
-                              subtitle: `DAY ${val.toString().padStart(2, '0')}-${testPaperConfig.endDay.toString().padStart(2, '0')}`
-                            });
-                          }}
-                          className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">종료 DAY</label>
-                        <input
-                          type="number"
-                          min={testPaperConfig.startDay}
-                          value={testPaperConfig.endDay}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value) || 1;
-                            setTestPaperConfig({ 
-                              ...testPaperConfig, 
-                              endDay: val,
-                              subtitle: `DAY ${testPaperConfig.startDay.toString().padStart(2, '0')}-${val.toString().padStart(2, '0')}`
-                            });
-                          }}
-                          className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
-                        />
-                      </div>
-                    </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">학습 단위 (DAY당 단어)</label>
+                            <input
+                              type="number"
+                              value={testPaperConfig.unitSize}
+                              onChange={(e) => setTestPaperConfig({ ...testPaperConfig, unitSize: parseInt(e.target.value) || 1 })}
+                              className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">총 DAY 수</label>
+                            <div className="p-2.5 bg-white border border-blue-100 rounded-lg font-bold text-blue-600 text-sm">
+                              약 {Math.ceil(words.length / testPaperConfig.unitSize)} DAYS
+                            </div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">시작 DAY</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={testPaperConfig.startDay}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 1;
+                                setTestPaperConfig({ 
+                                  ...testPaperConfig, 
+                                  startDay: val,
+                                  subtitle: `DAY ${val.toString().padStart(2, '0')}-${testPaperConfig.endDay.toString().padStart(2, '0')}`
+                                });
+                              }}
+                              className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">종료 DAY</label>
+                            <input
+                              type="number"
+                              min={testPaperConfig.startDay}
+                              value={testPaperConfig.endDay}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 1;
+                                setTestPaperConfig({ 
+                                  ...testPaperConfig, 
+                                  endDay: val,
+                                  subtitle: `DAY ${testPaperConfig.startDay.toString().padStart(2, '0')}-${val.toString().padStart(2, '0')}`
+                                });
+                              }}
+                              className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
                     <div className="text-[10px] font-bold text-blue-400 text-center">
-                      선택 범위: {((testPaperConfig.startDay - 1) * testPaperConfig.unitSize) + 1}번 ~ {Math.min(testPaperConfig.endDay * testPaperConfig.unitSize, words.length)}번 단어
+                      {selectedWordbook?.type === 'grammar-cramming' ? (
+                        `선택된 세트: ${testPaperConfig.startDay}세트 ~ ${testPaperConfig.endDay}세트`
+                      ) : (
+                        `선택 범위: ${((testPaperConfig.startDay - 1) * testPaperConfig.unitSize) + 1}번 ~ ${Math.min(testPaperConfig.endDay * testPaperConfig.unitSize, words.length)}번 단어`
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -1762,51 +1968,94 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 )}
 
                 {testPaperConfig.quizType === 'standard' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">시험 유형</label>
-                      <select
-                        value={testPaperConfig.testType}
-                        onChange={(e) => setTestPaperConfig({ ...testPaperConfig, testType: e.target.value as any })}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
-                      >
-                        <option value="en-to-ko">영어 → 뜻</option>
-                        <option value="ko-to-en">뜻 → 영어</option>
-                      </select>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 ml-1">시험 유형</label>
+                        <select
+                          value={testPaperConfig.testType}
+                          onChange={(e) => setTestPaperConfig({ ...testPaperConfig, testType: e.target.value as any })}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                        >
+                          <option value="en-to-ko">영어 → 뜻</option>
+                          <option value="ko-to-en">뜻 → 영어</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px] mt-auto">
+                        <button 
+                          onClick={() => setTestPaperConfig({ ...testPaperConfig, includeAnswerKey: !testPaperConfig.includeAnswerKey })}
+                          className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.includeAnswerKey ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
+                        >
+                          {testPaperConfig.includeAnswerKey && <CheckCircle2 size={14} />}
+                        </button>
+                        <span className="font-bold text-slate-700 text-xs text-nowrap">정답지 포함하기</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px] mt-auto">
-                      <button 
-                        onClick={() => setTestPaperConfig({ ...testPaperConfig, includeAnswerKey: !testPaperConfig.includeAnswerKey })}
-                        className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.includeAnswerKey ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
-                      >
-                        {testPaperConfig.includeAnswerKey && <CheckCircle2 size={14} />}
-                      </button>
-                      <span className="font-bold text-slate-700 text-xs">정답지 포함하기</span>
-                    </div>
+                    {testPaperConfig.selectionMode === 'range' && (
+                      <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px]">
+                        <button 
+                          onClick={() => setTestPaperConfig({ ...testPaperConfig, shuffleVerbs: !testPaperConfig.shuffleVerbs })}
+                          className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.shuffleVerbs ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
+                        >
+                          {testPaperConfig.shuffleVerbs && <CheckCircle2 size={14} />}
+                        </button>
+                        <span className="font-bold text-slate-700 text-xs text-nowrap">단어 순서 랜덤</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {testPaperConfig.quizType === 'multiple-choice' && (
-                  <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px]">
-                    <button 
-                      onClick={() => setTestPaperConfig({ ...testPaperConfig, includeAnswerKey: !testPaperConfig.includeAnswerKey })}
-                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.includeAnswerKey ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
-                    >
-                      {testPaperConfig.includeAnswerKey && <CheckCircle2 size={14} />}
-                    </button>
-                    <span className="font-bold text-slate-700 text-xs">정답지 포함하기</span>
+                  <div className="space-y-4">
+                    <div className="flex gap-4">
+                      <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px]">
+                        <button 
+                          onClick={() => setTestPaperConfig({ ...testPaperConfig, includeAnswerKey: !testPaperConfig.includeAnswerKey })}
+                          className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.includeAnswerKey ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
+                        >
+                          {testPaperConfig.includeAnswerKey && <CheckCircle2 size={14} />}
+                        </button>
+                        <span className="font-bold text-slate-700 text-xs text-nowrap">정답지 포함하기</span>
+                      </div>
+                      {testPaperConfig.selectionMode === 'range' && (
+                        <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px]">
+                          <button 
+                            onClick={() => setTestPaperConfig({ ...testPaperConfig, shuffleVerbs: !testPaperConfig.shuffleVerbs })}
+                            className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.shuffleVerbs ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
+                          >
+                            {testPaperConfig.shuffleVerbs && <CheckCircle2 size={14} />}
+                          </button>
+                          <span className="font-bold text-slate-700 text-xs text-nowrap">단어 순서 랜덤</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
                 {testPaperConfig.quizType === 'irregular-writing' && (
-                  <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px]">
-                    <button 
-                      onClick={() => setTestPaperConfig({ ...testPaperConfig, includeAnswerKey: !testPaperConfig.includeAnswerKey })}
-                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.includeAnswerKey ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
-                    >
-                      {testPaperConfig.includeAnswerKey && <CheckCircle2 size={14} />}
-                    </button>
-                    <span className="font-bold text-slate-700 text-xs">정답지 포함하기</span>
+                  <div className="space-y-4">
+                    <div className="flex gap-4">
+                      <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px]">
+                        <button 
+                          onClick={() => setTestPaperConfig({ ...testPaperConfig, includeAnswerKey: !testPaperConfig.includeAnswerKey })}
+                          className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.includeAnswerKey ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
+                        >
+                          {testPaperConfig.includeAnswerKey && <CheckCircle2 size={14} />}
+                        </button>
+                        <span className="font-bold text-slate-700 text-xs text-nowrap">정답지 포함하기</span>
+                      </div>
+                      {testPaperConfig.selectionMode === 'range' && (
+                        <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px]">
+                          <button 
+                            onClick={() => setTestPaperConfig({ ...testPaperConfig, shuffleVerbs: !testPaperConfig.shuffleVerbs })}
+                            className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${testPaperConfig.shuffleVerbs ? 'bg-blue-500 text-white' : 'bg-white border-2 border-slate-200'}`}
+                          >
+                            {testPaperConfig.shuffleVerbs && <CheckCircle2 size={14} />}
+                          </button>
+                          <span className="font-bold text-slate-700 text-xs text-nowrap">단어 순서 랜덤</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

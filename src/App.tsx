@@ -111,7 +111,7 @@ interface UserProfile {
 // Helper to run teacher seeding logic
 const runTeacherSeeding = async () => {
   try {
-    const [{ seedIrregularVerbs }, { seedObjectPatternGrammar, seedComplementGrammar, seedConversionGrammar, seedRelativeGrammar, seedModalGrammar, seedVerbFormGrammar }] = await Promise.all([
+    const [{ seedIrregularVerbs }, { seedObjectPatternGrammar, seedComplementGrammar, seedConversionGrammar, seedRelativeGrammar, seedModalGrammar, seedVerbFormGrammar, seedGrammarCramming }] = await Promise.all([
       import('./lib/irregularVerbsData'),
       import('./lib/grammarSets')
     ]);
@@ -122,6 +122,7 @@ const runTeacherSeeding = async () => {
     seedRelativeGrammar();
     seedModalGrammar();
     seedVerbFormGrammar();
+    seedGrammarCramming();
   } catch (error) {
     console.error('Seeding failed:', error);
   }

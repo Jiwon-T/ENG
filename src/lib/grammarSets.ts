@@ -1,5 +1,6 @@
 import { collection, addDoc, Timestamp, query, where, getDocs, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
+import { GRAMMAR_CRAMMING_POOL } from './grammarCrammingPool';
 
 export interface GrammarWord {
   word: string;
@@ -1581,5 +1582,85 @@ export async function seedRelativeGrammar() {
         });
       }
     }
+  }
+}
+
+export async function seedGrammarCramming() {
+  if ((window as any)._grammarCrammingSeeded) return;
+  (window as any)._grammarCrammingSeeded = true;
+
+  const wordbooksRef = collection(db, 'wordbooks');
+  const q = query(wordbooksRef, where('type', '==', 'grammar-cramming'));
+  const snapshot = await getDocs(q);
+
+  let wordbookId: string;
+
+  if (snapshot.empty) {
+    const docRef = await addDoc(wordbooksRef, {
+      title: '문법 벼락치기',
+      description: '지원T 문법 벼락치기 교안 기반 객관식 퀴즈',
+      createdBy: 'system',
+      isPublic: true,
+      type: 'grammar-cramming',
+      category: 'grammar',
+      createdAt: Timestamp.now(),
+      order: 3 // Set appropriately
+    });
+    wordbookId = docRef.id;
+  } else {
+    wordbookId = snapshot.docs[0].id;
+    await setDoc(doc(db, 'wordbooks', wordbookId), { 
+      type: 'grammar-cramming',
+      category: 'grammar',
+      createdBy: 'system',
+      isPublic: true
+    }, { merge: true });
+  }
+
+  // Add/Sync words
+  const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
+  const existingWords = await getDocs(wordsRef);
+  
+  // Track existing sentences to avoid duplicates
+  const existingSentences = new Set(existingWords.docs.map(doc => doc.data().quizSentence));
+  
+  // Also check for old format
+  const isOldFormat = existingWords.size > 0 && existingWords.docs[0].data().word.includes(' ');
+  
+  if (isOldFormat) {
+    const deleteBatch = writeBatch(db);
+    for (const d of existingWords.docs) {
+      deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
+    }
+    await deleteBatch.commit();
+    existingSentences.clear();
+  }
+  
+  // Add only new questions from the pool
+  const newQuestions = GRAMMAR_CRAMMING_POOL.filter(item => !existingSentences.has(item.sentence));
+  
+  if (newQuestions.length > 0) {
+    let orderCounter = existingWords.size;
+    for (let i = 0; i < newQuestions.length; i += 400) {
+      const batch = writeBatch(db);
+      const chunk = newQuestions.slice(i, i + 400);
+      chunk.forEach((item, index) => {
+        const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
+        batch.set(newDocRef, {
+          word: item.category,
+          meaning: item.choices[item.answer],
+          quizSentence: item.sentence,
+          quizQuestion: item.question,
+          quizChoices: item.choices,
+          quizAnswerIndex: item.answer,
+          quizExplanation: item.explanation,
+          set: item.set,
+          category: item.category,
+          order: orderCounter + i + index
+        });
+      });
+      await batch.commit();
+    }
+    console.log(`Synced ${newQuestions.length} new grammar questions`);
   }
 }
