@@ -128,7 +128,12 @@ export async function seedIrregularVerbs() {
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  // Force re-sync
+  // Skip if already has words (unless force sync requested or empty)
+  if (!existingWords.empty && !(window as any)._forceGrammarSync) {
+    return;
+  }
+
+  // If force sync or empty, proceed with re-sync
   const deleteBatch = writeBatch(db);
   for (const d of existingWords.docs) {
     deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
