@@ -197,10 +197,22 @@ export default function App() {
       
       if (firebaseUser) {
         try {
-          const { profileLoader } = await import('./lib/profileLoader');
-          const data = await profileLoader(firebaseUser);
+          const { ensureUserDocExists } = await import('./lib/firebase');
+          await ensureUserDocExists(firebaseUser);
           
-          if (data) {
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+          if (userDoc.exists()) {
+            let data = userDoc.data() as UserProfile;
+            
+            // Force update role for teacher email if it's currently student
+            if (firebaseUser.email === 'lizzieshere1@gmail.com' && data.role !== 'teacher') {
+              data = { ...data, role: 'teacher' as const };
+              setDoc(userDocRef, { role: 'teacher' }, { merge: true }).catch(e => console.error('Silent role update failed:', e));
+              setTimeout(runTeacherSeeding, 1000); // Defer seeding
+            }
+            
             setProfile(data);
             
             if (data.role === 'teacher' || data.role === 'admin') {
@@ -211,6 +223,15 @@ export default function App() {
               setNewName(data.alias || data.name || '');
               setShowNameEditModal(true);
             }
+          } else {
+            console.warn('User doc still does not exist after ensureUserDocExists');
+            // Mock profile if firestore is lagging
+            setProfile({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              name: firebaseUser.displayName || '사용자',
+              role: firebaseUser.email === 'lizzieshere1@gmail.com' ? 'teacher' : 'student'
+            });
           }
         } catch (error: any) {
           console.error('Failed to manage user profile:', error);

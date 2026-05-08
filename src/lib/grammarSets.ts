@@ -105,11 +105,6 @@ export async function seedObjectPatternGrammar() {
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  // Skip if already has words (unless force sync requested)
-  if (!existingWords.empty && !(window as any)._forceGrammarSync) {
-    return;
-  }
-
   // Delete existing to force re-sync
   const deleteBatch = writeBatch(db);
   for (const d of existingWords.docs) {
@@ -205,11 +200,6 @@ export async function seedComplementGrammar() {
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  // Skip if already has words (unless force sync requested)
-  if (!existingWords.empty && !(window as any)._forceGrammarSync) {
-    return;
-  }
-
   // Delete existing to force re-sync
   const deleteBatch = writeBatch(db);
   for (const d of existingWords.docs) {
@@ -374,11 +364,6 @@ export async function seedModalGrammar() {
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  // Skip if already has words (unless force sync requested)
-  if (!existingWords.empty && !(window as any)._forceGrammarSync) {
-    return;
-  }
-
   // Delete existing to force re-sync with newest data structure
   const deleteBatch = writeBatch(db);
   for (const d of existingWords.docs) {
@@ -439,11 +424,6 @@ export async function seedConversionGrammar() {
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  // Skip if already has words (unless force sync requested)
-  if (!existingWords.empty && !(window as any)._forceGrammarSync) {
-    return;
-  }
-
   // Delete existing to force re-sync
   const deleteBatch = writeBatch(db);
   for (const d of existingWords.docs) {
@@ -1482,11 +1462,6 @@ export async function seedVerbFormGrammar() {
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  // Skip if already has words (unless force sync requested)
-  if (!existingWords.empty && !(window as any)._forceGrammarSync) {
-    return;
-  }
-
   // Delete existing to force re-sync
   const deleteBatch = writeBatch(db);
   for (const d of existingWords.docs) {
@@ -1554,11 +1529,6 @@ export async function seedRelativeGrammar() {
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWordsSnap = await getDocs(wordsRef);
   
-  // Skip if already has words (unless force sync requested)
-  if (!existingWordsSnap.empty && !(window as any)._forceGrammarSync) {
-    return;
-  }
-
   // 1. Delete outdated concepts (words that are not in the new RELATIVE_GRAMMAR_CONCEPTS list)
   const currentConceptNames = RELATIVE_GRAMMAR_CONCEPTS.map(c => c.word);
   for (const docSnap of existingWordsSnap.docs) {
