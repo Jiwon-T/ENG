@@ -20,6 +20,14 @@ export const irregularVerbsData: IrregularVerb[] = [
   { base: 'read', past: 'read', pastParticiple: 'read', meaning: '읽다', pattern: 'A-A-A', distractors: ['readed', 'red', 'reads'] },
   { base: 'set', past: 'set', pastParticiple: 'set', meaning: '놓다', pattern: 'A-A-A', distractors: ['setted', 'sat', 'sot'] },
   { base: 'spread', past: 'spread', pastParticiple: 'spread', meaning: '펼치다', pattern: 'A-A-A', distractors: ['spreaded', 'sprad', 'sprod'] },
+  { base: 'let', past: 'let', pastParticiple: 'let', meaning: '하게 하다', pattern: 'A-A-A', distractors: ['letted', 'lat', 'luts'] },
+  { base: 'shut', past: 'shut', pastParticiple: 'shut', meaning: '닫다', pattern: 'A-A-A', distractors: ['shutted', 'shot', 'shat'] },
+  { base: 'split', past: 'split', pastParticiple: 'split', meaning: '찢다, 쪼개다', pattern: 'A-A-A', distractors: ['splitted', 'splat', 'splot'] },
+  { base: 'quit', past: 'quit', pastParticiple: 'quit', meaning: '그만두다', pattern: 'A-A-A', distractors: ['quitted', 'quat', 'quits'] },
+  { base: 'burst', past: 'burst', pastParticiple: 'burst', meaning: '터뜨리다', pattern: 'A-A-A', distractors: ['bursted', 'barst', 'borst'] },
+  { base: 'cast', past: 'cast', pastParticiple: 'cast', meaning: '던지다', pattern: 'A-A-A', distractors: ['casted', 'cost', 'cust'] },
+  { base: 'bid', past: 'bid', pastParticiple: 'bid', meaning: '명령하다, 입찰하다', pattern: 'A-A-A', distractors: ['bidded', 'bad', 'bod'] },
+  { base: 'upset', past: 'upset', pastParticiple: 'upset', meaning: '당황하게 하다', pattern: 'A-A-A', distractors: ['upsetted', 'upsat', 'upsot'] },
   
   // A-B-A
   { base: 'become', past: 'became', pastParticiple: 'become', meaning: '~이 되다', pattern: 'A-B-A', distractors: ['becomed', 'becomen', 'becam'] },
@@ -45,6 +53,28 @@ export const irregularVerbsData: IrregularVerb[] = [
   { base: 'tell', past: 'told', pastParticiple: 'told', meaning: '말하다', pattern: 'A-B-B', distractors: ['telled', 'tolen', 'telling'] },
   { base: 'think', past: 'thought', pastParticiple: 'thought', meaning: '생각하다', pattern: 'A-B-B', distractors: ['thinked', 'thoughten', 'thinking'] },
   { base: 'win', past: 'won', pastParticiple: 'won', meaning: '이기다', pattern: 'A-B-B', distractors: ['winned', 'wonned', 'winning'] },
+  { base: 'bend', past: 'bent', pastParticiple: 'bent', meaning: '구부리다', pattern: 'A-B-B', distractors: ['bended', 'benten', 'band'] },
+  { base: 'dig', past: 'dug', pastParticiple: 'dug', meaning: '파다', pattern: 'A-B-B', distractors: ['digged', 'dag', 'dugen'] },
+  { base: 'feed', past: 'fed', pastParticiple: 'fed', meaning: '먹여 주다', pattern: 'A-B-B', distractors: ['feeded', 'food', 'feden'] },
+  { base: 'feel', past: 'felt', pastParticiple: 'felt', meaning: '느끼다', pattern: 'A-B-B', distractors: ['feeled', 'felten', 'feeling'] },
+  { base: 'fight', past: 'fought', pastParticiple: 'fought', meaning: '싸우다', pattern: 'A-B-B', distractors: ['fighted', 'fate', 'foughten'] },
+  { base: 'hang', past: 'hung', pastParticiple: 'hung', meaning: '걸다, 매달다', pattern: 'A-B-B', distractors: ['hanged', 'hangen', 'hunged'] },
+  { base: 'hold', past: 'held', pastParticiple: 'held', meaning: '잡다, 유지하다', pattern: 'A-B-B', distractors: ['holded', 'helden', 'holden'] },
+  { base: 'lead', past: 'led', pastParticiple: 'led', meaning: '이끌다', pattern: 'A-B-B', distractors: ['leaded', 'laden', 'leaden'] },
+  { base: 'lend', past: 'lent', pastParticiple: 'lent', meaning: '빌려주다', pattern: 'A-B-B', distractors: ['lended', 'lenten', 'land'] },
+  { base: 'mean', past: 'meant', pastParticiple: 'meant', meaning: '의미하다', pattern: 'A-B-B', distractors: ['meaned', 'meanten', 'moant'] },
+  { base: 'meet', past: 'met', pastParticiple: 'met', meaning: '만나다', pattern: 'A-B-B', distractors: ['meeted', 'metten', 'meetened'] },
+  { base: 'pay', past: 'paid', pastParticiple: 'paid', meaning: '지불하다', pattern: 'A-B-B', distractors: ['payed', 'paidened', 'pays'] },
+  { base: 'sell', past: 'sold', pastParticiple: 'sold', meaning: '팔다', pattern: 'A-B-B', distractors: ['selled', 'solden', 'sells'] },
+  { base: 'shoot', past: 'shot', pastParticiple: 'shot', meaning: '쏘다', pattern: 'A-B-B', distractors: ['shooted', 'shotten', 'shat'] },
+  { base: 'sit', past: 'sat', pastParticiple: 'sat', meaning: '앉다', pattern: 'A-B-B', distractors: ['sitted', 'saten', 'sitten'] },
+  { base: 'spend', past: 'spent', pastParticiple: 'spent', meaning: '소비하다', pattern: 'A-B-B', distractors: ['spended', 'spenten', 'spand'] },
+  { base: 'stand', past: 'stood', pastParticiple: 'stood', meaning: '서다', pattern: 'A-B-B', distractors: ['standed', 'stooden', 'stonden'] },
+  { base: 'stick', past: 'stuck', pastParticiple: 'stuck', meaning: '찌르다, 붙이다', pattern: 'A-B-B', distractors: ['sticked', 'stack', 'stucken'] },
+  { base: 'strike', past: 'struck', pastParticiple: 'struck', meaning: '치다, 때리다', pattern: 'A-B-B', distractors: ['striked', 'strok', 'strucken'] },
+  { base: 'sweep', past: 'swept', pastParticiple: 'swept', meaning: '쓸다, 소탕하다', pattern: 'A-B-B', distractors: ['sweeped', 'swepten', 'swap'] },
+  { base: 'understand', past: 'understood', pastParticiple: 'understood', meaning: '이해하다', pattern: 'A-B-B', distractors: ['understanded', 'understooden', 'understands'] },
+  { base: 'weep', past: 'wept', pastParticiple: 'wept', meaning: '울다', pattern: 'A-B-B', distractors: ['weeped', 'wepten', 'wap'] },
 
   // A-B-C
   { base: 'begin', past: 'began', pastParticiple: 'begun', meaning: '시작하다', pattern: 'A-B-C', distractors: ['begined', 'begannen', 'begunned'] },
@@ -61,6 +91,31 @@ export const irregularVerbsData: IrregularVerb[] = [
   { base: 'sing', past: 'sang', pastParticiple: 'sung', meaning: '노래하다', pattern: 'A-B-C', distractors: ['singed', 'sanged', 'sunged'] },
   { base: 'swim', past: 'swam', pastParticiple: 'swum', meaning: '수영하다', pattern: 'A-B-C', distractors: ['swimmed', 'swammed', 'swummed'] },
   { base: 'write', past: 'wrote', pastParticiple: 'written', meaning: '쓰다', pattern: 'A-B-C', distractors: ['writed', 'wroteed', 'written'] },
+  { base: 'bite', past: 'bit', pastParticiple: 'bitten', meaning: '물다', pattern: 'A-B-C', distractors: ['bited', 'biten', 'bitted'] },
+  { base: 'blow', past: 'blew', pastParticiple: 'blown', meaning: '불다', pattern: 'A-B-C', distractors: ['blowed', 'blown', 'blewd'] },
+  { base: 'choose', past: 'chose', pastParticiple: 'chosen', meaning: '선택하다', pattern: 'A-B-C', distractors: ['choosed', 'chosen', 'chosened'] },
+  { base: 'draw', past: 'drew', pastParticiple: 'drawn', meaning: '그리다', pattern: 'A-B-C', distractors: ['drawed', 'drawn', 'drewed'] },
+  { base: 'drive', past: 'drove', pastParticiple: 'driven', meaning: '운전하다', pattern: 'A-B-C', distractors: ['drived', 'driven', 'droven'] },
+  { base: 'forbid', past: 'forbade', pastParticiple: 'forbidden', meaning: '금지하다', pattern: 'A-B-C', distractors: ['forbided', 'forbiden', 'forbad'] },
+  { base: 'forget', past: 'forgot', pastParticiple: 'forgotten', meaning: '잊다', pattern: 'A-B-C', distractors: ['forgeted', 'forgoten', 'forgottened'] },
+  { base: 'forgive', past: 'forgave', pastParticiple: 'forgiven', meaning: '용서하다', pattern: 'A-B-C', distractors: ['forgived', 'forgiven', 'forgaven'] },
+  { base: 'freeze', past: 'froze', pastParticiple: 'frozen', meaning: '얼다', pattern: 'A-B-C', distractors: ['freezed', 'frozen', 'frozed'] },
+  { base: 'grow', past: 'grew', pastParticiple: 'grown', meaning: '자라다', pattern: 'A-B-C', distractors: ['growed', 'grown', 'grewed'] },
+  { base: 'hide', past: 'hid', pastParticiple: 'hidden', meaning: '숨다', pattern: 'A-B-C', distractors: ['hided', 'hidden', 'hiden'] },
+  { base: 'lie', past: 'lay', pastParticiple: 'lain', meaning: '눕다', pattern: 'A-B-C', distractors: ['lied', 'lain', 'layed'] },
+  { base: 'mistake', past: 'mistook', pastParticiple: 'mistaken', meaning: '실수하다', pattern: 'A-B-C', distractors: ['mistaked', 'mistaken', 'mistooked'] },
+  { base: 'ride', past: 'rode', pastParticiple: 'ridden', meaning: '타다', pattern: 'A-B-C', distractors: ['rided', 'ridden', 'roden'] },
+  { base: 'rise', past: 'rose', pastParticiple: 'risen', meaning: '오르다', pattern: 'A-B-C', distractors: ['rised', 'risen', 'rosen'] },
+  { base: 'shake', past: 'shook', pastParticiple: 'shaken', meaning: '흔들다', pattern: 'A-B-C', distractors: ['shaked', 'shaken', 'shooked'] },
+  { base: 'show', past: 'showed', pastParticiple: 'shown', meaning: '보여주다', pattern: 'A-B-C', distractors: ['showed', 'shown', 'showened'] },
+  { base: 'speak', past: 'spoke', pastParticiple: 'spoken', meaning: '말하다', pattern: 'A-B-C', distractors: ['speaked', 'spoken', 'spokened'] },
+  { base: 'steal', past: 'stole', pastParticiple: 'stolen', meaning: '훔치다', pattern: 'A-B-C', distractors: ['stealed', 'stolen', 'stolened'] },
+  { base: 'strive', past: 'strove', pastParticiple: 'striven', meaning: '노력하다', pattern: 'A-B-C', distractors: ['strived', 'striven', 'stroven'] },
+  { base: 'take', past: 'took', pastParticiple: 'taken', meaning: '잡다, 취하다', pattern: 'A-B-C', distractors: ['taked', 'taken', 'token'] },
+  { base: 'throw', past: 'threw', pastParticiple: 'thrown', meaning: '던지다', pattern: 'A-B-C', distractors: ['throwed', 'thrown', 'threwed'] },
+  { base: 'wake', past: 'woke', pastParticiple: 'woken', meaning: '깨다', pattern: 'A-B-C', distractors: ['waked', 'woken', 'woked'] },
+  { base: 'wear', past: 'wore', pastParticiple: 'worn', meaning: '입다, 착용하다', pattern: 'A-B-C', distractors: ['weared', 'worn', 'woren'] },
+  { base: 'weave', past: 'wove', pastParticiple: 'woven', meaning: '지어내다, 짜다', pattern: 'A-B-C', distractors: ['weaved', 'woven', 'wovened'] },
 ];
 
 export async function seedIrregularVerbs() {
@@ -76,12 +131,21 @@ export async function seedIrregularVerbs() {
   let wordbookId: string;
 
   if (snapshot.empty) {
-    // Check for old title (for transitional period)
-    const oldTitleQ = query(wordbooksRef, where('title', '==', '불규칙 변화 동사'));
-    const oldSnapshot = await getDocs(oldTitleQ);
+    // Check for old titles (for transitional period)
+    const oldTitleQ1 = query(wordbooksRef, where('title', '==', '불규칙 변화 동사'));
+    const oldTitleQ2 = query(wordbooksRef, where('title', '==', '불규칙 변화 동사 (수동태)'));
+    const oldSnapshot1 = await getDocs(oldTitleQ1);
+    const oldSnapshot2 = await getDocs(oldTitleQ2);
 
-    if (!oldSnapshot.empty) {
-      wordbookId = oldSnapshot.docs[0].id;
+    if (!oldSnapshot1.empty) {
+      wordbookId = oldSnapshot1.docs[0].id;
+      await setDoc(doc(db, 'wordbooks', wordbookId), {
+        type: 'irregular',
+        category: 'grammar',
+        createdBy: 'system'
+      }, { merge: true });
+    } else if (!oldSnapshot2.empty) {
+      wordbookId = oldSnapshot2.docs[0].id;
       await setDoc(doc(db, 'wordbooks', wordbookId), {
         type: 'irregular',
         category: 'grammar',
@@ -89,8 +153,8 @@ export async function seedIrregularVerbs() {
       }, { merge: true });
     } else {
       const docRef = await addDoc(wordbooksRef, {
-        title: '불규칙 변화 동사',
-        description: '원형-과거형-과거분사형 변화를 학습합니다.',
+        title: '불규칙 변화 동사 (수동태)',
+        description: '원형-과거형-과거분사형 변화를 학습합니다. (수동태 핵심)',
         createdBy: 'system',
         isPublic: true,
         type: 'irregular',
@@ -126,29 +190,35 @@ export async function seedIrregularVerbs() {
 
   // Add/Sync words
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
-  const existingWords = await getDocs(wordsRef);
+  const existingSnapshot = await getDocs(wordsRef);
   
-  // Force re-sync
-  const deleteBatch = writeBatch(db);
-  for (const d of existingWords.docs) {
-    deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
+  // Only re-sync if the count is strictly less than our new comprehensive list
+  // This avoids wiping manual changes IF they somehow survived or if it's already updated.
+  // Actually, we want to RESTORE the lost data, so we SHOULD re-sync to the full list once.
+  // We'll use a specific flag to only do this huge sync if needed.
+  if (existingSnapshot.size < irregularVerbsData.length) {
+    const deleteBatch = writeBatch(db);
+    for (const d of existingSnapshot.docs) {
+      deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
+    }
+    await deleteBatch.commit();
+    
+    // Split addBatch if it exceeds 500 limit (though 98 is fine)
+    const addBatch = writeBatch(db);
+    for (let i = 0; i < irregularVerbsData.length; i++) {
+      const verb = irregularVerbsData[i];
+      const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
+      addBatch.set(newDocRef, {
+        word: verb.base,
+        past: verb.past,
+        pastParticiple: verb.pastParticiple,
+        meaning: verb.meaning,
+        pattern: verb.pattern,
+        distractors: verb.distractors || [],
+        order: i
+      });
+    }
+    await addBatch.commit();
+    console.log('Irregular verbs restored and synced successfully');
   }
-  await deleteBatch.commit();
-  
-  const addBatch = writeBatch(db);
-  for (let i = 0; i < irregularVerbsData.length; i++) {
-    const verb = irregularVerbsData[i];
-    const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
-    addBatch.set(newDocRef, {
-      word: verb.base,
-      past: verb.past,
-      pastParticiple: verb.pastParticiple,
-      meaning: verb.meaning,
-      pattern: verb.pattern,
-      distractors: verb.distractors || [],
-      order: i
-    });
-  }
-  await addBatch.commit();
-  console.log('Irregular verbs sync successful');
 }
