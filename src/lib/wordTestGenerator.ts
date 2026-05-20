@@ -410,7 +410,7 @@ export const generateMultipleChoiceQuiz = async (
         const choices = item.distractors || [];
         correctAnswer = choices[0] || '';
         distractors = choices.slice(1);
-      } else if (wordbookType === 'modal-grammar' || wordbookType === 'verb-form-grammar' || wordbookType === 'grammar-cramming') {
+      } else if (wordbookType === 'modal-grammar' || wordbookType === 'basic-modal-grammar' || wordbookType === 'verb-form-grammar' || wordbookType === 'grammar-cramming') {
         correctAnswer = item.meaning;
         distractors = (wordbookType === 'grammar-cramming') 
           ? (item.quizChoices || []).filter((c: string) => c !== item.meaning)
@@ -442,7 +442,7 @@ export const generateMultipleChoiceQuiz = async (
         keepNext: true,
       }));
 
-      if (isAnswerKey && (isRelative || ['modal-grammar', 'verb-form-grammar', 'grammar-cramming'].includes(wordbookType || '')) && (item.explanation || item.quizExplanation || (isRelative && item.meaning))) {
+      if (isAnswerKey && (isRelative || ['modal-grammar', 'basic-modal-grammar', 'verb-form-grammar', 'grammar-cramming'].includes(wordbookType || '')) && (item.explanation || item.quizExplanation || (isRelative && item.meaning))) {
         quizElements.push(new Paragraph({
           children: [
             new TextRun({ text: `   💡 해설: ${item.quizExplanation || item.explanation || item.meaning}`, size: 18, italics: true, color: "666666" })

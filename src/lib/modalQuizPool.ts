@@ -602,3 +602,169 @@ export const MODAL_QUIZ_POOL: QuizQuestion[] = [
     explanation: "would rather는 상대방의 제안을 정중히 거절하며 다른 것을 선택할 때 쓰기 좋은 표현이다."
   }
 ];
+
+export const BASIC_MODAL_QUIZ_POOL: QuizQuestion[] = [
+  // 1세트: 기본 조동사
+  {
+    id: 1001, set: 1,
+    sentence: "My sister ___ speak four languages fluently.",
+    question: "빈칸에 알맞은 조동사와 의미는?",
+    choices: ["can (~할 수 있다, 능력)", "may (~일지도 모른다, 약한 추측)", "would like (~을 원하다)", "had better (~하는 것이 낫다)"],
+    answer: 0,
+    explanation: "능력을 나타내어 '~할 수 있다'는 의미로 can이 가장 알맞습니다."
+  },
+  {
+    id: 1002, set: 1,
+    sentence: "You ___ borrow my tablet if you need it.",
+    question: "빈칸에 알맞은 조동사와 의미는?",
+    choices: ["can (~해도 된다, 허가)", "must (~해야 한다, 의무)", "would like (~을 원하다)", "could (~할 수 있었다, 과거 능력)"],
+    answer: 0,
+    explanation: "허가를 나타내어 '~해도 된다'는 의미로 can이 적절합니다."
+  },
+  {
+    id: 1003, set: 1,
+    sentence: "___ you carry this box for me, please?",
+    question: "빈칸에 알맞은 조동사와 의미는?",
+    choices: ["Can (~해주겠니?, 요청)", "May (~해도 된다, 허가)", "Must (~해야 한다, 의무)", "Should (~해야 한다, 충고)"],
+    answer: 0,
+    explanation: "상대방에게 부탁이나 요청을 할 때 '~해주겠니?'의 의미로 Can을 씁니다."
+  },
+  {
+    id: 1004, set: 1,
+    sentence: "I ___ swim across the river when I was ten.",
+    question: "빈칸에 알맞은 조동사와 의미는?",
+    choices: ["could (~할 수 있었다, 과거 능력)", "can (~할 수 있다, 현재 능력)", "may (~해도 된다, 허가)", "must (~해야 한다, 의무)"],
+    answer: 0,
+    explanation: "과거에 '~할 수 있었다'는 능력을 표현하므로 can의 과거형인 could가 알맞습니다."
+  },
+  {
+    id: 1005, set: 1,
+    sentence: "___ you repeat that more slowly, please?",
+    question: "빈칸에 알맞은 조동사와 특징은?",
+    choices: ["Could (can보다 더 정중한 요청)", "Can (일반적인 요청)", "May (허가 요구)", "Must (의무적 명령)"],
+    answer: 0,
+    explanation: "could는 요청을 할 때 can보다 공손하고 정중한 표현으로 쓰입니다."
+  },
+  {
+    id: 1006, set: 1,
+    sentence: "He will ___ finish the drawing by tomorrow.",
+    question: "빈칸에 알맞은 표현과 의미는?",
+    choices: ["be able to (~할 수 있다, 능력)", "can (~할 수 있다, 능력)", "must receive (~해야 한다)", "would like to (~하고 싶다)"],
+    answer: 0,
+    explanation: "조동사 will 뒤에는 또 다른 조동사인 can을 쓸 수 없으므로, can의 대용 표현인 be able to를 씁니다."
+  },
+  {
+    id: 1007, set: 1,
+    sentence: "Take an umbrella. It ___ rain later today.",
+    question: "빈칸에 알맞은 조동사와 의미는?",
+    choices: ["may (~일지도 모른다, 약한 추측)", "must (~해야 한다, 의무)", "must not (~해서는 안 된다)", "would (~하곤 했다)"],
+    answer: 0,
+    explanation: "비가 올지도 모른다는 불확실하고 약한 추측을 나타내므로 may가 알맞습니다."
+  },
+  {
+    id: 1008, set: 1,
+    sentence: "___ I come in and ask a quick question?",
+    question: "빈칸에 알맞은 조동사와 의미는?",
+    choices: ["May (~해도 되나요?, 허가)", "Will (~할 것인가요?, 미래)", "Must (~해야 하나요?, 의무)", "Should (~해야 하나요?, 충고)"],
+    answer: 0,
+    explanation: "정중하게 허가를 구할 때 'May I ~?' (~해도 되나요?) 패턴을 씁니다."
+  },
+  {
+    id: 1009, set: 1,
+    sentence: "I ___ a glass of fresh orange juice, please.",
+    question: "빈칸에 알맞은 표현과 의미는?",
+    choices: ["would like (~을 원하다)", "would like to (~하기를 원하다)", "had better (~하는 것이 낫다)", "must (~해야 한다, 의무)"],
+    answer: 0,
+    explanation: "명사(a glass of orange juice)가 뒤에 올 때는 '~을 원하다'의 의미로 would like를 씁니다."
+  },
+  {
+    id: 1010, set: 1,
+    sentence: "We ___ order food now, if that is fine.",
+    question: "빈칸에 알맞은 표현과 의미는?",
+    choices: ["would like to (~하기를 원하다)", "would like (~을 원하다)", "should not (~하지 않는 편이 좋다)", "must not (~해서는 안 된다)"],
+    answer: 0,
+    explanation: "동사원형(order)이 뒤에 올 때는 '~하기를 원하다'의 의미로 would like to를 씁니다."
+  },
+
+  // 2세트: 의무, 금지, 충고 및 부정
+  {
+    id: 1011, set: 2,
+    sentence: "Drivers ___ stop at the red light.",
+    question: "빈칸에 알맞은 조동사와 의미는?",
+    choices: ["must (~해야 한다, 의무)", "may (~일지도 모른다, 추측)", "can (~할 수 있다, 능력)", "would (~하곤 했다)"],
+    answer: 0,
+    explanation: "반드시 지켜야 하는 강력한 의무를 나타내므로 must가 가장 어울립니다."
+  },
+  {
+    id: 1012, set: 2,
+    sentence: "She is wearing a heavy coat. It ___ be very cold outside.",
+    question: "빈칸에 알맞은 조동사와 의미는?",
+    choices: ["must (~임에 틀림없다, 강한 추측)", "should (~해야 한다, 충고)", "can't (~일 리가 없다, 강한 부정)", "may (~일지도 모른다, 약한 추측)"],
+    answer: 0,
+    explanation: "주변 정황으로 보아 확실한 사실을 강하게 추측하는 '~임에 틀림없다'이므로 must가 적절합니다."
+  },
+  {
+    id: 1013, set: 2,
+    sentence: "She slept for ten hours. She ___ be tired now.",
+    question: "빈칸에 알맞은 표현과 의미는?",
+    choices: ["can't (~일리가 없다, 강한 추측 부정)", "must (~임에 틀림없다, 강한 추측)", "must not (~해서는 안 된다, 강한 금지)", "may (~일지도 모른다, 약한 추측)"],
+    answer: 0,
+    explanation: "10시간 동안 잤기 때문에 피곤할 리가 없다는 강한 부정 추측 '~일리가 없다'이므로 can't가 정답입니다."
+  },
+  {
+    id: 1014, set: 2,
+    sentence: "You ___ touch these exhibition paintings in the museum.",
+    question: "빈칸에 알맞은 표현과 의미는?",
+    choices: ["must not (~하면 안 된다, 강한 금지)", "don't have to (~할 필요가 없다, 불필요)", "should not (~하지 않는 게 좋estate, 충고)", "cannot (~할 수 없다)"],
+    answer: 0,
+    explanation: "전시품을 만지는 것은 법이나 규칙으로 강하게 금지되므로 must not(~하면 안 된다)이 정답입니다."
+  },
+  {
+    id: 1015, set: 2,
+    sentence: "I ___ wear a school uniform on weekdays.",
+    question: "빈칸에 알맞은 표현과 의미는?",
+    choices: ["have to (~해야 한다, 의무)", "don't have to (~할 필요가 없다, 불필요)", "may (~일지도 모른다, 추측)", "would rather (~하하하겠다)"],
+    answer: 0,
+    explanation: "규칙상의 의무를 나타내는 '~해야 한다'는 의미로 have to가 가장 알맞습니다."
+  },
+  {
+    id: 1016, set: 2,
+    sentence: "My laptop broke down, so I ___ buy a new one yesterday.",
+    question: "빈칸에 알맞은 표현과 의미는?",
+    choices: ["had to (~해야 했다, 과거 의무)", "must (~해야 한다, 현재 의무)", "will have to (~해야 할 것이다)", "don't have to (~할 필요가 없다)"],
+    answer: 0,
+    explanation: "어제(yesterday) 일어난 과거의 의무를 부각시키므로 must의 과거 대용인 had to를 사용합니다."
+  },
+  {
+    id: 1017, set: 2,
+    sentence: "If you want to pass the exam, you ___ study much harder next week.",
+    question: "빈칸에 알맞은 표현과 의미는?",
+    choices: ["will have to (~해야 할 것이다, 미래 의무)", "had to (~해야 했다, 과거 의무)", "must not (~해서는 안 된다)", "don't have to (~할 필요가 없다)"],
+    answer: 0,
+    explanation: "다음 주(next week)처럼 미래에 해야 할 의무를 나타내므로 will have to(~해야 할 것이다)가 알맞습니다."
+  },
+  {
+    id: 1018, set: 2,
+    sentence: "Tomorrow is Sunday. We ___ go to school.",
+    question: "빈칸에 알맞은 표현과 의미는?",
+    choices: ["don't have to (~할 필요가 없다, 불필요)", "must not (~하면 안 된다, 강한 금지)", "should not (~하지 말아야 한다)", "could not (~할 수 없었다)"],
+    answer: 0,
+    explanation: "일요일이므로 학교에 갈 필요(불필요)가 없다는 뜻인 don't have to가 알맞습니다."
+  },
+  {
+    id: 1019, set: 2,
+    sentence: "We ___ be kind to our neighbors and help them.",
+    question: "빈칸에 알맞은 조동사와 의미는?",
+    choices: ["should (~해야 한다, 충고·의무)", "must not (~하면 안 된다, 금지)", "would like (~을 원하다)", "would rather (~하는 편이 낫다)"],
+    answer: 0,
+    explanation: "도덕적인 의무나 가벼운 충고를 나타내어 '~해야 한다'이므로 should가 가장 자연스럽습니다."
+  },
+  {
+    id: 1020, set: 2,
+    sentence: "You ___ visit the doctor. Your cough is getting much worse.",
+    question: "빈칸에 알맞은 표현과 의미는?",
+    choices: ["had better (~하는 것이 낫다, 강한 충고)", "would rather (~하하하하하하겠다, 선호)", "may as well (~하는 편이 낫다)", "must not (~하면 안 된다, 금지)"],
+    answer: 0,
+    explanation: "기침이 심해지고 있으므로 충고를 강하게 전달하는 '~하는 것이 낫다'인 had better가 알맞습니다."
+  }
+];

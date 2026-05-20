@@ -6,7 +6,7 @@ import { db, auth, handleFirestoreError, OperationType, recordStudySession } fro
 import { PetService } from '../../lib/petService';
 import { collection, query, where, onSnapshot, doc, setDoc, Timestamp, getDocs, orderBy, limit, addDoc, getDoc } from 'firebase/firestore';
 import { COMPLEMENT_QUIZ_DATA, GrammarWord } from '../../lib/grammarSets';
-import { MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
+import { MODAL_QUIZ_POOL, BASIC_MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
 import { VERB_FORM_QUIZ_POOL } from '../../lib/verbFormQuizPool';
 
 interface Wordbook {
@@ -14,7 +14,7 @@ interface Wordbook {
   title: string;
   description: string;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'verb-form-grammar' | 'grammar-cramming';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming';
   category?: 'word' | 'grammar';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -178,6 +178,10 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       else if (currentChunk === 1) displayedWords = words.slice(7, 17);
       else displayedWords = words.slice(17, 26);
     }
+  } else if (selectedWordbook?.type === 'basic-modal-grammar') {
+    totalChunks = 2;
+    if (currentChunk === 0) displayedWords = words.slice(0, 6);
+    else displayedWords = words.slice(6, 15);
   } else if (selectedWordbook?.type === 'modal-grammar') {
     totalChunks = 6;
     // Boundaries: 14, 21, 30, 37, 42, 48
@@ -400,11 +404,12 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       setIsFocusedMode(true);
       setSessionStartTime(Date.now());
       generateQuizOptions(0, selectedSessionWords);
-    } else if (selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'verb-form-grammar') {
+    } else if (selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'basic-modal-grammar' || selectedWordbook?.type === 'verb-form-grammar') {
       const isVerbForm = selectedWordbook?.type === 'verb-form-grammar';
+      const isBasicModal = selectedWordbook?.type === 'basic-modal-grammar';
       // Filter quiz pool by current set (currentChunk + 1)
       const currentSet = currentChunk + 1;
-      const pool = isVerbForm ? VERB_FORM_QUIZ_POOL : MODAL_QUIZ_POOL;
+      const pool = isVerbForm ? VERB_FORM_QUIZ_POOL : (isBasicModal ? BASIC_MODAL_QUIZ_POOL : MODAL_QUIZ_POOL);
       const setQuizPool = pool.filter(q => q.set === currentSet);
       
       if (setQuizPool.length === 0) {
@@ -414,7 +419,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
 
       // Format quiz pool into Word interface for consistency
       const quizWords: Word[] = setQuizPool.map(q => ({
-        id: isVerbForm ? `verb_form_quiz_${q.id}` : `modal_quiz_${q.id}`,
+        id: isVerbForm ? `verb_form_quiz_${q.id}` : (isBasicModal ? `basic_modal_quiz_${q.id}` : `modal_quiz_${q.id}`),
         word: q.sentence, // We'll display sentence in front
         meaning: q.choices[q.answer], // Set correct meaning for match logic
         quizSentence: q.sentence,
@@ -629,7 +634,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     const isToIngGrammar = selectedWordbook?.type === 'to-ing-grammar';
     const isComplementGrammar = selectedWordbook?.type === 'complement-grammar';
     const isConversionGrammar = selectedWordbook?.type === 'conversion-grammar';
-    const isModalGrammar = selectedWordbook?.type === 'modal-grammar';
+    const isModalGrammar = selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'basic-modal-grammar';
     const isVerbFormGrammar = selectedWordbook?.type === 'verb-form-grammar';
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.title?.includes('관계부사');
     
@@ -805,7 +810,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     const isToIngGrammar = selectedWordbook?.type === 'to-ing-grammar';
     const isComplementGrammar = selectedWordbook?.type === 'complement-grammar';
     const isConversionGrammar = selectedWordbook?.type === 'conversion-grammar';
-    const isModalGrammar = selectedWordbook?.type === 'modal-grammar';
+    const isModalGrammar = selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'basic-modal-grammar';
     const isVerbFormGrammar = selectedWordbook?.type === 'verb-form-grammar';
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.title?.includes('관계부사');
     
@@ -814,8 +819,12 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       // In relative grammar, the first element of quizChoices is always the correct one
       correctAnswer = sessionWords[quizIndex].quizChoices?.[0] || '';
     } else if (isModalGrammar || isVerbFormGrammar) {
-      const pool = isModalGrammar ? MODAL_QUIZ_POOL : VERB_FORM_QUIZ_POOL;
-      const originalQuestion = (pool as any[]).find(q => (isModalGrammar ? `modal_quiz_${q.id}` : `verb_form_quiz_${q.id}`) === sessionWords[quizIndex].id);
+      const isBasic = selectedWordbook?.type === 'basic-modal-grammar';
+      const pool = isVerbFormGrammar ? VERB_FORM_QUIZ_POOL : (isBasic ? BASIC_MODAL_QUIZ_POOL : MODAL_QUIZ_POOL);
+      const originalQuestion = (pool as any[]).find(q => {
+        const prefix = isVerbFormGrammar ? 'verb_form_quiz_' : (isBasic ? 'basic_modal_quiz_' : 'modal_quiz_');
+        return `${prefix}${q.id}` === sessionWords[quizIndex].id;
+      });
       correctAnswer = originalQuestion ? originalQuestion.choices[originalQuestion.answer] : '';
     } else if (isConversionGrammar) {
       const p = sessionWords[quizIndex].pattern || '';
@@ -867,6 +876,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     // Don't auto-advance for grammar types that show explanation modal
     const showExplanationModal = selectedWordbook?.type === 'relative-grammar' || 
                                   selectedWordbook?.type === 'modal-grammar' || 
+                                  selectedWordbook?.type === 'basic-modal-grammar' || 
                                   selectedWordbook?.type === 'verb-form-grammar' || 
                                   selectedWordbook?.type === 'grammar-cramming' ||
                                   selectedWordbook?.title?.includes('관계부사');
@@ -1301,11 +1311,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                             </p>
                           )}
                           <h3 className={`${isMobile ? 'text-2xl' : 'text-5xl'} font-black text-slate-900 text-center leading-tight`}>
-                            {(selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.type === 'grammar-cramming' || selectedWordbook?.title?.includes('관계부사'))
+                            {(selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'basic-modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.type === 'grammar-cramming' || selectedWordbook?.title?.includes('관계부사'))
                               ? sessionWords[quizIndex].quizSentence 
                               : sessionWords[quizIndex].word}
                           </h3>
-                          {(selectedWordbook?.type !== 'relative-grammar' && selectedWordbook?.type !== 'modal-grammar' && selectedWordbook?.type !== 'verb-form-grammar' && !selectedWordbook?.title?.includes('관계부사')) && (
+                          {(selectedWordbook?.type !== 'relative-grammar' && selectedWordbook?.type !== 'modal-grammar' && selectedWordbook?.type !== 'basic-modal-grammar' && selectedWordbook?.type !== 'verb-form-grammar' && !selectedWordbook?.title?.includes('관계부사')) && (
                             <button 
                               onClick={() => speak(sessionWords[quizIndex].word)}
                               className="p-2 md:p-3 bg-slate-50 text-slate-400 rounded-xl hover:text-pastel-pink-500 transition-colors"
@@ -1386,7 +1396,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                           })}
                         </div>
 
-                          { (selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.type === 'grammar-cramming' || selectedWordbook?.title?.includes('관계부사')) && selectedOption !== null && (
+                          { (selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'basic-modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.type === 'grammar-cramming' || selectedWordbook?.title?.includes('관계부사')) && selectedOption !== null && (
                           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                             <motion.div 
                               initial={{ opacity: 0 }}
@@ -1655,7 +1665,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                     >
                       {/* Front */}
                       <div className={`absolute inset-0 backface-hidden bg-white ${isMobile ? 'rounded-2xl p-6' : 'rounded-[3rem] p-10'} border-2 border-pastel-pink-100 shadow-xl flex flex-col items-center justify-center`}>
-                        {selectedWordbook?.type === 'modal-grammar' && (
+                        {(selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'basic-modal-grammar') && (
                           <div className="absolute top-6 px-3 py-1 bg-indigo-100 text-indigo-600 text-[10px] font-black rounded-lg uppercase tracking-wider">
                             GRAMMAR CONCEPT
                           </div>
@@ -1945,6 +1955,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                       currentChunk === 0 ? '명사/형용사 보어' :
                       currentChunk === 1 ? 'to V 보어' :
                       '동사원형 / 둘 다 가능'
+                    ) : selectedWordbook?.type === 'basic-modal-grammar' ? (
+                      currentChunk === 0 ? '기본 조동사 (can, could, be able to, may, would like)' :
+                      '의무, 금지, 충고 및 부정 (must, have to, should, had better)'
                     ) : selectedWordbook?.type === 'modal-grammar' ? (
                       currentChunk === 0 ? '능력/허가/요청 (can, may, will)' :
                       currentChunk === 1 ? '의무/금지/추측 (must, should)' :
@@ -1967,6 +1980,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                       currentChunk === 0 ? '명사나 형용사를 보어로 취하는 동사 (7개)' :
                       currentChunk === 1 ? 'to 부정사를 보어로 취하는 동사 (10개)' :
                       '동사원형 또는 둘 다 가능한 동사 (9개)'
+                    ) : selectedWordbook?.type === 'basic-modal-grammar' ? (
+                      currentChunk === 0 ? '1세트: 능력, 허가, 요청, 추측 등 기초 의미 구별 (6개)' :
+                      '2세트: 의무, 금지, 불필요, 충고 등 기초 표현 (9개)'
                     ) : selectedWordbook?.type === 'modal-grammar' ? (
                       currentChunk === 0 ? '1세트: 능력, 허가, 요청, 추측 등 의미 구별 (14개)' :
                       currentChunk === 1 ? '2세트: 의무, 금지, 불필요, 추측 등 강도 구별 (7개)' :
@@ -2026,7 +2042,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                               Grammar Concept
                             </span>
                           )}
-                          {(selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'verb-form-grammar' || selectedWordbook.type === 'grammar-cramming') && (
+                          {(selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'basic-modal-grammar' || selectedWordbook.type === 'verb-form-grammar' || selectedWordbook.type === 'grammar-cramming') && (
                             <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 text-[8px] md:text-[10px] font-black rounded uppercase tracking-tighter">
                               GRAMMAR CONCEPT
                             </span>
@@ -2047,7 +2063,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                                퀴즈에서 문제 확인 가능 (보안)
                              </div>
                           </div>
-                        ) : selectedWordbook.type === 'modal-grammar' ? (
+                        ) : (selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'basic-modal-grammar') ? (
                           <div className="space-y-0.5">
                             <div className={`${isMobile ? 'text-[10px]' : 'text-sm'} font-medium ${progress[word.id] === 'learned' ? 'text-emerald-600/70' : 'text-slate-500'}`}>
                               {word.meaning}

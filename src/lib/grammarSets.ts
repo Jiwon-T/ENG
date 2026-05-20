@@ -388,6 +388,101 @@ export async function seedModalGrammar() {
   await addBatch.commit();
 }
 
+export const BASIC_MODAL_GRAMMAR_DATA = [
+  // 1세트: 기본 조동사
+  { word: 'can V', meaning: '(능력) 할 수 있다 / (허가) 해도 된다 / (요청) ~해주겠니?', pattern: 'can', set: 1, example: 'He can speak three languages.' },
+  { word: 'could V', meaning: '(능력) 할 수 있었다 / (허가, 요청에서는 과거가 아니라 can보다 더 정중한 표현)', pattern: 'could', set: 1, example: 'Could you help me with this bag?' },
+  { word: 'be able to V', meaning: '(능력)할 수 있다', pattern: 'be able to', set: 1, example: 'She will be able to play the piano soon.' },
+  { word: 'may V', meaning: '(약한 추측) ~일지도 모른다 / (허가) ~해도 된다', pattern: 'may', set: 1, example: 'It may rain this afternoon.' },
+  { word: 'would like A', meaning: '~을 원하다', pattern: 'would like', set: 1, example: 'I would like a cup of hot chocolate, please.' },
+  { word: 'would like to V', meaning: '~하기를 원하다', pattern: 'would like to', set: 1, example: 'We would like to see the representative.' },
+
+  // 2세트: 의무, 금지, 충고 및 부정
+  { word: 'must V', meaning: '(의무) ~해야 한다 / (강한 추측) ~임에 틀림없다', pattern: 'must', set: 2, example: 'You must wear a helmet on a motorcycle.' },
+  { word: "can't V", meaning: '(능력/허가/요청의 부정) / (강한 추측) ~일리가 없다', pattern: "can't", set: 2, example: 'The story can\'t be true.' },
+  { word: 'must not V', meaning: '(강한 금지)~하면 안된다', pattern: 'must not', set: 2, example: 'We must not run in the hallway.' },
+  { word: 'have to V / has to V', meaning: '(의무) ~해야 한다', pattern: 'have to', set: 2, example: 'He has to finish his homework tonight.' },
+  { word: 'had to V', meaning: '(의무) ~해야 했다', pattern: 'had to', set: 2, example: 'I had to stay at school until 6 p.m.' },
+  { word: 'will have to V', meaning: '(의무) ~해야 할 것이다', pattern: 'will have to', set: 2, example: 'You will have to apologize to him.' },
+  { word: "don't have to V", meaning: '(불필요) ~할 필요가 없다', pattern: "don't have to", set: 2, example: 'She doesn\'t have to buy a ticket.' },
+  { word: 'should V', meaning: '(충고,의무) 해야 한다', pattern: 'should', set: 2, example: 'We should protect our environment.' },
+  { word: 'had better V', meaning: '(강한 충고) ~하는 것이 낫다', pattern: 'had better', set: 2, example: 'You had better take an umbrella today.' },
+];
+
+export async function seedBasicModalGrammar() {
+  const wordbooksRef = collection(db, 'wordbooks');
+  const q = query(wordbooksRef, where('type', '==', 'basic-modal-grammar'));
+  const snapshot = await getDocs(q);
+
+  // Also check for legacy duplicates by title and delete them if they have wrong type
+  const titleQ = query(wordbooksRef, where('title', '==', '조동사 기초'));
+  const titleSnap = await getDocs(titleQ);
+  
+  let wordbookId: string = '';
+
+  for (const docSnap of titleSnap.docs) {
+    if (docSnap.data().type !== 'basic-modal-grammar') {
+      await deleteDoc(docSnap.ref);
+    } else {
+      wordbookId = docSnap.id;
+    }
+  }
+
+  if (!wordbookId) {
+    if (!snapshot.empty) {
+      wordbookId = snapshot.docs[0].id;
+    } else {
+      const docRef = await addDoc(wordbooksRef, {
+        title: '조동사 기초',
+        description: '기초 조동사 문법을 학습합니다.',
+        createdBy: 'system',
+        isPublic: true,
+        type: 'basic-modal-grammar',
+        category: 'grammar',
+        createdAt: Timestamp.now(),
+        order: 2.5
+      });
+      wordbookId = docRef.id;
+    }
+  }
+
+  // Final update to ensure metadata is sync'd
+  await setDoc(doc(db, 'wordbooks', wordbookId), { 
+    type: 'basic-modal-grammar',
+    category: 'grammar',
+    createdBy: 'system',
+    description: '기초 조동사 문법을 학습합니다.',
+    isPublic: true,
+    order: 2.5
+  }, { merge: true });
+
+  const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
+  const existingWords = await getDocs(wordsRef);
+  
+  // Delete existing to force re-sync with newest data structure
+  const deleteBatch = writeBatch(db);
+  for (const d of existingWords.docs) {
+    deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
+  }
+  await deleteBatch.commit();
+  
+  // Add new
+  const addBatch = writeBatch(db);
+  for (let i = 0; i < BASIC_MODAL_GRAMMAR_DATA.length; i++) {
+    const item = BASIC_MODAL_GRAMMAR_DATA[i];
+    const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
+    addBatch.set(newDocRef, {
+      word: item.word,
+      meaning: item.meaning,
+      pattern: item.pattern,
+      example: item.example || '',
+      order: i,
+      set: item.set 
+    });
+  }
+  await addBatch.commit();
+}
+
 export async function seedConversionGrammar() {
   if ((window as any)._conversionSeeded) return;
   (window as any)._conversionSeeded = true;

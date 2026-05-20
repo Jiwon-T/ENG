@@ -4,7 +4,7 @@ import { BookOpen, Plus, Search, Trash2, Edit3, FileSpreadsheet, X, CheckCircle2
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, writeBatch, getDocs, orderBy } from 'firebase/firestore';
 import { generateWordTest, generateMultipleChoiceQuiz, generateIrregularVerbTest, generateWordbookTable, generateVerbFormMemorizationTest } from '../../lib/wordTestGenerator';
-import { MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
+import { MODAL_QUIZ_POOL, BASIC_MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
 import { VERB_FORM_QUIZ_POOL } from '../../lib/verbFormQuizPool';
 import { VERB_FORM_TABLE_DATA } from '../../lib/verbFormTableData';
 import { GRAMMAR_CRAMMING_POOL } from '../../lib/grammarCrammingPool';
@@ -34,7 +34,7 @@ interface Wordbook {
   createdBy: string;
   createdAt: any;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'verb-form-grammar' | 'grammar-cramming';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming';
   category?: 'word' | 'grammar';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -425,7 +425,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         updatedAt: Timestamp.now()
       };
 
-      if (selectedWordbook.type === 'irregular' || selectedWordbook.type === 'modal-grammar') {
+      if (selectedWordbook.type === 'irregular' || selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'basic-modal-grammar') {
         updateData.past = editPastValue.trim();
         updateData.pastParticiple = editPastParticipleValue.trim();
         updateData.pattern = editPatternValue.trim();
@@ -662,10 +662,12 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
           wordsForQuiz = shuffledEx.slice(0, Math.min(targetCount, allExamples.length));
         }
 
-        if (selectedWordbook.type === 'modal-grammar') {
+        if (selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'basic-modal-grammar') {
+          const isBasic = selectedWordbook.type === 'basic-modal-grammar';
           const activeSets = Array.from(new Set(selectedWords.map(w => (w as any).set))).filter(s => s !== undefined);
           if (activeSets.length > 0) {
-            const applicableQuestions = MODAL_QUIZ_POOL.filter(q => activeSets.includes(q.set));
+            const pool = isBasic ? BASIC_MODAL_QUIZ_POOL : MODAL_QUIZ_POOL;
+            const applicableQuestions = pool.filter(q => activeSets.includes(q.set));
             if (applicableQuestions.length > 0) {
               const shuffledPool = [...applicableQuestions].sort(() => 0.5 - Math.random());
               const targetCount = testPaperConfig.selectionMode === 'random' ? testPaperConfig.wordCount : selectedWords.length;
@@ -1062,7 +1064,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                         </div>
                         <div className="text-sm text-slate-500 font-medium whitespace-pre-wrap">{word.meaning}</div>
                       </div>
-                    ) : selectedWordbook.type === 'modal-grammar' ? (
+                    ) : (selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'basic-modal-grammar') ? (
                       <div className="space-y-0.5">
                         <div className="text-sm font-black text-pastel-pink-500">{word.meaning}</div>
                         {word.example && <div className="text-xs text-slate-400 font-medium italic">Ex: {word.example}</div>}
@@ -1358,7 +1360,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold resize-none"
                 />
               </div>
-              {selectedWordbook?.type === 'modal-grammar' && (
+              {(selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'basic-modal-grammar') && (
                 <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">문법 패턴 (예: 능력, 허가)</label>
