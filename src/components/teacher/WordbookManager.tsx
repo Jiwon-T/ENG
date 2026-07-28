@@ -527,6 +527,31 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     }
   };
 
+  const handleWordDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !selectedWordbook) return;
+
+    const oldIndex = words.findIndex((w) => w.id === active.id);
+    const newIndex = words.findIndex((w) => w.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newWords = arrayMove(words, oldIndex, newIndex);
+    setWords(newWords);
+
+    // Update Firestore
+    try {
+      const batch = writeBatch(db);
+      newWords.forEach((word: Word, index) => {
+        const wordRef = doc(db, `wordbooks/${selectedWordbook.id}/words`, word.id);
+        batch.update(wordRef, { order: index });
+      });
+      await batch.commit();
+    } catch (error) {
+      console.error('Failed to update word order:', error);
+    }
+  };
+
   const handleUpdateWordbookTitle = async () => {
     if (!editingWordbook || !editWbTitleValue.trim()) return;
     try {
@@ -1037,72 +1062,26 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
               </button>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {words.map((word) => (
-                <div key={word.id} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-lg font-black text-slate-900">
-                        {selectedWordbook.type === 'grammar-cramming' ? (word as any).quizSentence || word.word : word.word}
-                      </div>
-                      {selectedWordbook.type === 'irregular' && word.pattern && (
-                        <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 text-[10px] font-black rounded uppercase tracking-tighter">
-                          {word.pattern}
-                        </span>
-                      )}
-                      {selectedWordbook.type === 'relative-grammar' && word.word.includes('(___)') && (
-                        <span className="px-1.5 py-0.5 bg-orange-100 text-orange-600 text-[10px] font-black rounded uppercase tracking-tighter flex items-center gap-1">
-                          ⚠️ MOVE TO EXAMPLES
-                        </span>
-                      )}
-                    </div>
-                    {selectedWordbook.type === 'irregular' ? (
-                      <div className="space-y-0.5">
-                        <div className="text-sm font-black text-blue-500">
-                          {selectedWordbook.type === 'grammar-cramming' && word.word !== (word as any).quizSentence ? `개념: ${word.word} | ` : ''}
-                          {word.past} - {word.pastParticiple}
-                        </div>
-                        <div className="text-sm text-slate-500 font-medium whitespace-pre-wrap">{word.meaning}</div>
-                      </div>
-                    ) : (selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'basic-modal-grammar') ? (
-                      <div className="space-y-0.5">
-                        <div className="text-sm font-black text-pastel-pink-500">{word.meaning}</div>
-                        {word.example && <div className="text-xs text-slate-400 font-medium italic">Ex: {word.example}</div>}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-slate-500 font-medium whitespace-pre-wrap">
-                        {selectedWordbook.type === 'relative-grammar' && word.word.includes('(___)') ? (
-                          <span className="text-orange-500 font-bold">이 항목은 문장 형태입니다. 삭제 후 특정 개념의 [예문 관리] 버튼을 통해 등록해주세요.</span>
-                        ) : selectedWordbook.type === 'grammar-cramming' ? (
-                          <div className="space-y-1">
-                            <div className="text-xs font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded inline-block">개념: {word.word}</div>
-                            <div className="text-sm text-slate-600">정답: <span className="font-bold text-slate-900">{word.meaning}</span></div>
-                            <div className="text-[10px] text-slate-400 font-medium italic">해설: {(word as any).quizExplanation}</div>
-                          </div>
-                        ) : word.meaning}
-                      </div>
-                    )}
-                    {word.imageUrl && (
-                      <div className="mt-2 w-16 h-16 rounded-lg overflow-hidden border border-slate-200">
-                        <img src={word.imageUrl} alt={word.word} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex gap-1">
-                    {(selectedWordbook.type === 'relative-grammar' || selectedWordbook.type === 'verb-form-grammar') && (
-                      <button 
-                        onClick={() => {
-                          setCurrentWordForExamples(word);
-                          setIsExampleModalOpen(true);
-                        }}
-                        className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg font-bold text-xs hover:bg-indigo-100 transition-all flex items-center gap-1.5"
-                      >
-                        <FileText size={14} />
-                        예문 관리
-                      </button>
-                    )}
-                    <button 
-                      onClick={() => {
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleWordDragEnd}
+            >
+              <SortableContext
+                items={words.map(w => w.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {words.map((word) => (
+                    <SortableWordCard
+                      key={word.id}
+                      word={word}
+                      selectedWordbook={selectedWordbook}
+                      onOpenExamples={() => {
+                        setCurrentWordForExamples(word);
+                        setIsExampleModalOpen(true);
+                      }}
+                      onEdit={() => {
                         setEditingWord(word);
                         setEditWordValue(word.word);
                         setEditMeaningValue(word.meaning);
@@ -1122,25 +1101,17 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                         setEditCategory((word as any).category || '');
                         setEditSet((word as any).set || 1);
                       }}
-                      className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
-                    >
-                      <Edit3 size={18} />
-                    </button>
-                    <button 
-                      onClick={() => setDeleteTarget({ id: word.id, title: word.word, type: 'word' })}
-                      className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+                      onDelete={() => setDeleteTarget({ id: word.id, title: word.word, type: 'word' })}
+                    />
+                  ))}
+                  {words.length === 0 && (
+                    <div className="col-span-2 py-20 text-center text-slate-400 font-medium">
+                      등록된 단어가 없습니다.
+                    </div>
+                  )}
                 </div>
-              ))}
-              {words.length === 0 && (
-                <div className="col-span-2 py-20 text-center text-slate-400 font-medium">
-                  등록된 단어가 없습니다.
-                </div>
-              )}
-            </div>
+              </SortableContext>
+            </DndContext>
           </div>
         </motion.div>
       )}
@@ -2265,5 +2236,127 @@ function SortableWordbookCard({ wb, onClick, onDelete, onEdit }: { wb: Wordbook;
       </div>
       <p className="text-xs text-slate-400 font-medium mt-auto">생성일: {wb.createdAt?.toDate().toLocaleDateString()}</p>
     </motion.div>
+  );
+}
+
+function SortableWordCard({
+  word,
+  selectedWordbook,
+  onEdit,
+  onDelete,
+  onOpenExamples
+}: {
+  word: Word;
+  selectedWordbook: Wordbook;
+  onEdit: () => void;
+  onDelete: () => void;
+  onOpenExamples: () => void;
+  key?: string;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: word.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center gap-3 relative hover:border-slate-200 transition-all"
+    >
+      <div className="flex items-start gap-3 flex-1 min-w-0">
+        <div 
+          {...attributes} 
+          {...listeners}
+          className="p-1 mt-0.5 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing flex-shrink-0"
+          title="드래그하여 순서 변경"
+        >
+          <GripVertical size={20} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="text-lg font-black text-slate-900 break-words">
+              {selectedWordbook.type === 'grammar-cramming' ? (word as any).quizSentence || word.word : word.word}
+            </div>
+            {selectedWordbook.type === 'irregular' && word.pattern && (
+              <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 text-[10px] font-black rounded uppercase tracking-tighter">
+                {word.pattern}
+              </span>
+            )}
+            {selectedWordbook.type === 'relative-grammar' && word.word.includes('(___)') && (
+              <span className="px-1.5 py-0.5 bg-orange-100 text-orange-600 text-[10px] font-black rounded uppercase tracking-tighter flex items-center gap-1">
+                ⚠️ MOVE TO EXAMPLES
+              </span>
+            )}
+          </div>
+          {selectedWordbook.type === 'irregular' ? (
+            <div className="space-y-0.5 mt-1">
+              <div className="text-sm font-black text-blue-500">
+                {word.past} - {word.pastParticiple}
+              </div>
+              <div className="text-sm text-slate-500 font-medium whitespace-pre-wrap">{word.meaning}</div>
+            </div>
+          ) : (selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'basic-modal-grammar') ? (
+            <div className="space-y-0.5 mt-1">
+              <div className="text-sm font-black text-pastel-pink-500">{word.meaning}</div>
+              {word.example && <div className="text-xs text-slate-400 font-medium italic">Ex: {word.example}</div>}
+            </div>
+          ) : (
+            <div className="text-sm text-slate-500 font-medium whitespace-pre-wrap mt-1">
+              {selectedWordbook.type === 'relative-grammar' && word.word.includes('(___)') ? (
+                <span className="text-orange-500 font-bold">이 항목은 문장 형태입니다. 삭제 후 특정 개념의 [예문 관리] 버튼을 통해 등록해주세요.</span>
+              ) : selectedWordbook.type === 'grammar-cramming' ? (
+                <div className="space-y-1">
+                  <div className="text-xs font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded inline-block">개념: {word.word}</div>
+                  <div className="text-sm text-slate-600">정답: <span className="font-bold text-slate-900">{word.meaning}</span></div>
+                  <div className="text-[10px] text-slate-400 font-medium italic">해설: {(word as any).quizExplanation}</div>
+                </div>
+              ) : word.meaning}
+            </div>
+          )}
+          {word.imageUrl && (
+            <div className="mt-2 w-16 h-16 rounded-lg overflow-hidden border border-slate-200">
+              <img src={word.imageUrl} alt={word.word} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-1 flex-shrink-0 items-center">
+        {(selectedWordbook.type === 'relative-grammar' || selectedWordbook.type === 'verb-form-grammar') && (
+          <button 
+            onClick={onOpenExamples}
+            className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg font-bold text-xs hover:bg-indigo-100 transition-all flex items-center gap-1.5"
+          >
+            <FileText size={14} />
+            예문 관리
+          </button>
+        )}
+        <button 
+          onClick={onEdit}
+          className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
+          title="단어 수정"
+        >
+          <Edit3 size={18} />
+        </button>
+        <button 
+          onClick={onDelete}
+          className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+          title="단어 삭제"
+        >
+          <Trash2 size={18} />
+        </button>
+      </div>
+    </div>
   );
 }
