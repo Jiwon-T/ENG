@@ -518,9 +518,10 @@ export const generateIrregularVerbTest = async (
     includeAnswerKey: boolean;
     paperTitle?: string;
     studentName?: string;
+    includeMeaningColumn?: boolean;
   }
 ) => {
-  const { includeAnswerKey, paperTitle = '불규칙 변화 테스트', studentName = '' } = options;
+  const { includeAnswerKey, paperTitle = '불규칙 변화 테스트', studentName = '', includeMeaningColumn = false } = options;
 
   const createDocument = (isAnswerKey: boolean) => {
     // Header Table
@@ -563,12 +564,11 @@ export const generateIrregularVerbTest = async (
     const halfCount = Math.ceil(words.length / 2);
     const rows: TableRow[] = [];
 
-    // Table Header Row
     const createHeaderCell = (text: string, width: number) => new TableCell({
       width: { size: width, type: WidthType.PERCENTAGE },
-      shading: { fill: "FFF1F2" }, // Pastel Pink background
+      shading: { fill: "FFF1F2" },
       verticalAlign: VerticalAlign.CENTER,
-      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text, bold: true, size: 18, color: "FF4D6D" })] })],
+      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text, bold: true, size: 17, color: "FF4D6D" })] })],
       borders: {
         top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
         bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
@@ -577,19 +577,37 @@ export const generateIrregularVerbTest = async (
       }
     });
 
-    rows.push(new TableRow({
-      height: { value: 500, rule: HeightRule.ATLEAST },
-      children: [
-        createHeaderCell("№", 6),
-        createHeaderCell("현재형 (+뜻)", 24),
-        createHeaderCell("과거형", 10),
-        createHeaderCell("과거분사", 10),
-        createHeaderCell("№", 6),
-        createHeaderCell("현재형 (+뜻)", 24),
-        createHeaderCell("과거형", 10),
-        createHeaderCell("과거분사", 10),
-      ]
-    }));
+    if (includeMeaningColumn) {
+      rows.push(new TableRow({
+        height: { value: 500, rule: HeightRule.ATLEAST },
+        children: [
+          createHeaderCell("№", 4),
+          createHeaderCell("원형", 11),
+          createHeaderCell("뜻", 13),
+          createHeaderCell("과거형", 11),
+          createHeaderCell("과거분사", 11),
+          createHeaderCell("№", 4),
+          createHeaderCell("원형", 11),
+          createHeaderCell("뜻", 13),
+          createHeaderCell("과거형", 11),
+          createHeaderCell("과거분사", 11),
+        ]
+      }));
+    } else {
+      rows.push(new TableRow({
+        height: { value: 500, rule: HeightRule.ATLEAST },
+        children: [
+          createHeaderCell("№", 6),
+          createHeaderCell("현재형 (+뜻)", 24),
+          createHeaderCell("과거형", 10),
+          createHeaderCell("과거분사", 10),
+          createHeaderCell("№", 6),
+          createHeaderCell("현재형 (+뜻)", 24),
+          createHeaderCell("과거형", 10),
+          createHeaderCell("과거분사", 10),
+        ]
+      }));
+    }
 
     for (let i = 0; i < halfCount; i++) {
       const leftWord = words[i];
@@ -600,7 +618,7 @@ export const generateIrregularVerbTest = async (
         verticalAlign: VerticalAlign.CENTER,
         children: [new Paragraph({ 
           alignment: align, 
-          children: [new TextRun({ text, size: 18, bold, color })] 
+          children: [new TextRun({ text, size: 17, bold, color })] 
         })],
         borders: {
           top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
@@ -617,7 +635,7 @@ export const generateIrregularVerbTest = async (
           new Paragraph({ 
             alignment: AlignmentType.CENTER, 
             children: [
-              new TextRun({ text: word.word, bold: true, size: 18 }),
+              new TextRun({ text: word.word, bold: true, size: 17 }),
               new TextRun({ text: `  (${word.meaning})`, size: 14, color: "666666" })
             ] 
           })
@@ -630,20 +648,41 @@ export const generateIrregularVerbTest = async (
         }
       });
 
-      rows.push(new TableRow({
-        height: { value: 700, rule: HeightRule.ATLEAST },
-        children: [
-          createCell((i + 1).toString(), 6),
-          createBaseCell(leftWord),
-          createCell(isAnswerKey ? leftWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
-          createCell(isAnswerKey ? leftWord.pastParticiple : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
-          
-          createCell(rightWord ? (i + halfCount + 1).toString() : "", 6),
-          rightWord ? createBaseCell(rightWord) : createCell("", 24),
-          createCell(rightWord && isAnswerKey ? rightWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
-          createCell(rightWord && isAnswerKey ? rightWord.pastParticiple : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
-        ]
-      }));
+      if (includeMeaningColumn) {
+        rows.push(new TableRow({
+          height: { value: 700, rule: HeightRule.ATLEAST },
+          children: [
+            // Left set
+            createCell((i + 1).toString(), 4),
+            createCell(leftWord ? leftWord.word : "", 11, AlignmentType.CENTER, true),
+            createCell(isAnswerKey && leftWord ? leftWord.meaning : "", 13, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF0000" : undefined, !isAnswerKey),
+            createCell(isAnswerKey && leftWord ? (leftWord.past || "") : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
+            createCell(isAnswerKey && leftWord ? (leftWord.pastParticiple || "") : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
+
+            // Right set
+            createCell(rightWord ? (i + halfCount + 1).toString() : "", 4),
+            createCell(rightWord ? rightWord.word : "", 11, AlignmentType.CENTER, true),
+            createCell(isAnswerKey && rightWord ? rightWord.meaning : "", 13, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF0000" : undefined, rightWord && !isAnswerKey),
+            createCell(rightWord && isAnswerKey ? (rightWord.past || "") : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
+            createCell(rightWord && isAnswerKey ? (rightWord.pastParticiple || "") : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
+          ]
+        }));
+      } else {
+        rows.push(new TableRow({
+          height: { value: 700, rule: HeightRule.ATLEAST },
+          children: [
+            createCell((i + 1).toString(), 6),
+            createBaseCell(leftWord),
+            createCell(isAnswerKey ? leftWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
+            createCell(isAnswerKey ? leftWord.pastParticiple : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
+            
+            createCell(rightWord ? (i + halfCount + 1).toString() : "", 6),
+            rightWord ? createBaseCell(rightWord) : createCell("", 24),
+            createCell(rightWord && isAnswerKey ? rightWord.past : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
+            createCell(rightWord && isAnswerKey ? rightWord.pastParticiple : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
+          ]
+        }));
+      }
     }
 
     const mainTable = new Table({
@@ -671,17 +710,239 @@ export const generateIrregularVerbTest = async (
     });
   };
 
-  // Create safe filename
   const baseName = [paperTitle, subtitle, studentName].filter(Boolean).join('_');
+  const fileSuffix = includeMeaningColumn ? '_3단변화_한글뜻_테스트.docx' : '_3단변화_테스트.docx';
+  const answerSuffix = includeMeaningColumn ? '_3단변화_한글뜻_정답지.docx' : '_3단변화_정답지.docx';
 
   const testDoc = createDocument(false);
   const testBlob = await Packer.toBlob(testDoc);
-  saveAs(testBlob, `${baseName}_3단변화_테스트.docx`);
+  saveAs(testBlob, `${baseName}${fileSuffix}`);
 
   if (includeAnswerKey) {
     const answerDoc = createDocument(true);
     const answerBlob = await Packer.toBlob(answerDoc);
-    saveAs(answerBlob, `${baseName}_3단변화_정답지.docx`);
+    saveAs(answerBlob, `${baseName}${answerSuffix}`);
+  }
+};
+
+export const generateComparativeTest = async (
+  title: string,
+  subtitle: string,
+  words: any[],
+  options: {
+    includeAnswerKey: boolean;
+    paperTitle?: string;
+    studentName?: string;
+    includeMeaningColumn?: boolean;
+  }
+) => {
+  const { includeAnswerKey, paperTitle = '비교급 3단 변화 테스트', studentName = '', includeMeaningColumn = true } = options;
+
+  const createDocument = (isAnswerKey: boolean) => {
+    // Header Table
+    const headerTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        new TableRow({
+          height: { value: 800, rule: HeightRule.ATLEAST },
+          children: [
+            new TableCell({
+              width: { size: 15, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "지원T", bold: true, size: 20 })] })],
+            }),
+            new TableCell({
+              width: { size: 55, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              children: [
+                new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: title, bold: true, size: 26 })] }),
+                new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: subtitle, bold: true, size: 22 })] }),
+              ],
+            }),
+            new TableCell({
+              width: { size: 30, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: `이름: ${studentName}`, size: 22, bold: true })],
+                  alignment: AlignmentType.LEFT,
+                  spacing: { before: 80, after: 80 },
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const halfCount = Math.ceil(words.length / 2);
+    const rows: TableRow[] = [];
+
+    const createHeaderCell = (text: string, width: number) => new TableCell({
+      width: { size: width, type: WidthType.PERCENTAGE },
+      shading: { fill: "FFF1F2" },
+      verticalAlign: VerticalAlign.CENTER,
+      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text, bold: true, size: 17, color: "FF4D6D" })] })],
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+        bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+        left: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+        right: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+      }
+    });
+
+    if (includeMeaningColumn) {
+      rows.push(new TableRow({
+        height: { value: 500, rule: HeightRule.ATLEAST },
+        children: [
+          createHeaderCell("№", 4),
+          createHeaderCell("원급", 11),
+          createHeaderCell("뜻", 13),
+          createHeaderCell("비교급", 11),
+          createHeaderCell("최상급", 11),
+          createHeaderCell("№", 4),
+          createHeaderCell("원급", 11),
+          createHeaderCell("뜻", 13),
+          createHeaderCell("비교급", 11),
+          createHeaderCell("최상급", 11),
+        ]
+      }));
+    } else {
+      rows.push(new TableRow({
+        height: { value: 500, rule: HeightRule.ATLEAST },
+        children: [
+          createHeaderCell("№", 6),
+          createHeaderCell("원급 (+뜻)", 24),
+          createHeaderCell("비교급", 10),
+          createHeaderCell("최상급", 10),
+          createHeaderCell("№", 6),
+          createHeaderCell("원급 (+뜻)", 24),
+          createHeaderCell("비교급", 10),
+          createHeaderCell("최상급", 10),
+        ]
+      }));
+    }
+
+    for (let i = 0; i < halfCount; i++) {
+      const leftWord = words[i];
+      const rightWord = words[i + halfCount];
+
+      const createCell = (text: string, width: number, align = AlignmentType.CENTER, bold: boolean = false, color?: string, showBottomBorder: boolean = false) => new TableCell({
+        width: { size: width, type: WidthType.PERCENTAGE },
+        verticalAlign: VerticalAlign.CENTER,
+        children: [new Paragraph({ 
+          alignment: align, 
+          children: [new TextRun({ text, size: 17, bold, color })] 
+        })],
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+          bottom: showBottomBorder ? { style: BorderStyle.SINGLE, size: 4, color: "DDDDDD" } : { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+          left: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+          right: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+        }
+      });
+
+      const createBaseCell = (word: any) => new TableCell({
+        width: { size: 24, type: WidthType.PERCENTAGE },
+        verticalAlign: VerticalAlign.CENTER,
+        children: [
+          new Paragraph({ 
+            alignment: AlignmentType.CENTER, 
+            children: [
+              new TextRun({ text: word.word, bold: true, size: 17 }),
+              new TextRun({ text: `  (${word.meaning})`, size: 14, color: "666666" })
+            ] 
+          })
+        ],
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+          left: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+          right: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+        }
+      });
+
+      const leftComp = leftWord ? (leftWord.comparative || leftWord.past || "") : "";
+      const leftSup = leftWord ? (leftWord.superlative || leftWord.pastParticiple || "") : "";
+      const rightComp = rightWord ? (rightWord.comparative || rightWord.past || "") : "";
+      const rightSup = rightWord ? (rightWord.superlative || rightWord.pastParticiple || "") : "";
+
+      if (includeMeaningColumn) {
+        rows.push(new TableRow({
+          height: { value: 700, rule: HeightRule.ATLEAST },
+          children: [
+            // Left set
+            createCell((i + 1).toString(), 4),
+            createCell(leftWord ? leftWord.word : "", 11, AlignmentType.CENTER, true),
+            createCell(isAnswerKey && leftWord ? leftWord.meaning : "", 13, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF0000" : undefined, !isAnswerKey),
+            createCell(isAnswerKey ? leftComp : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
+            createCell(isAnswerKey ? leftSup : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
+
+            // Right set
+            createCell(rightWord ? (i + halfCount + 1).toString() : "", 4),
+            createCell(rightWord ? rightWord.word : "", 11, AlignmentType.CENTER, true),
+            createCell(isAnswerKey && rightWord ? rightWord.meaning : "", 13, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "FF0000" : undefined, rightWord && !isAnswerKey),
+            createCell(rightWord && isAnswerKey ? rightComp : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
+            createCell(rightWord && isAnswerKey ? rightSup : "", 11, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
+          ]
+        }));
+      } else {
+        rows.push(new TableRow({
+          height: { value: 700, rule: HeightRule.ATLEAST },
+          children: [
+            // Left set
+            createCell((i + 1).toString(), 6),
+            leftWord ? createBaseCell(leftWord) : createCell("", 24),
+            createCell(isAnswerKey ? leftComp : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
+            createCell(isAnswerKey ? leftSup : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, !isAnswerKey),
+
+            // Right set
+            createCell(rightWord ? (i + halfCount + 1).toString() : "", 6),
+            rightWord ? createBaseCell(rightWord) : createCell("", 24),
+            createCell(rightWord && isAnswerKey ? rightComp : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
+            createCell(rightWord && isAnswerKey ? rightSup : "", 10, AlignmentType.CENTER, isAnswerKey, isAnswerKey ? "000000" : undefined, rightWord && !isAnswerKey),
+          ]
+        }));
+      }
+    }
+
+    const mainTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+        bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+        left: { style: BorderStyle.NONE },
+        right: { style: BorderStyle.NONE },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "FFF1F2" },
+        insideVertical: { style: BorderStyle.NONE },
+      },
+      rows: rows
+    });
+
+    return new Document({
+      sections: [{
+        properties: { page: { margin: { top: 720, bottom: 720, left: 720, right: 720 } } },
+        children: [
+          headerTable,
+          new Paragraph({ spacing: { before: 200 } }),
+          mainTable
+        ],
+      }],
+    });
+  };
+
+  const baseName = [paperTitle, subtitle, studentName].filter(Boolean).join('_');
+  const fileSuffix = includeMeaningColumn ? '_비교급3단변화_한글뜻_테스트.docx' : '_비교급3단변화_테스트.docx';
+  const answerSuffix = includeMeaningColumn ? '_비교급3단변화_한글뜻_정답지.docx' : '_비교급3단변화_정답지.docx';
+
+  const testDoc = createDocument(false);
+  const testBlob = await Packer.toBlob(testDoc);
+  saveAs(testBlob, `${baseName}${fileSuffix}`);
+
+  if (includeAnswerKey) {
+    const answerDoc = createDocument(true);
+    const answerBlob = await Packer.toBlob(answerDoc);
+    saveAs(answerBlob, `${baseName}${answerSuffix}`);
   }
 };
 
@@ -862,6 +1123,7 @@ export const generateWordbookTable = async (
   const { paperTitle = '단어장', wordbookType, unitSize, startDay } = options;
 
   const isIrregular = wordbookType === 'irregular';
+  const isComparative = wordbookType === 'comparative-grammar';
 
   const doc = new Document({
     sections: [{
@@ -925,10 +1187,10 @@ export const generateWordbookTable = async (
                   },
                 }),
                 new TableCell({
-                  width: { size: isIrregular ? 20 : 25, type: WidthType.PERCENTAGE },
+                  width: { size: (isIrregular || isComparative) ? 20 : 25, type: WidthType.PERCENTAGE },
                   shading: { fill: "FFF1F2" },
                   verticalAlign: VerticalAlign.CENTER,
-                  children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: isIrregular ? "원형 (Base)" : "단어 (Word)", bold: true, color: "FF4D6D", size: 22 })] })],
+                  children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: (isIrregular || isComparative) ? "원형 (Base)" : "단어 (Word)", bold: true, color: "FF4D6D", size: 22 })] })],
                   borders: {
                     top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
                     bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
@@ -962,8 +1224,34 @@ export const generateWordbookTable = async (
                     },
                   }),
                 ] : []),
+                ...(isComparative ? [
+                  new TableCell({
+                    width: { size: 18, type: WidthType.PERCENTAGE },
+                    shading: { fill: "FFF1F2" },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "비교급", bold: true, color: "FF4D6D", size: 22 })] })],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                      bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                    },
+                  }),
+                  new TableCell({
+                    width: { size: 18, type: WidthType.PERCENTAGE },
+                    shading: { fill: "FFF1F2" },
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "최상급", bold: true, color: "FF4D6D", size: 22 })] })],
+                    borders: {
+                      top: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                      bottom: { style: BorderStyle.SINGLE, size: 2, color: "FFB3C1" },
+                      left: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                      right: { style: BorderStyle.SINGLE, size: 1, color: "FFB3C1" },
+                    },
+                  }),
+                ] : []),
                 new TableCell({
-                  width: { size: isIrregular ? 36 : 63, type: WidthType.PERCENTAGE },
+                  width: { size: (isIrregular || isComparative) ? 32 : 63, type: WidthType.PERCENTAGE },
                   shading: { fill: "FFF1F2" },
                   verticalAlign: VerticalAlign.CENTER,
                   children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "뜻 (Meaning)", bold: true, color: "FF4D6D", size: 22 })] })],
@@ -1022,6 +1310,26 @@ export const generateWordbookTable = async (
                       verticalAlign: VerticalAlign.CENTER,
                       shading: index % 2 === 0 ? undefined : { fill: "FFF9FA" },
                       children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: word.pastParticiple || "", size: 22, bold: true, color: "000000" })] })],
+                      borders: {
+                        bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                        right: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                      },
+                    }),
+                  ] : []),
+                  ...(isComparative ? [
+                    new TableCell({
+                      verticalAlign: VerticalAlign.CENTER,
+                      shading: index % 2 === 0 ? undefined : { fill: "FFF9FA" },
+                      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: word.comparative || word.past || "", size: 22, bold: true, color: "000000" })] })],
+                      borders: {
+                        bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                        right: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
+                      },
+                    }),
+                    new TableCell({
+                      verticalAlign: VerticalAlign.CENTER,
+                      shading: index % 2 === 0 ? undefined : { fill: "FFF9FA" },
+                      children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: word.superlative || word.pastParticiple || "", size: 22, bold: true, color: "000000" })] })],
                       borders: {
                         bottom: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },
                         right: { style: BorderStyle.SINGLE, size: 1, color: "FFD6E0" },

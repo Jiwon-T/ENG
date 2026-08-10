@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, Plus, Search, Trash2, Edit3, FileSpreadsheet, X, CheckCircle2, Circle, GripVertical, FileText, Download } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, writeBatch, getDocs, orderBy } from 'firebase/firestore';
-import { generateWordTest, generateMultipleChoiceQuiz, generateIrregularVerbTest, generateWordbookTable, generateVerbFormMemorizationTest } from '../../lib/wordTestGenerator';
+import { generateWordTest, generateMultipleChoiceQuiz, generateIrregularVerbTest, generateWordbookTable, generateVerbFormMemorizationTest, generateComparativeTest } from '../../lib/wordTestGenerator';
 import { MODAL_QUIZ_POOL, BASIC_MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
 import { VERB_FORM_QUIZ_POOL } from '../../lib/verbFormQuizPool';
 import { VERB_FORM_TABLE_DATA } from '../../lib/verbFormTableData';
@@ -34,7 +34,7 @@ interface Wordbook {
   createdBy: string;
   createdAt: any;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming' | 'comparative-grammar';
   category?: 'word' | 'grammar';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -46,6 +46,8 @@ interface Word {
   meaning: string;
   past?: string;
   pastParticiple?: string;
+  comparative?: string;
+  superlative?: string;
   pattern?: string;
   distractors?: string[];
   example?: string;
@@ -102,6 +104,8 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const [newWord, setNewWord] = useState('');
   const [newMeaning, setNewMeaning] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
+  const [newPast, setNewPast] = useState('');
+  const [newPastParticiple, setNewPastParticiple] = useState('');
 
   // Grammar Cramming new word states
   const [newQuizSentence, setNewQuizSentence] = useState('');
@@ -425,9 +429,13 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         updatedAt: Timestamp.now()
       };
 
-      if (selectedWordbook.type === 'irregular' || selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'basic-modal-grammar') {
+      if (selectedWordbook.type === 'irregular' || selectedWordbook.type === 'modal-grammar' || selectedWordbook.type === 'basic-modal-grammar' || selectedWordbook.type === 'comparative-grammar') {
         updateData.past = editPastValue.trim();
         updateData.pastParticiple = editPastParticipleValue.trim();
+        if (selectedWordbook.type === 'comparative-grammar') {
+          updateData.comparative = editPastValue.trim();
+          updateData.superlative = editPastParticipleValue.trim();
+        }
         updateData.pattern = editPatternValue.trim();
         updateData.example = editExampleValue.trim();
         updateData.distractors = editDistractorsValue.split(',').map(s => s.trim()).filter(s => !!s);
@@ -476,6 +484,15 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         createdAt: Timestamp.now()
       };
 
+      if (selectedWordbook.type === 'irregular' || selectedWordbook.type === 'comparative-grammar') {
+        wordData.past = newPast.trim();
+        wordData.pastParticiple = newPastParticiple.trim();
+        if (selectedWordbook.type === 'comparative-grammar') {
+          wordData.comparative = newPast.trim();
+          wordData.superlative = newPastParticiple.trim();
+        }
+      }
+
       if (selectedWordbook.type === 'grammar-cramming') {
         wordData.quizSentence = newQuizSentence.trim();
         wordData.quizQuestion = newQuizQuestion.trim();
@@ -489,6 +506,8 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       await addDoc(collection(db, `wordbooks/${selectedWordbook.id}/words`), wordData);
       setNewWord('');
       setNewMeaning('');
+      setNewPast('');
+      setNewPastParticiple('');
       setNewImageUrl('');
       setNewQuizSentence('');
       setNewQuizQuestion('');
@@ -757,21 +776,92 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       return;
     }
 
+    if (testPaperConfig.quizType === 'irregular-writing-with-meaning') {
+      try {
+        if (selectedWordbook.type === 'comparative-grammar') {
+          await generateComparativeTest(
+            testPaperConfig.title || selectedWordbook.title,
+            testPaperConfig.subtitle,
+            selectedWords,
+            {
+              includeAnswerKey: testPaperConfig.includeAnswerKey,
+              paperTitle: testPaperConfig.title || selectedWordbook.title,
+              studentName: testPaperConfig.studentName,
+              includeMeaningColumn: true
+            }
+          );
+        } else {
+          await generateIrregularVerbTest(
+            testPaperConfig.title || selectedWordbook.title,
+            testPaperConfig.subtitle,
+            selectedWords,
+            {
+              includeAnswerKey: testPaperConfig.includeAnswerKey,
+              paperTitle: testPaperConfig.title || selectedWordbook.title,
+              studentName: testPaperConfig.studentName,
+              includeMeaningColumn: true
+            }
+          );
+        }
+        setIsTestPaperModalOpen(false);
+      } catch (error) {
+        console.error('Failed to generate test:', error);
+        alert('시험지 생성 중 오류가 발생했습니다.');
+      }
+      return;
+    }
+
     if (testPaperConfig.quizType === 'irregular-writing') {
       try {
-        await generateIrregularVerbTest(
+        if (selectedWordbook.type === 'comparative-grammar') {
+          await generateComparativeTest(
+            testPaperConfig.title || selectedWordbook.title,
+            testPaperConfig.subtitle,
+            selectedWords,
+            {
+              includeAnswerKey: testPaperConfig.includeAnswerKey,
+              paperTitle: testPaperConfig.title || selectedWordbook.title,
+              studentName: testPaperConfig.studentName,
+              includeMeaningColumn: false
+            }
+          );
+        } else {
+          await generateIrregularVerbTest(
+            testPaperConfig.title || selectedWordbook.title,
+            testPaperConfig.subtitle,
+            selectedWords,
+            {
+              includeAnswerKey: testPaperConfig.includeAnswerKey,
+              paperTitle: testPaperConfig.title || selectedWordbook.title,
+              studentName: testPaperConfig.studentName,
+              includeMeaningColumn: false
+            }
+          );
+        }
+        setIsTestPaperModalOpen(false);
+      } catch (error) {
+        console.error('Failed to generate irregular test:', error);
+        alert('시험지 생성 중 오류가 발생했습니다.');
+      }
+      return;
+    }
+
+    if (selectedWordbook.type === 'comparative-grammar' && testPaperConfig.quizType !== 'standard') {
+      try {
+        await generateComparativeTest(
           testPaperConfig.title || selectedWordbook.title,
           testPaperConfig.subtitle,
           selectedWords,
           {
             includeAnswerKey: testPaperConfig.includeAnswerKey,
             paperTitle: testPaperConfig.title || selectedWordbook.title,
-            studentName: testPaperConfig.studentName
+            studentName: testPaperConfig.studentName,
+            includeMeaningColumn: true
           }
         );
         setIsTestPaperModalOpen(false);
       } catch (error) {
-        console.error('Failed to generate irregular test:', error);
+        console.error('Failed to generate comparative test:', error);
         alert('시험지 생성 중 오류가 발생했습니다.');
       }
       return;
@@ -1353,6 +1443,30 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   </div>
                 </div>
               )}
+              {selectedWordbook?.type === 'comparative-grammar' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">비교급 (-er / more)</label>
+                    <input
+                      type="text"
+                      value={editPastValue}
+                      onChange={(e) => setEditPastValue(e.target.value)}
+                      placeholder="예: faster 또는 more famous"
+                      className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">최상급 (-est / most)</label>
+                    <input
+                      type="text"
+                      value={editPastParticipleValue}
+                      onChange={(e) => setEditPastParticipleValue(e.target.value)}
+                      placeholder="예: fastest 또는 most famous"
+                      className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
+                    />
+                  </div>
+                </div>
+              )}
               {selectedWordbook?.type === 'irregular' && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1477,6 +1591,34 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold resize-none"
                 />
               </div>
+              {(selectedWordbook?.type === 'irregular' || selectedWordbook?.type === 'comparative-grammar') && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">
+                      {selectedWordbook?.type === 'comparative-grammar' ? '비교급 (-er / more)' : '과거형'}
+                    </label>
+                    <input
+                      type="text"
+                      value={newPast}
+                      onChange={(e) => setNewPast(e.target.value)}
+                      placeholder={selectedWordbook?.type === 'comparative-grammar' ? '예: faster' : '예: went'}
+                      className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">
+                      {selectedWordbook?.type === 'comparative-grammar' ? '최상급 (-est / most)' : '과거분사형'}
+                    </label>
+                    <input
+                      type="text"
+                      value={newPastParticiple}
+                      onChange={(e) => setNewPastParticiple(e.target.value)}
+                      placeholder={selectedWordbook?.type === 'comparative-grammar' ? '예: fastest' : '예: gone'}
+                      className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
+                    />
+                  </div>
+                </div>
+              )}
               {selectedWordbook?.type === 'grammar-cramming' && (
                 <div className="space-y-4 pt-4 border-t border-slate-100">
                   <h4 className="font-black text-indigo-500 text-sm">벼락치기 문제 상세</h4>
@@ -1715,31 +1857,39 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
             <div className="flex-1 overflow-y-auto p-8 pt-4 no-scrollbar">
               <div className="space-y-4 mb-6">
                 <div className="flex flex-col gap-4 mb-4">
-                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                  <div className="flex bg-slate-100 p-1 rounded-xl flex-wrap gap-1">
                     <button
                       onClick={() => setTestPaperConfig({ ...testPaperConfig, quizType: 'standard' })}
-                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${testPaperConfig.quizType === 'standard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                      className={`flex-1 min-w-[110px] py-2 px-1.5 rounded-lg text-xs font-bold transition-all ${testPaperConfig.quizType === 'standard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
                     >
                       기본 시험지 (직접 쓰기)
                     </button>
                     <button
                       onClick={() => setTestPaperConfig({ ...testPaperConfig, quizType: 'multiple-choice' })}
-                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${testPaperConfig.quizType === 'multiple-choice' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                      className={`flex-1 min-w-[90px] py-2 px-1.5 rounded-lg text-xs font-bold transition-all ${testPaperConfig.quizType === 'multiple-choice' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
                     >
                       객관식 퀴즈
                     </button>
-                    {selectedWordbook?.type === 'irregular' && (
-                      <button
-                        onClick={() => setTestPaperConfig({ ...testPaperConfig, quizType: 'irregular-writing' })}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${testPaperConfig.quizType === 'irregular-writing' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
-                      >
-                        3단 변화 쓰기
-                      </button>
+                    {(selectedWordbook?.type === 'irregular' || selectedWordbook?.type === 'comparative-grammar') && (
+                      <>
+                        <button
+                          onClick={() => setTestPaperConfig({ ...testPaperConfig, quizType: 'irregular-writing' })}
+                          className={`flex-1 min-w-[120px] py-2 px-1.5 rounded-lg text-xs font-bold transition-all ${testPaperConfig.quizType === 'irregular-writing' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                        >
+                          3단 변화 (뜻 제공)
+                        </button>
+                        <button
+                          onClick={() => setTestPaperConfig({ ...testPaperConfig, quizType: 'irregular-writing-with-meaning' })}
+                          className={`flex-1 min-w-[130px] py-2 px-1.5 rounded-lg text-xs font-bold transition-all ${testPaperConfig.quizType === 'irregular-writing-with-meaning' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                        >
+                          3단 변화 + 한글뜻
+                        </button>
+                      </>
                     )}
                     {selectedWordbook?.type === 'verb-form-grammar' && (
                       <button
                         onClick={() => setTestPaperConfig({ ...testPaperConfig, quizType: 'memorization-table' })}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${testPaperConfig.quizType === 'memorization-table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                        className={`flex-1 min-w-[90px] py-2 px-1.5 rounded-lg text-xs font-bold transition-all ${testPaperConfig.quizType === 'memorization-table' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
                       >
                         암기용 (표)
                       </button>
@@ -2005,7 +2155,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   </div>
                 )}
 
-                {testPaperConfig.quizType === 'irregular-writing' && (
+                {(testPaperConfig.quizType === 'irregular-writing' || testPaperConfig.quizType === 'irregular-writing-with-meaning') && (
                   <div className="space-y-4">
                     <div className="flex gap-4">
                       <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100 h-[50px]">
@@ -2304,6 +2454,13 @@ function SortableWordCard({
             <div className="space-y-0.5 mt-1">
               <div className="text-sm font-black text-blue-500">
                 {word.past} - {word.pastParticiple}
+              </div>
+              <div className="text-sm text-slate-500 font-medium whitespace-pre-wrap">{word.meaning}</div>
+            </div>
+          ) : selectedWordbook.type === 'comparative-grammar' ? (
+            <div className="space-y-0.5 mt-1">
+              <div className="text-sm font-black text-rose-500">
+                비교급: {word.comparative || word.past || '-'} | 최상급: {word.superlative || word.pastParticiple || '-'}
               </div>
               <div className="text-sm text-slate-500 font-medium whitespace-pre-wrap">{word.meaning}</div>
             </div>

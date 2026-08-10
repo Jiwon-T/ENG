@@ -14,7 +14,7 @@ interface Wordbook {
   title: string;
   description: string;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming' | 'comparative-grammar';
   category?: 'word' | 'grammar';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -26,6 +26,8 @@ interface Word {
   meaning: string;
   past?: string;
   pastParticiple?: string;
+  comparative?: string;
+  superlative?: string;
   pattern?: string;
   distractors?: string[];
   example?: string;
@@ -914,10 +916,12 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     const correctWord = currentWords[wordIndex];
     if (!correctWord) return;
     
-    const correctAnswer = step === 0 ? correctWord.past : correctWord.pastParticiple;
+    const correctAnswer = step === 0 
+      ? (correctWord.comparative || correctWord.past) 
+      : (correctWord.superlative || correctWord.pastParticiple);
     
     const distractors = new Set<string>();
-    distractors.add(correctAnswer!);
+    if (correctAnswer) distractors.add(correctAnswer);
 
     // 0. Word-specific distractors prioritized correctly
     const teacherDistractors = Array.isArray(correctWord.distractors) 
@@ -945,21 +949,23 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     }
 
     // Attractive distractors:
-    // 1. The other form of the same verb
-    const otherForm = step === 0 ? correctWord.pastParticiple : correctWord.past;
+    // 1. The other form of the same verb/adjective
+    const otherForm = step === 0 
+      ? (correctWord.superlative || correctWord.pastParticiple) 
+      : (correctWord.comparative || correctWord.past);
     if (otherForm && distractors.size < 4) distractors.add(otherForm);
 
     // 2. The base form (if different)
     if (correctWord.word && distractors.size < 4) distractors.add(correctWord.word);
 
-    // 3. Fake regular form (base + ed)
+    // 3. Fake regular form
     const fakeRegular = correctWord.word.endsWith('e') ? correctWord.word + 'd' : correctWord.word + 'ed';
     if (distractors.size < 4) distractors.add(fakeRegular);
 
-    // 4. Forms from verbs with the same pattern
+    // 4. Forms from words with the same pattern
     const samePatternWords = words.filter(w => w.id !== correctWord.id && w.pattern === correctWord.pattern);
     const samePatternForms: string[] = samePatternWords
-      .map(w => step === 0 ? w.past : w.pastParticiple)
+      .map(w => step === 0 ? (w.comparative || w.past) : (w.superlative || w.pastParticiple))
       .filter((f): f is string => !!f && f !== correctAnswer);
     
     const shuffledPatternForms = shuffleArray<string>(samePatternForms);
@@ -968,10 +974,10 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       distractors.add(f);
     }
 
-    // 5. Any other irregular forms
+    // 5. Any other forms
     const otherWords = words.filter(w => w.id !== correctWord.id);
     const otherForms: string[] = otherWords
-      .map(w => step === 0 ? w.past : w.pastParticiple)
+      .map(w => step === 0 ? (w.comparative || w.past) : (w.superlative || w.pastParticiple))
       .filter((f): f is string => !!f && f !== correctAnswer);
     
     const uniqueOtherForms = otherForms.filter((v, i, a) => a.indexOf(v) === i);
@@ -996,7 +1002,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     
     setSelectedOption(optionIndex);
     const correctWord = sessionWords[conjugationIndex];
-    const correctAnswer = conjugationStep === 0 ? correctWord.past : correctWord.pastParticiple;
+    const correctAnswer = conjugationStep === 0 
+      ? (correctWord.comparative || correctWord.past) 
+      : (correctWord.superlative || correctWord.pastParticiple);
     
     const isAnswerCorrect = conjugationOptions[optionIndex] === correctAnswer;
     setIsCorrect(isAnswerCorrect);
@@ -1600,18 +1608,20 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
 
                           <div className="flex items-center gap-4 mt-4">
                             <div className={`px-4 py-2 rounded-xl font-black text-sm transition-all ${conjugationStep === 0 ? 'bg-blue-500 text-white scale-110 shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
-                              PAST
+                              {selectedWordbook?.type === 'comparative-grammar' ? 'COMPARATIVE' : 'PAST'}
                             </div>
                             <ChevronRight className="text-slate-300" />
                             <div className={`px-4 py-2 rounded-xl font-black text-sm transition-all ${conjugationStep === 1 ? 'bg-blue-500 text-white scale-110 shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
-                              PARTICIPLE
+                              {selectedWordbook?.type === 'comparative-grammar' ? 'SUPERLATIVE' : 'PARTICIPLE'}
                             </div>
                           </div>
                         </div>
 
                         <div className="text-center mb-6">
                           <h4 className="text-xl font-black text-slate-900">
-                            {conjugationStep === 0 ? '과거형' : '과거분사형'}을 선택하세요
+                            {conjugationStep === 0 
+                              ? (selectedWordbook?.type === 'comparative-grammar' ? '비교급' : '과거형') 
+                              : (selectedWordbook?.type === 'comparative-grammar' ? '최상급' : '과거분사형')}을 선택하세요
                           </h4>
                         </div>
 
@@ -1707,6 +1717,19 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                               <div className="text-[10px] font-black uppercase tracking-widest opacity-60">과거형 - 과거분사형</div>
                               <div className={`${isMobile ? 'text-2xl' : 'text-4xl'} font-black`}>
                                 {currentWord.past} - {currentWord.pastParticiple}
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-[10px] font-black uppercase tracking-widest opacity-60">뜻</div>
+                              <div className={`${isMobile ? 'text-xl' : 'text-2xl'} font-bold`}>{currentWord.meaning}</div>
+                            </div>
+                          </div>
+                        ) : selectedWordbook?.type === 'comparative-grammar' ? (
+                          <div className="text-center space-y-4">
+                            <div className="space-y-1">
+                              <div className="text-[10px] font-black uppercase tracking-widest opacity-60">비교급 - 최상급</div>
+                              <div className={`${isMobile ? 'text-2xl' : 'text-4xl'} font-black`}>
+                                {currentWord.comparative || currentWord.past} - {currentWord.superlative || currentWord.pastParticiple}
                               </div>
                             </div>
                             <div className="space-y-1">
@@ -1862,7 +1885,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                 ← 전체 학습 세트
               </button>
               <div className="flex flex-wrap items-center gap-2 md:gap-4">
-                {selectedWordbook.type === 'irregular' && (
+                {(selectedWordbook.type === 'irregular' || selectedWordbook.type === 'comparative-grammar') && (
                   <button
                     onClick={() => setPendingMode('conjugation')}
                     className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all bg-blue-500 text-white shadow-lg shadow-blue-200 hover:scale-105`}
@@ -2052,6 +2075,15 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                           <div className="space-y-0.5">
                             <div className={`${isMobile ? 'text-xs' : 'text-sm'} font-black text-blue-500`}>
                               {word.past} - {word.pastParticiple}
+                            </div>
+                            <div className={`${isMobile ? 'text-[10px]' : 'text-sm'} font-medium ${progress[word.id] === 'learned' ? 'text-emerald-600/70' : 'text-slate-500'}`}>
+                              {word.meaning}
+                            </div>
+                          </div>
+                        ) : selectedWordbook.type === 'comparative-grammar' ? (
+                          <div className="space-y-0.5">
+                            <div className={`${isMobile ? 'text-xs' : 'text-sm'} font-black text-rose-500`}>
+                              비교급: {word.comparative || word.past} | 최상급: {word.superlative || word.pastParticiple}
                             </div>
                             <div className={`${isMobile ? 'text-[10px]' : 'text-sm'} font-medium ${progress[word.id] === 'learned' ? 'text-emerald-600/70' : 'text-slate-500'}`}>
                               {word.meaning}
