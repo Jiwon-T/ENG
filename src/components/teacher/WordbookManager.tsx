@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, Plus, Search, Trash2, Edit3, FileSpreadsheet, X, CheckCircle2, Circle, GripVertical, FileText, Download } from 'lucide-react';
+import { BookOpen, Plus, Search, Trash2, Edit3, FileSpreadsheet, X, CheckCircle2, Circle, GripVertical, FileText, Download, Layers, ArrowUp, ArrowDown, Calendar, CheckSquare, Square, Sliders, Check } from 'lucide-react';
+import { saveAs } from 'file-saver';
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, writeBatch, getDocs, orderBy } from 'firebase/firestore';
 import { generateWordTest, generateMultipleChoiceQuiz, generateIrregularVerbTest, generateWordbookTable, generateVerbFormMemorizationTest, generateComparativeTest } from '../../lib/wordTestGenerator';
@@ -35,7 +36,7 @@ interface Wordbook {
   createdAt: any;
   order?: number;
   type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming' | 'comparative-grammar';
-  category?: 'word' | 'grammar';
+  category?: 'word' | 'grammar' | 'exam';
   customDistractors?: string[];
   defaultUnitSize?: number;
 }
@@ -44,6 +45,7 @@ interface Word {
   id: string;
   word: string;
   meaning: string;
+  day?: number;
   past?: string;
   pastParticiple?: string;
   comparative?: string;
@@ -64,7 +66,7 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-export default function WordbookManager({ category = 'word' }: { category?: 'word' | 'grammar' }) {
+export default function WordbookManager({ category = 'word' }: { category?: 'word' | 'grammar' | 'exam' }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [selectedWordbook, setSelectedWordbook] = useState<Wordbook | null>(null);
   const [words, setWords] = useState<Word[]>([]);
@@ -98,6 +100,13 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const [editWbTitleValue, setEditWbTitleValue] = useState('');
   const [editWbDistractorsValue, setEditWbDistractorsValue] = useState('');
   const [editWbUnitSizeValue, setEditWbUnitSizeValue] = useState(10);
+  const [editWbCategoryValue, setEditWbCategoryValue] = useState<'word' | 'grammar' | 'exam'>(category);
+
+  // Category navigation & creation states
+  const [newWbCategory, setNewWbCategory] = useState<'word' | 'grammar' | 'exam'>(category);
+  const [mergeTargetCategory, setMergeTargetCategory] = useState<'word' | 'grammar' | 'exam'>(category);
+  const [moveToastMessage, setMoveToastMessage] = useState<string | null>(null);
+  const [allWordbooks, setAllWordbooks] = useState<Wordbook[]>([]);
 
   // Individual add states
   const [isIndividualAddOpen, setIsIndividualAddOpen] = useState(false);
@@ -148,6 +157,26 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     shuffleVerbs: false
   });
 
+  // Merge Wordbooks states
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
+  const [selectedWbIdsForMerge, setSelectedWbIdsForMerge] = useState<string[]>([]);
+  const [mergeOrder, setMergeOrder] = useState<string[]>([]);
+  const [mergedTitle, setMergedTitle] = useState('');
+  const [mergedUnitSize, setMergedUnitSize] = useState(40);
+  const [mergeDayOption, setMergeDayOption] = useState<'sequential' | 'separate' | 'preserve'>('sequential');
+  const [removeDuplicates, setRemoveDuplicates] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+  const [wordbookWordCounts, setWordbookWordCounts] = useState<Record<string, number>>({});
+  const [mergeFilterTab, setMergeFilterTab] = useState<'all' | 'word' | 'grammar' | 'exam'>('all');
+
+  // Day Management states
+  const [activeDayFilter, setActiveDayFilter] = useState<'all' | number>('all');
+  const [selectedWordIds, setSelectedWordIds] = useState<string[]>([]);
+  const [isDayManagementOpen, setIsDayManagementOpen] = useState(false);
+  const [editDayValue, setEditDayValue] = useState(1);
+  const [newWordDay, setNewWordDay] = useState(1);
+  const [bulkDaySplitSize, setBulkDaySplitSize] = useState(40);
+
   // Print Wordbook states
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printConfig, setPrintConfig] = useState({
@@ -168,6 +197,49 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   );
 
   useEffect(() => {
+    if (!isMergeModalOpen) return;
+    const fetchCounts = async () => {
+      const counts: Record<string, number> = {};
+      const pool = allWordbooks.length > 0 ? allWordbooks : wordbooks;
+      for (const wb of pool) {
+        try {
+          const snap = await getDocs(collection(db, `wordbooks/${wb.id}/words`));
+          counts[wb.id] = snap.size;
+        } catch (e) {
+          counts[wb.id] = 0;
+        }
+      }
+      setWordbookWordCounts(counts);
+    };
+    fetchCounts();
+  }, [isMergeModalOpen, wordbooks, allWordbooks]);
+
+  useEffect(() => {
+    setNewWbCategory(category);
+    setMergeTargetCategory(category);
+    setEditWbCategoryValue(category);
+  }, [category]);
+
+  const handleMoveWordbookCategory = async (wbId: string, targetCategory: 'word' | 'grammar' | 'exam', currentTitle?: string) => {
+    try {
+      const categoryNames: Record<string, string> = { word: '단어장', grammar: '문법 세트', exam: '시험기간' };
+      await updateDoc(doc(db, 'wordbooks', wbId), {
+        category: targetCategory,
+        updatedAt: Timestamp.now()
+      });
+      setMoveToastMessage(`'${currentTitle || '단어장'}'이(가) [${categoryNames[targetCategory]}] 탭으로 이동되었습니다.`);
+      setTimeout(() => setMoveToastMessage(null), 3500);
+
+      if (selectedWordbook?.id === wbId) {
+        setSelectedWordbook(prev => prev ? { ...prev, category: targetCategory } : null);
+      }
+    } catch (error) {
+      console.error('Failed to move wordbook category:', error);
+      alert('단어장 이동 중 오류가 발생했습니다.');
+    }
+  };
+
+  useEffect(() => {
     if (!auth.currentUser) return;
     const q = query(
       collection(db, 'wordbooks'), 
@@ -175,12 +247,11 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedWordbooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wordbook));
-      
+      setAllWordbooks(fetchedWordbooks);
+
       // Filter by category
       const filtered = fetchedWordbooks.filter(wb => {
-        const wbCategory = wb.category || 'word';
-        // Irregular verbs are forced into grammar category in the teacher view too
-        if (wb.type === 'irregular') return category === 'grammar';
+        const wbCategory = wb.category || (wb.type === 'irregular' ? 'grammar' : 'word');
         return wbCategory === category;
       });
 
@@ -192,6 +263,8 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   }, [category]);
 
   useEffect(() => {
+    setActiveDayFilter('all');
+    setSelectedWordIds([]);
     if (!selectedWordbook) {
       setWords([]);
       return;
@@ -221,6 +294,278 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       return () => unsubscribe();
     }
   }, [isExampleModalOpen, currentWordForExamples, selectedWordbook]);
+
+  const getWordDay = (word: Word, index?: number) => {
+    if (typeof word.day === 'number' && word.day > 0) return word.day;
+    const unitSize = selectedWordbook?.defaultUnitSize || 40;
+    const ord = word.order ?? (index ?? 0);
+    return Math.floor(ord / unitSize) + 1;
+  };
+
+  const currentDays = React.useMemo(() => {
+    if (words.length === 0) return [1];
+    const set = new Set<number>();
+    words.forEach((w, i) => set.add(getWordDay(w, i)));
+    const sorted = Array.from(set).sort((a, b) => a - b);
+    return sorted.length > 0 ? sorted : [1];
+  }, [words, selectedWordbook]);
+
+  const displayedWords = React.useMemo(() => {
+    if (activeDayFilter === 'all') return words;
+    return words.filter((w, i) => getWordDay(w, i) === activeDayFilter);
+  }, [words, activeDayFilter, selectedWordbook]);
+
+  const handleUpdateWordDay = async (wordId: string, newDay: number) => {
+    if (!selectedWordbook) return;
+    try {
+      await updateDoc(doc(db, `wordbooks/${selectedWordbook.id}/words`, wordId), {
+        day: newDay,
+        updatedAt: Timestamp.now()
+      });
+    } catch (error) {
+      console.error('Failed to update word day:', error);
+      alert('DAY 변경 실패');
+    }
+  };
+
+  const handleBatchMoveWordsToDay = async (wordIds: string[], targetDay: number) => {
+    if (!selectedWordbook || wordIds.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      wordIds.forEach(id => {
+        const wordRef = doc(db, `wordbooks/${selectedWordbook.id}/words`, id);
+        batch.update(wordRef, { day: targetDay, updatedAt: Timestamp.now() });
+      });
+      await batch.commit();
+      setSelectedWordIds([]);
+      alert(`${wordIds.length}개 단어가 DAY ${targetDay}(으)로 이동되었습니다.`);
+    } catch (error) {
+      console.error('Failed to move words to day:', error);
+      alert('단어 이동 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleAutoSplitDays = async (size: number) => {
+    if (!selectedWordbook || words.length === 0 || size < 1) return;
+    try {
+      const batch = writeBatch(db);
+      words.forEach((w, idx) => {
+        const assignedDay = Math.floor(idx / size) + 1;
+        const wordRef = doc(db, `wordbooks/${selectedWordbook.id}/words`, w.id);
+        batch.update(wordRef, { day: assignedDay, order: idx });
+      });
+      await batch.commit();
+      setIsDayManagementOpen(false);
+      alert(`전체 ${words.length}개 단어를 DAY당 ${size}개씩 총 ${Math.ceil(words.length / size)}개 DAY로 일괄 분할했습니다.`);
+    } catch (error) {
+      console.error('Failed to auto split days:', error);
+      alert('DAY 분할 중 오류가 발생했습니다.');
+    }
+  };
+
+  const toggleWbForMerge = (wbId: string) => {
+    if (selectedWbIdsForMerge.includes(wbId)) {
+      const newSelected = selectedWbIdsForMerge.filter(id => id !== wbId);
+      setSelectedWbIdsForMerge(newSelected);
+      const newOrder = mergeOrder.filter(id => id !== wbId);
+      setMergeOrder(newOrder);
+      const titles = newOrder.map(id => wordbooks.find(w => w.id === id)?.title).filter(Boolean);
+      setMergedTitle(titles.length > 0 ? `${titles.join(' + ')} 통합` : '');
+    } else {
+      const newSelected = [...selectedWbIdsForMerge, wbId];
+      setSelectedWbIdsForMerge(newSelected);
+      const newOrder = [...mergeOrder, wbId];
+      setMergeOrder(newOrder);
+      const titles = newOrder.map(id => wordbooks.find(w => w.id === id)?.title).filter(Boolean);
+      setMergedTitle(titles.length > 0 ? `${titles.join(' + ')} 통합` : '');
+    }
+  };
+
+  const moveMergeWb = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= mergeOrder.length) return;
+    const newOrder = [...mergeOrder];
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[targetIndex];
+    newOrder[targetIndex] = temp;
+    setMergeOrder(newOrder);
+    const titles = newOrder.map(id => wordbooks.find(w => w.id === id)?.title).filter(Boolean);
+    setMergedTitle(`${titles.join(' + ')} 통합`);
+  };
+
+  const handleExecuteMerge = async () => {
+    if (mergeOrder.length < 2) {
+      alert('합칠 단어장을 최소 2개 이상 선택해주세요.');
+      return;
+    }
+    if (!mergedTitle.trim()) {
+      alert('통합 단어장의 제목을 입력해주세요.');
+      return;
+    }
+    if (!auth.currentUser) return;
+
+    setIsMerging(true);
+    try {
+      const allFetchedWords: Array<{ word: Word; wbTitle: string; wbIndex: number }> = [];
+      const pool = allWordbooks.length > 0 ? allWordbooks : wordbooks;
+      
+      for (let i = 0; i < mergeOrder.length; i++) {
+        const wbId = mergeOrder[i];
+        const wb = pool.find(w => w.id === wbId);
+        const snap = await getDocs(query(collection(db, `wordbooks/${wbId}/words`), orderBy('order', 'asc')));
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Word));
+        docs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        docs.forEach(w => {
+          allFetchedWords.push({ word: w, wbTitle: wb?.title || '', wbIndex: i + 1 });
+        });
+      }
+
+      if (allFetchedWords.length === 0) {
+        alert('선택한 단어장들에 등록된 단어가 없습니다.');
+        setIsMerging(false);
+        return;
+      }
+
+      let wordsToSave = allFetchedWords;
+      if (removeDuplicates) {
+        const seen = new Set<string>();
+        wordsToSave = allFetchedWords.filter(item => {
+          const key = item.word.word.trim().toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      }
+
+      const maxOrder = wordbooks.length > 0 ? Math.max(...wordbooks.map(wb => wb.order ?? 0)) : -1;
+      const newWbRef = await addDoc(collection(db, 'wordbooks'), {
+        title: mergedTitle.trim(),
+        createdBy: auth.currentUser.uid,
+        createdAt: Timestamp.now(),
+        order: maxOrder + 1,
+        category: mergeTargetCategory || category,
+        defaultUnitSize: mergedUnitSize,
+        type: 'standard'
+      });
+
+      const finalWordsList = wordsToSave.map((item, index) => {
+        let assignedDay = 1;
+        if (mergeDayOption === 'sequential') {
+          assignedDay = Math.floor(index / mergedUnitSize) + 1;
+        } else if (mergeDayOption === 'separate') {
+          assignedDay = item.wbIndex;
+        } else {
+          assignedDay = item.word.day || (Math.floor((item.word.order ?? 0) / mergedUnitSize) + 1);
+        }
+
+        const cleanWordData: any = {
+          word: item.word.word,
+          meaning: item.word.meaning,
+          order: index,
+          day: assignedDay,
+          createdAt: Timestamp.now()
+        };
+
+        if (item.word.past) cleanWordData.past = item.word.past;
+        if (item.word.pastParticiple) cleanWordData.pastParticiple = item.word.pastParticiple;
+        if (item.word.comparative) cleanWordData.comparative = item.word.comparative;
+        if (item.word.superlative) cleanWordData.superlative = item.word.superlative;
+        if (item.word.pattern) cleanWordData.pattern = item.word.pattern;
+        if (item.word.example) cleanWordData.example = item.word.example;
+        if (item.word.imageUrl) cleanWordData.imageUrl = item.word.imageUrl;
+        if (item.word.distractors) cleanWordData.distractors = item.word.distractors;
+
+        return cleanWordData;
+      });
+
+      const BATCH_SIZE = 400;
+      for (let i = 0; i < finalWordsList.length; i += BATCH_SIZE) {
+        const batch = writeBatch(db);
+        const chunk = finalWordsList.slice(i, i + BATCH_SIZE);
+        chunk.forEach(wordData => {
+          const wordRef = doc(collection(db, `wordbooks/${newWbRef.id}/words`));
+          batch.set(wordRef, wordData);
+        });
+        await batch.commit();
+      }
+
+      const targetCatName = (mergeTargetCategory || category) === 'exam' ? '시험기간' : (mergeTargetCategory || category) === 'grammar' ? '문법 세트' : '단어장';
+      alert(`"${mergedTitle}" 통합 단어장이 성공적으로 생성되었습니다! (총 ${finalWordsList.length}개 단어, [${targetCatName}] 탭에 저장됨)`);
+      setIsMergeModalOpen(false);
+      setSelectedWbIdsForMerge([]);
+      setMergeOrder([]);
+    } catch (error) {
+      console.error('Failed to merge wordbooks:', error);
+      alert('단어장 합치기 중 오류가 발생했습니다.');
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  const handleExportMergeAsCsv = async () => {
+    if (mergeOrder.length === 0) {
+      alert('내보낼 단어장을 1개 이상 선택해주세요.');
+      return;
+    }
+    setIsMerging(true);
+    try {
+      const allFetchedWords: Array<{ word: Word; wbTitle: string; wbIndex: number }> = [];
+      const pool = allWordbooks.length > 0 ? allWordbooks : wordbooks;
+      for (let i = 0; i < mergeOrder.length; i++) {
+        const wbId = mergeOrder[i];
+        const wb = pool.find(w => w.id === wbId);
+        const snap = await getDocs(query(collection(db, `wordbooks/${wbId}/words`), orderBy('order', 'asc')));
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Word));
+        docs.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        docs.forEach(w => {
+          allFetchedWords.push({ word: w, wbTitle: wb?.title || '', wbIndex: i + 1 });
+        });
+      }
+
+      let wordsToExport = allFetchedWords;
+      if (removeDuplicates) {
+        const seen = new Set<string>();
+        wordsToExport = allFetchedWords.filter(item => {
+          const key = item.word.word.trim().toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      }
+
+      const csvRows = [
+        ['번호', '단어', '뜻', 'DAY', '출처 단어장']
+      ];
+
+      wordsToExport.forEach((item, idx) => {
+        let day = 1;
+        if (mergeDayOption === 'sequential') {
+          day = Math.floor(idx / mergedUnitSize) + 1;
+        } else if (mergeDayOption === 'separate') {
+          day = item.wbIndex;
+        } else {
+          day = item.word.day || (Math.floor((item.word.order ?? 0) / mergedUnitSize) + 1);
+        }
+        csvRows.push([
+          String(idx + 1),
+          `"${(item.word.word || '').replace(/"/g, '""')}"`,
+          `"${(item.word.meaning || '').replace(/"/g, '""')}"`,
+          `DAY ${day}`,
+          `"${(item.wbTitle || '').replace(/"/g, '""')}"`
+        ]);
+      });
+
+      const csvContent = '\uFEFF' + csvRows.map(r => r.join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const filename = `${mergedTitle || '통합단어장'}.csv`;
+      saveAs(blob, filename);
+    } catch (error) {
+      console.error('Failed to export CSV:', error);
+      alert('내보내기 중 오류가 발생했습니다.');
+    } finally {
+      setIsMerging(false);
+    }
+  };
 
   const handleAddExample = async () => {
     if (!selectedWordbook || !currentWordForExamples || !newExSentence.trim() || !newExExplanation.trim()) return;
@@ -256,11 +601,11 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     try {
       const maxOrder = wordbooks.length > 0 ? Math.max(...wordbooks.map(wb => wb.order ?? 0)) : -1;
       await addDoc(collection(db, 'wordbooks'), {
-        title: newTitle,
+        title: newTitle.trim(),
         createdBy: auth.currentUser.uid,
         createdAt: Timestamp.now(),
         order: maxOrder + 1,
-        category: category
+        category: newWbCategory || category
       });
       setNewTitle('');
       setIsAddModalOpen(false);
@@ -360,7 +705,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
           createdBy: auth.currentUser.uid,
           createdAt: Timestamp.now(),
           order: maxOrder + 1,
-          category: category
+          category: newWbCategory || category
         });
         targetWbId = wbRef.id;
       }
@@ -425,6 +770,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       const updateData: any = {
         word: editWordValue.trim(),
         meaning: editMeaningValue.trim(),
+        day: editDayValue,
         imageUrl: editImageUrlValue.trim(),
         updatedAt: Timestamp.now()
       };
@@ -480,6 +826,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         word: newWord.trim(),
         meaning: newMeaning.trim(),
         imageUrl: newImageUrl.trim(),
+        day: newWordDay,
         order: maxOrder + 1,
         createdAt: Timestamp.now()
       };
@@ -577,6 +924,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       const updateData: any = {
         title: editWbTitleValue.trim(),
         defaultUnitSize: editWbUnitSizeValue,
+        category: editWbCategoryValue,
         updatedAt: Timestamp.now()
       };
 
@@ -590,11 +938,19 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
       await updateDoc(doc(db, 'wordbooks', editingWordbook.id), updateData);
       
+      const prevCat = editingWordbook.category || (editingWordbook.type === 'irregular' ? 'grammar' : 'word');
+      if (editWbCategoryValue !== prevCat) {
+        const categoryNames: Record<string, string> = { word: '단어장', grammar: '문법 세트', exam: '시험기간' };
+        setMoveToastMessage(`'${editWbTitleValue.trim()}'이(가) [${categoryNames[editWbCategoryValue]}] 탭으로 이동되었습니다.`);
+        setTimeout(() => setMoveToastMessage(null), 3500);
+      }
+
       if (selectedWordbook?.id === editingWordbook.id) {
         setSelectedWordbook({ 
           ...selectedWordbook, 
           title: editWbTitleValue.trim(),
           defaultUnitSize: updateData.defaultUnitSize,
+          category: editWbCategoryValue,
           customDistractors: updateData.customDistractors
         });
       }
@@ -625,9 +981,10 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         });
       } else {
         // Range selection by DAY
-        const startIndex = (testPaperConfig.startDay - 1) * testPaperConfig.unitSize;
-        const endIndex = testPaperConfig.endDay * testPaperConfig.unitSize;
-        selectedWords = words.slice(startIndex, endIndex);
+        selectedWords = words.filter((w, idx) => {
+          const d = getWordDay(w, idx);
+          return d >= testPaperConfig.startDay && d <= testPaperConfig.endDay;
+        });
       }
       
       // Respect shuffle option if available (default true for random mode, but random mode handled above)
@@ -889,9 +1246,10 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const handlePrintWordbook = async () => {
     if (!selectedWordbook || words.length === 0) return;
     
-    const startIndex = (printConfig.startDay - 1) * printConfig.unitSize;
-    const endIndex = printConfig.endDay * printConfig.unitSize;
-    const selectedWords = words.slice(startIndex, endIndex);
+    const selectedWords = words.filter((w, idx) => {
+      const d = getWordDay(w, idx);
+      return d >= printConfig.startDay && d <= printConfig.endDay;
+    });
 
     if (selectedWords.length === 0) {
       alert('선택된 범위에 단어가 없습니다.');
@@ -1009,6 +1367,23 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
   return (
     <div className="space-y-6">
+      {moveToastMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 font-bold text-sm flex items-center justify-between shadow-sm"
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />
+            <span>{moveToastMessage}</span>
+          </div>
+          <button onClick={() => setMoveToastMessage(null)} className="text-emerald-500 hover:text-emerald-700">
+            <X size={16} />
+          </button>
+        </motion.div>
+      )}
+
       {!selectedWordbook ? (
         <DndContext
           sensors={sensors}
@@ -1018,16 +1393,36 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex flex-col gap-4">
               <button
-                onClick={() => setIsAddModalOpen(true)}
-                className="flex-1 rounded-[2.5rem] border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 text-slate-400 hover:border-pastel-pink-300 hover:text-pastel-pink-500 hover:bg-pastel-pink-50/30 transition-all group min-h-[12rem]"
+                onClick={() => {
+                  setNewWbCategory(category);
+                  setIsAddModalOpen(true);
+                }}
+                className={`flex-1 rounded-[2.5rem] border-2 border-dashed flex flex-col items-center justify-center gap-4 transition-all group min-h-[12rem] ${
+                  category === 'exam'
+                    ? 'border-amber-200 text-amber-500 hover:border-amber-300 hover:bg-amber-50/40'
+                    : category === 'grammar'
+                    ? 'border-purple-200 text-purple-500 hover:border-purple-300 hover:bg-purple-50/40'
+                    : 'border-slate-200 text-slate-400 hover:border-pastel-pink-300 hover:text-pastel-pink-500 hover:bg-pastel-pink-50/30'
+                }`}
               >
-                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center group-hover:bg-pastel-pink-100 transition-colors">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
+                  category === 'exam'
+                    ? 'bg-amber-50 text-amber-600 group-hover:bg-amber-100'
+                    : category === 'grammar'
+                    ? 'bg-purple-50 text-purple-600 group-hover:bg-purple-100'
+                    : 'bg-slate-50 text-slate-500 group-hover:bg-pastel-pink-100'
+                }`}>
                   <Plus size={24} />
                 </div>
-                <span className="font-bold">새 단어장 만들기</span>
+                <span className="font-bold">
+                  {category === 'exam' ? '새 시험기간 단어장 만들기' : category === 'grammar' ? '새 문법 세트 만들기' : '새 단어장 만들기'}
+                </span>
               </button>
               <button
-                onClick={() => setIsBulkAddOpen(true)}
+                onClick={() => {
+                  setNewWbCategory(category);
+                  setIsBulkAddOpen(true);
+                }}
                 className="py-4 bg-emerald-50 text-emerald-600 rounded-3xl font-bold text-sm hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 border border-emerald-100"
               >
                 <FileSpreadsheet size={18} />
@@ -1048,27 +1443,74 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 <FileText size={18} />
                 외부 단어로 즉석 시험지 만들기
               </button>
+              <button
+                onClick={() => {
+                  setSelectedWbIdsForMerge([]);
+                  setMergeOrder([]);
+                  setMergedTitle('');
+                  setMergedUnitSize(40);
+                  setMergeDayOption('sequential');
+                  setRemoveDuplicates(false);
+                  setMergeTargetCategory(category);
+                  setIsMergeModalOpen(true);
+                }}
+                className="py-4 bg-purple-50 text-purple-700 rounded-3xl font-bold text-sm hover:bg-purple-100 transition-all flex items-center justify-center gap-2 border border-purple-100 shadow-sm"
+              >
+                <Layers size={18} />
+                단어장 합치기 (통합 및 내보내기)
+              </button>
             </div>
 
-            <SortableContext
-              items={wordbooks.map(wb => wb.id)}
-              strategy={rectSortingStrategy}
-            >
-              {wordbooks.map((wb: Wordbook) => (
-                <SortableWordbookCard 
-                  key={wb.id} 
-                  wb={wb} 
-                  onClick={() => setSelectedWordbook(wb)}
-                  onDelete={() => setDeleteTarget({ id: wb.id, title: wb.title, type: 'wordbook' })}
-                  onEdit={() => {
-                    setEditingWordbook(wb);
-                    setEditWbTitleValue(wb.title);
-                    setEditWbUnitSizeValue(wb.defaultUnitSize || 10);
-                    setEditWbDistractorsValue(wb.customDistractors?.join(', ') || '');
+            {wordbooks.length === 0 ? (
+              <div className="md:col-span-2 rounded-[2.5rem] border-2 border-dashed border-slate-200 bg-white/60 p-10 flex flex-col items-center justify-center text-center">
+                <div className={`w-16 h-16 rounded-3xl flex items-center justify-center mb-4 ${
+                  category === 'exam' ? 'bg-amber-100 text-amber-600' : category === 'grammar' ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  <BookOpen size={32} />
+                </div>
+                <h3 className="text-lg font-black text-slate-800 mb-1">
+                  {category === 'exam' ? '등록된 시험기간 대비 단어장이 없습니다' : category === 'grammar' ? '등록된 문법 세트가 없습니다' : '등록된 단어장이 없습니다'}
+                </h3>
+                <p className="text-xs text-slate-400 font-medium max-w-sm mb-4 leading-relaxed">
+                  {category === 'exam'
+                    ? '왼쪽의 [새 시험기간 단어장 만들기]를 누르거나, 다른 탭의 단어장 카드에서 [이동: 🎯 시험기간]을 선택하여 가져올 수 있습니다.'
+                    : '왼쪽의 버튼을 눌러 새 단어장을 생성하거나 텍스트를 일괄 등록해보세요.'}
+                </p>
+                <button
+                  onClick={() => {
+                    setNewWbCategory(category);
+                    setIsAddModalOpen(true);
                   }}
-                />
-              ))}
-            </SortableContext>
+                  className={`px-5 py-2.5 rounded-xl font-bold text-xs text-white shadow-sm transition-all ${
+                    category === 'exam' ? 'bg-amber-500 hover:bg-amber-600' : category === 'grammar' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-pastel-pink-500 hover:bg-pastel-pink-600'
+                  }`}
+                >
+                  지금 만들기
+                </button>
+              </div>
+            ) : (
+              <SortableContext
+                items={wordbooks.map(wb => wb.id)}
+                strategy={rectSortingStrategy}
+              >
+                {wordbooks.map((wb: Wordbook) => (
+                  <SortableWordbookCard 
+                    key={wb.id} 
+                    wb={wb} 
+                    onClick={() => setSelectedWordbook(wb)}
+                    onDelete={() => setDeleteTarget({ id: wb.id, title: wb.title, type: 'wordbook' })}
+                    onEdit={() => {
+                      setEditingWordbook(wb);
+                      setEditWbTitleValue(wb.title);
+                      setEditWbUnitSizeValue(wb.defaultUnitSize || 10);
+                      setEditWbDistractorsValue(wb.customDistractors?.join(', ') || '');
+                      setEditWbCategoryValue(wb.category || (wb.type === 'irregular' ? 'grammar' : 'word'));
+                    }}
+                    onMoveCategory={(targetCat) => handleMoveWordbookCategory(wb.id, targetCat, wb.title)}
+                  />
+                ))}
+              </SortableContext>
+            )}
           </div>
         </DndContext>
       ) : (
@@ -1116,6 +1558,13 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 엑셀로 단어 추가
               </button>
               <button 
+                onClick={() => setIsDayManagementOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-all border border-indigo-100"
+              >
+                <Calendar size={16} />
+                DAY 일괄 설정
+              </button>
+              <button 
                 onClick={() => setIsIndividualAddOpen(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-pastel-pink-500 text-white rounded-xl font-bold text-sm hover:bg-pastel-pink-600 transition-all"
               >
@@ -1127,22 +1576,45 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
-                <BookOpen className="text-pastel-pink-500" />
-                {selectedWordbook.title}
-                <button 
-                  onClick={() => {
-                    setEditingWordbook(selectedWordbook);
-                    setEditWbTitleValue(selectedWordbook.title);
-                    setEditWbUnitSizeValue(selectedWordbook.defaultUnitSize || 10);
-                    setEditWbDistractorsValue(selectedWordbook.customDistractors?.join(', ') || '');
-                  }}
-                  className="p-2 text-slate-300 hover:text-pastel-pink-500 transition-colors"
-                  title="단어장 이름 수정"
+              <div className="flex items-center gap-3 flex-wrap">
+                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+                  <BookOpen className={
+                    selectedWordbook.category === 'exam' ? 'text-amber-500' : selectedWordbook.category === 'grammar' ? 'text-purple-600' : 'text-pastel-pink-500'
+                  } />
+                  {selectedWordbook.title}
+                  <button 
+                    onClick={() => {
+                      setEditingWordbook(selectedWordbook);
+                      setEditWbTitleValue(selectedWordbook.title);
+                      setEditWbUnitSizeValue(selectedWordbook.defaultUnitSize || 10);
+                      setEditWbDistractorsValue(selectedWordbook.customDistractors?.join(', ') || '');
+                      setEditWbCategoryValue(selectedWordbook.category || (selectedWordbook.type === 'irregular' ? 'grammar' : 'word'));
+                    }}
+                    className="p-2 text-slate-300 hover:text-pastel-pink-500 transition-colors"
+                    title="단어장 설정 및 카테고리 수정"
+                  >
+                    <Edit3 size={18} />
+                  </button>
+                </h2>
+                <div 
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold hover:bg-white transition-all"
+                  title="소속 탭(카테고리) 변경"
                 >
-                  <Edit3 size={18} />
-                </button>
-              </h2>
+                  <span className="text-[10px] text-slate-400">소속 탭:</span>
+                  <select
+                    value={selectedWordbook.category || (selectedWordbook.type === 'irregular' ? 'grammar' : 'word')}
+                    onChange={(e) => {
+                      const newCat = e.target.value as 'word' | 'grammar' | 'exam';
+                      handleMoveWordbookCategory(selectedWordbook.id, newCat, selectedWordbook.title);
+                    }}
+                    className="font-bold text-xs text-slate-700 bg-transparent outline-none cursor-pointer"
+                  >
+                    <option value="word">📘 단어장</option>
+                    <option value="grammar">🎓 문법 세트</option>
+                    <option value="exam">🎯 시험기간</option>
+                  </select>
+                </div>
+              </div>
               <button
                 onClick={() => setDeleteTarget({ id: selectedWordbook.id, title: selectedWordbook.title, type: 'wordbook' })}
                 className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl text-sm font-bold flex items-center gap-2 transition-all"
@@ -1151,6 +1623,103 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 단어장 전체 삭제
               </button>
             </div>
+
+            {/* DAY Filter Tabs & Batch Selection Bar */}
+            <div className="mb-6 space-y-3 pb-6 border-b border-slate-100">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full custom-scrollbar">
+                  <span className="text-xs font-black text-slate-400 mr-1 flex items-center gap-1">
+                    <Calendar size={14} /> DAY 선택:
+                  </span>
+                  <button
+                    onClick={() => setActiveDayFilter('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
+                      activeDayFilter === 'all'
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    전체 ({words.length})
+                  </button>
+                  {currentDays.map(d => {
+                    const count = words.filter((w, i) => getWordDay(w, i) === d).length;
+                    return (
+                      <button
+                        key={d}
+                        onClick={() => setActiveDayFilter(d)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
+                          activeDayFilter === d
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                        }`}
+                      >
+                        DAY {d} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (selectedWordIds.length === displayedWords.length) {
+                        setSelectedWordIds([]);
+                      } else {
+                        setSelectedWordIds(displayedWords.map(w => w.id));
+                      }
+                    }}
+                    className="text-xs font-bold text-slate-500 hover:text-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all"
+                  >
+                    {selectedWordIds.length === displayedWords.length && displayedWords.length > 0 ? '선택 전체 해제' : '현재 화면 전체 선택'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Batch Action Toolbar when words are selected */}
+              {selectedWordIds.length > 0 && (
+                <div className="p-3 bg-indigo-50/80 rounded-2xl border border-indigo-100 flex items-center justify-between flex-wrap gap-3 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs font-black">
+                      {selectedWordIds.length}
+                    </span>
+                    <span className="text-xs font-bold text-indigo-900">개 단어 선택됨</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-indigo-700">선택 단어를:</span>
+                    <select
+                      id="batchDayTargetSelect"
+                      defaultValue={currentDays[0] || 1}
+                      className="px-3 py-1 bg-white border border-indigo-200 rounded-xl text-xs font-bold text-indigo-900 outline-none"
+                    >
+                      {currentDays.map(d => (
+                        <option key={d} value={d}>
+                          DAY {d}로 이동
+                        </option>
+                      ))}
+                      <option value={(currentDays[currentDays.length - 1] || 0) + 1}>
+                        + 신규 DAY {(currentDays[currentDays.length - 1] || 0) + 1}로 이동
+                      </option>
+                    </select>
+                    <button
+                      onClick={() => {
+                        const selectEl = document.getElementById('batchDayTargetSelect') as HTMLSelectElement | null;
+                        const targetDay = parseInt(selectEl?.value || '1');
+                        handleBatchMoveWordsToDay(selectedWordIds, targetDay);
+                      }}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-all shadow-sm"
+                    >
+                      이동 적용
+                    </button>
+                    <button
+                      onClick={() => setSelectedWordIds([])}
+                      className="px-2 py-1 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             
             <DndContext
               sensors={sensors}
@@ -1158,15 +1727,24 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
               onDragEnd={handleWordDragEnd}
             >
               <SortableContext
-                items={words.map(w => w.id)}
+                items={displayedWords.map(w => w.id)}
                 strategy={rectSortingStrategy}
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {words.map((word) => (
+                  {displayedWords.map((word, index) => (
                     <SortableWordCard
                       key={word.id}
                       word={word}
                       selectedWordbook={selectedWordbook}
+                      currentDay={getWordDay(word, index)}
+                      availableDays={currentDays}
+                      onDayChange={(newDay) => handleUpdateWordDay(word.id, newDay)}
+                      isSelected={selectedWordIds.includes(word.id)}
+                      onToggleSelect={() => {
+                        setSelectedWordIds(prev => 
+                          prev.includes(word.id) ? prev.filter(id => id !== word.id) : [...prev, word.id]
+                        );
+                      }}
                       onOpenExamples={() => {
                         setCurrentWordForExamples(word);
                         setIsExampleModalOpen(true);
@@ -1181,6 +1759,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                         setEditImageUrlValue(word.imageUrl || '');
                         setEditDistractorsValue(word.distractors?.join(', ') || '');
                         setEditExampleValue((word as any).example || '');
+                        setEditDayValue(getWordDay(word, index));
                         
                         // Grammar Cramming
                         setEditQuizSentence((word as any).quizSentence || '');
@@ -1194,9 +1773,9 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                       onDelete={() => setDeleteTarget({ id: word.id, title: word.word, type: 'word' })}
                     />
                   ))}
-                  {words.length === 0 && (
+                  {displayedWords.length === 0 && (
                     <div className="col-span-2 py-20 text-center text-slate-400 font-medium">
-                      등록된 단어가 없습니다.
+                      {activeDayFilter === 'all' ? '등록된 단어가 없습니다.' : `DAY ${activeDayFilter}에 배정된 단어가 없습니다.`}
                     </div>
                   )}
                 </div>
@@ -1327,13 +1906,56 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
             <h2 className="text-2xl font-black text-slate-900 mb-6">새 단어장 만들기</h2>
-            <input
-              type="text"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="단어장 제목 (예: 고1 필수 어휘)"
-              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none mb-6 font-bold"
-            />
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">단어장 제목</label>
+                <input
+                  type="text"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="단어장 제목 (예: 고1 필수 어휘, 비전고 중간고사)"
+                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">소속 탭 (카테고리)</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewWbCategory('word')}
+                    className={`py-3 px-2 rounded-xl text-xs font-black border transition-all ${
+                      newWbCategory === 'word'
+                        ? 'bg-pastel-pink-500 text-white border-pastel-pink-500 shadow-sm'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    📘 단어장
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewWbCategory('grammar')}
+                    className={`py-3 px-2 rounded-xl text-xs font-black border transition-all ${
+                      newWbCategory === 'grammar'
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    🎓 문법 세트
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewWbCategory('exam')}
+                    className={`py-3 px-2 rounded-xl text-xs font-black border transition-all ${
+                      newWbCategory === 'exam'
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    🎯 시험기간
+                  </button>
+                </div>
+              </div>
+            </div>
             <div className="flex gap-3">
               <button onClick={() => setIsAddModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold">취소</button>
               <button onClick={handleCreateWordbook} className="flex-1 py-4 bg-pastel-pink-500 text-white rounded-2xl font-bold shadow-lg shadow-pastel-pink-200">만들기</button>
@@ -1357,6 +1979,47 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   placeholder="단어장 제목"
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">소속 탭 (카테고리 이동)</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditWbCategoryValue('word')}
+                    className={`py-3 px-2 rounded-xl text-xs font-black border transition-all ${
+                      editWbCategoryValue === 'word'
+                        ? 'bg-pastel-pink-500 text-white border-pastel-pink-500 shadow-sm'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    📘 단어장
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditWbCategoryValue('grammar')}
+                    className={`py-3 px-2 rounded-xl text-xs font-black border transition-all ${
+                      editWbCategoryValue === 'grammar'
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    🎓 문법 세트
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditWbCategoryValue('exam')}
+                    className={`py-3 px-2 rounded-xl text-xs font-black border transition-all ${
+                      editWbCategoryValue === 'exam'
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    🎯 시험기간
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1 ml-1">
+                  * 탭을 변경하면 해당 화면(단어장, 문법 세트, 시험기간)으로 단어장이 즉시 이동됩니다.
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">학습 기본 단위 (DAY당 단어 수)</label>
@@ -1420,6 +2083,19 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   rows={2}
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold resize-none"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">소속 DAY</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    value={editDayValue}
+                    onChange={(e) => setEditDayValue(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
+                  />
+                  <span className="text-sm font-bold text-indigo-600 whitespace-nowrap px-3 py-2 bg-indigo-50 rounded-xl">DAY {editDayValue}</span>
+                </div>
               </div>
               {(selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'basic-modal-grammar') && (
                 <div className="grid grid-cols-1 gap-4">
@@ -1590,6 +2266,19 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   rows={3}
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold resize-none"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">소속 DAY</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    value={newWordDay}
+                    onChange={(e) => setNewWordDay(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
+                  />
+                  <span className="text-sm font-bold text-indigo-600 whitespace-nowrap px-3 py-2 bg-indigo-50 rounded-xl">DAY {newWordDay}</span>
+                </div>
               </div>
               {(selectedWordbook?.type === 'irregular' || selectedWordbook?.type === 'comparative-grammar') && (
                 <div className="grid grid-cols-2 gap-4">
@@ -2309,11 +2998,423 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
           </motion.div>
         </div>
       )}
+
+      {/* Wordbook Merge Modal */}
+      {isMergeModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-2xl w-full bg-white rounded-[3rem] p-8 md:p-10 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                  <Layers className="text-purple-600" />
+                  단어장 합치기 (통합 및 내보내기)
+                </h2>
+                <p className="text-xs font-bold text-slate-400 mt-1">
+                  여러 단어장을 하나로 묶어 새 단어장으로 생성하거나 CSV 파일로 내보낼 수 있습니다.
+                </p>
+              </div>
+              <button onClick={() => setIsMergeModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-6 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+              {/* Step 1: Select Wordbooks */}
+              <div>
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                    1. 합칠 단어장 선택 ({selectedWbIdsForMerge.length}개 선택됨)
+                  </label>
+                  <div className="flex gap-1 bg-slate-100 p-1 rounded-xl text-[11px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setMergeFilterTab('all')}
+                      className={`px-2 py-1 rounded-lg transition-all ${mergeFilterTab === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      전체 ({allWordbooks.length || wordbooks.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMergeFilterTab('word')}
+                      className={`px-2 py-1 rounded-lg transition-all ${mergeFilterTab === 'word' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      📘 단어장
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMergeFilterTab('grammar')}
+                      className={`px-2 py-1 rounded-lg transition-all ${mergeFilterTab === 'grammar' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      🎓 문법
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMergeFilterTab('exam')}
+                      className={`px-2 py-1 rounded-lg transition-all ${mergeFilterTab === 'exam' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      🎯 시험기간
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-100 custom-scrollbar">
+                  {(allWordbooks.length > 0 ? allWordbooks : wordbooks)
+                    .filter(wb => {
+                      if (mergeFilterTab === 'all') return true;
+                      const cat = wb.category || (wb.type === 'irregular' ? 'grammar' : 'word');
+                      return cat === mergeFilterTab;
+                    })
+                    .map(wb => {
+                      const isChecked = selectedWbIdsForMerge.includes(wb.id);
+                      const cat = wb.category || (wb.type === 'irregular' ? 'grammar' : 'word');
+                      const count = wordbookWordCounts[wb.id];
+                      return (
+                        <div
+                          key={wb.id}
+                          onClick={() => toggleWbForMerge(wb.id)}
+                          className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-purple-50 border-purple-200 text-purple-900 shadow-sm'
+                              : 'bg-white border-slate-200/70 text-slate-700 hover:border-slate-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            className="w-4 h-4 rounded text-purple-600 focus:ring-purple-400 cursor-pointer"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
+                                cat === 'exam' ? 'bg-amber-100 text-amber-700' : cat === 'grammar' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {cat === 'exam' ? '시험' : cat === 'grammar' ? '문법' : '단어'}
+                              </span>
+                              <span className="font-bold text-sm truncate">{wb.title}</span>
+                            </div>
+                            {typeof count === 'number' && (
+                              <span className="text-[10px] text-slate-400 font-bold ml-0.5">{count}개 단어</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Step 2: Configure Wordbooks Order */}
+              {mergeOrder.length > 0 && (
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="text-xs font-black text-slate-700 uppercase tracking-wider">
+                      2. 단어 순서 설정 (어느 단어장의 단어가 먼저 올지 정렬)
+                    </label>
+                    <span className="text-[11px] font-bold text-purple-600">▲▼ 버튼으로 순서 변경</span>
+                  </div>
+                  <div className="space-y-2 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                    {mergeOrder.map((wbId, index) => {
+                      const wb = (allWordbooks.length > 0 ? allWordbooks : wordbooks).find(w => w.id === wbId);
+                      const cat = wb?.category || (wb?.type === 'irregular' ? 'grammar' : 'word');
+                      return (
+                        <div key={wbId} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 font-black text-xs rounded-lg shrink-0">
+                              {index + 1}순위
+                            </span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
+                              cat === 'exam' ? 'bg-amber-100 text-amber-700' : cat === 'grammar' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {cat === 'exam' ? '시험' : cat === 'grammar' ? '문법' : '단어'}
+                            </span>
+                            <span className="font-bold text-sm text-slate-800 truncate">{wb?.title || wbId}</span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              disabled={index === 0}
+                              onClick={() => moveMergeWb(index, 'up')}
+                              className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent"
+                              title="위로 이동 (먼저 출제)"
+                            >
+                              <ArrowUp size={16} />
+                            </button>
+                            <button
+                              disabled={index === mergeOrder.length - 1}
+                              onClick={() => moveMergeWb(index, 'down')}
+                              className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent"
+                              title="아래로 이동 (나중에 출제)"
+                            >
+                              <ArrowDown size={16} />
+                            </button>
+                            <button
+                              onClick={() => toggleWbForMerge(wbId)}
+                              className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg ml-1"
+                              title="선택 제외"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Settings */}
+              <div className="space-y-4 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1 ml-1">
+                    3. 통합 단어장 제목
+                  </label>
+                  <input
+                    type="text"
+                    value={mergedTitle}
+                    onChange={(e) => setMergedTitle(e.target.value)}
+                    placeholder="예: 수특라 + 6모 비전고2 통합 단어장"
+                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-purple-100 outline-none font-bold text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5 ml-1">
+                    통합 단어장이 저장될 탭 (카테고리)
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMergeTargetCategory('word')}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all ${
+                        mergeTargetCategory === 'word'
+                          ? 'bg-pastel-pink-500 text-white border-pastel-pink-500 shadow-sm'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      📘 단어장
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMergeTargetCategory('grammar')}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all ${
+                        mergeTargetCategory === 'grammar'
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      🎓 문법 세트
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMergeTargetCategory('exam')}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all ${
+                        mergeTargetCategory === 'exam'
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      🎯 시험기간
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1 ml-1">
+                      DAY 배정 방식
+                    </label>
+                    <select
+                      value={mergeDayOption}
+                      onChange={(e) => setMergeDayOption(e.target.value as any)}
+                      className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-purple-100 outline-none font-bold text-xs"
+                    >
+                      <option value="sequential">단어 수 기준 순차 배정 (DAY당 {mergedUnitSize}개)</option>
+                      <option value="separate">단어장별로 각각 1 DAY씩 배정</option>
+                      <option value="preserve">기존 각 단어장의 DAY 유지</option>
+                    </select>
+                  </div>
+                  {mergeDayOption === 'sequential' && (
+                    <div>
+                      <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1 ml-1">
+                        DAY당 단어 수
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={mergedUnitSize}
+                        onChange={(e) => setMergedUnitSize(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-purple-100 outline-none font-bold text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer" onClick={() => setRemoveDuplicates(!removeDuplicates)}>
+                  <input
+                    type="checkbox"
+                    checked={removeDuplicates}
+                    onChange={(e) => setRemoveDuplicates(e.target.checked)}
+                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-400 cursor-pointer"
+                  />
+                  <div className="text-xs">
+                    <span className="font-black text-slate-800">중복 단어 자동 제거</span>
+                    <span className="text-slate-400 ml-2">(동일한 스펠링의 단어가 여러 단어장에 있으면 1번만 포함)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-6 border-t border-slate-100 mt-4">
+              <button
+                onClick={() => setIsMergeModalOpen(false)}
+                className="py-3.5 px-6 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-bold text-sm transition-all"
+              >
+                닫기
+              </button>
+              <button
+                onClick={handleExportMergeAsCsv}
+                disabled={isMerging || mergeOrder.length === 0}
+                className="flex-1 py-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Download size={16} />
+                {isMerging ? '처리 중...' : '합쳐서 CSV로 내보내기'}
+              </button>
+              <button
+                onClick={handleExecuteMerge}
+                disabled={isMerging || mergeOrder.length < 2 || !mergedTitle.trim()}
+                className="flex-1 py-3.5 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-bold text-sm shadow-lg shadow-purple-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Layers size={16} />
+                {isMerging ? '단어장 합치는 중...' : '새 단어장으로 합치기'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* DAY Management Modal */}
+      {isDayManagementOpen && selectedWordbook && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-lg w-full bg-white rounded-[3rem] p-8 md:p-10 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                  <Calendar className="text-indigo-600" />
+                  DAY 일괄 설정 및 관리
+                </h2>
+                <p className="text-xs font-bold text-slate-400 mt-1">
+                  [{selectedWordbook.title}] 단어장의 DAY 구성을 한눈에 확인하고 일괄 재배정합니다.
+                </p>
+              </div>
+              <button onClick={() => setIsDayManagementOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-6 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+              {/* Current Day Distribution */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-3">
+                  현재 DAY별 단어 수 현황 (전체: {words.length}개)
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {currentDays.map(d => {
+                    const count = words.filter((w, i) => getWordDay(w, i) === d).length;
+                    return (
+                      <div key={d} className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl flex items-center gap-2 text-xs font-bold shadow-2xs">
+                        <span className="text-indigo-600 font-black">DAY {d}</span>
+                        <span className="text-slate-500 font-medium">{count}단어</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Auto Split Option */}
+              <div className="p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-4">
+                <div className="flex items-center gap-2 text-indigo-900">
+                  <FileSpreadsheet size={18} className="text-indigo-600" />
+                  <h4 className="text-sm font-black">균등 일괄 자동 분할</h4>
+                </div>
+                <p className="text-xs text-indigo-700 leading-relaxed font-medium">
+                  단어 순서대로 DAY 1부터 지정된 개수만큼 차례대로 DAY를 재배정합니다.
+                </p>
+                <div>
+                  <label className="block text-xs font-bold text-indigo-800 mb-1">
+                    DAY당 단어 수
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      value={bulkDaySplitSize}
+                      onChange={(e) => setBulkDaySplitSize(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="flex-1 p-3 bg-white border border-indigo-200 rounded-xl font-bold text-sm outline-none focus:ring-4 focus:ring-indigo-100"
+                    />
+                    <button
+                      onClick={() => {
+                        if (confirm(`전체 ${words.length}개 단어를 DAY당 ${bulkDaySplitSize}개씩 일괄 재배정하시겠습니까?`)) {
+                          handleAutoSplitDays(bulkDaySplitSize);
+                        }
+                      }}
+                      className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all whitespace-nowrap"
+                    >
+                      일괄 분할 적용
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-2">
+                    * {words.length}개 단어 분할 시 총 약 {Math.ceil(words.length / bulkDaySplitSize)}개 DAY 생성 예정
+                  </p>
+                </div>
+              </div>
+
+              {/* Direct Individual / Batch Guidance */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+                <h4 className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                  <CheckCircle2 size={14} className="text-emerald-500" />
+                  원하는 단어만 직접 DAY 지정하는 방법
+                </h4>
+                <ul className="text-xs text-slate-500 space-y-1.5 font-medium leading-relaxed list-disc list-inside">
+                  <li>
+                    <strong className="text-slate-800">단어별 즉시 변경</strong>: 단어 카드 좌측 상단의 <span className="text-indigo-600 font-bold">[DAY X]</span> 뱃지 드롭다운을 클릭하여 즉시 다른 DAY로 이동할 수 있습니다.
+                  </li>
+                  <li>
+                    <strong className="text-slate-800">체크박스 다중 이동</strong>: 목록에서 여러 단어의 체크박스를 선택한 후 상단 바에서 이동할 대상 DAY를 선택하고 [이동 적용]을 누르면 한 번에 이동됩니다.
+                  </li>
+                  <li>
+                    <strong className="text-slate-800">단어 편집창</strong>: 각 단어 카드의 수정(연필 아이콘) 버튼을 누르면 단어의 소속 DAY를 직접 숫자로 입력할 수도 있습니다.
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 mt-4">
+              <button
+                onClick={() => setIsDayManagementOpen(false)}
+                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold text-sm transition-all"
+              >
+                닫기
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
 
-function SortableWordbookCard({ wb, onClick, onDelete, onEdit }: { wb: Wordbook; onClick: () => void; onDelete: () => void; onEdit: () => void; key?: string }) {
+function SortableWordbookCard({ 
+  wb, 
+  onClick, 
+  onDelete, 
+  onEdit,
+  onMoveCategory
+}: { 
+  wb: Wordbook; 
+  onClick: () => void; 
+  onDelete: () => void; 
+  onEdit: () => void; 
+  onMoveCategory?: (targetCategory: 'word' | 'grammar' | 'exam') => void;
+  key?: string;
+}) {
   const {
     attributes,
     listeners,
@@ -2329,6 +3430,8 @@ function SortableWordbookCard({ wb, onClick, onDelete, onEdit }: { wb: Wordbook;
     zIndex: isDragging ? 50 : 'auto',
     opacity: isDragging ? 0.5 : 1,
   };
+
+  const wbCat = wb.category || (wb.type === 'irregular' ? 'grammar' : 'word');
 
   return (
     <motion.div
@@ -2349,7 +3452,9 @@ function SortableWordbookCard({ wb, onClick, onDelete, onEdit }: { wb: Wordbook;
           >
             <GripVertical size={20} />
           </div>
-          <div className="w-10 h-10 bg-pastel-pink-100 rounded-xl flex items-center justify-center text-pastel-pink-600">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+            wbCat === 'exam' ? 'bg-amber-100 text-amber-600' : wbCat === 'grammar' ? 'bg-purple-100 text-purple-600' : 'bg-pastel-pink-100 text-pastel-pink-600'
+          }`}>
             <BookOpen size={20} />
           </div>
         </div>
@@ -2360,7 +3465,7 @@ function SortableWordbookCard({ wb, onClick, onDelete, onEdit }: { wb: Wordbook;
               onEdit();
             }}
             className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-            title="단어장 이름 수정"
+            title="단어장 설정 및 카테고리 수정"
           >
             <Edit3 size={18} />
           </button>
@@ -2377,14 +3482,37 @@ function SortableWordbookCard({ wb, onClick, onDelete, onEdit }: { wb: Wordbook;
         </div>
       </div>
       <div className="flex items-center gap-2 mb-2">
-        <h3 className="text-xl font-black text-slate-900 group-hover:text-pastel-pink-600 transition-colors">{wb.title}</h3>
+        <h3 className="text-xl font-black text-slate-900 group-hover:text-pastel-pink-600 transition-colors line-clamp-1">{wb.title}</h3>
         {wb.type === 'irregular' && (
-          <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-black rounded-full uppercase tracking-tighter">
+          <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-black rounded-full uppercase tracking-tighter shrink-0">
             Irregular
           </span>
         )}
       </div>
-      <p className="text-xs text-slate-400 font-medium mt-auto">생성일: {wb.createdAt?.toDate().toLocaleDateString()}</p>
+      <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-50">
+        <p className="text-[11px] text-slate-400 font-medium">
+          {wb.createdAt?.toDate ? wb.createdAt.toDate().toLocaleDateString() : '등록됨'}
+        </p>
+        <div 
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold hover:bg-white hover:border-slate-300 transition-all shadow-2xs"
+          onClick={(e) => e.stopPropagation()}
+          title="소속 탭(카테고리) 이동"
+        >
+          <span className="text-[10px] text-slate-400">이동:</span>
+          <select
+            value={wbCat}
+            onChange={(e) => {
+              e.stopPropagation();
+              onMoveCategory?.(e.target.value as 'word' | 'grammar' | 'exam');
+            }}
+            className="font-bold text-[11px] text-slate-700 bg-transparent outline-none cursor-pointer"
+          >
+            <option value="word">📘 단어장</option>
+            <option value="grammar">🎓 문법 세트</option>
+            <option value="exam">🎯 시험기간</option>
+          </select>
+        </div>
+      </div>
     </motion.div>
   );
 }
@@ -2392,12 +3520,22 @@ function SortableWordbookCard({ wb, onClick, onDelete, onEdit }: { wb: Wordbook;
 function SortableWordCard({
   word,
   selectedWordbook,
+  currentDay,
+  availableDays,
+  onDayChange,
+  isSelected,
+  onToggleSelect,
   onEdit,
   onDelete,
   onOpenExamples
 }: {
   word: Word;
   selectedWordbook: Wordbook;
+  currentDay: number;
+  availableDays: number[];
+  onDayChange: (newDay: number) => void;
+  isSelected: boolean;
+  onToggleSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onOpenExamples: () => void;
@@ -2423,19 +3561,47 @@ function SortableWordCard({
     <div
       ref={setNodeRef}
       style={style}
-      className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center gap-3 relative hover:border-slate-200 transition-all"
+      className={`p-6 rounded-2xl border flex justify-between items-center gap-3 relative transition-all ${
+        isSelected ? 'bg-indigo-50/40 border-indigo-200 shadow-sm' : 'bg-slate-50 border-slate-100 hover:border-slate-200'
+      }`}
     >
       <div className="flex items-start gap-3 flex-1 min-w-0">
-        <div 
-          {...attributes} 
-          {...listeners}
-          className="p-1 mt-0.5 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing flex-shrink-0"
-          title="드래그하여 순서 변경"
-        >
-          <GripVertical size={20} />
+        <div className="flex items-center gap-1.5 flex-shrink-0 mt-1">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggleSelect}
+            className="w-4 h-4 rounded text-pastel-pink-500 border-slate-300 focus:ring-pastel-pink-400 cursor-pointer"
+          />
+          <div 
+            {...attributes} 
+            {...listeners}
+            className="p-1 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing flex-shrink-0"
+            title="드래그하여 순서 변경"
+          >
+            <GripVertical size={20} />
+          </div>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative inline-flex items-center">
+              <select
+                value={currentDay}
+                onChange={(e) => onDayChange(parseInt(e.target.value))}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black text-xs py-0.5 px-2 rounded-lg cursor-pointer transition-all border border-indigo-200 outline-none"
+                title="단어 소속 DAY 변경"
+              >
+                {availableDays.map((d) => (
+                  <option key={d} value={d}>
+                    DAY {d}
+                  </option>
+                ))}
+                <option value={(availableDays[availableDays.length - 1] || 0) + 1}>
+                  + DAY {(availableDays[availableDays.length - 1] || 0) + 1}
+                </option>
+              </select>
+            </div>
             <div className="text-lg font-black text-slate-900 break-words">
               {selectedWordbook.type === 'grammar-cramming' ? (word as any).quizSentence || word.word : word.word}
             </div>

@@ -31,7 +31,7 @@ interface TeacherRoomProps {
 }
 
 export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
-  const [activeTab, setActiveTab] = useState<'students' | 'wordbook' | 'grammar' | 'reports'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'wordbook' | 'grammar' | 'exam' | 'reports'>('students');
   const [students, setStudents] = useState<StudentUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingAlias, setEditingAlias] = useState<string | null>(null);
@@ -121,6 +121,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
           <TabButton active={activeTab === 'students'} onClick={() => setActiveTab('students')} icon={<Users size={18} />} label="수강생 관리" />
           <TabButton active={activeTab === 'wordbook'} onClick={() => setActiveTab('wordbook')} icon={<BookOpen size={18} />} label="단어장 관리" />
           <TabButton active={activeTab === 'grammar'} onClick={() => setActiveTab('grammar')} icon={<Sparkles size={18} />} label="문법 세트 관리" />
+          <TabButton active={activeTab === 'exam'} onClick={() => setActiveTab('exam')} icon={<FileText size={18} />} label="시험기간 관리" />
           <TabButton active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} icon={<BarChart3 size={18} />} label="학습 리포트" />
           <div className="w-px h-6 bg-slate-100 mx-2 self-center hidden md:block" />
           <button
@@ -417,6 +418,17 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
               exit={{ opacity: 0, x: -20 }}
             >
               <WordbookManager category="grammar" />
+            </motion.div>
+          )}
+
+          {activeTab === 'exam' && (
+            <motion.div
+              key="exam"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+            >
+              <WordbookManager category="exam" />
             </motion.div>
           )}
 

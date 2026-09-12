@@ -361,7 +361,7 @@ export async function recordStudySession(data: {
   wordbookId: string;
   wordbookTitle: string;
   type: 'quiz' | 'flashcard' | 'match' | 'conjugation' | 'test';
-  category: 'word' | 'grammar';
+  category: 'word' | 'grammar' | 'exam';
   duration: number; // in seconds
   score?: number;
   totalItems?: number;

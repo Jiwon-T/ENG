@@ -96,7 +96,7 @@ const LearningReport = lazy(() => import('./components/student/LearningReport'))
 const ArchiveView = lazy(() => import('./components/student/ArchiveView'));
 const PetHome = lazy(() => import('./components/pet/PetHome'));
 
-type View = 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'tutor' | 'report' | 'archive' | 'teacher-room' | 'pet';
+type View = 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'exam' | 'tutor' | 'report' | 'archive' | 'teacher-room' | 'pet';
 
 interface UserProfile {
   uid: string;
@@ -787,7 +787,7 @@ export default function App() {
             >
               <TeacherRoom onNavigate={setCurrentView} />
             </motion.div>
-          ) : currentView === 'vocab' || currentView === 'grammar' ? (
+          ) : currentView === 'vocab' || currentView === 'grammar' || currentView === 'exam' ? (
             <motion.div
               key={currentView}
               initial={{ opacity: 0, x: 20 }}
@@ -796,7 +796,7 @@ export default function App() {
             >
               <WordbookView 
                 isMobile={isMobile} 
-                category={currentView === 'grammar' ? 'grammar' : 'word'} 
+                category={currentView === 'grammar' ? 'grammar' : currentView === 'exam' ? 'exam' : 'word'} 
                 onNavigate={setCurrentView}
               />
             </motion.div>

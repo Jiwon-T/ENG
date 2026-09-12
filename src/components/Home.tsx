@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { GraduationCap, Languages, BookOpen, History, BarChart3, FileText, Users, ArrowRight, X, Sparkles, Dog } from 'lucide-react';
 
 interface HomeProps {
-  onNavigate: (view: 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'vocab-mobile' | 'tutor' | 'report' | 'archive' | 'teacher-room') => void;
+  onNavigate: (view: 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'exam' | 'vocab-mobile' | 'tutor' | 'report' | 'archive' | 'teacher-room' | 'pet') => void;
   userRole?: 'teacher' | 'student' | 'admin';
   hasNewAssignment?: boolean;
 }
@@ -18,6 +18,16 @@ export default function Home({ onNavigate, userRole, hasNewAssignment }: HomePro
       color: 'bg-pastel-pink-50',
       borderColor: 'border-pastel-pink-100',
       textColor: 'text-pastel-pink-600',
+      show: true
+    },
+    {
+      id: 'exam',
+      title: '시험기간',
+      description: '각 학교별 시험기간 대비 단어장을 학습합니다.',
+      icon: <FileText className="text-amber-500 w-4 h-4 md:w-8 md:h-8" />,
+      color: 'bg-amber-50',
+      borderColor: 'border-amber-100',
+      textColor: 'text-amber-600',
       show: true
     },
     {

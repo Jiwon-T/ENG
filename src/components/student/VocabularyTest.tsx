@@ -33,7 +33,7 @@ interface VocabularyTestProps {
   onNavigateToReport?: () => void;
   wordbookId: string;
   wordbookTitle: string;
-  category: 'word' | 'grammar';
+  category: 'word' | 'grammar' | 'exam';
   type?: string;
 }
 
@@ -343,7 +343,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
           wordbookId,
           wordbookTitle,
           type: 'test',
-          category: category as 'word' | 'grammar',
+          category: category as 'word' | 'grammar' | 'exam',
           duration,
           score: finalScoreValue,
           totalItems: totalCount,

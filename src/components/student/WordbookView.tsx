@@ -15,7 +15,7 @@ interface Wordbook {
   description: string;
   order?: number;
   type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming' | 'comparative-grammar';
-  category?: 'word' | 'grammar';
+  category?: 'word' | 'grammar' | 'exam';
   customDistractors?: string[];
   defaultUnitSize?: number;
 }
@@ -24,6 +24,7 @@ interface Word {
   id: string;
   word: string;
   meaning: string;
+  day?: number;
   past?: string;
   pastParticiple?: string;
   comparative?: string;
@@ -53,7 +54,7 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-export default function WordbookView({ isMobile, category = 'word', onNavigate }: { isMobile?: boolean; category?: 'word' | 'grammar'; onNavigate?: (view: any) => void }) {
+export default function WordbookView({ isMobile, category = 'word', onNavigate }: { isMobile?: boolean; category?: 'word' | 'grammar' | 'exam'; onNavigate?: (view: any) => void }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [selectedWordbook, setSelectedWordbook] = useState<Wordbook | null>(null);
   const [words, setWords] = useState<Word[]>([]);
@@ -147,7 +148,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       wordbookId: selectedWordbook.id,
       wordbookTitle: selectedWordbook.title,
       type,
-      category: category as 'word' | 'grammar',
+      category: category as 'word' | 'grammar' | 'exam',
       duration,
       score,
       totalItems: total,
@@ -159,8 +160,12 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
 
   const isGrammar = selectedWordbook?.category === 'grammar' || selectedWordbook?.type === 'irregular';
   const daySize = selectedWordbook?.type === 'grammar-cramming' ? 999 : (isGrammar ? 10 : (selectedWordbook?.defaultUnitSize || 47));
-  let totalChunks: number = Math.ceil(words.length / daySize);
-  let displayedWords: Word[] = words.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
+  const hasCustomDays = !isGrammar && words.some(w => typeof w.day === 'number' && w.day > 0);
+  const maxCustomDay = hasCustomDays ? words.reduce((max, w) => Math.max(max, w.day || 0), 0) : 0;
+  let totalChunks: number = hasCustomDays ? Math.max(1, maxCustomDay) : Math.ceil(words.length / daySize);
+  let displayedWords: Word[] = hasCustomDays
+    ? words.filter(w => (w.day ?? (Math.floor((w.order ?? 0) / daySize) + 1)) === currentChunk + 1)
+    : words.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
 
   if (selectedWordbook?.type === 'grammar-cramming') {
     totalChunks = 6; // Based on the 6 sets in the pool
@@ -205,10 +210,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       
       // Filter by category
       const filtered = fetchedWordbooks.filter(wb => {
-        // Default to 'word' if no category set
-        const wbCategory = wb.category || 'word';
-        // Special case: Irregular verbs are grammar
-        if (wb.type === 'irregular') return category === 'grammar';
+        const wbCategory = wb.category || (wb.type === 'irregular' ? 'grammar' : 'word');
         return wbCategory === category;
       });
 
@@ -513,9 +515,15 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       baseWords = words.filter(w => !w.word.includes('(___)'));
     }
     
+    const hasCustomDays = !isGrammar && baseWords.some(w => typeof w.day === 'number' && w.day > 0);
     const startIndex = (testRange.start - 1) * daySize;
     const endIndex = testRange.end * daySize;
-    let rangeWords = baseWords.slice(startIndex, endIndex);
+    let rangeWords = hasCustomDays
+      ? baseWords.filter(w => {
+          const d = w.day ?? (Math.floor((w.order ?? 0) / daySize) + 1);
+          return d >= testRange.start && d <= testRange.end;
+        })
+      : baseWords.slice(startIndex, endIndex);
     
     if (rangeWords.length === 0) {
       alert('선택한 범위에 단어가 없습니다.');
@@ -1834,10 +1842,14 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
           >
             <header className={`${isMobile ? 'mb-6' : 'mb-12'} text-center`}>
               <h1 className={`${isMobile ? 'text-2xl' : 'text-4xl'} font-black text-slate-900 mb-2 md:mb-4 tracking-tight`}>
-                {category === 'grammar' ? '반복 학습' : '단어장 학습'}
+                {category === 'grammar' ? '반복 학습 (문법 세트)' : category === 'exam' ? '시험기간 대비 단어장' : '단어장 학습'}
               </h1>
               <p className="text-sm md:text-base text-slate-500 font-medium">
-                {category === 'grammar' ? '선생님이 등록한 학습 세트로 실력을 키워보세요!' : '선생님이 등록한 단어장을 학습하고 실력을 키워보세요!'}
+                {category === 'grammar' 
+                  ? '선생님이 등록한 학습 세트로 실력을 키워보세요!' 
+                  : category === 'exam'
+                  ? '각 학교별 시험기간 대비 맞춤 단어장으로 내신을 완벽 대비하세요!'
+                  : '선생님이 등록한 단어장을 학습하고 실력을 키워보세요!'}
               </p>
             </header>
 
@@ -1853,7 +1865,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                   className={`${isMobile ? 'p-5 rounded-2xl' : 'p-8 rounded-[2.5rem]'} bg-white border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-pastel-pink-200/20 transition-all text-left flex items-center justify-between group`}
                 >
                   <div className="flex items-center gap-4 md:gap-6">
-                    <div className={`${isMobile ? 'w-10 h-10' : 'w-14 h-14'} bg-pastel-pink-100 rounded-xl md:rounded-2xl flex items-center justify-center text-pastel-pink-600 group-hover:scale-110 transition-transform`}>
+                    <div className={`${isMobile ? 'w-10 h-10' : 'w-14 h-14'} ${category === 'exam' ? 'bg-amber-100 text-amber-600' : 'bg-pastel-pink-100 text-pastel-pink-600'} rounded-xl md:rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
                       <BookOpen size={isMobile ? 20 : 28} />
                     </div>
                     <div>
@@ -1864,6 +1876,21 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                   <ChevronRight size={isMobile ? 16 : 24} className="text-slate-300 group-hover:text-pastel-pink-500 transition-colors" />
                 </button>
               ))}
+              {wordbooks.length === 0 && !loading && (
+                <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
+                  <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">
+                    {category === 'exam' ? '🎯' : '📚'}
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-700 mb-1">
+                    {category === 'exam' ? '등록된 시험기간 단어장이 없습니다' : '등록된 단어장이 없습니다'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {category === 'exam'
+                      ? '선생님이 학교별 시험 대비 단어장을 등록하거나 이동시키면 이곳에 표시됩니다.'
+                      : '선생님이 단어장을 등록하면 이곳에 표시됩니다.'}
+                  </p>
+                </div>
+              )}
             </div>
           </motion.div>
         ) : (
