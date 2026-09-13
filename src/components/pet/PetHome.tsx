@@ -17,8 +17,16 @@ const CHARACTER_OPTIONS: { id: PetCharacterType, name: string }[] = [
 
 const SHOP_ITEMS = {
   outfits: [
+    { id: 'muji_cape', name: '무지개 망토', price: 120, icon: '🌈', category: 'clothing' },
     { id: 'uniform', name: '교복', price: 150, icon: '👔', category: 'clothing' },
-    { id: 'muji_cape', name: '무지개 망토', price: 120, icon: '🌈', category: 'clothing' }
+    { id: 'mori_girl', name: '모리걸', price: 1000, icon: '🌿', category: 'clothing' },
+    { id: 'hippie', name: '히피', price: 1000, icon: '🌻', category: 'clothing' },
+    { id: 'fairy', name: '페어리', price: 1000, icon: '🧚', category: 'clothing' },
+    { id: 'lovely', name: '러블리', price: 1000, icon: '💖', category: 'clothing' },
+    { id: 'sporty', name: '스포티', price: 1000, icon: '👟', category: 'clothing' },
+    { id: 'onee_gyaru', name: '오네갸루', price: 1000, icon: '🐆', category: 'clothing' },
+    { id: 'hime_gyaru', name: '히메갸루', price: 1000, icon: '👑', category: 'clothing' },
+    { id: 'latte_gyaru', name: '라떼갸루', price: 1000, icon: '☕', category: 'clothing' }
   ],
   accessories: [
     { id: 'pink_ribbon', name: '리본', price: 50, icon: '🎀', category: 'accessory' },

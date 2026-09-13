@@ -88,6 +88,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   const [quizScore, setQuizScore] = useState(0);
   const [isQuizFinished, setIsQuizFinished] = useState(false);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
+  const [selectedMultiOptions, setSelectedMultiOptions] = useState<number[]>([]);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
 
   // Conjugation Challenge states
@@ -176,15 +177,10 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     totalChunks = Math.ceil(conceptsOnly.length / daySize);
     displayedWords = conceptsOnly.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
   } else if (selectedWordbook?.type === 'complement-grammar') {
-    if (daySize >= 26 && !isGrammar) { // isGrammar = true for grammar, but complement-grammar had special 3 day logic
-      totalChunks = 1;
-      displayedWords = words; 
-    } else if (!isGrammar) {
-      totalChunks = 3;
-      if (currentChunk === 0) displayedWords = words.slice(0, 7);
-      else if (currentChunk === 1) displayedWords = words.slice(7, 17);
-      else displayedWords = words.slice(17, 26);
-    }
+    totalChunks = 3;
+    if (currentChunk === 0) displayedWords = words.slice(0, 7);
+    else if (currentChunk === 1) displayedWords = words.slice(7, 17);
+    else displayedWords = words.slice(17, 29);
   } else if (selectedWordbook?.type === 'basic-modal-grammar') {
     totalChunks = 2;
     if (currentChunk === 0) displayedWords = words.slice(0, 6);
@@ -689,28 +685,26 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       otherOptions = allLabels.filter(l => l !== correctOption);
     } else if (isComplementGrammar) {
       const verb = correctWord.word;
-      correctOption = correctWord.distractors?.[0] || '';
-      
-      const standardDistractors = [
-        `${verb} O 명사/형용사`,
-        `${verb} O to V`,
-        `${verb} O 동사원형`,
-        `${verb} O V-ing`
-      ];
-
-      otherOptions = standardDistractors.filter(d => {
-        if (d === correctOption) return false;
-        // 만약 정답에 '둘 다 가능'이 포함되어 있다면, 그 구성 요소들을 함정 보기에서 제외
-        if (correctOption.includes('둘 다 가능')) {
-          const parts = correctOption.split('둘 다 가능')[0];
-          if (parts.includes('명사/형용사') && d.includes('명사/형용사')) return false;
-          if (parts.includes('V-ing') && d.includes('V-ing')) return false;
-          if (parts.includes('동사원형') && d.includes('동사원형')) return false;
-          if (parts.includes('to V') && d.includes('to V')) return false;
-        }
-        return true;
-      });
-      if (otherOptions.length > 3) otherOptions = otherOptions.slice(0, 3);
+      const compItem = COMPLEMENT_QUIZ_DATA.find(c => c.verb.toLowerCase() === (verb || '').toLowerCase());
+      if (compItem) {
+        setQuizOptions(compItem.choices);
+        setSelectedMultiOptions([]);
+        setSelectedOption(null);
+        setIsCorrect(null);
+        return;
+      }
+      if (correctWord.quizChoices && correctWord.quizChoices.length > 0) {
+        setQuizOptions(correctWord.quizChoices);
+        setSelectedMultiOptions([]);
+        setSelectedOption(null);
+        setIsCorrect(null);
+        return;
+      }
+      setQuizOptions(["O + 명사/형용사", "O + to V", "O + 동사원형", "O + V-ing"]);
+      setSelectedMultiOptions([]);
+      setSelectedOption(null);
+      setIsCorrect(null);
+      return;
     } else if (isToIngGrammar) {
       const allPatterns = [
         'to부정사만 목적어로 오는 동사',
@@ -889,6 +883,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                                   selectedWordbook?.type === 'basic-modal-grammar' || 
                                   selectedWordbook?.type === 'verb-form-grammar' || 
                                   selectedWordbook?.type === 'grammar-cramming' ||
+                                  selectedWordbook?.type === 'complement-grammar' ||
                                   selectedWordbook?.title?.includes('관계부사');
     
     if (showExplanationModal) {
@@ -906,7 +901,42 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     }, 600);
   };
 
+  const handleComplementSubmit = () => {
+    if (selectedMultiOptions.length === 0 || selectedOption !== null) return;
+    const currentWord = sessionWords[quizIndex];
+    if (!currentWord) return;
+
+    const compItem = COMPLEMENT_QUIZ_DATA.find(c => c.verb.toLowerCase() === (currentWord.word || '').toLowerCase());
+    const correctIndices: number[] = compItem 
+      ? compItem.answers.map(a => a - 1)
+      : (currentWord.quizAnswers ? currentWord.quizAnswers.map((a: number) => a - 1) : [0]);
+
+    const isAnswerCorrect = 
+      selectedMultiOptions.length === correctIndices.length &&
+      selectedMultiOptions.every(idx => correctIndices.includes(idx));
+
+    setSelectedOption(999);
+    setIsCorrect(isAnswerCorrect);
+
+    let updatedIncorrectAnswers = [...incorrectAnswers];
+    if (isAnswerCorrect) {
+      setQuizScore(prev => prev + 1);
+    } else {
+      const newIncorrect = {
+        word: currentWord.word,
+        meaning: compItem ? compItem.complementForms : (currentWord.pattern || currentWord.meaning),
+        userChoice: selectedMultiOptions.map(i => quizOptions[i]).join(', '),
+        correctAnswer: correctIndices.map(i => quizOptions[i]).join(', '),
+        choices: [...quizOptions],
+        quizSentence: `5형식 목적격 보어 형태: ${compItem ? compItem.complementForms : currentWord.pattern}`
+      };
+      updatedIncorrectAnswers.push(newIncorrect);
+      setIncorrectAnswers(prev => [...prev, newIncorrect]);
+    }
+  };
+
   const handleNextQuizQuestion = () => {
+    setSelectedMultiOptions([]);
     if (quizIndex < sessionWords.length - 1) {
       setQuizIndex(prev => prev + 1);
       generateQuizOptions(quizIndex + 1);
@@ -1292,14 +1322,22 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                           </button>
                         </div>
                       </motion.div>
-                    ) : (
-                      <motion.div
-                        key={quizIndex}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        className={`w-full max-w-2xl bg-white ${isMobile ? 'rounded-2xl p-6' : 'rounded-[3rem] p-8 md:p-12'} border border-slate-100 shadow-xl`}
-                      >
+                    ) : (() => {
+                      const currentWord = sessionWords[quizIndex];
+                      const isComplement = selectedWordbook?.type === 'complement-grammar';
+                      const compItem = isComplement ? COMPLEMENT_QUIZ_DATA.find(c => c.verb.toLowerCase() === (currentWord?.word || '').toLowerCase()) : null;
+                      const correctIndices: number[] = compItem 
+                        ? compItem.answers.map(a => a - 1)
+                        : (currentWord?.quizAnswers ? currentWord.quizAnswers.map((a: number) => a - 1) : [0]);
+
+                      return (
+                        <motion.div
+                          key={quizIndex}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          className={`w-full max-w-2xl bg-white ${isMobile ? 'rounded-2xl p-6' : 'rounded-[3rem] p-8 md:p-12'} border border-slate-100 shadow-xl`}
+                        >
                         <div className="flex justify-between items-center mb-6 md:mb-8">
                           <div className="text-[10px] md:text-sm font-black text-slate-400">
                             문제 {quizIndex + 1} / {sessionWords.length}
@@ -1326,11 +1364,21 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                               {(sessionWords[quizIndex] as any).quizQuestion}
                             </p>
                           )}
+                          {isComplement && (
+                            <p className="text-xs md:text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-full mb-[-0.5rem] flex items-center gap-1.5">
+                              <span>5형식 동사: 목적격 보어로 가능한 형태를 모두 고르시오 (복수 정답)</span>
+                            </p>
+                          )}
                           <h3 className={`${isMobile ? 'text-2xl' : 'text-5xl'} font-black text-slate-900 text-center leading-tight`}>
                             {(selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'basic-modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.type === 'grammar-cramming' || selectedWordbook?.title?.includes('관계부사'))
                               ? sessionWords[quizIndex].quizSentence 
                               : sessionWords[quizIndex].word}
                           </h3>
+                          {isComplement && sessionWords[quizIndex].meaning && (
+                            <p className="text-xs md:text-sm text-slate-500 font-medium">
+                              뜻: {sessionWords[quizIndex].meaning}
+                            </p>
+                          )}
                           {(selectedWordbook?.type !== 'relative-grammar' && selectedWordbook?.type !== 'modal-grammar' && selectedWordbook?.type !== 'basic-modal-grammar' && selectedWordbook?.type !== 'verb-form-grammar' && !selectedWordbook?.title?.includes('관계부사')) && (
                             <button 
                               onClick={() => speak(sessionWords[quizIndex].word)}
@@ -1343,6 +1391,75 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
 
                         <div className="grid grid-cols-1 gap-2 md:gap-3">
                           {quizOptions.map((option, idx) => {
+                            if (isComplement) {
+                              const isSelected = selectedMultiOptions.includes(idx);
+                              const isThisCorrect = correctIndices.includes(idx);
+                              const isSubmitted = selectedOption !== null;
+
+                              let btnClass = "bg-white border-slate-200 text-slate-700 hover:border-indigo-300 hover:bg-slate-50";
+                              let badgeClass = "bg-slate-100 text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600";
+
+                              if (!isSubmitted) {
+                                if (isSelected) {
+                                  btnClass = "bg-indigo-50/80 border-indigo-500 text-indigo-950 ring-2 ring-indigo-200 shadow-sm";
+                                  badgeClass = "bg-indigo-600 text-white";
+                                }
+                              } else {
+                                if (isThisCorrect) {
+                                  btnClass = "bg-emerald-50/80 border-emerald-500 text-emerald-950 ring-2 ring-emerald-200";
+                                  badgeClass = "bg-emerald-600 text-white";
+                                } else if (isSelected && !isThisCorrect) {
+                                  btnClass = "bg-rose-50/80 border-rose-500 text-rose-950 ring-2 ring-rose-200";
+                                  badgeClass = "bg-rose-600 text-white";
+                                } else {
+                                  btnClass = "bg-slate-50/60 border-slate-200 text-slate-400 opacity-60";
+                                  badgeClass = "bg-slate-200 text-slate-400";
+                                }
+                              }
+
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() => {
+                                    if (isSubmitted) return;
+                                    setSelectedMultiOptions(prev => 
+                                      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+                                    );
+                                  }}
+                                  className={`${isMobile ? 'p-3 text-sm' : 'p-4'} rounded-xl md:rounded-2xl border-2 text-left font-bold transition-all flex items-center justify-between group ${btnClass}`}
+                                >
+                                  <span className="flex items-center gap-3 md:gap-4 w-full">
+                                    <span className={`${isMobile ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'} rounded-lg flex-shrink-0 flex items-center justify-center font-black transition-all ${badgeClass}`}>
+                                      {isSubmitted ? (
+                                        isThisCorrect ? (
+                                          <CheckCircle2 size={isMobile ? 12 : 16} />
+                                        ) : isSelected ? (
+                                          <X size={isMobile ? 12 : 16} />
+                                        ) : (
+                                          idx + 1
+                                        )
+                                      ) : isSelected ? (
+                                        <CheckCircle2 size={isMobile ? 12 : 16} />
+                                      ) : (
+                                        idx + 1
+                                      )}
+                                    </span>
+                                    <span className="whitespace-pre-wrap leading-tight text-slate-900 font-bold">{option}</span>
+                                  </span>
+                                  {isSubmitted && isThisCorrect && (
+                                    <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg flex-shrink-0 flex items-center gap-1">
+                                      <CheckCircle2 size={13} /> 정답
+                                    </span>
+                                  )}
+                                  {isSubmitted && isSelected && !isThisCorrect && (
+                                    <span className="text-xs font-black text-rose-700 bg-rose-100 px-2.5 py-1 rounded-lg flex-shrink-0 flex items-center gap-1">
+                                      <X size={13} /> 오답
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            }
+
                             const isRelative = selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.title?.includes('관계부사');
                             const relativeCorrect = isRelative && sessionWords[quizIndex].quizChoices && (
                               option === sessionWords[quizIndex].quizChoices[0] ||
@@ -1412,6 +1529,56 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                           })}
                         </div>
 
+                        {isComplement && (
+                          <div className="mt-4 flex flex-col gap-3">
+                            {selectedOption === null ? (
+                              <div className="flex flex-col sm:flex-row gap-3 items-center justify-between p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl">
+                                <p className="text-xs sm:text-sm text-indigo-950 font-bold flex items-center gap-2">
+                                  <Info size={18} className="text-indigo-600 flex-shrink-0" />
+                                  <span>목적격 보어로 올 수 있는 형태를 <strong>모두</strong> 선택하세요. (1개 이상 선택 가능)</span>
+                                </p>
+                                <button
+                                  onClick={handleComplementSubmit}
+                                  disabled={selectedMultiOptions.length === 0}
+                                  className="w-full sm:w-auto px-7 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-30 disabled:hover:bg-indigo-600 text-white rounded-xl font-black text-sm shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-2 flex-shrink-0"
+                                >
+                                  <CheckCircle2 size={16} />
+                                  정답 확인 ({selectedMultiOptions.length}개 선택됨)
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in zoom-in-95 duration-200">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-black ${isCorrect ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                      {isCorrect ? '정답입니다! 🎉' : '오답입니다 💡'}
+                                    </span>
+                                    <span className="text-sm font-black text-slate-800">
+                                      정답: {compItem?.answers.map(a => `(${a})`).join(', ') || correctIndices.map(i => `(${i + 1})`).join(', ')}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs sm:text-sm text-slate-700 font-medium">
+                                    목적격 보어 형태: <strong className="text-indigo-600 font-bold">{compItem?.complementForms || sessionWords[quizIndex]?.pattern}</strong>
+                                    <span className="text-slate-500 ml-2">({compItem?.desc || sessionWords[quizIndex]?.meaning})</span>
+                                  </p>
+                                  {(compItem?.note || (sessionWords[quizIndex] as any)?.note) && (
+                                    <p className="text-xs text-indigo-700 bg-indigo-50/80 px-2.5 py-1 rounded-lg mt-1 font-semibold">
+                                      💡 {compItem?.note || (sessionWords[quizIndex] as any)?.note}
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={handleNextQuizQuestion}
+                                  className="w-full sm:w-auto px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-black text-sm shadow transition-all flex items-center justify-center gap-2 flex-shrink-0"
+                                >
+                                  {quizIndex < sessionWords.length - 1 ? '다음 문제' : '결과 보기'}
+                                  <ChevronRight size={16} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                           { (selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'basic-modal-grammar' || selectedWordbook?.type === 'verb-form-grammar' || selectedWordbook?.type === 'grammar-cramming' || selectedWordbook?.title?.includes('관계부사')) && selectedOption !== null && (
                           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                             <motion.div 
@@ -1448,7 +1615,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                           키보드 숫자로도 선택할 수 있습니다.
                         </div>
                       </motion.div>
-                    )}
+                    );})()}
                   </AnimatePresence>
                 </div>
               ) : isMatchMode ? (
@@ -2004,7 +2171,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                     {selectedWordbook?.type === 'complement-grammar' ? (
                       currentChunk === 0 ? '명사/형용사 보어' :
                       currentChunk === 1 ? 'to V 보어' :
-                      '동사원형 / 둘 다 가능'
+                      '사역·지각동사 및 다양한 보어'
                     ) : selectedWordbook?.type === 'basic-modal-grammar' ? (
                       currentChunk === 0 ? '기본 조동사 (can, could, be able to, may, would like)' :
                       '의무, 금지, 충고 및 부정 (must, have to, should, had better)'
@@ -2029,7 +2196,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                     {selectedWordbook?.type === 'complement-grammar' ? (
                       currentChunk === 0 ? '명사나 형용사를 보어로 취하는 동사 (7개)' :
                       currentChunk === 1 ? 'to 부정사를 보어로 취하는 동사 (10개)' :
-                      '동사원형 또는 둘 다 가능한 동사 (9개)'
+                      '사역·지각동사 및 다양한 목적격 보어 (12개)'
                     ) : selectedWordbook?.type === 'basic-modal-grammar' ? (
                       currentChunk === 0 ? '1세트: 능력, 허가, 요청, 추측 등 기초 의미 구별 (6개)' :
                       '2세트: 의무, 금지, 불필요, 충고 등 기초 표현 (9개)'
@@ -2115,6 +2282,20 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                             <div className={`${isMobile ? 'text-[10px]' : 'text-sm'} font-medium ${progress[word.id] === 'learned' ? 'text-emerald-600/70' : 'text-slate-500'}`}>
                               {word.meaning}
                             </div>
+                          </div>
+                        ) : selectedWordbook.type === 'complement-grammar' ? (
+                          <div className="space-y-0.5">
+                            <div className={`${isMobile ? 'text-xs' : 'text-sm'} font-black text-indigo-600`}>
+                              목적격 보어: {word.pattern}
+                            </div>
+                            <div className={`${isMobile ? 'text-[10px]' : 'text-sm'} font-medium ${progress[word.id] === 'learned' ? 'text-emerald-600/70' : 'text-slate-500'}`}>
+                              {word.meaning}
+                            </div>
+                            {(word as any).note && (
+                              <div className={`${isMobile ? 'text-[9px]' : 'text-xs'} font-semibold text-indigo-500/90`}>
+                                💡 {(word as any).note}
+                              </div>
+                            )}
                           </div>
                         ) : selectedWordbook.type === 'grammar-cramming' ? (
                           <div className="space-y-0.5">

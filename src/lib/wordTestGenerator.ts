@@ -1,5 +1,6 @@
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, HeightRule, SectionType, PageOrientation } from 'docx';
 import { saveAs } from 'file-saver';
+import { COMPLEMENT_QUIZ_DATA } from './grammarSets';
 
 interface Word {
   word: string;
@@ -371,7 +372,24 @@ export const generateMultipleChoiceQuiz = async (
       let questionPrefix = "";
       let displayWord = item.word;
 
-      if (wordbookType === 'irregular') {
+      let choices: string[] = [];
+      let correctAnswersList: string[] = [];
+      let complementMeta: any = null;
+
+      if (wordbookType === 'complement-grammar') {
+        const compItem = COMPLEMENT_QUIZ_DATA.find(c => c.verb.toLowerCase() === (item.word || '').toLowerCase());
+        if (compItem) {
+          complementMeta = compItem;
+          choices = compItem.choices;
+          correctAnswersList = compItem.answers.map(a => compItem.choices[a - 1]);
+          questionPrefix = "목적격 보어로 가능한 형태를 모두 고르시오";
+        } else {
+          const baseOptions = ["O + 명사/형용사", "O + to V", "O + 동사원형", "O + V-ing"];
+          choices = baseOptions;
+          correctAnswersList = [baseOptions[0]];
+          questionPrefix = "목적격 보어로 가능한 형태를 모두 고르시오";
+        }
+      } else if (wordbookType === 'irregular') {
         const isPast = (index % 2 === 0);
         correctAnswer = isPast ? item.past : item.pastParticiple;
         questionPrefix = isPast ? "과거형(Past)을 고르세요" : "과거분사(Participle)를 고르세요";
@@ -396,20 +414,10 @@ export const generateMultipleChoiceQuiz = async (
         else if (item.pattern?.includes('to부정사만')) correctAnswer = baseOptions[2];
         else if (item.pattern?.includes('동명사만')) correctAnswer = baseOptions[3];
         distractors = baseOptions.filter(o => o !== correctAnswer);
-      } else if (wordbookType === 'complement-grammar') {
-        const baseOptions = ["O + 명사/형용사", "O + to V", "O + 동사원형", "O + V-ing", "O + p.p. (과거분사)"];
-        if (item.pattern?.includes('명형')) correctAnswer = baseOptions[0];
-        else if (item.pattern?.includes('to V')) correctAnswer = baseOptions[1];
-        else if (item.pattern?.includes('동사원형')) correctAnswer = baseOptions[2];
-        else if (item.pattern?.includes('V-ing')) correctAnswer = baseOptions[3];
-        else if (item.pattern?.includes('p.p') || item.pattern?.includes('과거분사')) correctAnswer = baseOptions[4];
-        
-        // Pick 3 distractors from the rest
-        distractors = baseOptions.filter(o => o !== correctAnswer).sort(() => 0.5 - Math.random()).slice(0, 3);
       } else if (wordbookType === 'relative-grammar') {
-        const choices = item.distractors || [];
-        correctAnswer = choices[0] || '';
-        distractors = choices.slice(1);
+        const dChoices = item.distractors || [];
+        correctAnswer = dChoices[0] || '';
+        distractors = dChoices.slice(1);
       } else if (wordbookType === 'modal-grammar' || wordbookType === 'basic-modal-grammar' || wordbookType === 'verb-form-grammar' || wordbookType === 'grammar-cramming') {
         correctAnswer = item.meaning;
         distractors = (wordbookType === 'grammar-cramming') 
@@ -423,7 +431,9 @@ export const generateMultipleChoiceQuiz = async (
         distractors = allPatterns.filter(p => p !== correctAnswer).sort(() => 0.5 - Math.random()).slice(0, 3);
       }
 
-      const choices = [correctAnswer, ...distractors].sort(() => 0.5 - Math.random());
+      if (choices.length === 0) {
+        choices = [correctAnswer, ...distractors].sort(() => 0.5 - Math.random());
+      }
 
       const isRelative = wordbookType === 'relative-grammar';
       const isConceptGrammar = ['conversion-grammar', 'to-ing-grammar', 'complement-grammar'].includes(wordbookType || '');
@@ -452,11 +462,16 @@ export const generateMultipleChoiceQuiz = async (
       }
 
       choices.forEach((choice, cIdx) => {
-        const isCorrect = choice === correctAnswer || 
-          (wordbookType === 'relative-grammar' && (
-            (correctAnswer === 'how' && choice === 'the way') ||
-            (correctAnswer === 'the way' && choice === 'how')
-          ));
+        let isCorrect = false;
+        if (wordbookType === 'complement-grammar') {
+          isCorrect = correctAnswersList.includes(choice);
+        } else {
+          isCorrect = choice === correctAnswer || 
+            (wordbookType === 'relative-grammar' && (
+              (correctAnswer === 'how' && choice === 'the way') ||
+              (correctAnswer === 'the way' && choice === 'how')
+            ));
+        }
         
         quizElements.push(new Paragraph({
           children: [
@@ -471,6 +486,27 @@ export const generateMultipleChoiceQuiz = async (
           spacing: { before: 40, after: 40 },
         }));
       });
+
+      if (isAnswerKey && wordbookType === 'complement-grammar' && complementMeta) {
+        quizElements.push(new Paragraph({
+          children: [
+            new TextRun({ 
+              text: `   💡 정답: ${complementMeta.answers.map((a: number) => `(${a})`).join(', ')} / 형태: ${complementMeta.complementForms} (${complementMeta.desc})`, 
+              size: 18, 
+              italics: true, 
+              color: "0066CC",
+              bold: true
+            }),
+            complementMeta.note ? new TextRun({
+              text: ` [${complementMeta.note}]`,
+              size: 18,
+              italics: true,
+              color: "444444"
+            }) : new TextRun({ text: "" }),
+          ],
+          spacing: { before: 40, after: 60 }
+        }));
+      }
     });
 
     return new Document({

@@ -614,80 +614,107 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     }
   };
 
-  const handleBulkAddWords = async () => {
-    if (!bulkText.trim() || !auth.currentUser) return;
-    
+  const parseWordListText = (rawText: string): { title?: string; words: { word: string; meaning: string; example?: string }[] } => {
     let title = '';
-    const wordsToProcess: { word: string; meaning: string; example?: string }[] = [];
-
-    let remainingText = bulkText.trim();
+    let remainingText = rawText.trim();
+    
     const titleMatch = remainingText.match(/^단어장 제목\s*:\s*(.*)$/m);
     if (titleMatch) {
       title = titleMatch[1].trim();
       remainingText = remainingText.replace(titleMatch[0], '').trim();
     }
 
-    const records: string[][] = [];
-    let currentRecord: string[] = [];
-    let currentField = '';
-    let inQuotes = false;
-    
-    for (let i = 0; i < remainingText.length; i++) {
-      const char = remainingText[i];
-      
-      if (char === '"') {
-        inQuotes = !inQuotes;
-        continue;
+    const lines = remainingText.split(/\r?\n/);
+    const words: { word: string; meaning: string; example?: string }[] = [];
+
+    for (let rawLine of lines) {
+      let line = rawLine.trim();
+      if (!line) continue;
+
+      // Unquote if line is quoted
+      if (line.startsWith('"') && line.endsWith('"') && line.length > 2) {
+        line = line.slice(1, -1).trim();
       }
-      
-      if (inQuotes) {
-        currentField += char;
-      } else {
-        if (char === '\t') {
-          currentRecord.push(currentField.trim());
-          currentField = '';
-        } else if (char === '\n') {
-          currentRecord.push(currentField.trim());
-          if (currentRecord.some(f => f !== '')) {
-            records.push(currentRecord);
+
+      // 1. Handle Tab separated (even with multiple consecutive tabs or wide spacing)
+      if (line.includes('\t')) {
+        const tabParts = line.split(/\t+/).map(p => p.trim().replace(/^"|"$/g, '').trim()).filter(Boolean);
+        if (tabParts.length >= 2) {
+          const word = tabParts[0];
+          if (tabParts.length >= 3) {
+            const part3 = tabParts[2];
+            // If part3 has Korean or starts with part-of-speech prefix, merge with meaning
+            if (/[가-힣]/.test(part3) || /^(n|v|vt|vi|a|adj|adv|prep|conj|pron|int)\./i.test(part3)) {
+              words.push({ word, meaning: tabParts.slice(1).join(' ') });
+            } else {
+              words.push({ word, meaning: tabParts[1], example: tabParts.slice(2).join(' ') });
+            }
+          } else {
+            words.push({ word, meaning: tabParts[1] });
           }
-          currentRecord = [];
-          currentField = '';
-        } else if (char === ' ' && remainingText[i+1] === ' ') {
-          currentRecord.push(currentField.trim());
-          currentField = '';
-          while (i + 1 < remainingText.length && remainingText[i+1] === ' ') {
-            i++;
-          }
-        } else {
-          currentField += char;
+          continue;
         }
       }
-    }
-    if (currentField || currentRecord.length > 0) {
-      currentRecord.push(currentField.trim());
-      if (currentRecord.some(f => f !== '')) {
-        records.push(currentRecord);
+
+      // 2. Handle 2 or more consecutive spaces (wide spacing / space column alignment)
+      const multiSpaceParts = line.split(/\s{2,}/).map(p => p.trim().replace(/^"|"$/g, '').trim()).filter(Boolean);
+      if (multiSpaceParts.length >= 2) {
+        const word = multiSpaceParts[0];
+        if (multiSpaceParts.length >= 3) {
+          const part3 = multiSpaceParts[2];
+          if (/[가-힣]/.test(part3) || /^(n|v|vt|vi|a|adj|adv|prep|conj|pron|int)\./i.test(part3)) {
+            words.push({ word, meaning: multiSpaceParts.slice(1).join(' ') });
+          } else {
+            words.push({ word, meaning: multiSpaceParts[1], example: multiSpaceParts.slice(2).join(' ') });
+          }
+        } else {
+          words.push({ word, meaning: multiSpaceParts[1] });
+        }
+        continue;
+      }
+
+      // 3. Handle single-space separation by detecting part-of-speech tag or Korean character boundary
+      const posMatch = line.search(/\s+(n|v|vt|vi|a|adj|adv|prep|conj|pron|int)\.\s+[가-힣~]/i);
+      if (posMatch !== -1) {
+        const word = line.substring(0, posMatch).trim();
+        const meaning = line.substring(posMatch).trim();
+        if (word && meaning) {
+          words.push({ word, meaning });
+          continue;
+        }
+      }
+
+      const hangulMatch = line.search(/\s+[~]?[가-힣]/);
+      if (hangulMatch !== -1) {
+        const word = line.substring(0, hangulMatch).trim();
+        const meaning = line.substring(hangulMatch).trim();
+        if (word && meaning) {
+          words.push({ word, meaning });
+          continue;
+        }
+      }
+
+      // 4. Fallback: first space index
+      const firstSpaceIndex = line.indexOf(' ');
+      if (firstSpaceIndex !== -1) {
+        const word = line.substring(0, firstSpaceIndex).trim();
+        const meaning = line.substring(firstSpaceIndex + 1).trim();
+        if (word && meaning) {
+          words.push({ word, meaning });
+          continue;
+        }
       }
     }
 
-    records.forEach(parts => {
-      if (parts.length < 2 && parts[0]) {
-        // Fallback for single space if only one field found
-        const firstSpaceIndex = parts[0].indexOf(' ');
-        if (firstSpaceIndex !== -1) {
-          const word = parts[0].substring(0, firstSpaceIndex).trim();
-          const meaning = parts[0].substring(firstSpaceIndex + 1).trim();
-          wordsToProcess.push({ word, meaning });
-        }
-      } else if (parts.length >= 2) {
-        wordsToProcess.push({
-          word: parts[0],
-          meaning: parts[1],
-          example: parts[2] || ''
-        });
-      }
-    });
+    return { title: title || undefined, words };
+  };
+
+  const handleBulkAddWords = async () => {
+    if (!bulkText.trim() || !auth.currentUser) return;
+    
+    const parsed = parseWordListText(bulkText);
+    const title = parsed.title || '';
+    const wordsToProcess = parsed.words;
 
     if (wordsToProcess.length === 0) {
       alert('추가할 단어를 찾지 못했습니다. 형식을 확인해주세요.');
@@ -1277,66 +1304,14 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const handleGenerateInstantTest = async () => {
     if (!instantTestText.trim()) return;
 
-    let title = testPaperConfig.title || '즉석 단어 시험';
-    const wordsToProcess: Word[] = [];
-
-    let remainingText = instantTestText.trim();
-    const titleMatch = remainingText.match(/^단어장 제목\s*:\s*(.*)$/m);
-    if (titleMatch) {
-      title = titleMatch[1].trim();
-      remainingText = remainingText.replace(titleMatch[0], '').trim();
-    }
-
-    const records: string[][] = [];
-    let currentRecord: string[] = [];
-    let currentField = '';
-    let inQuotes = false;
-    
-    for (let i = 0; i < remainingText.length; i++) {
-      const char = remainingText[i];
-      if (char === '"') { inQuotes = !inQuotes; continue; }
-      if (inQuotes) {
-        currentField += char;
-      } else {
-        if (char === '\t') {
-          currentRecord.push(currentField.trim());
-          currentField = '';
-        } else if (char === '\n') {
-          currentRecord.push(currentField.trim());
-          if (currentRecord.some(f => f !== '')) records.push(currentRecord);
-          currentRecord = [];
-          currentField = '';
-        } else if (char === ' ' && remainingText[i+1] === ' ') {
-          currentRecord.push(currentField.trim());
-          currentField = '';
-          while (i + 1 < remainingText.length && remainingText[i+1] === ' ') i++;
-        } else {
-          currentField += char;
-        }
-      }
-    }
-    if (currentField || currentRecord.length > 0) {
-      currentRecord.push(currentField.trim());
-      if (currentRecord.some(f => f !== '')) records.push(currentRecord);
-    }
-
-    records.forEach((parts, idx) => {
-      if (parts.length < 2 && parts[0]) {
-        const firstSpaceIndex = parts[0].indexOf(' ');
-        if (firstSpaceIndex !== -1) {
-          const word = parts[0].substring(0, firstSpaceIndex).trim();
-          const meaning = parts[0].substring(firstSpaceIndex + 1).trim();
-          wordsToProcess.push({ id: `tmp-${idx}`, word, meaning });
-        }
-      } else if (parts.length >= 2) {
-        wordsToProcess.push({
-          id: `tmp-${idx}`,
-          word: parts[0],
-          meaning: parts[1],
-          example: parts[2] || ''
-        });
-      }
-    });
+    const parsed = parseWordListText(instantTestText);
+    const title = parsed.title || testPaperConfig.title || '즉석 단어 시험';
+    const wordsToProcess: Word[] = parsed.words.map((w, idx) => ({
+      id: `tmp-${idx}`,
+      word: w.word,
+      meaning: w.meaning,
+      example: w.example || ''
+    }));
 
     if (wordsToProcess.length === 0) {
       alert('출제할 단어를 찾지 못했습니다. 단어 뜻 순서로 입력해주세요.');

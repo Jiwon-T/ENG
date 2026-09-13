@@ -127,38 +127,264 @@ export async function seedObjectPatternGrammar() {
   await addBatch.commit();
 }
 
-export const COMPLEMENT_QUIZ_DATA = [
-  { verb: "call", type: "명형", label: "call O 명사/형용사", desc: "~를 -이라고 부르다" },
-  { verb: "make", type: "명형+사역", label: "make O 명사/형용사 또는 동사원형", desc: "둘 다 가능 (의미 다름)" },
-  { verb: "keep", type: "명형/V-ing", label: "keep O 명사/형용사 / V-ing 둘 다 가능", desc: "~을 -한 상태로 유지하다" },
-  { verb: "think", type: "명형", label: "think O 명사/형용사", desc: "~를 -이라고 생각하다" },
-  { verb: "believe", type: "명형", label: "believe O 명사/형용사", desc: "~를 -라고 믿다" },
-  { verb: "consider", type: "명형", label: "consider O 명사/형용사", desc: "~을 -이라고 여기다" },
-  { verb: "find", type: "명형", label: "find O 명사/형용사", desc: "~가 -이라는 것을 알게 되다" },
-  { verb: "want", type: "to V", label: "want O to V", desc: "~가 -하기를 원하다" },
-  { verb: "ask", type: "to V", label: "ask O to V", desc: "~에게 -하라고 요청하다" },
-  { verb: "encourage", type: "to V", label: "encourage O to V", desc: "~가 -하는 것을 격려하다" },
-  { verb: "tell", type: "to V", label: "tell O to V", desc: "~에게 -하라고 말하다" },
-  { verb: "expect", type: "to V", label: "expect O to V", desc: "~가 -하는 것을 기대하다" },
-  { verb: "permit", type: "to V", label: "permit O to V", desc: "~가 -하는 것을 허락하다" },
-  { verb: "advise", type: "to V", label: "advise O to V", desc: "~에게 -하라고 조언하다" },
-  { verb: "allow", type: "to V", label: "allow O to V", desc: "~가 -하는 것을 허락하다" },
-  { verb: "force", type: "to V", label: "force O to V", desc: "~가 -하도록 강요하다" },
-  { verb: "get", type: "to V", label: "get O to V", desc: "~가 -하게 시키다 (준사역)" },
-  { verb: "have", type: "동사원형/V-ing", label: "have O 동사원형 / V-ing 둘 다 가능", desc: "사역동사: ~에게 -하게 하다" },
-  { verb: "let", type: "동사원형", label: "let O 동사원형", desc: "사역동사: ~가 -하도록 허락하다" },
-  { verb: "help", type: "동사원형/to V", label: "help O 동사원형 / to V 둘 다 가능", desc: "준사역동사: 의미 차이 없음" },
-  { verb: "see", type: "동사원형/V-ing", label: "see O 동사원형 / V-ing 둘 다 가능", desc: "지각동사: 완료 vs 진행 의미 차이" },
-  { verb: "watch", type: "동사원형/V-ing", label: "watch O 동사원형 / V-ing 둘 다 가능", desc: "지각동사" },
-  { verb: "hear", type: "동사원형/V-ing", label: "hear O 동사원형 / V-ing 둘 다 가능", desc: "지각동사" },
-  { verb: "listen to", type: "동사원형/V-ing", label: "listen to O 동사원형 / V-ing 둘 다 가능", desc: "지각동사" },
-  { verb: "smell", type: "동사원형/V-ing", label: "smell O 동사원형 / V-ing 둘 다 가능", desc: "지각동사" },
-  { verb: "feel", type: "동사원형/V-ing", label: "feel O 동사원형 / V-ing 둘 다 가능", desc: "지각동사" }
+export interface ComplementQuizItem {
+  verb: string;
+  answers: number[]; // 1-based answer indices e.g. [2] or [1, 2, 4]
+  choices: string[]; // 4 choices exactly from PDF
+  complementForms: string; // e.g. "동사원형 / p.p. (과거분사) / 명사/형용사"
+  desc: string;
+  note?: string;
+}
+
+export const COMPLEMENT_QUIZ_DATA: ComplementQuizItem[] = [
+  // 1. call
+  {
+    verb: "call",
+    answers: [2],
+    choices: ["O + V-ing", "O + 명사/형용사", "O + 동사원형", "O + to V"],
+    complementForms: "명사/형용사",
+    desc: "~를 -이라고 부르다"
+  },
+  // 2. make
+  {
+    verb: "make",
+    answers: [1, 2, 4],
+    choices: ["O + 동사원형", "O + p.p. (과거분사)", "O + to V", "O + 명사/형용사"],
+    complementForms: "동사원형 / p.p. (과거분사) / 명사/형용사",
+    desc: "사역: ~하게 만들다 / -되게 만들다 / 명사·형용사로 만들다",
+    note: "사역동사의 핵심 구조(동사원형) 및 p.p., 명사/형용사 보어 가능"
+  },
+  // 3. keep
+  {
+    verb: "keep",
+    answers: [1, 2, 3],
+    choices: ["O + V-ing", "O + 명사/형용사", "O + p.p. (과거분사)", "O + 동사원형"],
+    complementForms: "V-ing / 명사/형용사 / p.p. (과거분사)",
+    desc: "~을 -한 상태로 유지하다",
+    note: "과거분사(p.p.) 목적격 보어가 가능한 구조 반영"
+  },
+  // 4. think
+  {
+    verb: "think",
+    answers: [2, 3],
+    choices: ["O + V-ing", "O + 명사/형용사", "O + to V", "O + 동사원형"],
+    complementForms: "명사/형용사 / to V",
+    desc: "~를 -이라고 생각하다"
+  },
+  // 5. believe
+  {
+    verb: "believe",
+    answers: [1, 4],
+    choices: ["O + 명사/형용사", "O + 동사원형", "O + V-ing", "O + to V"],
+    complementForms: "명사/형용사 / to V",
+    desc: "~를 -라고 믿다"
+  },
+  // 6. consider
+  {
+    verb: "consider",
+    answers: [1, 2, 4],
+    choices: ["O + p.p. (과거분사)", "O + 명사/형용사", "O + 동사원형", "O + to V"],
+    complementForms: "p.p. (과거분사) / 명사/형용사 / to V",
+    desc: "~을 -이라고 여기다 / 고려하다"
+  },
+  // 7. find
+  {
+    verb: "find",
+    answers: [2, 3, 4],
+    choices: ["O + to V", "O + V-ing", "O + 명사/형용사", "O + p.p. (과거분사)"],
+    complementForms: "V-ing / 명사/형용사 / p.p. (과거분사)",
+    desc: "~가 -이라는 것을 알게 되다 / 발견하다",
+    note: "과거분사(p.p.) 목적격 보어가 가능한 구조 반영"
+  },
+  // 8. want
+  {
+    verb: "want",
+    answers: [1, 3],
+    choices: ["O + p.p. (과거분사)", "O + 명사/형용사", "O + to V", "O + V-ing"],
+    complementForms: "p.p. (과거분사) / to V",
+    desc: "~가 -하기를 원하다 / -되기를 원하다"
+  },
+  // 9. ask
+  {
+    verb: "ask",
+    answers: [2],
+    choices: ["O + V-ing", "O + to V", "O + 명사/형용사", "O + 동사원형"],
+    complementForms: "to V",
+    desc: "~에게 -하라고 요청하다"
+  },
+  // 10. encourage
+  {
+    verb: "encourage",
+    answers: [2],
+    choices: ["O + p.p. (과거분사)", "O + to V", "O + 동사원형", "O + V-ing"],
+    complementForms: "to V",
+    desc: "~가 -하도록 격려하다"
+  },
+  // 11. tell
+  {
+    verb: "tell",
+    answers: [4],
+    choices: ["O + 명사/형용사", "O + 동사원형", "O + V-ing", "O + to V"],
+    complementForms: "to V",
+    desc: "~에게 -하라고 말하다"
+  },
+  // 12. expect
+  {
+    verb: "expect",
+    answers: [2, 3],
+    choices: ["O + 동사원형", "O + p.p. (과거분사)", "O + to V", "O + 명사/형용사"],
+    complementForms: "p.p. (과거분사) / to V",
+    desc: "~가 -하기를 기대하다 / -되기를 예상하다"
+  },
+  // 13. permit
+  {
+    verb: "permit",
+    answers: [3],
+    choices: ["O + p.p. (과거분사)", "O + V-ing", "O + to V", "O + 동사원형"],
+    complementForms: "to V",
+    desc: "~가 -하는 것을 허락하다"
+  },
+  // 14. advise
+  {
+    verb: "advise",
+    answers: [3],
+    choices: ["O + V-ing", "O + 명사/형용사", "O + to V", "O + p.p. (과거분사)"],
+    complementForms: "to V",
+    desc: "~에게 -하라고 조언하다"
+  },
+  // 15. allow
+  {
+    verb: "allow",
+    answers: [1],
+    choices: ["O + to V", "O + V-ing", "O + 명사/형용사", "O + p.p. (과거분사)"],
+    complementForms: "to V",
+    desc: "~가 -하는 것을 허락하다"
+  },
+  // 16. force
+  {
+    verb: "force",
+    answers: [3],
+    choices: ["O + 동사원형", "O + p.p. (과거분사)", "O + to V", "O + 명사/형용사"],
+    complementForms: "to V",
+    desc: "~가 -하도록 강요하다"
+  },
+  // 17. get
+  {
+    verb: "get",
+    answers: [1, 2, 3, 4],
+    choices: ["O + p.p. (과거분사)", "O + V-ing", "O + 명사/형용사", "O + to V"],
+    complementForms: "p.p. (과거분사) / V-ing / 명사/형용사 / to V",
+    desc: "~가 -하게 시키다 (준사역) / -되게 하다",
+    note: "get은 O + 형용사, O + V-ing, O + p.p., O + to V가 모두 가능한 대표적 5형식 동사이므로 네 선택지가 모두 정답"
+  },
+  // 18. have
+  {
+    verb: "have",
+    answers: [1, 2, 3],
+    choices: ["O + 동사원형", "O + p.p. (과거분사)", "O + V-ing", "O + to V"],
+    complementForms: "동사원형 / p.p. (과거분사) / V-ing",
+    desc: "사역: ~에게 -하게 하다 / -되고 있게 하다",
+    note: "사역동사 핵심 구조(동사원형) 및 진행(V-ing), 과거분사(p.p.) 반영"
+  },
+  // 19. let
+  {
+    verb: "let",
+    answers: [1],
+    choices: ["O + 동사원형", "O + V-ing", "O + 명사/형용사", "O + to V"],
+    complementForms: "동사원형",
+    desc: "사역동사: ~가 -하도록 허락하다/하게 하다"
+  },
+  // 20. help
+  {
+    verb: "help",
+    answers: [2, 3],
+    choices: ["O + V-ing", "O + 동사원형", "O + to V", "O + p.p. (과거분사)"],
+    complementForms: "동사원형 / to V",
+    desc: "준사역동사: ~가 -하는 것을 돕다 (동사원형 / to V 둘 다 가능)"
+  },
+  // 21. see
+  {
+    verb: "see",
+    answers: [1, 3, 4],
+    choices: ["O + V-ing", "O + to V", "O + 동사원형", "O + p.p. (과거분사)"],
+    complementForms: "V-ing / 동사원형 / p.p. (과거분사)",
+    desc: "지각동사: ~가 -하는/되는 것을 보다",
+    note: "지각동사: O + 동사원형 / V-ing / p.p. 모두 가능"
+  },
+  // 22. watch
+  {
+    verb: "watch",
+    answers: [1, 3, 4],
+    choices: ["O + 동사원형", "O + to V", "O + V-ing", "O + p.p. (과거분사)"],
+    complementForms: "동사원형 / V-ing / p.p. (과거분사)",
+    desc: "지각동사: ~가 -하는/되는 것을 지켜보다",
+    note: "지각동사: O + 동사원형 / V-ing / p.p. 모두 가능"
+  },
+  // 23. hear
+  {
+    verb: "hear",
+    answers: [1, 2, 4],
+    choices: ["O + p.p. (과거분사)", "O + 동사원형", "O + to V", "O + V-ing"],
+    complementForms: "p.p. (과거분사) / 동사원형 / V-ing",
+    desc: "지각동사: ~가 -하는/되는 것을 듣다",
+    note: "지각동사: O + 동사원형 / V-ing / p.p. 모두 가능"
+  },
+  // 24. listen to
+  {
+    verb: "listen to",
+    answers: [1, 3, 4],
+    choices: ["O + 동사원형", "O + to V", "O + V-ing", "O + p.p. (과거분사)"],
+    complementForms: "동사원형 / V-ing / p.p. (과거분사)",
+    desc: "지각동사: ~가 -하는/되는 것을 귀기울여 듣다",
+    note: "지각동사: O + 동사원형 / V-ing / p.p. 모두 가능"
+  },
+  // 25. smell
+  {
+    verb: "smell",
+    answers: [2, 3, 4],
+    choices: ["O + to V", "O + 동사원형", "O + p.p. (과거분사)", "O + V-ing"],
+    complementForms: "동사원형 / p.p. (과거분사) / V-ing",
+    desc: "지각동사: ~가 -하는/되는 냄새를 맡다",
+    note: "지각동사: O + 동사원형 / V-ing / p.p. 모두 가능"
+  },
+  // 26. feel
+  {
+    verb: "feel",
+    answers: [1, 2, 3],
+    choices: ["O + p.p. (과거분사)", "O + 동사원형", "O + V-ing", "O + to V"],
+    complementForms: "p.p. (과거분사) / 동사원형 / V-ing",
+    desc: "지각동사: ~가 -하는/되는 것을 느끼다",
+    note: "지각동사: O + 동사원형 / V-ing / p.p. 모두 가능"
+  },
+  // 27. require
+  {
+    verb: "require",
+    answers: [2],
+    choices: ["O + V-ing", "O + to V", "O + 명사/형용사", "O + 동사원형"],
+    complementForms: "to V",
+    desc: "~에게 -하도록 요구하다"
+  },
+  // 28. enable
+  {
+    verb: "enable",
+    answers: [3],
+    choices: ["O + V-ing", "O + 동사원형", "O + to V", "O + 명사/형용사"],
+    complementForms: "to V",
+    desc: "~가 -할 수 있게 하다"
+  },
+  // 29. warn
+  {
+    verb: "warn",
+    answers: [4],
+    choices: ["O + 동사원형", "O + V-ing", "O + 명사/형용사", "O + to V"],
+    complementForms: "to V",
+    desc: "~에게 -하라고 경고하다"
+  }
 ];
 
 export async function seedComplementGrammar() {
-  if ((window as any)._complementSeeded) return;
-  (window as any)._complementSeeded = true;
+  if ((window as any)._complementSeededV3) return;
+  (window as any)._complementSeededV3 = true;
 
   const wordbooksRef = collection(db, 'wordbooks');
   // Query by type instead of title to allow renaming
@@ -200,7 +426,7 @@ export async function seedComplementGrammar() {
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  // Delete existing to force re-sync
+  // Delete existing to force re-sync if count doesn't match or fields outdated
   const deleteBatch = writeBatch(db);
   for (const d of existingWords.docs) {
     deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
@@ -215,8 +441,12 @@ export async function seedComplementGrammar() {
     addBatch.set(newDocRef, {
       word: item.verb,
       meaning: item.desc,
-      pattern: item.type,
-      distractors: [item.label],
+      pattern: item.complementForms,
+      quizChoices: item.choices,
+      quizAnswers: item.answers,
+      correctOptions: item.answers.map(a => item.choices[a - 1]),
+      distractors: item.choices,
+      note: item.note || '',
       order: i
     });
   }

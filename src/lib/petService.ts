@@ -104,7 +104,7 @@ export const PetService = {
 
           // Split outfit into clothing and accessory (migration)
           if ((state as any).clothing === undefined) {
-            const isClothing = (id: string) => ['uniform', 'muji_cape'].includes(id);
+            const isClothing = (id: string) => ['uniform', 'muji_cape', 'mori_girl', 'hippie', 'fairy', 'lovely', 'sporty', 'onee_gyaru', 'hime_gyaru', 'latte_gyaru'].includes(id);
             const outfit = (state as any).outfit;
             state.clothing = isClothing(outfit) ? outfit : null;
             state.accessory = !isClothing(outfit) ? outfit : null;
