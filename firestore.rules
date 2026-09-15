@@ -150,9 +150,9 @@ service cloud.firestore {
              data.uid is string &&
              data.wordbookId is string &&
              data.type in ['quiz', 'flashcard', 'match', 'conjugation', 'test'] &&
-             data.category in ['word', 'grammar'] &&
+             data.category in ['word', 'grammar', 'exam'] &&
              data.duration is number && data.duration >= 0 && data.duration < 86400 &&
-             (!('wordbookTitle' in data) || (data.wordbookTitle is string && data.wordbookTitle.size() < 200)) &&
+             (!('wordbookTitle' in data) || (data.wordbookTitle is string && data.wordbookTitle.size() <= 500)) &&
              (!('score' in data) || data.score is number) &&
              (!('totalItems' in data) || data.totalItems is number) &&
              (!('dayStart' in data) || data.dayStart is number) &&

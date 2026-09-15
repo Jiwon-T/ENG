@@ -359,9 +359,9 @@ export async function markIncorrectAnswerReviewed(sessionId: string, word: strin
 export async function recordStudySession(data: {
   uid: string;
   wordbookId: string;
-  wordbookTitle: string;
+  wordbookTitle?: string;
   type: 'quiz' | 'flashcard' | 'match' | 'conjugation' | 'test';
-  category: 'word' | 'grammar' | 'exam';
+  category?: 'word' | 'grammar' | 'exam';
   duration: number; // in seconds
   score?: number;
   totalItems?: number;
@@ -378,10 +378,12 @@ export async function recordStudySession(data: {
 }) {
   const sessionRef = collection(db, 'studySessions');
   try {
-    // Recursive function to remove undefined values
+    // Recursive function to remove undefined values and clean arrays
     const cleanObject = (obj: any): any => {
       if (Array.isArray(obj)) {
-        return obj.map(item => cleanObject(item));
+        return obj
+          .filter(item => item !== undefined)
+          .map(item => cleanObject(item));
       } else if (obj !== null && typeof obj === 'object' && !(obj instanceof Timestamp)) {
         const newObj: any = {};
         Object.keys(obj).forEach(key => {
@@ -394,14 +396,50 @@ export async function recordStudySession(data: {
       return obj;
     };
 
+    // Sanitize incorrect answers so no unsupported values reach Firestore
+    const sanitizedIncorrect = Array.isArray(data.incorrectAnswers) 
+      ? data.incorrectAnswers.map(ans => ({
+          word: String(ans.word || ''),
+          meaning: String(ans.meaning || ''),
+          userChoice: String(ans.userChoice || ''),
+          correctAnswer: String(ans.correctAnswer || ''),
+          choices: Array.isArray(ans.choices) ? ans.choices.filter(c => c !== undefined && c !== null).map(String) : [],
+          quizSentence: ans.quizSentence ? String(ans.quizSentence) : ''
+        }))
+      : undefined;
+
+    const safeDuration = typeof data.duration === 'number' && !isNaN(data.duration)
+      ? Math.max(1, Math.floor(data.duration))
+      : 1;
+
+    const safeScore = typeof data.score === 'number' && !isNaN(data.score)
+      ? data.score
+      : 0;
+
+    const safeTotal = typeof data.totalItems === 'number' && !isNaN(data.totalItems)
+      ? data.totalItems
+      : 0;
+
     const docData = cleanObject({
-      ...data,
+      uid: data.uid,
+      wordbookId: data.wordbookId,
+      wordbookTitle: (data.wordbookTitle || '단어장').slice(0, 450),
+      type: data.type,
+      category: data.category || 'word',
+      duration: safeDuration,
+      score: safeScore,
+      totalItems: safeTotal,
+      dayStart: typeof data.dayStart === 'number' && !isNaN(data.dayStart) ? data.dayStart : undefined,
+      dayEnd: typeof data.dayEnd === 'number' && !isNaN(data.dayEnd) ? data.dayEnd : undefined,
+      incorrectAnswers: sanitizedIncorrect,
       createdAt: Timestamp.now()
     });
 
-    await addDoc(sessionRef, docData);
-    console.log(`Study session recorded: ${data.type} for ${data.duration}s`);
+    const docRef = await addDoc(sessionRef, docData);
+    console.log(`[StudySession] Recorded successfully: ID=${docRef.id}, type=${data.type}, category=${docData.category}, score=${safeScore}/${safeTotal}, duration=${safeDuration}s`);
+    return docRef.id;
   } catch (error) {
-    console.error('Failed to record study session:', error);
+    console.error('[StudySession] Failed to record study session:', error, data);
+    throw error;
   }
 }

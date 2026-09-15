@@ -123,6 +123,16 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
 
     const qSessions = query(collection(db, 'studySessions'), where('uid', '==', selectedStudent.uid));
     const unsubSessions = onSnapshot(qSessions, (snapshot) => {
+      const getSessionMillis = (createdAt: any): number => {
+        if (!createdAt) return 0;
+        if (typeof createdAt.toMillis === 'function') return createdAt.toMillis();
+        if (typeof createdAt.toDate === 'function') return createdAt.toDate().getTime();
+        if (typeof createdAt.seconds === 'number') return createdAt.seconds * 1000;
+        if (typeof createdAt === 'number') return createdAt;
+        const d = new Date(createdAt).getTime();
+        return isNaN(d) ? 0 : d;
+      };
+
       const sessions = snapshot.docs.map(doc => doc.data() as StudySession);
       
       const totalTime = sessions.reduce((sum: number, s: StudySession) => sum + (s.duration || 0), 0);
@@ -132,7 +142,10 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
       });
 
       setStats(prev => ({ ...prev, totalPlayTime: totalTime, gameCountsCount: counts }));
-      setSessionHistory(sessions.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
+      sessions.sort((a, b) => getSessionMillis(b.createdAt) - getSessionMillis(a.createdAt));
+      setSessionHistory(sessions);
+    }, (error) => {
+      console.error('Failed to load study sessions for student:', error);
     });
 
     const qAssignments = query(
@@ -621,13 +634,14 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                                 {session.type === 'flashcard' && <BookOpen size={20} />}
                                 {session.type === 'match' && <Gamepad2 size={20} />}
                                 {session.type === 'conjugation' && <TrendingUp size={20} />}
+                                {session.type === 'test' && <CheckCircle2 size={20} className="text-pastel-pink-500" />}
                               </div>
                               <div>
-                                <div className="font-bold text-slate-900 text-sm">{session.wordbookTitle}</div>
+                                <div className="font-bold text-slate-900 text-sm">{session.wordbookTitle || '단어장'}</div>
                                 <div className="text-[10px] text-slate-400 font-medium">
-                                  {session.type === 'quiz' ? '객관식 퀴즈' : session.type === 'flashcard' ? '플래시카드' : session.type === 'match' ? '매치 게임' : '3단 변화 챌린지'} 
-                                  {' '}• {session.category === 'grammar' ? '문법' : '단어'} 
-                                  {' '}• {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleString() : '방금 전'}
+                                  {session.type === 'quiz' ? '객관식 퀴즈' : session.type === 'flashcard' ? '플래시카드' : session.type === 'match' ? '매치 게임' : session.type === 'test' ? '단원 테스트' : '3단 변화 챌린지'} 
+                                  {' '}• {session.category === 'grammar' ? '문법' : session.category === 'exam' ? '시험대비' : '단어'} 
+                                  {' '}• {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleString() : (session.createdAt ? new Date(session.createdAt).toLocaleString() : '방금 전')}
                                 </div>
                               </div>
                             </div>
@@ -635,7 +649,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                                <div className="font-black text-pastel-pink-500 text-sm">{session.duration}초</div>
                                {session.score !== undefined && (
                                  <div className="text-[10px] font-bold text-emerald-500">
-                                   {session.score}/{session.totalItems}
+                                   {session.score}/{session.totalItems ?? '-'}
                                  </div>
                                )}
                             </div>

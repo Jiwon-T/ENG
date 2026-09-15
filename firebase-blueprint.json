@@ -167,7 +167,7 @@
         "wordbookId": { "type": "string" },
         "wordbookTitle": { "type": "string" },
         "type": { "type": "string", "enum": ["quiz", "flashcard", "match", "conjugation", "test"] },
-        "category": { "type": "string", "enum": ["word", "grammar"] },
+        "category": { "type": "string", "enum": ["word", "grammar", "exam"] },
         "duration": { "type": "number" },
         "score": { "type": "number" },
         "totalItems": { "type": "number" },

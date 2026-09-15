@@ -142,14 +142,24 @@ export default function LearningReport() {
     // Fetch study sessions (Activity Log)
     const qSessions = query(
       collection(db, 'studySessions'), 
-      where('uid', '==', auth.currentUser.uid),
-      orderBy('createdAt', 'desc'),
-      limit(50)
+      where('uid', '==', auth.currentUser.uid)
     );
     const unsubSessions = onSnapshot(qSessions, (snapshot) => {
+      const getMillis = (ts: any): number => {
+        if (!ts) return 0;
+        if (typeof ts.toMillis === 'function') return ts.toMillis();
+        if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+        if (typeof ts.seconds === 'number') return ts.seconds * 1000;
+        if (typeof ts === 'number') return ts;
+        const d = new Date(ts).getTime();
+        return isNaN(d) ? 0 : d;
+      };
+
       const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setStats(prev => ({ ...prev, sessionHistory: sessions }));
+      sessions.sort((a: any, b: any) => getMillis(b.createdAt) - getMillis(a.createdAt));
+      setStats(prev => ({ ...prev, sessionHistory: sessions.slice(0, 100) }));
     }, (error) => {
+      console.error('Failed to load study sessions in LearningReport:', error);
       handleFirestoreError(error, OperationType.LIST, 'studySessions');
     });
 
@@ -539,7 +549,7 @@ export default function LearningReport() {
                     <div className="font-bold text-slate-900 text-sm line-clamp-1">{session.wordbookTitle}</div>
                     <div className="text-[10px] text-slate-400 font-medium">
                       {session.type === 'quiz' ? '객관식 퀴즈' : session.type === 'flashcard' ? '플래시카드' : session.type === 'match' ? '매치 게임' : session.type === 'test' ? '단원 테스트' : '3단 변화 챌린지'} 
-                      {' '}• {session.category === 'grammar' ? '문법' : '단어'} 
+                      {' '}• {session.category === 'grammar' ? '문법' : session.category === 'exam' ? '시험대비' : '단어'} 
                     </div>
                   </div>
                 </div>
@@ -547,15 +557,15 @@ export default function LearningReport() {
                   <div className="font-black text-pastel-pink-500 text-[11px] sm:text-sm">{session.duration}초</div>
                   {session.score !== undefined ? (
                     <div className="text-[10px] font-bold text-emerald-500 whitespace-nowrap">
-                      정답: {session.score}/{session.totalItems}
+                      정답: {session.score}/{session.totalItems ?? '-'}
                     </div>
                   ) : (
                     <div className="text-[10px] text-slate-400 font-medium sm:hidden">
-                      {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleDateString() : '방금 전'}
+                      {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleDateString() : (session.createdAt ? new Date(session.createdAt).toLocaleDateString() : '방금 전')}
                     </div>
                   )}
                   <div className="hidden sm:block text-[9px] text-slate-400 font-medium mt-0.5">
-                    {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '방금 전'}
+                    {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (session.createdAt ? new Date(session.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '방금 전')}
                   </div>
                 </div>
               </div>

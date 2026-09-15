@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import VocabularyTest from './VocabularyTest';
 import { BookOpen, CheckCircle2, Circle, ChevronRight, Sparkles, Trophy, Volume2, RotateCcw, ChevronLeft, Gamepad2, Timer, X, Info, GraduationCap, AlertCircle } from 'lucide-react';
@@ -112,10 +112,61 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   const [totalPoints, setTotalPoints] = useState(0);
   const [incorrectAnswers, setIncorrectAnswers] = useState<{ word: string; meaning: string; userChoice: string; correctAnswer: string; choices?: string[]; quizSentence?: string }[]>([]);
 
+  // Ref to track active session state for reliable saves (even on unmount/tab switch)
+  const activeSessionRef = useRef<{
+    type: 'quiz' | 'flashcard' | 'match' | 'conjugation' | null;
+    startTime: number | null;
+    score: number;
+    total: number;
+    incorrectAnswers: any[];
+    isFinished: boolean;
+    wordbook: Wordbook | null;
+    category: string;
+  }>({
+    type: null,
+    startTime: null,
+    score: 0,
+    total: 0,
+    incorrectAnswers: [],
+    isFinished: false,
+    wordbook: null,
+    category: 'word'
+  });
+
+  const initActiveSession = (type: 'quiz' | 'flashcard' | 'match' | 'conjugation', total: number) => {
+    const now = Date.now();
+    setSessionStartTime(now);
+    activeSessionRef.current = {
+      type,
+      startTime: now,
+      score: 0,
+      total,
+      incorrectAnswers: [],
+      isFinished: false,
+      wordbook: selectedWordbook,
+      category: category
+    };
+  };
+
   const finishSession = (type: 'quiz' | 'flashcard' | 'match' | 'conjugation', score?: number, total?: number, overrideIncorrectAnswers?: any[]) => {
-    if (!sessionStartTime || !auth.currentUser || !selectedWordbook) return;
-    const duration = Math.floor((Date.now() - sessionStartTime) / 1000);
-    if (duration < 1) return; // Ignore very short sessions (less than 1s)
+    if (!sessionStartTime || !auth.currentUser || !selectedWordbook) {
+      console.warn('[WordbookView] finishSession skipped due to missing prerequisite:', {
+        hasStartTime: !!sessionStartTime,
+        hasUser: !!auth.currentUser,
+        hasWordbook: !!selectedWordbook
+      });
+      return;
+    }
+    const startTime = sessionStartTime;
+    setSessionStartTime(null);
+    
+    // Mark active session as finished to prevent duplicate unmount saves
+    if (activeSessionRef.current) {
+      activeSessionRef.current.isFinished = true;
+      activeSessionRef.current.startTime = null;
+    }
+
+    const duration = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
 
     // Calculate rewards
     let points = 0;
@@ -129,7 +180,6 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       points = sessionWords.length * 5;
       xp = sessionWords.length * 10;
     } else if (type === 'flashcard') {
-      // Flashcards: give half reward?
       points = sessionWords.length * 2;
       xp = sessionWords.length * 5;
     }
@@ -144,20 +194,100 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     }
     if (xp > 0) PetService.addXP(xp, auth.currentUser.uid);
 
+    const targetCategory = (selectedWordbook.category || 
+      (selectedWordbook.type === 'irregular' || 
+       selectedWordbook.type === 'relative-grammar' || 
+       selectedWordbook.type === 'modal-grammar' || 
+       selectedWordbook.type === 'basic-modal-grammar' || 
+       selectedWordbook.type === 'verb-form-grammar' || 
+       selectedWordbook.type === 'grammar-cramming' || 
+       selectedWordbook.type === 'complement-grammar' || 
+       selectedWordbook.type === 'to-ing-grammar' || 
+       selectedWordbook.type === 'conversion-grammar' ? 'grammar' : category) || 'word') as 'word' | 'grammar' | 'exam';
+
     recordStudySession({
       uid: auth.currentUser.uid,
       wordbookId: selectedWordbook.id,
       wordbookTitle: selectedWordbook.title,
       type,
-      category: category as 'word' | 'grammar' | 'exam',
+      category: targetCategory,
       duration,
-      score,
-      totalItems: total,
+      score: score ?? (type === 'conjugation' ? conjugationScore : quizScore),
+      totalItems: total ?? sessionWords.length,
       incorrectAnswers: (type === 'quiz' || type === 'conjugation' || type === 'match') ? finalIncorrectAnswers : undefined
+    }).catch(err => {
+      console.error('[WordbookView] Failed to record study session:', err);
     });
-    setSessionStartTime(null);
+
     setIncorrectAnswers([]);
   };
+
+  // Auto-save any active session if user leaves the view or closes window before final button
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const s = activeSessionRef.current;
+      if (s.startTime && !s.isFinished && s.wordbook && auth.currentUser) {
+        const duration = Math.max(1, Math.floor((Date.now() - s.startTime) / 1000));
+        if (s.score > 0 || (s.incorrectAnswers && s.incorrectAnswers.length > 0) || duration >= 2) {
+          const cat = (s.wordbook.category || 
+            (s.wordbook.type === 'irregular' || 
+             s.wordbook.type === 'relative-grammar' || 
+             s.wordbook.type === 'modal-grammar' || 
+             s.wordbook.type === 'basic-modal-grammar' || 
+             s.wordbook.type === 'verb-form-grammar' || 
+             s.wordbook.type === 'grammar-cramming' || 
+             s.wordbook.type === 'complement-grammar' || 
+             s.wordbook.type === 'to-ing-grammar' || 
+             s.wordbook.type === 'conversion-grammar' ? 'grammar' : s.category) || 'word') as any;
+
+          recordStudySession({
+            uid: auth.currentUser.uid,
+            wordbookId: s.wordbook.id,
+            wordbookTitle: s.wordbook.title,
+            type: s.type || 'quiz',
+            category: cat,
+            duration,
+            score: s.score,
+            totalItems: s.total,
+            incorrectAnswers: s.incorrectAnswers
+          });
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      const s = activeSessionRef.current;
+      if (s.startTime && !s.isFinished && s.wordbook && auth.currentUser) {
+        const duration = Math.max(1, Math.floor((Date.now() - s.startTime) / 1000));
+        if (s.score > 0 || (s.incorrectAnswers && s.incorrectAnswers.length > 0) || duration >= 2) {
+          const cat = (s.wordbook.category || 
+            (s.wordbook.type === 'irregular' || 
+             s.wordbook.type === 'relative-grammar' || 
+             s.wordbook.type === 'modal-grammar' || 
+             s.wordbook.type === 'basic-modal-grammar' || 
+             s.wordbook.type === 'verb-form-grammar' || 
+             s.wordbook.type === 'grammar-cramming' || 
+             s.wordbook.type === 'complement-grammar' || 
+             s.wordbook.type === 'to-ing-grammar' || 
+             s.wordbook.type === 'conversion-grammar' ? 'grammar' : s.category) || 'word') as any;
+
+          recordStudySession({
+            uid: auth.currentUser.uid,
+            wordbookId: s.wordbook.id,
+            wordbookTitle: s.wordbook.title,
+            type: s.type || 'quiz',
+            category: cat,
+            duration,
+            score: s.score,
+            totalItems: s.total,
+            incorrectAnswers: s.incorrectAnswers
+          }).catch(e => console.error('[WordbookView] Auto-save on unmount failed:', e));
+        }
+      }
+    };
+  }, []);
 
   const isGrammar = selectedWordbook?.category === 'grammar' || selectedWordbook?.type === 'irregular';
   const daySize = selectedWordbook?.type === 'grammar-cramming' ? 999 : (isGrammar ? 10 : (selectedWordbook?.defaultUnitSize || 47));
@@ -318,7 +448,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     setMatchCards(shuffleArray(cards));
     setSelectedMatchCard(null);
     setMatchStartTime(Date.now());
-    setSessionStartTime(Date.now());
+    initActiveSession('match', selectedSessionWords.length);
     setMatchTime(0);
     setIsMatchFinished(false);
     setIsMatchMode(true);
@@ -380,7 +510,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       setIsMatchMode(false);
       setIsFlashcardMode(false);
       setIsFocusedMode(true);
-      setSessionStartTime(Date.now());
+      initActiveSession('quiz', selectedSessionWords.length);
       generateQuizOptions(0, selectedSessionWords);
     } else if (selectedWordbook?.type === 'grammar-cramming') {
       // For grammar-cramming, the data is already in words subcollection but formatted for quiz
@@ -402,7 +532,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       setIsMatchMode(false);
       setIsFlashcardMode(false);
       setIsFocusedMode(true);
-      setSessionStartTime(Date.now());
+      initActiveSession('quiz', selectedSessionWords.length);
       generateQuizOptions(0, selectedSessionWords);
     } else if (selectedWordbook?.type === 'modal-grammar' || selectedWordbook?.type === 'basic-modal-grammar' || selectedWordbook?.type === 'verb-form-grammar') {
       const isVerbForm = selectedWordbook?.type === 'verb-form-grammar';
@@ -439,7 +569,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       setIsMatchMode(false);
       setIsFlashcardMode(false);
       setIsFocusedMode(true);
-      setSessionStartTime(Date.now());
+      initActiveSession('quiz', selectedSessionWords.length);
       generateQuizOptions(0, selectedSessionWords);
     } else {
       // Normal Wordbook: Pick sessionUnitSize random words from the CURRENT Day/Set
@@ -452,7 +582,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       setIsFlashcardMode(false);
       setQuizIndex(0);
       setQuizScore(0);
-      setSessionStartTime(Date.now());
+      initActiveSession('quiz', selectedSessionWords.length);
       setIsQuizFinished(false);
       generateQuizOptions(0, selectedSessionWords);
       setIsFocusedMode(true);
@@ -473,7 +603,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     setIsQuizMode(false);
     setIsConjugationMode(false);
     setCurrentCardIndex(0);
-    setSessionStartTime(Date.now());
+    initActiveSession('flashcard', selectedSessionWords.length);
     setIsFlipped(false);
     setIsFocusedMode(true);
   };
@@ -494,7 +624,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     setConjugationIndex(0);
     setConjugationStep(0);
     setConjugationScore(0);
-    setSessionStartTime(Date.now());
+    initActiveSession('conjugation', selectedSessionWords.length);
     setIsConjugationFinished(false);
     generateConjugationOptions(0, 0, selectedSessionWords);
     setIsFocusedMode(true);
@@ -618,11 +748,12 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   };
 
   const exitFocusedMode = () => {
+    const s = activeSessionRef.current;
     // Record session before exiting if it was in progress
-    if (isQuizMode && !isQuizFinished) finishSession('quiz', quizScore, sessionWords.length);
+    if (isQuizMode && !isQuizFinished) finishSession('quiz', s.score, sessionWords.length, s.incorrectAnswers);
     else if (isFlashcardMode) finishSession('flashcard');
-    else if (isMatchMode && !isMatchFinished) finishSession('match');
-    else if (isConjugationMode && !isConjugationFinished) finishSession('conjugation', conjugationScore, sessionWords.length);
+    else if (isMatchMode && !isMatchFinished) finishSession('match', undefined, sessionWords.length, s.incorrectAnswers);
+    else if (isConjugationMode && !isConjugationFinished) finishSession('conjugation', s.score, sessionWords.length, s.incorrectAnswers);
 
     setIsFocusedMode(false);
     setIsFlashcardMode(false);
@@ -862,7 +993,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     setIsCorrect(isAnswerCorrect);
     
     let updatedIncorrectAnswers = [...incorrectAnswers];
+    let newScore = quizScore;
     if (isAnswerCorrect) {
+      newScore = quizScore + 1;
       setQuizScore(prev => prev + 1);
     } else {
       const newIncorrect = {
@@ -875,6 +1008,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       };
       updatedIncorrectAnswers.push(newIncorrect);
       setIncorrectAnswers(prev => [...prev, newIncorrect]);
+    }
+
+    if (activeSessionRef.current) {
+      activeSessionRef.current.score = newScore;
+      activeSessionRef.current.incorrectAnswers = updatedIncorrectAnswers;
     }
 
     // Don't auto-advance for grammar types that show explanation modal
@@ -896,7 +1034,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
         generateQuizOptions(quizIndex + 1);
       } else {
         setIsQuizFinished(true);
-        finishSession('quiz', quizScore + (isAnswerCorrect ? 1 : 0), sessionWords.length, updatedIncorrectAnswers);
+        finishSession('quiz', newScore, sessionWords.length, updatedIncorrectAnswers);
       }
     }, 600);
   };
@@ -919,7 +1057,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     setIsCorrect(isAnswerCorrect);
 
     let updatedIncorrectAnswers = [...incorrectAnswers];
+    let newScore = quizScore;
     if (isAnswerCorrect) {
+      newScore = quizScore + 1;
       setQuizScore(prev => prev + 1);
     } else {
       const newIncorrect = {
@@ -933,6 +1073,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       updatedIncorrectAnswers.push(newIncorrect);
       setIncorrectAnswers(prev => [...prev, newIncorrect]);
     }
+
+    if (activeSessionRef.current) {
+      activeSessionRef.current.score = newScore;
+      activeSessionRef.current.incorrectAnswers = updatedIncorrectAnswers;
+    }
   };
 
   const handleNextQuizQuestion = () => {
@@ -942,8 +1087,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       generateQuizOptions(quizIndex + 1);
     } else {
       setIsQuizFinished(true);
-      // Pass the current state score and incorrect answers
-      finishSession('quiz', quizScore, sessionWords.length, incorrectAnswers);
+      const s = activeSessionRef.current;
+      finishSession('quiz', s.score, sessionWords.length, s.incorrectAnswers);
     }
   };
 
@@ -1048,7 +1193,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     setIsCorrect(isAnswerCorrect);
     
     let updatedIncorrectAnswers = [...incorrectAnswers];
+    let newScore = conjugationScore;
     if (isAnswerCorrect) {
+      newScore = conjugationScore + 0.5;
       setConjugationScore(prev => prev + 0.5); // 0.5 for each step
     } else {
       const newIncorrect = {
@@ -1061,6 +1208,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       };
       updatedIncorrectAnswers.push(newIncorrect);
       setIncorrectAnswers(prev => [...prev, newIncorrect]);
+    }
+
+    if (activeSessionRef.current) {
+      activeSessionRef.current.score = newScore;
+      activeSessionRef.current.incorrectAnswers = updatedIncorrectAnswers;
     }
 
     setTimeout(() => {
@@ -1076,7 +1228,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
           generateConjugationOptions(conjugationIndex + 1, 0);
         } else {
           setIsConjugationFinished(true);
-          finishSession('conjugation', conjugationScore + (isAnswerCorrect ? 0.5 : 0), sessionWords.length, updatedIncorrectAnswers);
+          finishSession('conjugation', newScore, sessionWords.length, updatedIncorrectAnswers);
         }
       }
     }, 600);
@@ -1136,7 +1288,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
         if (newCards.every(c => c.matched)) {
           const finalTime = Math.floor((Date.now() - (matchStartTime || 0)) / 100) / 10;
           setIsMatchFinished(true);
-          finishSession('match', undefined, undefined, incorrectAnswers);
+          finishSession('match', undefined, sessionWords.length, incorrectAnswers);
           saveScore(finalTime);
         }
       } else {
@@ -1604,7 +1756,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                                 onClick={handleNextQuizQuestion}
                                 className="w-full py-4 bg-indigo-500 text-white rounded-2xl font-black shadow-xl shadow-indigo-100 hover:scale-[1.02] transition-transform flex items-center justify-center gap-2 group"
                               >
-                                다음 문제로 넘어가기
+                                {quizIndex < sessionWords.length - 1 ? '다음 문제로 넘어가기' : '결과 보기 및 저장'}
                                 <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
                               </button>
                             </motion.div>
