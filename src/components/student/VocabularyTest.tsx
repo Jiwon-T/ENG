@@ -146,6 +146,58 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
     fetchPreviousRecord();
   }, [wordbookId, auth.currentUser?.uid, dayRange.start, dayRange.end, words]); // Added words to dependencies
 
+  // Ensure partial test sessions are saved on unexpected exit/refresh
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!finishingRef.current && (scoreRef.current > 0 || incorrectWordsRef.current.length > 0) && auth.currentUser) {
+        finishingRef.current = true;
+        const startDay = Number(dayRange?.start) || 1;
+        const endDay = Number(dayRange?.end) || startDay;
+        const duration = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+        recordStudySession({
+          uid: auth.currentUser.uid,
+          wordbookId,
+          wordbookTitle,
+          type: 'test',
+          category: (category as 'word' | 'grammar' | 'exam') || 'word',
+          duration,
+          score: scoreRef.current,
+          totalItems: shuffledWords.length || words.length,
+          incorrectAnswers: incorrectWordsRef.current,
+          dayStart: startDay,
+          dayEnd: endDay
+        }).catch(err => console.error('[VocabularyTest] beforeunload save error:', err));
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [dayRange?.start, dayRange?.end, startTime, wordbookId, wordbookTitle, category, shuffledWords.length, words.length]);
+
+  const handleExitTest = () => {
+    if (!finishingRef.current && (scoreRef.current > 0 || incorrectWordsRef.current.length > 0) && auth.currentUser) {
+      finishingRef.current = true;
+      const startDay = Number(dayRange?.start) || 1;
+      const endDay = Number(dayRange?.end) || startDay;
+      const duration = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+      recordStudySession({
+        uid: auth.currentUser.uid,
+        wordbookId,
+        wordbookTitle,
+        type: 'test',
+        category: (category as 'word' | 'grammar' | 'exam') || 'word',
+        duration,
+        score: scoreRef.current,
+        totalItems: shuffledWords.length || words.length,
+        incorrectAnswers: incorrectWordsRef.current,
+        dayStart: startDay,
+        dayEnd: endDay
+      }).catch(err => console.error('[VocabularyTest] Early exit save error:', err));
+    }
+    onClose();
+  };
+
   const startTest = () => {
     if (words.length === 0) return;
 
@@ -347,18 +399,21 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
         PetService.addPoints(points, auth.currentUser.uid);
         PetService.addXP(xp, auth.currentUser.uid);
 
+        const startDay = Number(dayRange?.start) || 1;
+        const endDay = Number(dayRange?.end) || startDay;
+
         await recordStudySession({
           uid: auth.currentUser.uid,
           wordbookId,
           wordbookTitle,
           type: 'test',
-          category: category as 'word' | 'grammar' | 'exam',
+          category: (category as 'word' | 'grammar' | 'exam') || 'word',
           duration,
           score: finalScoreValue,
           totalItems: totalCount,
           incorrectAnswers: finalIncorrectWords,
-          dayStart: dayRange.start,
-          dayEnd: dayRange.end
+          dayStart: startDay,
+          dayEnd: endDay
         });
       } catch (err) {
         console.error('Failed to finish test session:', err);
@@ -835,7 +890,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
       {/* Exit Button */}
       {phase !== 'result' && (
         <button
-          onClick={onClose}
+          onClick={handleExitTest}
           className="fixed top-8 right-8 w-12 h-12 bg-white/10 text-white rounded-full flex items-center justify-center hover:bg-white/20 transition-all"
         >
           <X size={24} />

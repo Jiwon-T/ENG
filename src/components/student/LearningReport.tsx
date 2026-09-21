@@ -219,6 +219,16 @@ export default function LearningReport() {
   const totalAssignmentPages = Math.ceil(stats.assignments.length / ASSIGNMENTS_PER_PAGE);
   const paginatedAssignments = stats.assignments.slice((assignmentPage - 1) * ASSIGNMENTS_PER_PAGE, assignmentPage * ASSIGNMENTS_PER_PAGE);
 
+  const formatDayRange = (start?: number, end?: number, category?: string) => {
+    if (start === undefined || start === null) return null;
+    const isGrammar = category === 'grammar';
+    const finalEnd = end ?? start;
+    if (isGrammar) {
+      return start === finalEnd ? `${start}세트` : `${start}~${finalEnd}세트`;
+    }
+    return start === finalEnd ? `DAY ${start}` : `DAY ${start}~${finalEnd}`;
+  };
+
   const totalSessionPages = Math.ceil(stats.sessionHistory.length / SESSIONS_PER_PAGE);
   const paginatedSessions = stats.sessionHistory.slice((sessionPage - 1) * SESSIONS_PER_PAGE, sessionPage * SESSIONS_PER_PAGE);
 
@@ -227,6 +237,9 @@ export default function LearningReport() {
       ...ans,
       sessionId: session.id,
       wordbookTitle: session.wordbookTitle,
+      dayStart: session.dayStart,
+      dayEnd: session.dayEnd,
+      category: session.category,
       createdAt: session.createdAt
     }))
   );
@@ -546,10 +559,33 @@ export default function LearningReport() {
                     {session.type === 'test' && <Trophy size={18} className="text-pastel-pink-500" />}
                   </div>
                   <div>
-                    <div className="font-bold text-slate-900 text-sm line-clamp-1">{session.wordbookTitle}</div>
-                    <div className="text-[10px] text-slate-400 font-medium">
-                      {session.type === 'quiz' ? '객관식 퀴즈' : session.type === 'flashcard' ? '플래시카드' : session.type === 'match' ? '매치 게임' : session.type === 'test' ? '단원 테스트' : '3단 변화 챌린지'} 
-                      {' '}• {session.category === 'grammar' ? '문법' : session.category === 'exam' ? '시험대비' : '단어'} 
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-slate-900 text-sm line-clamp-1">{session.wordbookTitle}</span>
+                      {session.dayStart !== undefined && (
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-black border shadow-2xs ${
+                          session.type === 'test'
+                            ? 'bg-rose-50 text-rose-600 border-rose-200'
+                            : 'bg-indigo-50 text-indigo-600 border-indigo-200'
+                        }`}>
+                          {session.type === 'test' && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse inline-block" />}
+                          {formatDayRange(session.dayStart, session.dayEnd, session.category)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-medium flex items-center gap-1.5 flex-wrap mt-0.5">
+                      <span className="font-bold text-slate-600">
+                        {session.type === 'quiz' ? '객관식 퀴즈' : session.type === 'flashcard' ? '플래시카드' : session.type === 'match' ? '매치 게임' : session.type === 'test' ? '단어 테스트' : '3단 변화 챌린지'} 
+                      </span>
+                      <span>•</span>
+                      <span>{session.category === 'grammar' ? '문법' : session.category === 'exam' ? '시험대비' : '단어'}</span>
+                      {session.dayStart !== undefined && (
+                        <>
+                          <span>•</span>
+                          <span className="font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded">
+                            범위: {formatDayRange(session.dayStart, session.dayEnd, session.category)}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -636,10 +672,15 @@ export default function LearningReport() {
             paginatedWrongAnswers.map((ans, idx) => (
               <div key={idx} className="p-4 md:p-5 bg-rose-50/30 rounded-2xl md:rounded-3xl border border-rose-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex flex-col">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-[9px] md:text-[10px] font-black text-rose-400 bg-white px-2 py-0.5 rounded-md border border-rose-100 uppercase tracking-tighter line-clamp-1">
                       {ans.wordbookTitle}
                     </span>
+                    {ans.dayStart !== undefined && (
+                      <span className="text-[9px] md:text-[10px] font-black text-indigo-600 bg-white px-2 py-0.5 rounded-md border border-indigo-100">
+                        {formatDayRange(ans.dayStart, ans.dayEnd, ans.category)}
+                      </span>
+                    )}
                     <span className="text-[9px] md:text-[10px] font-bold text-slate-400">
                       {ans.createdAt?.toMillis ? new Date(ans.createdAt.toMillis()).toLocaleDateString() : '방금 전'}
                     </span>

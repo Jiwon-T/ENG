@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BarChart3, TrendingUp, BookOpen, Calendar, Search, User, Save, X, CheckCircle2, Trash2, MessageSquare, ClipboardList, Gamepad2, Clock, ChevronLeft, ChevronRight, Pencil, XCircle } from 'lucide-react';
+import { BarChart3, TrendingUp, BookOpen, Calendar, Search, User, Save, X, CheckCircle2, Trash2, MessageSquare, ClipboardList, Gamepad2, Clock, ChevronLeft, ChevronRight, Pencil, XCircle, Trophy } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType, saveAssignment, updateAssignment, deleteAssignment } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, doc, setDoc, getDoc, Timestamp, deleteDoc, orderBy } from 'firebase/firestore';
 
@@ -19,6 +19,7 @@ interface Evaluation {
 }
 
 interface StudySession {
+  id?: string;
   uid: string;
   wordbookId: string;
   wordbookTitle: string;
@@ -27,6 +28,9 @@ interface StudySession {
   duration: number;
   score?: number;
   totalItems?: number;
+  dayStart?: number;
+  dayEnd?: number;
+  incorrectAnswers?: any[];
   createdAt: any;
 }
 
@@ -54,6 +58,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
   const [studentAssignments, setStudentAssignments] = useState<any[]>([]);
   const [assignmentPage, setAssignmentPage] = useState(1);
   const [sessionPage, setSessionPage] = useState(1);
+  const [sessionFilter, setSessionFilter] = useState<'all' | 'test' | 'study'>('all');
   const [wrongPage, setWrongPage] = useState(1);
   const [isConfirmingWithdraw, setIsConfirmingWithdraw] = useState(false);
   const ASSIGNMENTS_PER_PAGE = 5;
@@ -262,16 +267,35 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
     return `${yyyy}-${mm}-${dd} (${day})`;
   };
 
+  const formatDayRange = (start?: number, end?: number, category?: string) => {
+    if (start === undefined || start === null) return null;
+    const isGrammar = category === 'grammar';
+    const finalEnd = end ?? start;
+    if (isGrammar) {
+      return start === finalEnd ? `${start}세트` : `${start}~${finalEnd}세트`;
+    }
+    return start === finalEnd ? `DAY ${start}` : `DAY ${start}~${finalEnd}`;
+  };
+
   const totalAssignmentPages = Math.ceil(studentAssignments.length / ASSIGNMENTS_PER_PAGE);
   const paginatedAssignments = studentAssignments.slice((assignmentPage - 1) * ASSIGNMENTS_PER_PAGE, assignmentPage * ASSIGNMENTS_PER_PAGE);
 
-  const totalSessionPages = Math.ceil(sessionHistory.length / SESSIONS_PER_PAGE);
-  const paginatedSessions = sessionHistory.slice((sessionPage - 1) * SESSIONS_PER_PAGE, sessionPage * SESSIONS_PER_PAGE);
+  const filteredSessions = sessionHistory.filter(session => {
+    if (sessionFilter === 'test') return session.type === 'test';
+    if (sessionFilter === 'study') return session.type !== 'test';
+    return true;
+  });
+
+  const totalSessionPages = Math.ceil(filteredSessions.length / SESSIONS_PER_PAGE);
+  const paginatedSessions = filteredSessions.slice((sessionPage - 1) * SESSIONS_PER_PAGE, sessionPage * SESSIONS_PER_PAGE);
 
   const allIncorrectAnswers = sessionHistory.flatMap(session => 
     (session.incorrectAnswers || []).map((ans: any) => ({
       ...ans,
       wordbookTitle: session.wordbookTitle,
+      dayStart: session.dayStart,
+      dayEnd: session.dayEnd,
+      category: session.category,
       createdAt: session.createdAt
     }))
   );
@@ -620,36 +644,108 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                   </div>
 
                   <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 mb-8">
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <TrendingUp size={16} className="text-pastel-pink-500" />
-                      학습 활동 로그
-                    </h3>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <TrendingUp size={16} className="text-pastel-pink-500" />
+                        학습 활동 로그
+                        {filteredSessions.length > 0 && (
+                          <span className="text-[10px] font-bold text-slate-400">({filteredSessions.length}건)</span>
+                        )}
+                      </h3>
+                      <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl text-xs">
+                        <button
+                          onClick={() => { setSessionFilter('all'); setSessionPage(1); }}
+                          className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                            sessionFilter === 'all'
+                              ? 'bg-white text-slate-900 shadow-xs'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          전체
+                        </button>
+                        <button
+                          onClick={() => { setSessionFilter('test'); setSessionPage(1); }}
+                          className={`px-3 py-1 rounded-lg font-bold transition-all flex items-center gap-1 ${
+                            sessionFilter === 'test'
+                              ? 'bg-rose-500 text-white shadow-xs'
+                              : 'text-slate-500 hover:text-rose-600'
+                          }`}
+                        >
+                          <Trophy size={13} />
+                          단어 테스트
+                        </button>
+                        <button
+                          onClick={() => { setSessionFilter('study'); setSessionPage(1); }}
+                          className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                            sessionFilter === 'study'
+                              ? 'bg-white text-slate-900 shadow-xs'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          퀴즈·학습
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="space-y-3">
                       {paginatedSessions.length > 0 ? (
                         paginatedSessions.map((session, idx) => (
-                          <div key={idx} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm hover:shadow-md transition-all">
+                          <div key={idx} className="bg-white p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between shadow-sm hover:shadow-md transition-all gap-3 border border-slate-100">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500">
+                              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                                session.type === 'test'
+                                  ? 'bg-rose-50 text-rose-500 border border-rose-100'
+                                  : 'bg-slate-100 text-slate-500'
+                              }`}>
                                 {session.type === 'quiz' && <CheckCircle2 size={20} />}
                                 {session.type === 'flashcard' && <BookOpen size={20} />}
                                 {session.type === 'match' && <Gamepad2 size={20} />}
                                 {session.type === 'conjugation' && <TrendingUp size={20} />}
-                                {session.type === 'test' && <CheckCircle2 size={20} className="text-pastel-pink-500" />}
+                                {session.type === 'test' && <Trophy size={20} className="text-rose-500" />}
                               </div>
                               <div>
-                                <div className="font-bold text-slate-900 text-sm">{session.wordbookTitle || '단어장'}</div>
-                                <div className="text-[10px] text-slate-400 font-medium">
-                                  {session.type === 'quiz' ? '객관식 퀴즈' : session.type === 'flashcard' ? '플래시카드' : session.type === 'match' ? '매치 게임' : session.type === 'test' ? '단원 테스트' : '3단 변화 챌린지'} 
-                                  {' '}• {session.category === 'grammar' ? '문법' : session.category === 'exam' ? '시험대비' : '단어'} 
-                                  {' '}• {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleString() : (session.createdAt ? new Date(session.createdAt).toLocaleString() : '방금 전')}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-slate-900 text-sm">{session.wordbookTitle || '단어장'}</span>
+                                  {session.dayStart !== undefined && (
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-black border shadow-2xs ${
+                                      session.type === 'test'
+                                        ? 'bg-rose-50 text-rose-600 border-rose-200'
+                                        : 'bg-indigo-50 text-indigo-600 border-indigo-200'
+                                    }`}>
+                                      {session.type === 'test' && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse inline-block" />}
+                                      {formatDayRange(session.dayStart, session.dayEnd, session.category)}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 flex-wrap mt-0.5">
+                                  <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                    session.type === 'test' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'
+                                  }`}>
+                                    {session.type === 'quiz' ? '객관식 퀴즈' : session.type === 'flashcard' ? '플래시카드' : session.type === 'match' ? '매치 게임' : session.type === 'test' ? '단어 테스트' : '3단 변화 챌린지'} 
+                                  </span>
+                                  <span>•</span>
+                                  <span>{session.category === 'grammar' ? '문법' : session.category === 'exam' ? '시험대비' : '단어'}</span>
+                                  {session.dayStart !== undefined && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="font-bold text-indigo-600 bg-indigo-50/80 px-1.5 py-0.5 rounded text-[10px] border border-indigo-100">
+                                        설정 범위: {formatDayRange(session.dayStart, session.dayEnd, session.category)}
+                                      </span>
+                                    </>
+                                  )}
+                                  <span>•</span>
+                                  <span className="text-slate-400">
+                                    {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleString() : (session.createdAt ? new Date(session.createdAt).toLocaleString() : '방금 전')}
+                                  </span>
                                 </div>
                               </div>
                             </div>
-                            <div className="text-right">
+                            <div className="flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 shrink-0">
                                <div className="font-black text-pastel-pink-500 text-sm">{session.duration}초</div>
                                {session.score !== undefined && (
-                                 <div className="text-[10px] font-bold text-emerald-500">
-                                   {session.score}/{session.totalItems ?? '-'}
+                                 <div className="text-xs font-black text-emerald-600">
+                                   정답: {session.score}/{session.totalItems ?? '-'}
+                                   {session.totalItems ? ` (${Math.round((session.score / session.totalItems) * 100)}점)` : ''}
                                  </div>
                                )}
                             </div>
@@ -700,10 +796,15 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                         paginatedWrongAnswers.map((ans, idx) => (
                           <div key={idx} className="bg-white p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between border border-rose-50 shadow-sm gap-4">
                             <div className="flex flex-col">
-                              <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <span className="text-[9px] font-black text-rose-400 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 uppercase">
                                   {ans.wordbookTitle}
                                 </span>
+                                {ans.dayStart !== undefined && (
+                                  <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                    {formatDayRange(ans.dayStart, ans.dayEnd, ans.category)}
+                                  </span>
+                                )}
                                 <span className="text-[9px] font-bold text-slate-400">
                                   {ans.createdAt?.toMillis ? new Date(ans.createdAt.toMillis()).toLocaleDateString() : '최근'}
                                 </span>

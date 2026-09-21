@@ -122,6 +122,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     isFinished: boolean;
     wordbook: Wordbook | null;
     category: string;
+    dayStart?: number;
+    dayEnd?: number;
   }>({
     type: null,
     startTime: null,
@@ -130,12 +132,15 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     incorrectAnswers: [],
     isFinished: false,
     wordbook: null,
-    category: 'word'
+    category: 'word',
+    dayStart: 1,
+    dayEnd: 1
   });
 
   const initActiveSession = (type: 'quiz' | 'flashcard' | 'match' | 'conjugation', total: number) => {
     const now = Date.now();
     setSessionStartTime(now);
+    const day = currentChunk + 1;
     activeSessionRef.current = {
       type,
       startTime: now,
@@ -144,7 +149,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       incorrectAnswers: [],
       isFinished: false,
       wordbook: selectedWordbook,
-      category: category
+      category: category,
+      dayStart: day,
+      dayEnd: day
     };
   };
 
@@ -205,6 +212,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
        selectedWordbook.type === 'to-ing-grammar' || 
        selectedWordbook.type === 'conversion-grammar' ? 'grammar' : category) || 'word') as 'word' | 'grammar' | 'exam';
 
+    const currentDay = currentChunk + 1;
     recordStudySession({
       uid: auth.currentUser.uid,
       wordbookId: selectedWordbook.id,
@@ -214,7 +222,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
       duration,
       score: score ?? (type === 'conjugation' ? conjugationScore : quizScore),
       totalItems: total ?? sessionWords.length,
-      incorrectAnswers: (type === 'quiz' || type === 'conjugation' || type === 'match') ? finalIncorrectAnswers : undefined
+      incorrectAnswers: (type === 'quiz' || type === 'conjugation' || type === 'match') ? finalIncorrectAnswers : undefined,
+      dayStart: currentDay,
+      dayEnd: currentDay
     }).catch(err => {
       console.error('[WordbookView] Failed to record study session:', err);
     });
@@ -249,7 +259,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
             duration,
             score: s.score,
             totalItems: s.total,
-            incorrectAnswers: s.incorrectAnswers
+            incorrectAnswers: s.incorrectAnswers,
+            dayStart: s.dayStart,
+            dayEnd: s.dayEnd
           });
         }
       }
@@ -282,7 +294,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
             duration,
             score: s.score,
             totalItems: s.total,
-            incorrectAnswers: s.incorrectAnswers
+            incorrectAnswers: s.incorrectAnswers,
+            dayStart: s.dayStart,
+            dayEnd: s.dayEnd
           }).catch(e => console.error('[WordbookView] Auto-save on unmount failed:', e));
         }
       }
