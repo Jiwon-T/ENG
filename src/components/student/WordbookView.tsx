@@ -348,7 +348,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     const passageDays: number[] = Array.from(new Set<number>(words.map(w => Number(w.day ?? 1)))).sort((a, b) => a - b);
     totalChunks = Math.max(1, passageDays.length > 0 ? Math.max(...passageDays) : 1);
     displayedWords = words
-      .filter(w => (w.day ?? 1) === currentChunk + 1)
+      .filter(w => Number(w.day ?? 1) === currentChunk + 1)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }
 
@@ -533,7 +533,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     // Group sentences by passage (day)
     const passageMap = new Map<number, Word[]>();
     words.forEach(w => {
-      const d = w.day ?? 1;
+      const d = Number(w.day ?? 1);
       if (!passageMap.has(d)) passageMap.set(d, []);
       passageMap.get(d)!.push(w);
     });

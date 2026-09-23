@@ -304,8 +304,10 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     }
   }, [isExampleModalOpen, currentWordForExamples, selectedWordbook]);
 
-  const getWordDay = (word: Word, index?: number) => {
-    if (typeof word.day === 'number' && word.day > 0) return word.day;
+  const getWordDay = (word: Word, index?: number): number => {
+    const rawDay = Number(word.day);
+    if (!isNaN(rawDay) && rawDay > 0) return rawDay;
+    if (selectedWordbook?.type === 'sentence-order') return 1;
     const unitSize = selectedWordbook?.defaultUnitSize || 40;
     const ord = word.order ?? (index ?? 0);
     return Math.floor(ord / unitSize) + 1;
@@ -319,48 +321,110 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     return sorted.length > 0 ? sorted : [1];
   }, [words, selectedWordbook]);
 
-  const parsePassageInput = (text: string): { english: string; korean: string }[] => {
-    const result: { english: string; korean: string }[] = [];
+  interface ParsedPassageGroup {
+    day: number;
+    title: string;
+    sentences: { english: string; korean: string }[];
+  }
+
+  const parsePassagesFromInput = (
+    text: string,
+    fallbackDay: number,
+    fallbackTitle: string
+  ): ParsedPassageGroup[] => {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    if (lines.length === 0) return result;
+    if (lines.length === 0) return [];
 
-    const hasTab = lines.some(l => l.includes('\t'));
-    if (hasTab) {
-      for (const line of lines) {
-        if (line.includes('\t')) {
-          const parts = line.split('\t').map(p => p.trim()).filter(Boolean);
-          if (parts.length >= 2) {
-            result.push({ english: parts[0], korean: parts.slice(1).join(' ') });
+    // Header regex for detecting passage headers:
+    // e.g. [지문 1], [지문 10], 지문 1, 지문 10, 지문 10: 제목, [지문 10] 제목, Passage 10, Day 10
+    const headerRegex = /^[\[【]?(?:지문|Passage|Day)\s*(\d+)[\]】]?(?:\s*[:\-–.]?\s*(.*))?$/i;
+
+    const headerIndices: { lineIdx: number; day: number; title: string }[] = [];
+    lines.forEach((line, idx) => {
+      const match = line.match(headerRegex);
+      if (match) {
+        headerIndices.push({
+          lineIdx: idx,
+          day: parseInt(match[1], 10),
+          title: match[2]?.trim() || ''
+        });
+      }
+    });
+
+    const parseSentenceLines = (sentenceLines: string[]): { english: string; korean: string }[] => {
+      const result: { english: string; korean: string }[] = [];
+      if (sentenceLines.length === 0) return result;
+
+      const hasTab = sentenceLines.some(l => l.includes('\t'));
+      if (hasTab) {
+        for (const line of sentenceLines) {
+          if (line.includes('\t')) {
+            const parts = line.split('\t').map(p => p.trim()).filter(Boolean);
+            if (parts.length >= 2) {
+              result.push({ english: parts[0], korean: parts.slice(1).join(' ') });
+            }
           }
         }
+        return result;
       }
-      return result;
-    }
 
-    const hasDoubleSlash = lines.some(l => l.includes('//'));
-    if (hasDoubleSlash) {
-      for (const line of lines) {
-        if (line.includes('//')) {
-          const parts = line.split('//').map(p => p.trim()).filter(Boolean);
-          if (parts.length >= 2) {
-            result.push({ english: parts[0], korean: parts.slice(1).join(' ') });
+      const hasDoubleSlash = sentenceLines.some(l => l.includes('//'));
+      if (hasDoubleSlash) {
+        for (const line of sentenceLines) {
+          if (line.includes('//')) {
+            const parts = line.split('//').map(p => p.trim()).filter(Boolean);
+            if (parts.length >= 2) {
+              result.push({ english: parts[0], korean: parts.slice(1).join(' ') });
+            }
           }
         }
+        return result;
+      }
+
+      for (let i = 0; i < sentenceLines.length; i += 2) {
+        const en = sentenceLines[i];
+        const ko = sentenceLines[i + 1] || '(해석 없음)';
+        result.push({ english: en, korean: ko });
       }
       return result;
+    };
+
+    if (headerIndices.length > 0) {
+      const groups: ParsedPassageGroup[] = [];
+      for (let h = 0; h < headerIndices.length; h++) {
+        const currentH = headerIndices[h];
+        const nextH = headerIndices[h + 1];
+        const sliceStart = currentH.lineIdx + 1;
+        const sliceEnd = nextH ? nextH.lineIdx : lines.length;
+        const passageLines = lines.slice(sliceStart, sliceEnd);
+        const sentences = parseSentenceLines(passageLines);
+        if (sentences.length > 0) {
+          groups.push({
+            day: currentH.day,
+            title: currentH.title || `지문 ${currentH.day}`,
+            sentences
+          });
+        }
+      }
+      if (groups.length > 0) return groups;
     }
 
-    for (let i = 0; i < lines.length; i += 2) {
-      const en = lines[i];
-      const ko = lines[i + 1] || '(해석 없음)';
-      result.push({ english: en, korean: ko });
-    }
-    return result;
+    const singleSentences = parseSentenceLines(lines);
+    if (singleSentences.length === 0) return [];
+    return [{
+      day: Number(fallbackDay) || 1,
+      title: fallbackTitle.trim() || `지문 ${Number(fallbackDay) || 1}`,
+      sentences: singleSentences
+    }];
   };
 
-  const parsedPassageSentences = React.useMemo(() => {
-    return parsePassageInput(passageInputText);
-  }, [passageInputText]);
+  const parsedPassageGroups = React.useMemo(() => {
+    return parsePassagesFromInput(passageInputText, passageTargetDay, passageTitleInput);
+  }, [passageInputText, passageTargetDay, passageTitleInput]);
+
+  const totalParsedSentences = React.useMemo(() => {
+    return parsedPassageGroups.reduce((acc, g) => acc + g.sentences.length, 0);
+  }, [parsedPassageGroups]);
 
   const displayedWords = React.useMemo(() => {
     let list = words;
@@ -369,8 +433,8 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     }
     if (selectedWordbook?.type === 'sentence-order') {
       return [...list].sort((a, b) => {
-        const dayA = a.day || 1;
-        const dayB = b.day || 1;
+        const dayA = Number(a.day) || 1;
+        const dayB = Number(b.day) || 1;
         if (dayA !== dayB) return dayA - dayB;
         return (a.order ?? 0) - (b.order ?? 0);
       });
@@ -379,23 +443,29 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   }, [words, activeDayFilter, selectedWordbook]);
 
   const handleSavePassageSentences = async () => {
-    if (!selectedWordbook || parsedPassageSentences.length === 0) return;
+    if (!selectedWordbook || parsedPassageGroups.length === 0) return;
     try {
       const batch = writeBatch(db);
-      const existingInPassage = words.filter(w => (w.day || 1) === passageTargetDay);
-      const startOrder = existingInPassage.length > 0
-        ? Math.max(...existingInPassage.map(w => w.order ?? 0)) + 1
-        : 1;
+      let totalSaved = 0;
 
-      parsedPassageSentences.forEach((item, idx) => {
-        const docRef = doc(collection(db, `wordbooks/${selectedWordbook.id}/words`));
-        batch.set(docRef, {
-          word: item.english,
-          meaning: item.korean,
-          day: passageTargetDay,
-          order: startOrder + idx,
-          passageTitle: passageTitleInput.trim() || `지문 ${passageTargetDay}`,
-          createdAt: Timestamp.now()
+      parsedPassageGroups.forEach((group) => {
+        const targetDay = Number(group.day) || 1;
+        const existingInPassage = words.filter(w => (Number(w.day) || 1) === targetDay);
+        const startOrder = existingInPassage.length > 0
+          ? Math.max(...existingInPassage.map(w => Number(w.order) || 0)) + 1
+          : 1;
+
+        group.sentences.forEach((item, idx) => {
+          const docRef = doc(collection(db, `wordbooks/${selectedWordbook.id}/words`));
+          batch.set(docRef, {
+            word: item.english,
+            meaning: item.korean,
+            day: targetDay,
+            order: startOrder + idx,
+            passageTitle: group.title.trim() || `지문 ${targetDay}`,
+            createdAt: Timestamp.now()
+          });
+          totalSaved++;
         });
       });
 
@@ -403,7 +473,12 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       setIsPassageModalOpen(false);
       setPassageInputText('');
       setPassageTitleInput('');
-      alert(`지문 ${passageTargetDay}에 ${parsedPassageSentences.length}개의 문장이 순서대로 등록되었습니다.`);
+
+      if (parsedPassageGroups.length === 1) {
+        alert(`지문 ${parsedPassageGroups[0].day}에 ${parsedPassageGroups[0].sentences.length}개의 문장이 순서대로 등록되었습니다.`);
+      } else {
+        alert(`총 ${parsedPassageGroups.length}개 지문 (${totalSaved}개 문장)이 성공적으로 등록되었습니다.`);
+      }
     } catch (error) {
       console.error('Failed to save passage sentences:', error);
       alert('문장 등록 중 오류가 발생했습니다.');
@@ -412,10 +487,10 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
   const handleMoveSentenceOrder = async (word: Word, direction: 'up' | 'down') => {
     if (!selectedWordbook) return;
-    const wordDay = word.day || 1;
+    const wordDay = Number(word.day) || 1;
     const passageWords = words
-      .filter(w => (w.day || 1) === wordDay)
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      .filter(w => (Number(w.day) || 1) === wordDay)
+      .sort((a, b) => (Number(a.order) ?? 0) - (Number(b.order) ?? 0));
 
     const idx = passageWords.findIndex(w => w.id === word.id);
     if (idx === -1) return;
@@ -434,8 +509,9 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
   const handleDeletePassage = async (passageDay: number) => {
     if (!selectedWordbook) return;
-    if (!window.confirm(`지문 ${passageDay}에 포함된 모든 문장을 삭제하시겠습니까?`)) return;
-    const passageWords = words.filter(w => (w.day || 1) === passageDay);
+    const targetDay = Number(passageDay);
+    if (!window.confirm(`지문 ${targetDay}에 포함된 모든 문장을 삭제하시겠습니까?`)) return;
+    const passageWords = words.filter(w => (Number(w.day) || 1) === targetDay);
     const batch = writeBatch(db);
     passageWords.forEach(w => {
       batch.delete(doc(db, `wordbooks/${selectedWordbook.id}/words`, w.id));
@@ -446,8 +522,9 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const handleUpdateWordDay = async (wordId: string, newDay: number) => {
     if (!selectedWordbook) return;
     try {
+      const cleanDay = Number(newDay) || 1;
       await updateDoc(doc(db, `wordbooks/${selectedWordbook.id}/words`, wordId), {
-        day: newDay,
+        day: cleanDay,
         updatedAt: Timestamp.now()
       });
     } catch (error) {
@@ -459,14 +536,15 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const handleBatchMoveWordsToDay = async (wordIds: string[], targetDay: number) => {
     if (!selectedWordbook || wordIds.length === 0) return;
     try {
+      const cleanDay = Number(targetDay) || 1;
       const batch = writeBatch(db);
       wordIds.forEach(id => {
         const wordRef = doc(db, `wordbooks/${selectedWordbook.id}/words`, id);
-        batch.update(wordRef, { day: targetDay, updatedAt: Timestamp.now() });
+        batch.update(wordRef, { day: cleanDay, updatedAt: Timestamp.now() });
       });
       await batch.commit();
       setSelectedWordIds([]);
-      alert(`${wordIds.length}개 단어가 DAY ${targetDay}(으)로 이동되었습니다.`);
+      alert(`${wordIds.length}개 항목이 ${selectedWordbook.type === 'sentence-order' ? `지문 ${cleanDay}` : `DAY ${cleanDay}`}(으)로 이동되었습니다.`);
     } catch (error) {
       console.error('Failed to move words to day:', error);
       alert('단어 이동 중 오류가 발생했습니다.');
@@ -928,7 +1006,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       const updateData: any = {
         word: editWordValue.trim(),
         meaning: editMeaningValue.trim(),
-        day: editDayValue,
+        day: Number(editDayValue) || 1,
         imageUrl: editImageUrlValue.trim(),
         updatedAt: Timestamp.now()
       };
@@ -984,7 +1062,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         word: newWord.trim(),
         meaning: newMeaning.trim(),
         imageUrl: newImageUrl.trim(),
-        day: newWordDay,
+        day: Number(newWordDay) || 1,
         order: maxOrder + 1,
         createdAt: Timestamp.now()
       };
@@ -1636,7 +1714,10 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 <>
                   <button 
                     onClick={() => {
-                      setPassageTargetDay(currentDays[0] || 1);
+                      const nextDay = typeof activeDayFilter === 'number'
+                        ? activeDayFilter
+                        : (words.length > 0 ? (Math.max(...currentDays, 0) + 1) : 1);
+                      setPassageTargetDay(nextDay);
                       setIsPassageModalOpen(true);
                     }} 
                     className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
@@ -1835,11 +1916,13 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     >
                       {currentDays.map(d => (
                         <option key={d} value={d}>
-                          DAY {d}로 이동
+                          {selectedWordbook.type === 'sentence-order' ? `지문 ${d}로 이동` : `DAY ${d}로 이동`}
                         </option>
                       ))}
-                      <option value={(currentDays[currentDays.length - 1] || 0) + 1}>
-                        + 신규 DAY {(currentDays[currentDays.length - 1] || 0) + 1}로 이동
+                      <option value={(Math.max(...currentDays, 0)) + 1}>
+                        {selectedWordbook.type === 'sentence-order'
+                          ? `+ 신규 지문 ${(Math.max(...currentDays, 0)) + 1}로 이동`
+                          : `+ 신규 DAY ${(Math.max(...currentDays, 0)) + 1}로 이동`}
                       </option>
                     </select>
                     <button
@@ -2277,7 +2360,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   🧩 지문 문장 순서 일괄 등록
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  영문 문장과 한국어 해석을 번갈아 입력하거나 탭(\t) 또는 // 로 구분하여 입력하세요.
+                  지문 번호를 자유롭게 지정하거나, <span className="text-indigo-600 font-bold">[지문 1], [지문 10]</span> 등 머리글을 포함하여 원하는 만큼 여러 지문을 한 번에 등록하세요.
                 </p>
               </div>
               <button onClick={() => setIsPassageModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100">
@@ -2286,21 +2369,42 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">등록 대상 지문</label>
-                  <select
-                    value={passageTargetDay}
-                    onChange={(e) => setPassageTargetDay(parseInt(e.target.value))}
-                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                  >
-                    {currentDays.map(d => (
-                      <option key={d} value={d}>지문 {d}</option>
-                    ))}
-                    <option value={(currentDays[currentDays.length - 1] || 0) + 1}>
-                      + 새 지문 {(currentDays[currentDays.length - 1] || 0) + 1} 생성
-                    </option>
-                  </select>
+                  <div className="flex items-center justify-between mb-1 ml-1">
+                    <label className="block text-xs font-bold text-slate-500">등록 대상 지문</label>
+                    <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                      현재 선택: 지문 {passageTargetDay}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={passageTargetDay}
+                      onChange={(e) => setPassageTargetDay(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="flex-1 p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                    >
+                      {!currentDays.includes(passageTargetDay) && (
+                        <option value={passageTargetDay}>지문 {passageTargetDay} (직접 지정)</option>
+                      )}
+                      {currentDays.map(d => (
+                        <option key={d} value={d}>지문 {d}</option>
+                      ))}
+                      <option value={(Math.max(...currentDays, 0)) + 1}>
+                        + 새 지문 {(Math.max(...currentDays, 0)) + 1} 생성
+                      </option>
+                    </select>
+                    <div className="flex items-center gap-1 shrink-0 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2" title="원하는 지문 번호를 직접 숫자로 입력">
+                      <span className="text-xs font-bold text-slate-400">지문</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={passageTargetDay}
+                        onChange={(e) => setPassageTargetDay(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-14 p-1 bg-white border border-slate-200 rounded-lg text-center font-black text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                      <span className="text-xs font-bold text-slate-400">번</span>
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">지문 제목 (선택)</label>
@@ -2317,33 +2421,53 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
               <div>
                 <div className="flex justify-between items-center mb-1.5 ml-1">
                   <label className="text-xs font-bold text-slate-500">문장 입력란 (영문 - 한글 교차 또는 탭 구분)</label>
-                  <span className="text-[11px] text-indigo-600 font-bold bg-indigo-50 px-2.5 py-0.5 rounded-lg">
-                    {parsedPassageSentences.length}개 문장 감지됨
-                  </span>
+                  {parsedPassageGroups.length > 1 ? (
+                    <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg">
+                      🎉 다중 지문 {parsedPassageGroups.length}개 감지됨 (총 {totalParsedSentences}문장)
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-indigo-600 font-bold bg-indigo-50 px-2.5 py-0.5 rounded-lg">
+                      {totalParsedSentences}개 문장 감지됨
+                    </span>
+                  )}
                 </div>
                 <textarea
                   value={passageInputText}
                   onChange={(e) => setPassageInputText(e.target.value)}
-                  placeholder={`[입력 예시 1: 줄바꿈 교차]\nThe sun rises in the east.\n태양은 동쪽에서 뜬다.\nIt provides light and warmth to our planet.\n그것은 우리 행성에 빛과 온기를 제공한다.\nPlants use sunlight to make food through photosynthesis.\n식물은 광합성을 통해 음식을 만들기 위해 햇빛을 사용한다.\n\n[입력 예시 2: 탭(\t) 또는 // 구분]\nFirst sentence.\t첫 번째 문장 해석.\nSecond sentence.\t두 번째 문장 해석.`}
+                  placeholder={`[입력 예시 1: 여러 지문 한 번에 일괄 등록]\n[지문 1] 첫 번째 지문 제목\nThe sun rises in the east.\n태양은 동쪽에서 뜬다.\n\n[지문 10] 열 번째 지문 제목\nTechnology advances rapidly.\n기술은 빠르게 발전한다.\n\n[입력 예시 2: 단일 지문 줄바꿈 교차]\nThe sun rises in the east.\n태양은 동쪽에서 뜬다.\nIt provides light and warmth.\n그것은 빛과 온기를 제공한다.\n\n[입력 예시 3: 탭(\\t) 또는 // 구분]\nFirst sentence.\t첫 번째 문장 해석.\nSecond sentence.\t두 번째 문장 해석.`}
                   rows={8}
                   className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-xs outline-none focus:ring-2 focus:ring-indigo-200 resize-none leading-relaxed"
                 />
               </div>
 
-              {parsedPassageSentences.length > 0 && (
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 max-h-48 overflow-y-auto">
-                  <div className="text-xs font-black text-slate-600 mb-2">
-                    미리보기 (지문 {passageTargetDay} • 총 {parsedPassageSentences.length}문장 순서)
-                  </div>
-                  {parsedPassageSentences.map((s, idx) => (
-                    <div key={idx} className="bg-white p-3 rounded-xl border border-slate-100 text-xs space-y-1 shadow-2xs">
-                      <div className="font-black text-indigo-700 flex items-center gap-1.5">
-                        <span className="w-5 h-5 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-[10px] font-black shrink-0">
-                          {idx + 1}
+              {parsedPassageGroups.length > 0 && totalParsedSentences > 0 && (
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 max-h-56 overflow-y-auto custom-scrollbar">
+                  {parsedPassageGroups.length > 1 && (
+                    <div className="flex flex-wrap gap-1.5 pb-2 border-b border-slate-200">
+                      {parsedPassageGroups.map((g, gi) => (
+                        <span key={gi} className="px-2 py-1 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-xs font-black">
+                          지문 {g.day} ({g.sentences.length}문장)
                         </span>
-                        {s.english}
+                      ))}
+                    </div>
+                  )}
+                  {parsedPassageGroups.map((group, gi) => (
+                    <div key={gi} className="space-y-1.5">
+                      <div className="text-xs font-black text-slate-700 flex items-center justify-between">
+                        <span>미리보기: 지문 {group.day} {group.title ? `(${group.title})` : ''}</span>
+                        <span className="text-slate-400 font-medium">{group.sentences.length}개 문장</span>
                       </div>
-                      <div className="text-slate-500 font-medium pl-6.5">{s.korean}</div>
+                      {group.sentences.map((s, idx) => (
+                        <div key={idx} className="bg-white p-3 rounded-xl border border-slate-100 text-xs space-y-1 shadow-2xs">
+                          <div className="font-black text-indigo-700 flex items-center gap-1.5">
+                            <span className="w-5 h-5 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-[10px] font-black shrink-0">
+                              {idx + 1}
+                            </span>
+                            {s.english}
+                          </div>
+                          <div className="text-slate-500 font-medium pl-6.5">{s.korean}</div>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
@@ -2356,10 +2480,12 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
               </button>
               <button
                 onClick={handleSavePassageSentences}
-                disabled={parsedPassageSentences.length === 0}
+                disabled={totalParsedSentences === 0}
                 className="flex-1 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 transition-all"
               >
-                지문 {passageTargetDay}에 {parsedPassageSentences.length}개 문장 등록하기
+                {parsedPassageGroups.length > 1
+                  ? `총 ${parsedPassageGroups.length}개 지문 (${totalParsedSentences}개 문장) 일괄 등록하기`
+                  : `지문 ${parsedPassageGroups[0]?.day || passageTargetDay}에 ${totalParsedSentences}개 문장 등록하기`}
               </button>
             </div>
           </motion.div>
@@ -3923,15 +4049,20 @@ function SortableWordCard({
                 className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black text-xs py-0.5 px-2 rounded-lg cursor-pointer transition-all border border-indigo-200 outline-none"
                 title={selectedWordbook.type === 'sentence-order' ? "지문 번호 변경" : "단어 소속 DAY 변경"}
               >
+                {!availableDays.includes(currentDay) && (
+                  <option value={currentDay}>
+                    {selectedWordbook.type === 'sentence-order' ? `지문 ${currentDay}` : `DAY ${currentDay}`}
+                  </option>
+                )}
                 {availableDays.map((d) => (
                   <option key={d} value={d}>
                     {selectedWordbook.type === 'sentence-order' ? `지문 ${d}` : `DAY ${d}`}
                   </option>
                 ))}
-                <option value={(availableDays[availableDays.length - 1] || 0) + 1}>
+                <option value={(Math.max(...availableDays, 0)) + 1}>
                   {selectedWordbook.type === 'sentence-order'
-                    ? `+ 새 지문 ${(availableDays[availableDays.length - 1] || 0) + 1}`
-                    : `+ DAY ${(availableDays[availableDays.length - 1] || 0) + 1}`}
+                    ? `+ 새 지문 ${(Math.max(...availableDays, 0)) + 1}`
+                    : `+ DAY ${(Math.max(...availableDays, 0)) + 1}`}
                 </option>
               </select>
             </div>
