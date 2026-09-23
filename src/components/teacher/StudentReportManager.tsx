@@ -267,15 +267,24 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
     return `${yyyy}-${mm}-${dd} (${day})`;
   };
 
-  const formatDayRange = (start?: number, end?: number, category?: string) => {
-    if (start === undefined || start === null) return null;
+  const formatDayRange = (start?: any, end?: any, category?: string) => {
+    if (start === undefined || start === null || start === '') return null;
+    const numStart = Number(start);
+    const numEnd = (end !== undefined && end !== null && end !== '') ? Number(end) : numStart;
+    if (isNaN(numStart)) return null;
     const isGrammar = category === 'grammar';
-    const finalEnd = end ?? start;
+    const isExam = category === 'exam';
     if (isGrammar) {
-      return start === finalEnd ? `${start}세트` : `${start}~${finalEnd}세트`;
+      return numStart === numEnd ? `${numStart}세트` : `${numStart}~${numEnd}세트`;
     }
-    return start === finalEnd ? `DAY ${start}` : `DAY ${start}~${finalEnd}`;
+    if (isExam) {
+      return numStart === numEnd ? `지문 ${numStart}` : `지문 ${numStart}~${numEnd}`;
+    }
+    return numStart === numEnd ? `DAY ${numStart}` : `DAY ${numStart}~${numEnd}`;
   };
+
+  const testSessions = sessionHistory.filter(s => s.type === 'test');
+  const studySessionsCount = sessionHistory.length - testSessions.length;
 
   const totalAssignmentPages = Math.ceil(studentAssignments.length / ASSIGNMENTS_PER_PAGE);
   const paginatedAssignments = studentAssignments.slice((assignmentPage - 1) * ASSIGNMENTS_PER_PAGE, assignmentPage * ASSIGNMENTS_PER_PAGE);
@@ -600,9 +609,9 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                     학습 리포트 상세
                   </h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-                    <div className="p-6 bg-blue-50 rounded-3xl border border-blue-100 flex items-center gap-4">
-                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    <div className="p-5 bg-blue-50 rounded-3xl border border-blue-100 flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
                         <BookOpen className="text-blue-500" />
                       </div>
                       <div>
@@ -610,8 +619,8 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                         <div className="text-2xl font-black text-slate-900">{stats.learnedWords}개</div>
                       </div>
                     </div>
-                    <div className="p-6 bg-emerald-50 rounded-3xl border border-emerald-100 flex items-center gap-4">
-                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
+                    <div className="p-5 bg-emerald-50 rounded-3xl border border-emerald-100 flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
                         <Calendar className="text-emerald-500" />
                       </div>
                       <div>
@@ -619,29 +628,100 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                         <div className="text-2xl font-black text-slate-900">{stats.attendanceRate}%</div>
                       </div>
                     </div>
-                    <div className="p-6 bg-amber-50 rounded-3xl border border-amber-100 flex items-center gap-4">
-                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
+                    <div className="p-5 bg-amber-50 rounded-3xl border border-amber-100 flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
                         <Clock className="text-amber-500" />
                       </div>
                       <div>
                         <div className="text-xs font-bold text-amber-600 mb-1">총 학습 시간</div>
-                        <div className="text-2xl font-black text-slate-900">
+                        <div className="text-xl font-black text-slate-900">
                           {Math.floor(stats.totalPlayTime / 60)}분 {stats.totalPlayTime % 60}초
                         </div>
                       </div>
                     </div>
-                    <div className="p-6 bg-indigo-50 rounded-3xl border border-indigo-100 flex items-center gap-4">
-                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
-                        <Gamepad2 className="text-indigo-500" />
+                    <div className="p-5 bg-rose-50 rounded-3xl border border-rose-100 flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+                        <Trophy className="text-rose-500" />
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-indigo-600 mb-1">총 게임 횟수</div>
-                        <div className="text-2xl font-black text-slate-900">
-                          {(Object.values(stats.gameCountsCount) as number[]).reduce((a, b) => a + b, 0)}회
-                        </div>
+                        <div className="text-xs font-bold text-rose-600 mb-1">단어 테스트</div>
+                        <div className="text-2xl font-black text-slate-900">{testSessions.length}회</div>
+                        {testSessions[0] && (
+                          <div className="text-[10px] font-bold text-rose-400 mt-0.5">
+                            최근: {formatDayRange(testSessions[0].dayStart, testSessions[0].dayEnd, testSessions[0].category) || '완료'}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
+
+                  {/* 단어 테스트 성적표 & 학습자 설정 DAY */}
+                  {testSessions.length > 0 && (
+                    <div className="p-6 bg-linear-to-br from-rose-50/70 via-pink-50/40 to-indigo-50/40 rounded-[2rem] border border-rose-100/80 mb-8 shadow-2xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center shadow-xs">
+                            <Trophy size={16} />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                              단어 테스트 성적표
+                              <span className="text-[10px] font-bold text-rose-600 bg-white px-2 py-0.5 rounded-full border border-rose-200">
+                                총 {testSessions.length}회 응시
+                              </span>
+                            </h3>
+                            <p className="text-[11px] text-slate-500 font-medium">학습자가 직접 설정한 DAY 및 단어 테스트 결과입니다.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {testSessions.slice(0, 4).map((ts, idx) => {
+                          const percentage = ts.totalItems ? Math.round((ts.score! / ts.totalItems) * 100) : 0;
+                          const isPassed = percentage >= 90;
+                          const dayText = formatDayRange(ts.dayStart, ts.dayEnd, ts.category);
+                          return (
+                            <div key={idx} className="bg-white p-4 rounded-2xl border border-rose-100 shadow-2xs flex flex-col justify-between gap-3 hover:shadow-sm transition-all">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-rose-500 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
+                                      {ts.category === 'exam' ? '시험대비' : ts.category === 'grammar' ? '문법세트' : '단어장'}
+                                    </span>
+                                    {dayText && (
+                                      <span className="text-xs font-black text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-lg border border-rose-200 inline-flex items-center gap-1">
+                                        <span className="text-[9px] font-bold text-rose-400">설정 DAY:</span>
+                                        {dayText}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <h4 className="text-sm font-black text-slate-900 line-clamp-1">{ts.wordbookTitle || '단어장'}</h4>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className={`text-base font-black ${isPassed ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {percentage}점
+                                  </div>
+                                  <div className="text-[10px] font-bold text-slate-400">
+                                    {ts.score}/{ts.totalItems ?? '-'}문항
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium pt-2 border-t border-slate-50">
+                                <span className="flex items-center gap-1">
+                                  <Clock size={12} />
+                                  {ts.duration}초 소요
+                                </span>
+                                <span>
+                                  {ts.createdAt?.toMillis ? new Date(ts.createdAt.toMillis()).toLocaleString() : '최근'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 mb-8">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -661,7 +741,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                               : 'text-slate-500 hover:text-slate-800'
                           }`}
                         >
-                          전체
+                          전체 ({sessionHistory.length})
                         </button>
                         <button
                           onClick={() => { setSessionFilter('test'); setSessionPage(1); }}
@@ -672,7 +752,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                           }`}
                         >
                           <Trophy size={13} />
-                          단어 테스트
+                          단어 테스트 ({testSessions.length})
                         </button>
                         <button
                           onClick={() => { setSessionFilter('study'); setSessionPage(1); }}
@@ -682,7 +762,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                               : 'text-slate-500 hover:text-slate-800'
                           }`}
                         >
-                          퀴즈·학습
+                          퀴즈·학습 ({studySessionsCount})
                         </button>
                       </div>
                     </div>
@@ -707,12 +787,15 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-bold text-slate-900 text-sm">{session.wordbookTitle || '단어장'}</span>
                                   {session.dayStart !== undefined && (
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-black border shadow-2xs ${
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-black border shadow-2xs ${
                                       session.type === 'test'
-                                        ? 'bg-rose-50 text-rose-600 border-rose-200'
-                                        : 'bg-indigo-50 text-indigo-600 border-indigo-200'
+                                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                        : 'bg-indigo-50 text-indigo-700 border-indigo-200'
                                     }`}>
                                       {session.type === 'test' && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse inline-block" />}
+                                      <span className="text-[10px] font-bold opacity-70">
+                                        {session.type === 'test' ? '학습자 설정 DAY:' : '범위:'}
+                                      </span>
                                       {formatDayRange(session.dayStart, session.dayEnd, session.category)}
                                     </span>
                                   )}
@@ -728,8 +811,8 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                                   {session.dayStart !== undefined && (
                                     <>
                                       <span>•</span>
-                                      <span className="font-bold text-indigo-600 bg-indigo-50/80 px-1.5 py-0.5 rounded text-[10px] border border-indigo-100">
-                                        설정 범위: {formatDayRange(session.dayStart, session.dayEnd, session.category)}
+                                      <span className="font-bold text-rose-600 bg-rose-50/80 px-1.5 py-0.5 rounded text-[10px] border border-rose-100">
+                                        설정 DAY: {formatDayRange(session.dayStart, session.dayEnd, session.category)}
                                       </span>
                                     </>
                                   )}

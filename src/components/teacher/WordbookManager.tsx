@@ -35,7 +35,7 @@ interface Wordbook {
   createdBy: string;
   createdAt: any;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming' | 'comparative-grammar';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming' | 'comparative-grammar' | 'sentence-order';
   category?: 'word' | 'grammar' | 'exam';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -55,6 +55,7 @@ interface Word {
   example?: string;
   imageUrl?: string;
   order?: number;
+  passageTitle?: string;
 }
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -101,12 +102,20 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const [editWbDistractorsValue, setEditWbDistractorsValue] = useState('');
   const [editWbUnitSizeValue, setEditWbUnitSizeValue] = useState(10);
   const [editWbCategoryValue, setEditWbCategoryValue] = useState<'word' | 'grammar' | 'exam'>(category);
+  const [editWbTypeValue, setEditWbTypeValue] = useState<'standard' | 'sentence-order'>('standard');
 
   // Category navigation & creation states
   const [newWbCategory, setNewWbCategory] = useState<'word' | 'grammar' | 'exam'>(category);
+  const [newWbType, setNewWbType] = useState<'standard' | 'sentence-order'>('standard');
   const [mergeTargetCategory, setMergeTargetCategory] = useState<'word' | 'grammar' | 'exam'>(category);
   const [moveToastMessage, setMoveToastMessage] = useState<string | null>(null);
   const [allWordbooks, setAllWordbooks] = useState<Wordbook[]>([]);
+
+  // Sentence-order passage modal states
+  const [isPassageModalOpen, setIsPassageModalOpen] = useState(false);
+  const [passageInputText, setPassageInputText] = useState('');
+  const [passageTargetDay, setPassageTargetDay] = useState(1);
+  const [passageTitleInput, setPassageTitleInput] = useState('');
 
   // Individual add states
   const [isIndividualAddOpen, setIsIndividualAddOpen] = useState(false);
@@ -310,10 +319,129 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     return sorted.length > 0 ? sorted : [1];
   }, [words, selectedWordbook]);
 
+  const parsePassageInput = (text: string): { english: string; korean: string }[] => {
+    const result: { english: string; korean: string }[] = [];
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return result;
+
+    const hasTab = lines.some(l => l.includes('\t'));
+    if (hasTab) {
+      for (const line of lines) {
+        if (line.includes('\t')) {
+          const parts = line.split('\t').map(p => p.trim()).filter(Boolean);
+          if (parts.length >= 2) {
+            result.push({ english: parts[0], korean: parts.slice(1).join(' ') });
+          }
+        }
+      }
+      return result;
+    }
+
+    const hasDoubleSlash = lines.some(l => l.includes('//'));
+    if (hasDoubleSlash) {
+      for (const line of lines) {
+        if (line.includes('//')) {
+          const parts = line.split('//').map(p => p.trim()).filter(Boolean);
+          if (parts.length >= 2) {
+            result.push({ english: parts[0], korean: parts.slice(1).join(' ') });
+          }
+        }
+      }
+      return result;
+    }
+
+    for (let i = 0; i < lines.length; i += 2) {
+      const en = lines[i];
+      const ko = lines[i + 1] || '(해석 없음)';
+      result.push({ english: en, korean: ko });
+    }
+    return result;
+  };
+
+  const parsedPassageSentences = React.useMemo(() => {
+    return parsePassageInput(passageInputText);
+  }, [passageInputText]);
+
   const displayedWords = React.useMemo(() => {
-    if (activeDayFilter === 'all') return words;
-    return words.filter((w, i) => getWordDay(w, i) === activeDayFilter);
+    let list = words;
+    if (activeDayFilter !== 'all') {
+      list = words.filter((w, i) => getWordDay(w, i) === activeDayFilter);
+    }
+    if (selectedWordbook?.type === 'sentence-order') {
+      return [...list].sort((a, b) => {
+        const dayA = a.day || 1;
+        const dayB = b.day || 1;
+        if (dayA !== dayB) return dayA - dayB;
+        return (a.order ?? 0) - (b.order ?? 0);
+      });
+    }
+    return list;
   }, [words, activeDayFilter, selectedWordbook]);
+
+  const handleSavePassageSentences = async () => {
+    if (!selectedWordbook || parsedPassageSentences.length === 0) return;
+    try {
+      const batch = writeBatch(db);
+      const existingInPassage = words.filter(w => (w.day || 1) === passageTargetDay);
+      const startOrder = existingInPassage.length > 0
+        ? Math.max(...existingInPassage.map(w => w.order ?? 0)) + 1
+        : 1;
+
+      parsedPassageSentences.forEach((item, idx) => {
+        const docRef = doc(collection(db, `wordbooks/${selectedWordbook.id}/words`));
+        batch.set(docRef, {
+          word: item.english,
+          meaning: item.korean,
+          day: passageTargetDay,
+          order: startOrder + idx,
+          passageTitle: passageTitleInput.trim() || `지문 ${passageTargetDay}`,
+          createdAt: Timestamp.now()
+        });
+      });
+
+      await batch.commit();
+      setIsPassageModalOpen(false);
+      setPassageInputText('');
+      setPassageTitleInput('');
+      alert(`지문 ${passageTargetDay}에 ${parsedPassageSentences.length}개의 문장이 순서대로 등록되었습니다.`);
+    } catch (error) {
+      console.error('Failed to save passage sentences:', error);
+      alert('문장 등록 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleMoveSentenceOrder = async (word: Word, direction: 'up' | 'down') => {
+    if (!selectedWordbook) return;
+    const wordDay = word.day || 1;
+    const passageWords = words
+      .filter(w => (w.day || 1) === wordDay)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    const idx = passageWords.findIndex(w => w.id === word.id);
+    if (idx === -1) return;
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= passageWords.length) return;
+
+    const targetWord = passageWords[targetIdx];
+    const curOrder = word.order ?? (idx + 1);
+    const targetOrder = targetWord.order ?? (targetIdx + 1);
+
+    const batch = writeBatch(db);
+    batch.update(doc(db, `wordbooks/${selectedWordbook.id}/words`, word.id), { order: targetOrder });
+    batch.update(doc(db, `wordbooks/${selectedWordbook.id}/words`, targetWord.id), { order: curOrder });
+    await batch.commit();
+  };
+
+  const handleDeletePassage = async (passageDay: number) => {
+    if (!selectedWordbook) return;
+    if (!window.confirm(`지문 ${passageDay}에 포함된 모든 문장을 삭제하시겠습니까?`)) return;
+    const passageWords = words.filter(w => (w.day || 1) === passageDay);
+    const batch = writeBatch(db);
+    passageWords.forEach(w => {
+      batch.delete(doc(db, `wordbooks/${selectedWordbook.id}/words`, w.id));
+    });
+    await batch.commit();
+  };
 
   const handleUpdateWordDay = async (wordId: string, newDay: number) => {
     if (!selectedWordbook) return;
@@ -605,9 +733,12 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         createdBy: auth.currentUser.uid,
         createdAt: Timestamp.now(),
         order: maxOrder + 1,
-        category: newWbCategory || category
+        category: newWbCategory || category,
+        type: newWbType || 'standard',
+        defaultUnitSize: newWbType === 'sentence-order' ? 1 : 10
       });
       setNewTitle('');
+      setNewWbType('standard');
       setIsAddModalOpen(false);
     } catch (error) {
       console.error('Failed to create wordbook:', error);
@@ -952,6 +1083,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         title: editWbTitleValue.trim(),
         defaultUnitSize: editWbUnitSizeValue,
         category: editWbCategoryValue,
+        type: editWbTypeValue,
         updatedAt: Timestamp.now()
       };
 
@@ -1480,6 +1612,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                       setEditWbUnitSizeValue(wb.defaultUnitSize || 10);
                       setEditWbDistractorsValue(wb.customDistractors?.join(', ') || '');
                       setEditWbCategoryValue(wb.category || (wb.type === 'irregular' ? 'grammar' : 'word'));
+                      setEditWbTypeValue(wb.type === 'sentence-order' ? 'sentence-order' : 'standard');
                     }}
                     onMoveCategory={(targetCat) => handleMoveWordbookCategory(wb.id, targetCat, wb.title)}
                   />
@@ -1498,54 +1631,78 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
             <button onClick={() => setSelectedWordbook(null)} className="text-sm font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1">
               ← 단어장 목록으로
             </button>
-            <div className="flex gap-3">
-              <button 
-                onClick={() => {
-                  setTestPaperConfig({
-                    ...testPaperConfig,
-                    title: selectedWordbook.title,
-                    unitSize: selectedWordbook.defaultUnitSize || 10
-                  });
-                  setIsTestPaperModalOpen(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl font-bold text-sm hover:bg-blue-100 transition-all"
-              >
-                <FileText size={16} />
-                시험지 만들기
-              </button>
-              <button 
-                onClick={() => {
-                  if (selectedWordbook) {
-                    setPrintConfig({
-                      ...printConfig,
-                      unitSize: selectedWordbook.defaultUnitSize || 40
-                    });
-                    setIsPrintModalOpen(true);
-                  }
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-pink-50 text-pastel-pink-600 rounded-xl font-bold text-sm hover:bg-pink-100 transition-all border border-pastel-pink-100"
-              >
-                <Download size={16} />
-                단어장 출력하기
-              </button>
-              <button onClick={() => setIsBulkAddOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-all">
-                <FileSpreadsheet size={16} />
-                엑셀로 단어 추가
-              </button>
-              <button 
-                onClick={() => setIsDayManagementOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-all border border-indigo-100"
-              >
-                <Calendar size={16} />
-                DAY 일괄 설정
-              </button>
-              <button 
-                onClick={() => setIsIndividualAddOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-pastel-pink-500 text-white rounded-xl font-bold text-sm hover:bg-pastel-pink-600 transition-all"
-              >
-                <Plus size={16} />
-                단어 개별 추가
-              </button>
+            <div className="flex gap-2 flex-wrap items-center">
+              {selectedWordbook.type === 'sentence-order' ? (
+                <>
+                  <button 
+                    onClick={() => {
+                      setPassageTargetDay(currentDays[0] || 1);
+                      setIsPassageModalOpen(true);
+                    }} 
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
+                  >
+                    <FileText size={16} />
+                    🧩 지문 일괄 등록
+                  </button>
+                  <button 
+                    onClick={() => setIsIndividualAddOpen(true)} 
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-all border border-indigo-200"
+                  >
+                    <Plus size={16} />
+                    문장 개별 추가
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button 
+                    onClick={() => {
+                      setTestPaperConfig({
+                        ...testPaperConfig,
+                        title: selectedWordbook.title,
+                        unitSize: selectedWordbook.defaultUnitSize || 10
+                      });
+                      setIsTestPaperModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl font-bold text-sm hover:bg-blue-100 transition-all"
+                  >
+                    <FileText size={16} />
+                    시험지 만들기
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (selectedWordbook) {
+                        setPrintConfig({
+                          ...printConfig,
+                          unitSize: selectedWordbook.defaultUnitSize || 40
+                        });
+                        setIsPrintModalOpen(true);
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-pink-50 text-pastel-pink-600 rounded-xl font-bold text-sm hover:bg-pink-100 transition-all border border-pastel-pink-100"
+                  >
+                    <Download size={16} />
+                    단어장 출력하기
+                  </button>
+                  <button onClick={() => setIsBulkAddOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-all">
+                    <FileSpreadsheet size={16} />
+                    엑셀로 단어 추가
+                  </button>
+                  <button 
+                    onClick={() => setIsDayManagementOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-all border border-indigo-100"
+                  >
+                    <Calendar size={16} />
+                    DAY 일괄 설정
+                  </button>
+                  <button 
+                    onClick={() => setIsIndividualAddOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-pastel-pink-500 text-white rounded-xl font-bold text-sm hover:bg-pastel-pink-600 transition-all"
+                  >
+                    <Plus size={16} />
+                    단어 개별 추가
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -1564,6 +1721,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                       setEditWbUnitSizeValue(selectedWordbook.defaultUnitSize || 10);
                       setEditWbDistractorsValue(selectedWordbook.customDistractors?.join(', ') || '');
                       setEditWbCategoryValue(selectedWordbook.category || (selectedWordbook.type === 'irregular' ? 'grammar' : 'word'));
+                      setEditWbTypeValue(selectedWordbook.type === 'sentence-order' ? 'sentence-order' : 'standard');
                     }}
                     className="p-2 text-slate-300 hover:text-pastel-pink-500 transition-colors"
                     title="단어장 설정 및 카테고리 수정"
@@ -1599,12 +1757,12 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
               </button>
             </div>
 
-            {/* DAY Filter Tabs & Batch Selection Bar */}
+            {/* DAY / Passage Filter Tabs & Batch Selection Bar */}
             <div className="mb-6 space-y-3 pb-6 border-b border-slate-100">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full custom-scrollbar">
                   <span className="text-xs font-black text-slate-400 mr-1 flex items-center gap-1">
-                    <Calendar size={14} /> DAY 선택:
+                    {selectedWordbook.type === 'sentence-order' ? '🧩 지문 선택:' : <><Calendar size={14} /> DAY 선택:</>}
                   </span>
                   <button
                     onClick={() => setActiveDayFilter('all')}
@@ -1628,13 +1786,22 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                             : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
                         }`}
                       >
-                        DAY {d} ({count})
+                        {selectedWordbook.type === 'sentence-order' ? `지문 ${d} (${count}문장)` : `DAY ${d} (${count})`}
                       </button>
                     );
                   })}
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {selectedWordbook.type === 'sentence-order' && typeof activeDayFilter === 'number' && (
+                    <button
+                      onClick={() => handleDeletePassage(activeDayFilter)}
+                      className="text-xs font-bold text-red-500 hover:text-red-700 px-2.5 py-1.5 rounded-lg border border-red-200 hover:bg-red-50 transition-all flex items-center gap-1"
+                    >
+                      <Trash2 size={13} />
+                      지문 {activeDayFilter} 전체 삭제
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       if (selectedWordIds.length === displayedWords.length) {
@@ -1714,6 +1881,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                       currentDay={getWordDay(word, index)}
                       availableDays={currentDays}
                       onDayChange={(newDay) => handleUpdateWordDay(word.id, newDay)}
+                      onMoveOrder={(dir) => handleMoveSentenceOrder(word, dir)}
                       isSelected={selectedWordIds.includes(word.id)}
                       onToggleSelect={() => {
                         setSelectedWordIds(prev => 
@@ -1750,7 +1918,9 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   ))}
                   {displayedWords.length === 0 && (
                     <div className="col-span-2 py-20 text-center text-slate-400 font-medium">
-                      {activeDayFilter === 'all' ? '등록된 단어가 없습니다.' : `DAY ${activeDayFilter}에 배정된 단어가 없습니다.`}
+                      {selectedWordbook.type === 'sentence-order'
+                        ? (activeDayFilter === 'all' ? '등록된 지문 문장이 없습니다. [🧩 지문 일괄 등록] 버튼을 눌러 지문을 추가해보세요.' : `지문 ${activeDayFilter}에 등록된 문장이 없습니다.`)
+                        : (activeDayFilter === 'all' ? '등록된 단어가 없습니다.' : `DAY ${activeDayFilter}에 배정된 단어가 없습니다.`)}
                     </div>
                   )}
                 </div>
@@ -1893,6 +2063,41 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 />
               </div>
               <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">단어장 유형</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewWbType('standard')}
+                    className={`py-3 px-3 rounded-xl text-xs font-black border transition-all ${
+                      newWbType === 'standard'
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    📖 일반 단어장
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewWbType('sentence-order');
+                      setNewWbCategory('exam');
+                    }}
+                    className={`py-3 px-3 rounded-xl text-xs font-black border transition-all ${
+                      newWbType === 'sentence-order'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    🧩 문장 순서 배열
+                  </button>
+                </div>
+                {newWbType === 'sentence-order' && (
+                  <p className="text-[11px] text-indigo-700 font-bold mt-2 ml-1 bg-indigo-50 p-2.5 rounded-xl border border-indigo-100 leading-relaxed">
+                    ✨ <strong>시험기간 대비 문장 순서 배열:</strong> 여러 지문의 문장들을 순서대로 등록하고, 퀴즈에서는 "다음으로 올 문장을 고르시오" 객관식으로 지문을 완성합니다. (오답 선지는 다른 지문에서 무작위 추출)
+                  </p>
+                )}
+              </div>
+              <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">소속 탭 (카테고리)</label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
@@ -1954,6 +2159,33 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   placeholder="단어장 제목"
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">단어장 유형</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditWbTypeValue('standard')}
+                    className={`py-3 px-3 rounded-xl text-xs font-black border transition-all ${
+                      editWbTypeValue === 'standard'
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    📖 일반 단어장
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditWbTypeValue('sentence-order')}
+                    className={`py-3 px-3 rounded-xl text-xs font-black border transition-all ${
+                      editWbTypeValue === 'sentence-order'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    🧩 문장 순서 배열
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">소속 탭 (카테고리 이동)</label>
@@ -2035,7 +2267,104 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         </div>
       )}
 
-      {/* Edit Word Modal */}
+      {/* Passage Bulk Add Modal for sentence-order */}
+      {isPassageModalOpen && selectedWordbook && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-2xl w-full bg-white rounded-[2.5rem] p-8 md:p-10 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                  🧩 지문 문장 순서 일괄 등록
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  영문 문장과 한국어 해석을 번갈아 입력하거나 탭(\t) 또는 // 로 구분하여 입력하세요.
+                </p>
+              </div>
+              <button onClick={() => setIsPassageModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">등록 대상 지문</label>
+                  <select
+                    value={passageTargetDay}
+                    onChange={(e) => setPassageTargetDay(parseInt(e.target.value))}
+                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                  >
+                    {currentDays.map(d => (
+                      <option key={d} value={d}>지문 {d}</option>
+                    ))}
+                    <option value={(currentDays[currentDays.length - 1] || 0) + 1}>
+                      + 새 지문 {(currentDays[currentDays.length - 1] || 0) + 1} 생성
+                    </option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">지문 제목 (선택)</label>
+                  <input
+                    type="text"
+                    value={passageTitleInput}
+                    onChange={(e) => setPassageTitleInput(e.target.value)}
+                    placeholder="예: 2024년 3월 고1 학평 21번"
+                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1.5 ml-1">
+                  <label className="text-xs font-bold text-slate-500">문장 입력란 (영문 - 한글 교차 또는 탭 구분)</label>
+                  <span className="text-[11px] text-indigo-600 font-bold bg-indigo-50 px-2.5 py-0.5 rounded-lg">
+                    {parsedPassageSentences.length}개 문장 감지됨
+                  </span>
+                </div>
+                <textarea
+                  value={passageInputText}
+                  onChange={(e) => setPassageInputText(e.target.value)}
+                  placeholder={`[입력 예시 1: 줄바꿈 교차]\nThe sun rises in the east.\n태양은 동쪽에서 뜬다.\nIt provides light and warmth to our planet.\n그것은 우리 행성에 빛과 온기를 제공한다.\nPlants use sunlight to make food through photosynthesis.\n식물은 광합성을 통해 음식을 만들기 위해 햇빛을 사용한다.\n\n[입력 예시 2: 탭(\t) 또는 // 구분]\nFirst sentence.\t첫 번째 문장 해석.\nSecond sentence.\t두 번째 문장 해석.`}
+                  rows={8}
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-xs outline-none focus:ring-2 focus:ring-indigo-200 resize-none leading-relaxed"
+                />
+              </div>
+
+              {parsedPassageSentences.length > 0 && (
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2 max-h-48 overflow-y-auto">
+                  <div className="text-xs font-black text-slate-600 mb-2">
+                    미리보기 (지문 {passageTargetDay} • 총 {parsedPassageSentences.length}문장 순서)
+                  </div>
+                  {parsedPassageSentences.map((s, idx) => (
+                    <div key={idx} className="bg-white p-3 rounded-xl border border-slate-100 text-xs space-y-1 shadow-2xs">
+                      <div className="font-black text-indigo-700 flex items-center gap-1.5">
+                        <span className="w-5 h-5 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-[10px] font-black shrink-0">
+                          {idx + 1}
+                        </span>
+                        {s.english}
+                      </div>
+                      <div className="text-slate-500 font-medium pl-6.5">{s.korean}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-4 mt-2 border-t border-slate-100">
+              <button onClick={() => setIsPassageModalOpen(false)} className="flex-1 py-3.5 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">
+                취소
+              </button>
+              <button
+                onClick={handleSavePassageSentences}
+                disabled={parsedPassageSentences.length === 0}
+                className="flex-1 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 transition-all"
+              >
+                지문 {passageTargetDay}에 {parsedPassageSentences.length}개 문장 등록하기
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
       {editingWord && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
@@ -2220,30 +2549,48 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       {isIndividualAddOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
-            <h2 className="text-2xl font-black text-slate-900 mb-6">단어 추가</h2>
+            <h2 className="text-2xl font-black text-slate-900 mb-6">
+              {selectedWordbook?.type === 'sentence-order' ? '문장 추가' : '단어 추가'}
+            </h2>
             <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">단어</label>
-                <input
-                  type="text"
-                  value={newWord}
-                  onChange={(e) => setNewWord(e.target.value)}
-                  placeholder="예: apple"
-                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
-                />
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">
+                  {selectedWordbook?.type === 'sentence-order' ? '영문 문장' : '단어'}
+                </label>
+                {selectedWordbook?.type === 'sentence-order' ? (
+                  <textarea
+                    value={newWord}
+                    onChange={(e) => setNewWord(e.target.value)}
+                    placeholder="예: The secret of success is constancy to purpose."
+                    rows={3}
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-100 outline-none font-bold resize-none text-sm leading-relaxed"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={newWord}
+                    onChange={(e) => setNewWord(e.target.value)}
+                    placeholder="예: apple"
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
+                  />
+                )}
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">뜻</label>
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">
+                  {selectedWordbook?.type === 'sentence-order' ? '한국어 해석' : '뜻'}
+                </label>
                 <textarea
                   value={newMeaning}
                   onChange={(e) => setNewMeaning(e.target.value)}
-                  placeholder="예: 사과"
+                  placeholder={selectedWordbook?.type === 'sentence-order' ? "예: 성공의 비결은 목표를 향한 불변이다." : "예: 사과"}
                   rows={3}
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold resize-none"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">소속 DAY</label>
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">
+                  {selectedWordbook?.type === 'sentence-order' ? '소속 지문 번호' : '소속 DAY'}
+                </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -2252,7 +2599,9 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     onChange={(e) => setNewWordDay(Math.max(1, parseInt(e.target.value) || 1))}
                     className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
                   />
-                  <span className="text-sm font-bold text-indigo-600 whitespace-nowrap px-3 py-2 bg-indigo-50 rounded-xl">DAY {newWordDay}</span>
+                  <span className="text-sm font-bold text-indigo-600 whitespace-nowrap px-3 py-2 bg-indigo-50 rounded-xl">
+                    {selectedWordbook?.type === 'sentence-order' ? `지문 ${newWordDay}` : `DAY ${newWordDay}`}
+                  </span>
                 </div>
               </div>
               {(selectedWordbook?.type === 'irregular' || selectedWordbook?.type === 'comparative-grammar') && (
@@ -3463,6 +3812,11 @@ function SortableWordbookCard({
             Irregular
           </span>
         )}
+        {wb.type === 'sentence-order' && (
+          <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-black rounded-full uppercase tracking-tighter shrink-0">
+            🧩 문장 순서 배열
+          </span>
+        )}
       </div>
       <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-50">
         <p className="text-[11px] text-slate-400 font-medium">
@@ -3498,6 +3852,7 @@ function SortableWordCard({
   currentDay,
   availableDays,
   onDayChange,
+  onMoveOrder,
   isSelected,
   onToggleSelect,
   onEdit,
@@ -3509,6 +3864,7 @@ function SortableWordCard({
   currentDay: number;
   availableDays: number[];
   onDayChange: (newDay: number) => void;
+  onMoveOrder?: (direction: 'up' | 'down') => void;
   isSelected: boolean;
   onToggleSelect: () => void;
   onEdit: () => void;
@@ -3565,18 +3921,25 @@ function SortableWordCard({
                 onChange={(e) => onDayChange(parseInt(e.target.value))}
                 onClick={(e) => e.stopPropagation()}
                 className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black text-xs py-0.5 px-2 rounded-lg cursor-pointer transition-all border border-indigo-200 outline-none"
-                title="단어 소속 DAY 변경"
+                title={selectedWordbook.type === 'sentence-order' ? "지문 번호 변경" : "단어 소속 DAY 변경"}
               >
                 {availableDays.map((d) => (
                   <option key={d} value={d}>
-                    DAY {d}
+                    {selectedWordbook.type === 'sentence-order' ? `지문 ${d}` : `DAY ${d}`}
                   </option>
                 ))}
                 <option value={(availableDays[availableDays.length - 1] || 0) + 1}>
-                  + DAY {(availableDays[availableDays.length - 1] || 0) + 1}
+                  {selectedWordbook.type === 'sentence-order'
+                    ? `+ 새 지문 ${(availableDays[availableDays.length - 1] || 0) + 1}`
+                    : `+ DAY ${(availableDays[availableDays.length - 1] || 0) + 1}`}
                 </option>
               </select>
             </div>
+            {selectedWordbook.type === 'sentence-order' && (
+              <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-black rounded-lg">
+                {(word.order ?? 0) + 1}번 문장
+              </span>
+            )}
             <div className="text-lg font-black text-slate-900 break-words">
               {selectedWordbook.type === 'grammar-cramming' ? (word as any).quizSentence || word.word : word.word}
             </div>
@@ -3631,6 +3994,24 @@ function SortableWordCard({
         </div>
       </div>
       <div className="flex gap-1 flex-shrink-0 items-center">
+        {selectedWordbook.type === 'sentence-order' && onMoveOrder && (
+          <div className="flex flex-col gap-0.5 mr-1">
+            <button
+              onClick={() => onMoveOrder('up')}
+              className="p-1 hover:bg-slate-200 text-slate-400 hover:text-indigo-600 rounded transition-colors"
+              title="문장 순서 위로 이동"
+            >
+              <ArrowUp size={14} />
+            </button>
+            <button
+              onClick={() => onMoveOrder('down')}
+              className="p-1 hover:bg-slate-200 text-slate-400 hover:text-indigo-600 rounded transition-colors"
+              title="문장 순서 아래로 이동"
+            >
+              <ArrowDown size={14} />
+            </button>
+          </div>
+        )}
         {(selectedWordbook.type === 'relative-grammar' || selectedWordbook.type === 'verb-form-grammar') && (
           <button 
             onClick={onOpenExamples}
@@ -3643,14 +4024,14 @@ function SortableWordCard({
         <button 
           onClick={onEdit}
           className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
-          title="단어 수정"
+          title="수정"
         >
           <Edit3 size={18} />
         </button>
         <button 
           onClick={onDelete}
           className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-          title="단어 삭제"
+          title="삭제"
         >
           <Trash2 size={18} />
         </button>

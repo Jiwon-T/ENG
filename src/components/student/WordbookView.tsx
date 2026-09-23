@@ -14,7 +14,7 @@ interface Wordbook {
   title: string;
   description: string;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming' | 'comparative-grammar';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming' | 'comparative-grammar' | 'sentence-order';
   category?: 'word' | 'grammar' | 'exam';
   customDistractors?: string[];
   defaultUnitSize?: number;
@@ -25,6 +25,7 @@ interface Word {
   word: string;
   meaning: string;
   day?: number;
+  passageTitle?: string;
   past?: string;
   pastParticiple?: string;
   comparative?: string;
@@ -99,6 +100,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   const [conjugationScore, setConjugationScore] = useState(0);
   const [isConjugationFinished, setIsConjugationFinished] = useState(false);
   const [sessionWords, setSessionWords] = useState<Word[]>([]);
+  const [sentenceQuizChoices, setSentenceQuizChoices] = useState<{ english: string; korean: string; isCorrect: boolean }[]>([]);
+  const [currentSentencePassage, setCurrentSentencePassage] = useState<Word[]>([]);
 
   // Focus & Confirm states
   const [pendingMode, setPendingMode] = useState<'flashcard' | 'quiz' | 'match' | 'conjugation' | 'test' | null>(null);
@@ -341,6 +344,12 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   } else if (selectedWordbook?.type === 'verb-form-grammar') {
     totalChunks = 6;
     displayedWords = words.filter(w => (w as any).set === currentChunk + 1);
+  } else if (selectedWordbook?.type === 'sentence-order') {
+    const passageDays: number[] = Array.from(new Set<number>(words.map(w => Number(w.day ?? 1)))).sort((a, b) => a - b);
+    totalChunks = Math.max(1, passageDays.length > 0 ? Math.max(...passageDays) : 1);
+    displayedWords = words
+      .filter(w => (w.day ?? 1) === currentChunk + 1)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }
 
   useEffect(() => {
@@ -471,9 +480,122 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     setIsFocusedMode(true);
   };
 
+  const generateSentenceOrderQuizOptions = (
+    idx: number,
+    sessionQuestions: Word[],
+    passageSentences: Word[],
+    passageDay: number
+  ) => {
+    if (!sessionQuestions[idx] || !passageSentences[idx + 1]) return;
+    const targetNextSentence = passageSentences[idx + 1];
+
+    // Distractors: Randomly extract from other passages' sentences
+    const otherPassageSentences = words.filter(w => (w.day ?? 1) !== passageDay);
+    let distractorPool: Word[] = shuffleArray(otherPassageSentences);
+
+    // If there are fewer than 3 distractors from other passages, supplement with sentences from current wordbook
+    if (distractorPool.length < 3) {
+      const fallback = words.filter(
+        w => w.id !== targetNextSentence.id && w.id !== sessionQuestions[idx]?.id
+      );
+      const combinedMap = new Map<string, Word>();
+      [...distractorPool, ...fallback].forEach(item => {
+        if (item && item.id) combinedMap.set(item.id, item);
+      });
+      distractorPool = shuffleArray(Array.from(combinedMap.values()));
+    }
+
+    const selectedDistractors: Word[] = distractorPool.slice(0, 3);
+    const choicesList = [
+      {
+        english: targetNextSentence.word,
+        korean: targetNextSentence.meaning,
+        isCorrect: true
+      },
+      ...selectedDistractors.map((d: Word) => ({
+        english: d.word,
+        korean: d.meaning,
+        isCorrect: false
+      }))
+    ];
+
+    const shuffledChoices = shuffleArray(choicesList);
+    setSentenceQuizChoices(shuffledChoices);
+    setQuizOptions(shuffledChoices.map(c => c.english));
+    setSelectedOption(null);
+    setIsCorrect(null);
+  };
+
+  const startSentenceOrderQuiz = (randomPassage: boolean = true) => {
+    if (words.length === 0) return;
+    setIncorrectAnswers([]);
+
+    // Group sentences by passage (day)
+    const passageMap = new Map<number, Word[]>();
+    words.forEach(w => {
+      const d = w.day ?? 1;
+      if (!passageMap.has(d)) passageMap.set(d, []);
+      passageMap.get(d)!.push(w);
+    });
+
+    // Filter passages with at least 2 sentences
+    const validPassageDays = Array.from(passageMap.keys()).filter(
+      d => (passageMap.get(d)?.length ?? 0) >= 2
+    );
+
+    if (validPassageDays.length === 0) {
+      alert('문장 순서 퀴즈를 진행하려면 최소 2개 이상의 문장이 등록된 지문이 필요합니다.');
+      return;
+    }
+
+    let targetDay: number;
+    if (randomPassage) {
+      targetDay = validPassageDays[Math.floor(Math.random() * validPassageDays.length)];
+    } else {
+      const chunkDay = currentChunk + 1;
+      targetDay = validPassageDays.includes(chunkDay) ? chunkDay : validPassageDays[0];
+    }
+
+    const passageSentences = passageMap.get(targetDay)!.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    setCurrentSentencePassage(passageSentences);
+
+    const quizQuestions: Word[] = [];
+    for (let i = 0; i < passageSentences.length - 1; i++) {
+      quizQuestions.push({
+        id: `sentence_order_${targetDay}_${i}`,
+        word: passageSentences[i].word, // Current preceding sentence (English)
+        meaning: passageSentences[i + 1].word, // Target correct next sentence (English)
+        day: targetDay,
+        passageTitle: passageSentences[0]?.passageTitle || `지문 ${targetDay}`,
+        order: i,
+        quizSentence: passageSentences[i].word,
+        quizChoices: [],
+        currentSentenceKorean: passageSentences[i].meaning,
+        nextSentenceKorean: passageSentences[i + 1].meaning,
+        quizCategory: 'exam'
+      } as any);
+    }
+
+    setSessionWords(quizQuestions);
+    setQuizIndex(0);
+    setQuizScore(0);
+    setIsQuizFinished(false);
+    setIsQuizMode(true);
+    setIsMatchMode(false);
+    setIsFlashcardMode(false);
+    setIsFocusedMode(true);
+    initActiveSession('quiz', quizQuestions.length);
+    generateSentenceOrderQuizOptions(0, quizQuestions, passageSentences, targetDay);
+  };
+
   const startQuiz = async () => {
     if (words.length === 0) return;
     setIncorrectAnswers([]);
+
+    if (selectedWordbook?.type === 'sentence-order') {
+      startSentenceOrderQuiz(true);
+      return;
+    }
 
     const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || 
                               selectedWordbook?.title?.includes('관계부사') ||
@@ -780,6 +902,16 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     const currentWords = providedWords || sessionWords;
     if (currentWords.length === 0) return;
     
+    if (selectedWordbook?.type === 'sentence-order') {
+      generateSentenceOrderQuizOptions(
+        index,
+        currentWords,
+        currentSentencePassage,
+        (currentWords[0] as any)?.day ?? 1
+      );
+      return;
+    }
+
     const correctWord = currentWords[index];
     const isIrregular = selectedWordbook?.type === 'irregular';
     const isToIngGrammar = selectedWordbook?.type === 'to-ing-grammar';
@@ -955,6 +1087,52 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     if (selectedOption !== null || optionIndex < 0 || optionIndex >= quizOptions.length) return;
     
     setSelectedOption(optionIndex);
+
+    if (selectedWordbook?.type === 'sentence-order') {
+      const chosenChoice = sentenceQuizChoices[optionIndex];
+      const isAnswerCorrect = chosenChoice ? chosenChoice.isCorrect : (quizOptions[optionIndex] === sessionWords[quizIndex].meaning);
+      setIsCorrect(isAnswerCorrect);
+
+      let updatedIncorrectAnswers = [...incorrectAnswers];
+      let newScore = quizScore;
+      if (isAnswerCorrect) {
+        newScore = quizScore + 1;
+        setQuizScore(prev => prev + 1);
+      } else {
+        const newIncorrect = {
+          word: sessionWords[quizIndex].word,
+          meaning: sessionWords[quizIndex].meaning,
+          userChoice: chosenChoice ? `${chosenChoice.english} (${chosenChoice.korean})` : quizOptions[optionIndex],
+          correctAnswer: `${sessionWords[quizIndex].meaning} (${(sessionWords[quizIndex] as any)?.nextSentenceKorean || ''})`,
+          choices: [...quizOptions],
+          quizSentence: `[지문 ${(sessionWords[quizIndex] as any)?.day || currentChunk + 1}] 제시문: ${sessionWords[quizIndex].word}`
+        };
+        updatedIncorrectAnswers.push(newIncorrect);
+        setIncorrectAnswers(prev => [...prev, newIncorrect]);
+      }
+
+      if (activeSessionRef.current) {
+        activeSessionRef.current.score = newScore;
+        activeSessionRef.current.incorrectAnswers = updatedIncorrectAnswers;
+      }
+
+      setTimeout(() => {
+        if (quizIndex < sessionWords.length - 1) {
+          setQuizIndex(prev => prev + 1);
+          generateSentenceOrderQuizOptions(
+            quizIndex + 1,
+            sessionWords,
+            currentSentencePassage,
+            (sessionWords[0] as any)?.day ?? 1
+          );
+        } else {
+          setIsQuizFinished(true);
+          finishSession('quiz', newScore, sessionWords.length, updatedIncorrectAnswers);
+        }
+      }, 700);
+      return;
+    }
+
     const isIrregular = selectedWordbook?.type === 'irregular';
     const isToIngGrammar = selectedWordbook?.type === 'to-ing-grammar';
     const isComplementGrammar = selectedWordbook?.type === 'complement-grammar';
@@ -1382,7 +1560,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                         className="w-20 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none"
                       >
                         {Array.from({ length: totalChunks }).map((_, i) => (
-                          <option key={i} value={i + 1}>{isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}</option>
+                          <option key={i} value={i + 1}>{selectedWordbook?.type === 'sentence-order' ? `지문 ${i + 1}` : isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}</option>
                         ))}
                       </select>
                     </div>
@@ -1395,7 +1573,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                         className="w-20 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none"
                       >
                         {Array.from({ length: totalChunks }).map((_, i) => (
-                          <option key={i} value={i + 1}>{isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}</option>
+                          <option key={i} value={i + 1}>{selectedWordbook?.type === 'sentence-order' ? `지문 ${i + 1}` : isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}</option>
                         ))}
                       </select>
                     </div>
@@ -1407,7 +1585,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                 </div>
               ) : (
                 <p className="text-slate-500 font-medium mb-8">
-                  {pendingMode === 'flashcard' ? '플래시카드' : pendingMode === 'quiz' ? '객관식 퀴즈' : pendingMode === 'match' ? '매치 게임' : '3단 변화 챌린지'} 모드로 이동하여 학습에 집중합니다.
+                  {pendingMode === 'flashcard' ? '플래시카드' : pendingMode === 'quiz' ? (selectedWordbook?.type === 'sentence-order' ? '문장 순서 배열 퀴즈' : '객관식 퀴즈') : pendingMode === 'match' ? '매치 게임' : '3단 변화 챌린지'} 모드로 이동하여 학습에 집중합니다.
                 </p>
               )}
               <div className="grid grid-cols-2 gap-4">
@@ -1456,38 +1634,115 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                 <div className="flex flex-col items-center gap-8">
                   <AnimatePresence mode="wait">
                     {isQuizFinished ? (
-                      <motion.div
-                        key="quiz-finished"
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className={`bg-white ${isMobile ? 'p-8 rounded-[2.5rem]' : 'p-12 rounded-[3.5rem]'} border-4 border-indigo-100 shadow-2xl text-center space-y-4 md:space-y-6 w-full max-w-lg`}
-                      >
-                        <div className={`${isMobile ? 'w-16 h-16' : 'w-24 h-24'} bg-indigo-100 rounded-full flex items-center justify-center mx-auto text-indigo-500`}>
-                          <Trophy size={isMobile ? 32 : 48} />
-                        </div>
-                        <h2 className={`${isMobile ? 'text-2xl' : 'text-4xl'} font-black text-slate-900`}>퀴즈 종료!</h2>
-                        <p className={`${isMobile ? 'text-base' : 'text-xl'} font-bold text-slate-500`}>
-                          총 <span className="text-indigo-500">{sessionWords.length}</span>문제 중 <span className="text-indigo-500">{quizScore}</span>문제를 맞혔습니다.
-                        </p>
-                        
-                        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-2">
-                           <div className="text-emerald-600 font-black text-lg">
-                              🎉 {quizScore}개 정답! +{earnedPoints} 포인트를 획득했어요!
-                           </div>
-                           <div className="text-indigo-500 font-black">
-                              +{earnedXP} XP를 획득했어요! (총 {totalPoints} 포인트)
-                           </div>
-                        </div>
+                      selectedWordbook?.type === 'sentence-order' ? (
+                        <motion.div
+                          key="sentence-order-finished"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className={`bg-white ${isMobile ? 'p-6 rounded-[2rem]' : 'p-10 rounded-[3rem]'} border-4 border-indigo-100 shadow-2xl text-center space-y-5 w-full max-w-2xl`}
+                        >
+                          <div className={`${isMobile ? 'w-16 h-16' : 'w-20 h-20'} bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600`}>
+                            <Trophy size={isMobile ? 32 : 44} />
+                          </div>
+                          <div>
+                            <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-black rounded-lg">
+                              지문 {(sessionWords[0] as any)?.day || currentChunk + 1}
+                              {(sessionWords[0] as any)?.passageTitle ? ` • ${(sessionWords[0] as any).passageTitle}` : ''}
+                            </span>
+                            <h2 className={`${isMobile ? 'text-2xl' : 'text-3xl'} font-black text-slate-900 mt-2`}>
+                              문장 순서 배열 완성! 🎉
+                            </h2>
+                            <p className="text-sm font-bold text-slate-500 mt-1">
+                              총 <span className="text-indigo-600">{sessionWords.length}</span>문제 중 <span className="text-emerald-600">{quizScore}</span>문제를 맞혔습니다.
+                            </p>
+                          </div>
 
-                        <div className="pt-4 md:pt-6">
-                          <button 
-                            onClick={startQuiz}
-                            className="px-8 md:px-10 py-3 md:py-4 bg-indigo-500 text-white rounded-2xl font-black shadow-xl shadow-indigo-200 hover:scale-105 transition-transform text-sm md:text-base"
-                          >
-                            다시 도전하기
-                          </button>
-                        </div>
-                      </motion.div>
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-around text-xs md:text-sm">
+                            <div className="text-emerald-600 font-black">
+                              🎉 +{earnedPoints} 포인트
+                            </div>
+                            <div className="text-indigo-600 font-black">
+                              ⚡ +{earnedXP} XP
+                            </div>
+                          </div>
+
+                          {/* Complete Passage Overview */}
+                          <div className="text-left space-y-2">
+                            <div className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5 px-1">
+                              <span>📖 지문 전체 문장 순서 확인</span>
+                            </div>
+                            <div className="max-h-72 overflow-y-auto space-y-2 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                              {currentSentencePassage.map((s, idx) => (
+                                <div key={idx} className="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                                  <div className="font-black text-indigo-900 text-xs md:text-sm flex items-start gap-2">
+                                    <span className="w-5 h-5 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">
+                                      {idx + 1}
+                                    </span>
+                                    <span className="flex-1 leading-snug">{s.word}</span>
+                                    <button
+                                      onClick={() => speak(s.word)}
+                                      className="text-slate-400 hover:text-indigo-600 p-1 shrink-0"
+                                    >
+                                      <Volume2 size={14} />
+                                    </button>
+                                  </div>
+                                  <div className="text-slate-500 text-xs font-medium pl-7 mt-1">
+                                    {s.meaning}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 pt-2">
+                            <button
+                              onClick={() => startSentenceOrderQuiz(true)}
+                              className="py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs md:text-sm shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-1.5"
+                            >
+                              <span>🎲 다른 지문 랜덤 풀기</span>
+                            </button>
+                            <button
+                              onClick={() => startSentenceOrderQuiz(false)}
+                              className="py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs md:text-sm transition-all"
+                            >
+                              이 지문 다시 풀기
+                            </button>
+                          </div>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="quiz-finished"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className={`bg-white ${isMobile ? 'p-8 rounded-[2.5rem]' : 'p-12 rounded-[3.5rem]'} border-4 border-indigo-100 shadow-2xl text-center space-y-4 md:space-y-6 w-full max-w-lg`}
+                        >
+                          <div className={`${isMobile ? 'w-16 h-16' : 'w-24 h-24'} bg-indigo-100 rounded-full flex items-center justify-center mx-auto text-indigo-500`}>
+                            <Trophy size={isMobile ? 32 : 48} />
+                          </div>
+                          <h2 className={`${isMobile ? 'text-2xl' : 'text-4xl'} font-black text-slate-900`}>퀴즈 종료!</h2>
+                          <p className={`${isMobile ? 'text-base' : 'text-xl'} font-bold text-slate-500`}>
+                            총 <span className="text-indigo-500">{sessionWords.length}</span>문제 중 <span className="text-indigo-500">{quizScore}</span>문제를 맞혔습니다.
+                          </p>
+                          
+                          <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-2">
+                             <div className="text-emerald-600 font-black text-lg">
+                                🎉 {quizScore}개 정답! +{earnedPoints} 포인트를 획득했어요!
+                             </div>
+                             <div className="text-indigo-500 font-black">
+                                +{earnedXP} XP를 획득했어요! (총 {totalPoints} 포인트)
+                             </div>
+                          </div>
+
+                          <div className="pt-4 md:pt-6">
+                            <button 
+                              onClick={startQuiz}
+                              className="px-8 md:px-10 py-3 md:py-4 bg-indigo-500 text-white rounded-2xl font-black shadow-xl shadow-indigo-200 hover:scale-105 transition-transform text-sm md:text-base"
+                            >
+                              다시 도전하기
+                            </button>
+                          </div>
+                        </motion.div>
+                      )
                     ) : (() => {
                       const currentWord = sessionWords[quizIndex];
                       const isComplement = selectedWordbook?.type === 'complement-grammar';
@@ -1495,6 +1750,146 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                       const correctIndices: number[] = compItem 
                         ? compItem.answers.map(a => a - 1)
                         : (currentWord?.quizAnswers ? currentWord.quizAnswers.map((a: number) => a - 1) : [0]);
+
+                      if (selectedWordbook?.type === 'sentence-order') {
+                        return (
+                          <motion.div
+                            key={quizIndex}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            className={`w-full max-w-2xl bg-white ${isMobile ? 'rounded-2xl p-5' : 'rounded-[3rem] p-8 md:p-10'} border border-slate-100 shadow-xl`}
+                          >
+                            {/* Header */}
+                            <div className="flex justify-between items-center mb-4">
+                              <div className="flex items-center gap-2">
+                                <span className="px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-black rounded-lg">
+                                  🧩 지문 {(sessionWords[quizIndex] as any)?.day || currentChunk + 1}
+                                  {(sessionWords[quizIndex] as any)?.passageTitle ? ` • ${(sessionWords[quizIndex] as any).passageTitle}` : ''}
+                                </span>
+                                <span className="text-xs font-bold text-slate-400">
+                                  문장 순서 {quizIndex + 1} / {sessionWords.length}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 font-black text-emerald-600 text-xs bg-emerald-50 px-2.5 py-1 rounded-lg">
+                                <CheckCircle2 size={14} />
+                                <span>{quizScore} 정답</span>
+                              </div>
+                            </div>
+
+                            {/* Preceding sentences so far */}
+                            {quizIndex > 0 && currentSentencePassage.length > 0 && (
+                              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-left mb-4 space-y-1.5 max-h-36 overflow-y-auto">
+                                <div className="text-[11px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                  <CheckCircle2 size={12} className="text-emerald-500" />
+                                  앞서 연결된 문장들 ({quizIndex}개)
+                                </div>
+                                {currentSentencePassage.slice(0, quizIndex).map((s, idx) => (
+                                  <div key={idx} className="text-xs text-slate-600 font-medium pl-2 border-l-2 border-indigo-200">
+                                    <span className="font-bold text-slate-800 mr-1.5">{idx + 1}.</span>
+                                    <span>{s.word}</span>
+                                    <span className="text-slate-400 text-[11px] block">{s.meaning}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Prompt: Current sentence */}
+                            <div className="bg-indigo-50/70 border-2 border-indigo-200 rounded-2xl p-4 md:p-5 text-left mb-4 shadow-2xs">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-black text-indigo-700 bg-indigo-100/90 px-2.5 py-0.5 rounded-md flex items-center gap-1.5">
+                                  <span className="w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px]">
+                                    {quizIndex + 1}
+                                  </span>
+                                  제시된 문장
+                                </span>
+                                <button
+                                  onClick={() => speak(sessionWords[quizIndex].word)}
+                                  className="p-1.5 bg-white text-slate-400 rounded-lg hover:text-indigo-600 transition-colors shadow-2xs"
+                                  title="문장 듣기"
+                                >
+                                  <Volume2 size={16} />
+                                </button>
+                              </div>
+                              <div className="text-sm md:text-base font-black text-slate-900 leading-relaxed">
+                                {sessionWords[quizIndex].word}
+                              </div>
+                              <div className="text-xs md:text-sm font-medium text-slate-600 mt-1">
+                                {(sessionWords[quizIndex] as any)?.currentSentenceKorean || sessionWords[quizIndex].meaning}
+                              </div>
+                            </div>
+
+                            {/* Question Prompt Callout */}
+                            <div className="text-center mb-4">
+                              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-pastel-pink-50 border border-pastel-pink-200 text-pastel-pink-700 text-xs md:text-sm font-black rounded-full shadow-2xs">
+                                👇 다음으로 올 문장을 고르시오.
+                              </div>
+                            </div>
+
+                            {/* Choices list */}
+                            <div className="grid grid-cols-1 gap-2.5 md:gap-3">
+                              {sentenceQuizChoices.map((choice, idx) => {
+                                const isSelected = selectedOption === idx;
+                                const isSubmitted = selectedOption !== null;
+                                const isChoiceCorrect = choice.isCorrect;
+
+                                let btnStyle = "bg-white border-slate-200 text-slate-700 hover:border-indigo-300 hover:bg-slate-50";
+                                let badgeStyle = "bg-slate-100 text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600";
+
+                                if (isSubmitted) {
+                                  if (isChoiceCorrect) {
+                                    btnStyle = "bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-200";
+                                    badgeStyle = "bg-emerald-600 text-white";
+                                  } else if (isSelected && !isChoiceCorrect) {
+                                    btnStyle = "bg-rose-50 border-rose-500 text-rose-950 ring-2 ring-rose-200";
+                                    badgeStyle = "bg-rose-600 text-white";
+                                  } else {
+                                    btnStyle = "bg-slate-50/60 border-slate-200 text-slate-400 opacity-60";
+                                    badgeStyle = "bg-slate-200 text-slate-400";
+                                  }
+                                }
+
+                                return (
+                                  <button
+                                    key={idx}
+                                    onClick={() => handleQuizAnswer(idx)}
+                                    disabled={isSubmitted}
+                                    className={`w-full p-4 rounded-2xl border-2 text-left transition-all flex items-start justify-between gap-3 group ${btnStyle}`}
+                                  >
+                                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                                      <span className={`w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center font-black text-xs transition-all mt-0.5 ${badgeStyle}`}>
+                                        {isSubmitted ? (
+                                          isChoiceCorrect ? <CheckCircle2 size={15} /> : isSelected ? <X size={15} /> : idx + 1
+                                        ) : (
+                                          idx + 1
+                                        )}
+                                      </span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-xs md:text-sm font-bold leading-relaxed text-slate-900">
+                                          {choice.english}
+                                        </div>
+                                        <div className="text-[11px] md:text-xs text-slate-500 font-medium mt-1 leading-snug">
+                                          {choice.korean}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    {isSubmitted && isChoiceCorrect && (
+                                      <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1 mt-0.5">
+                                        <CheckCircle2 size={13} /> 정답
+                                      </span>
+                                    )}
+                                    {isSubmitted && isSelected && !isChoiceCorrect && (
+                                      <span className="text-xs font-black text-rose-700 bg-rose-100 px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1 mt-0.5">
+                                        <X size={13} /> 오답
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </motion.div>
+                        );
+                      }
 
                       return (
                         <motion.div
@@ -2156,7 +2551,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                   }}
                   wordbookId={selectedWordbook?.id || ''}
                   wordbookTitle={selectedWordbook?.title || ''}
-                  category={selectedWordbook?.category || 'word'}
+                  category={(selectedWordbook?.category as any) || category || 'word'}
                   type={selectedWordbook?.type}
                 />
               ) : null}
@@ -2245,48 +2640,78 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                 ← 전체 학습 세트
               </button>
               <div className="flex flex-wrap items-center gap-2 md:gap-4">
-                {(selectedWordbook.type === 'irregular' || selectedWordbook.type === 'comparative-grammar') && (
-                  <button
-                    onClick={() => setPendingMode('conjugation')}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all bg-blue-500 text-white shadow-lg shadow-blue-200 hover:scale-105`}
-                  >
-                    ✨ 3단 변화 챌린지
-                  </button>
+                {selectedWordbook.type === 'sentence-order' ? (
+                  <>
+                    <button
+                      onClick={() => setPendingMode('quiz')}
+                      className="px-4 md:px-5 py-2 md:py-2.5 rounded-full text-xs md:text-sm font-black transition-all flex items-center gap-1.5 md:gap-2 bg-indigo-600 text-white shadow-lg shadow-indigo-200 hover:scale-105"
+                    >
+                      <Sparkles size={isMobile ? 12 : 14} />
+                      문장 순서 배열 퀴즈
+                    </button>
+                    <button
+                      onClick={() => setPendingMode('flashcard')}
+                      className="px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
+                    >
+                      플래시카드
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTestRange({ start: currentChunk + 1, end: currentChunk + 1 });
+                        setPendingMode('test');
+                      }}
+                      className="px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all flex items-center gap-1 md:gap-2 bg-blue-600 text-white shadow-lg shadow-blue-200 hover:scale-105"
+                    >
+                      <GraduationCap size={isMobile ? 12 : 14} />
+                      테스트
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {(selectedWordbook.type === 'irregular' || selectedWordbook.type === 'comparative-grammar') && (
+                      <button
+                        onClick={() => setPendingMode('conjugation')}
+                        className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all bg-blue-500 text-white shadow-lg shadow-blue-200 hover:scale-105`}
+                      >
+                        ✨ 3단 변화 챌린지
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setPendingMode('flashcard')}
+                      className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all bg-white text-slate-400 border border-slate-100 hover:bg-slate-50`}
+                    >
+                      플래시카드
+                    </button>
+                    <button
+                      onClick={() => setPendingMode('quiz')}
+                      className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all flex items-center gap-1 md:gap-2 ${
+                        category === 'grammar' && selectedWordbook.type !== 'irregular'
+                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-200 hover:scale-105' 
+                        : 'bg-white text-slate-400 border border-slate-100 hover:bg-slate-50'
+                      }`}
+                    >
+                      <CheckCircle2 size={isMobile ? 12 : 14} />
+                      객관식
+                    </button>
+                    <button
+                      onClick={() => setPendingMode('match')}
+                      className="px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all flex items-center gap-1 md:gap-2 bg-white text-slate-400 border border-slate-100 hover:bg-slate-50"
+                    >
+                      <Gamepad2 size={isMobile ? 12 : 14} />
+                      매치 게임
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTestRange({ start: currentChunk + 1, end: currentChunk + 1 });
+                        setPendingMode('test');
+                      }}
+                      className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all flex items-center gap-1 md:gap-2 bg-blue-600 text-white shadow-lg shadow-blue-200 hover:scale-105`}
+                    >
+                      <GraduationCap size={isMobile ? 12 : 14} />
+                      테스트
+                    </button>
+                  </>
                 )}
-                <button
-                  onClick={() => setPendingMode('flashcard')}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all bg-white text-slate-400 border border-slate-100 hover:bg-slate-50`}
-                >
-                  플래시카드
-                </button>
-                <button
-                  onClick={() => setPendingMode('quiz')}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all flex items-center gap-1 md:gap-2 ${
-                    category === 'grammar' && selectedWordbook.type !== 'irregular'
-                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-200 hover:scale-105' 
-                    : 'bg-white text-slate-400 border border-slate-100 hover:bg-slate-50'
-                  }`}
-                >
-                  <CheckCircle2 size={isMobile ? 12 : 14} />
-                  객관식
-                </button>
-                <button
-                  onClick={() => setPendingMode('match')}
-                  className="px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all flex items-center gap-1 md:gap-2 bg-white text-slate-400 border border-slate-100 hover:bg-slate-50"
-                >
-                  <Gamepad2 size={isMobile ? 12 : 14} />
-                  매치 게임
-                </button>
-                <button
-                  onClick={() => {
-                    setTestRange({ start: currentChunk + 1, end: currentChunk + 1 });
-                    setPendingMode('test');
-                  }}
-                  className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all flex items-center gap-1 md:gap-2 bg-blue-600 text-white shadow-lg shadow-blue-200 hover:scale-105`}
-                >
-                  <GraduationCap size={isMobile ? 12 : 14} />
-                  테스트
-                </button>
               </div>
             </div>
 
@@ -2321,7 +2746,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                         : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
                     }`}
                   >
-                    {isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}
+                    {selectedWordbook?.type === 'sentence-order' ? `지문 ${i + 1}` : isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}
                   </button>
                 ))}
               </div>
@@ -2334,7 +2759,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                 </div>
                 <div className="flex-1">
                   <h2 className={`${isMobile ? 'text-xl' : 'text-3xl'} font-black text-slate-900 tracking-tight flex items-center gap-2 mb-1`}>
-                    {selectedWordbook?.type === 'complement-grammar' ? (
+                    {selectedWordbook?.type === 'sentence-order' ? (
+                      `지문 ${currentChunk + 1}${displayedWords[0]?.passageTitle ? ` - ${displayedWords[0].passageTitle}` : ''}`
+                    ) : selectedWordbook?.type === 'complement-grammar' ? (
                       currentChunk === 0 ? '명사/형용사 보어' :
                       currentChunk === 1 ? 'to V 보어' :
                       '사역·지각동사 및 다양한 보어'
@@ -2359,7 +2786,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                   </h2>
                   <p className="text-xs md:text-sm font-bold text-slate-400 flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-pastel-pink-400 animate-pulse" />
-                    {selectedWordbook?.type === 'complement-grammar' ? (
+                    {selectedWordbook?.type === 'sentence-order' ? (
+                      `지문 ${currentChunk + 1}의 순서별 문장 목록 (${displayedWords.length}문장)`
+                    ) : selectedWordbook?.type === 'complement-grammar' ? (
                       currentChunk === 0 ? '명사나 형용사를 보어로 취하는 동사 (7개)' :
                       currentChunk === 1 ? 'to 부정사를 보어로 취하는 동사 (10개)' :
                       '사역·지각동사 및 다양한 목적격 보어 (12개)'
@@ -2430,8 +2859,19 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
                               GRAMMAR CONCEPT
                             </span>
                           )}
+                          {selectedWordbook.type === 'sentence-order' && (
+                            <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] md:text-xs font-black rounded-md">
+                              {(word.order ?? 0) + 1}번 문장
+                            </span>
+                          )}
                         </div>
-                        {selectedWordbook.type === 'irregular' ? (
+                        {selectedWordbook.type === 'sentence-order' ? (
+                          <div className="space-y-0.5">
+                            <div className={`${isMobile ? 'text-xs' : 'text-sm'} font-medium text-slate-600 mt-1`}>
+                              {word.meaning}
+                            </div>
+                          </div>
+                        ) : selectedWordbook.type === 'irregular' ? (
                           <div className="space-y-0.5">
                             <div className={`${isMobile ? 'text-xs' : 'text-sm'} font-black text-blue-500`}>
                               {word.past} - {word.pastParticiple}

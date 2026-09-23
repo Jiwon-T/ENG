@@ -619,6 +619,16 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
                 <span className="text-[#F8F0F5]">지원T</span>
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center sm:gap-20">
+                <span className="sm:w-32 text-slate-400 text-sm md:text-2xl">설정 범위</span>
+                <span className="text-[#FF6B9D] font-black">
+                  {category === 'grammar' 
+                    ? (dayRange.start === dayRange.end ? `${dayRange.start}세트` : `${dayRange.start} ~ ${dayRange.end}세트`)
+                    : category === 'exam'
+                    ? (dayRange.start === dayRange.end ? `지문 ${dayRange.start}` : `지문 ${dayRange.start} ~ ${dayRange.end}`)
+                    : (dayRange.start === dayRange.end ? `DAY ${dayRange.start}` : `DAY ${dayRange.start} ~ ${dayRange.end}`)}
+                </span>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:gap-20">
                 <span className="sm:w-32 text-slate-400 text-sm md:text-2xl">문항수</span>
                 <span className="text-[#FF6B9D]">객관식 {words.length}문항</span>
               </div>
@@ -820,6 +830,16 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
             </div>
 
             <h2 className="text-3xl md:text-5xl font-black text-slate-900 mb-2 md:mb-4">테스트 결과</h2>
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-white rounded-full border border-pink-200 text-slate-700 text-xs md:text-sm font-bold shadow-xs mb-3">
+              <span className="text-slate-400">설정 범위:</span>
+              <span className="text-[#FF6B9D] font-black">
+                {category === 'grammar' 
+                  ? (dayRange.start === dayRange.end ? `${dayRange.start}세트` : `${dayRange.start} ~ ${dayRange.end}세트`)
+                  : category === 'exam'
+                  ? (dayRange.start === dayRange.end ? `지문 ${dayRange.start}` : `지문 ${dayRange.start} ~ ${dayRange.end}`)
+                  : (dayRange.start === dayRange.end ? `DAY ${dayRange.start}` : `DAY ${dayRange.start} ~ ${dayRange.end}`)}
+              </span>
+            </div>
             <div className="flex flex-col items-center gap-1 md:gap-2 mb-8 md:mb-10">
               <div className="text-6xl md:text-8xl font-black text-[#FF6B9D]">{percentage}점</div>
               <div className="text-lg md:text-2xl font-bold text-slate-400">{score} / {shuffledWords.length} 문항</div>

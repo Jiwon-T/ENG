@@ -219,14 +219,20 @@ export default function LearningReport() {
   const totalAssignmentPages = Math.ceil(stats.assignments.length / ASSIGNMENTS_PER_PAGE);
   const paginatedAssignments = stats.assignments.slice((assignmentPage - 1) * ASSIGNMENTS_PER_PAGE, assignmentPage * ASSIGNMENTS_PER_PAGE);
 
-  const formatDayRange = (start?: number, end?: number, category?: string) => {
-    if (start === undefined || start === null) return null;
+  const formatDayRange = (start?: any, end?: any, category?: string) => {
+    if (start === undefined || start === null || start === '') return null;
+    const numStart = Number(start);
+    const numEnd = (end !== undefined && end !== null && end !== '') ? Number(end) : numStart;
+    if (isNaN(numStart)) return null;
     const isGrammar = category === 'grammar';
-    const finalEnd = end ?? start;
+    const isExam = category === 'exam';
     if (isGrammar) {
-      return start === finalEnd ? `${start}세트` : `${start}~${finalEnd}세트`;
+      return numStart === numEnd ? `${numStart}세트` : `${numStart}~${numEnd}세트`;
     }
-    return start === finalEnd ? `DAY ${start}` : `DAY ${start}~${finalEnd}`;
+    if (isExam) {
+      return numStart === numEnd ? `지문 ${numStart}` : `지문 ${numStart}~${numEnd}`;
+    }
+    return numStart === numEnd ? `DAY ${numStart}` : `DAY ${numStart}~${numEnd}`;
   };
 
   const totalSessionPages = Math.ceil(stats.sessionHistory.length / SESSIONS_PER_PAGE);
@@ -562,12 +568,15 @@ export default function LearningReport() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-slate-900 text-sm line-clamp-1">{session.wordbookTitle}</span>
                       {session.dayStart !== undefined && (
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-black border shadow-2xs ${
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-black border shadow-2xs ${
                           session.type === 'test'
-                            ? 'bg-rose-50 text-rose-600 border-rose-200'
-                            : 'bg-indigo-50 text-indigo-600 border-indigo-200'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-indigo-50 text-indigo-700 border-indigo-200'
                         }`}>
                           {session.type === 'test' && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse inline-block" />}
+                          <span className="text-[10px] font-bold opacity-70">
+                            {session.type === 'test' ? '학습자 설정 DAY:' : '범위:'}
+                          </span>
                           {formatDayRange(session.dayStart, session.dayEnd, session.category)}
                         </span>
                       )}
@@ -581,8 +590,8 @@ export default function LearningReport() {
                       {session.dayStart !== undefined && (
                         <>
                           <span>•</span>
-                          <span className="font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded">
-                            범위: {formatDayRange(session.dayStart, session.dayEnd, session.category)}
+                          <span className="font-bold text-rose-600 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
+                            설정 DAY: {formatDayRange(session.dayStart, session.dayEnd, session.category)}
                           </span>
                         </>
                       )}
