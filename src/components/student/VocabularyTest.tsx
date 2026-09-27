@@ -76,6 +76,9 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
   const TARGET_SCORE = 95; 
   const GOAL_SCORE = 90;
 
+  const isGrammar = category === 'grammar' || (type ? ['irregular', 'relative-grammar', 'modal-grammar', 'basic-modal-grammar', 'verb-form-grammar', 'grammar-cramming', 'complement-grammar', 'to-ing-grammar', 'conversion-grammar', 'comparative-grammar'].includes(type) : false);
+  const isSentenceOrder = type === 'sentence-order' || (wordbookTitle ? (wordbookTitle.includes('지문') || wordbookTitle.includes('문장 순서') || wordbookTitle.includes('문장순서')) : false);
+
   // Initialize test data
   const [shuffledWords, setShuffledWords] = useState<Word[]>([]);
   const [conjugationSteps, setConjugationSteps] = useState<number[]>([]);
@@ -158,6 +161,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
           uid: auth.currentUser.uid,
           wordbookId,
           wordbookTitle,
+          wordbookType: type || 'standard',
           type: 'test',
           category: (category as 'word' | 'grammar' | 'exam') || 'word',
           duration,
@@ -173,7 +177,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [dayRange?.start, dayRange?.end, startTime, wordbookId, wordbookTitle, category, shuffledWords.length, words.length]);
+  }, [dayRange?.start, dayRange?.end, startTime, wordbookId, wordbookTitle, category, type, shuffledWords.length, words.length]);
 
   const handleExitTest = () => {
     if (!finishingRef.current && (scoreRef.current > 0 || incorrectWordsRef.current.length > 0) && auth.currentUser) {
@@ -185,6 +189,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
         uid: auth.currentUser.uid,
         wordbookId,
         wordbookTitle,
+        wordbookType: type || 'standard',
         type: 'test',
         category: (category as 'word' | 'grammar' | 'exam') || 'word',
         duration,
@@ -406,6 +411,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
           uid: auth.currentUser.uid,
           wordbookId,
           wordbookTitle,
+          wordbookType: type || 'standard',
           type: 'test',
           category: (category as 'word' | 'grammar' | 'exam') || 'word',
           duration,
@@ -426,7 +432,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
       date: `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
       score: finalScorePercent
     });
-  }, [phase, shuffledWords.length, startTime, wordbookId, wordbookTitle, category, dayRange.start, dayRange.end]);
+  }, [phase, shuffledWords.length, startTime, wordbookId, wordbookTitle, category, type, dayRange.start, dayRange.end]);
 
   const goToNextQuestion = useCallback(() => {
     // Safety guard
@@ -621,9 +627,9 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
               <div className="flex flex-col sm:flex-row sm:items-center sm:gap-20">
                 <span className="sm:w-32 text-slate-400 text-sm md:text-2xl">설정 범위</span>
                 <span className="text-[#FF6B9D] font-black">
-                  {category === 'grammar' 
+                  {isGrammar 
                     ? (dayRange.start === dayRange.end ? `${dayRange.start}세트` : `${dayRange.start} ~ ${dayRange.end}세트`)
-                    : category === 'exam'
+                    : isSentenceOrder
                     ? (dayRange.start === dayRange.end ? `지문 ${dayRange.start}` : `지문 ${dayRange.start} ~ ${dayRange.end}`)
                     : (dayRange.start === dayRange.end ? `DAY ${dayRange.start}` : `DAY ${dayRange.start} ~ ${dayRange.end}`)}
                 </span>
@@ -833,9 +839,9 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
             <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-white rounded-full border border-pink-200 text-slate-700 text-xs md:text-sm font-bold shadow-xs mb-3">
               <span className="text-slate-400">설정 범위:</span>
               <span className="text-[#FF6B9D] font-black">
-                {category === 'grammar' 
+                {isGrammar 
                   ? (dayRange.start === dayRange.end ? `${dayRange.start}세트` : `${dayRange.start} ~ ${dayRange.end}세트`)
-                  : category === 'exam'
+                  : isSentenceOrder
                   ? (dayRange.start === dayRange.end ? `지문 ${dayRange.start}` : `지문 ${dayRange.start} ~ ${dayRange.end}`)
                   : (dayRange.start === dayRange.end ? `DAY ${dayRange.start}` : `DAY ${dayRange.start} ~ ${dayRange.end}`)}
               </span>

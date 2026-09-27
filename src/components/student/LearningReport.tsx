@@ -33,6 +33,21 @@ export default function LearningReport() {
   const [reviewScore, setReviewScore] = useState(0);
   const [isReviewFinished, setIsReviewFinished] = useState(false);
   const [rewardFeedback, setRewardFeedback] = useState<{ points: number; xp: number } | null>(null);
+  const [wordbooksMap, setWordbooksMap] = useState<Record<string, { type?: string; title?: string }>>({});
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'wordbooks'), (snapshot) => {
+      const map: Record<string, { type?: string; title?: string }> = {};
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        map[d.id] = { type: data.type, title: data.title };
+      });
+      setWordbooksMap(map);
+    }, (err) => {
+      console.warn('Failed to load wordbooks in LearningReport:', err);
+    });
+    return () => unsub();
+  }, []);
 
   const ASSIGNMENTS_PER_PAGE = 5;
   const SESSIONS_PER_PAGE = 5;
@@ -219,20 +234,48 @@ export default function LearningReport() {
   const totalAssignmentPages = Math.ceil(stats.assignments.length / ASSIGNMENTS_PER_PAGE);
   const paginatedAssignments = stats.assignments.slice((assignmentPage - 1) * ASSIGNMENTS_PER_PAGE, assignmentPage * ASSIGNMENTS_PER_PAGE);
 
-  const formatDayRange = (start?: any, end?: any, category?: string) => {
+  const formatDayRange = (start?: any, end?: any, category?: string, wordbookType?: string, wordbookTitle?: string, wordbookId?: string) => {
     if (start === undefined || start === null || start === '') return null;
     const numStart = Number(start);
     const numEnd = (end !== undefined && end !== null && end !== '') ? Number(end) : numStart;
     if (isNaN(numStart)) return null;
-    const isGrammar = category === 'grammar';
-    const isExam = category === 'exam';
+
+    const wb = wordbookId ? wordbooksMap[wordbookId] : undefined;
+    const effectiveType = wordbookType || wb?.type;
+    const effectiveTitle = wordbookTitle || wb?.title;
+
+    // Reading passage / sentence-order is the ONLY type that uses '지문'
+    const isSentenceOrder = 
+      effectiveType === 'sentence-order' || 
+      (effectiveTitle ? (effectiveTitle.includes('지문') || effectiveTitle.includes('문장 순서') || effectiveTitle.includes('문장순서')) : false);
+
+    const isGrammar = 
+      category === 'grammar' || 
+      (effectiveType ? [
+        'irregular', 'relative-grammar', 'modal-grammar', 'basic-modal-grammar', 
+        'verb-form-grammar', 'grammar-cramming', 'complement-grammar', 
+        'to-ing-grammar', 'conversion-grammar', 'comparative-grammar'
+      ].includes(effectiveType) : false);
+
+    if (isSentenceOrder) {
+      return numStart === numEnd ? `지문 ${numStart}` : `지문 ${numStart}~${numEnd}`;
+    }
     if (isGrammar) {
       return numStart === numEnd ? `${numStart}세트` : `${numStart}~${numEnd}세트`;
     }
-    if (isExam) {
-      return numStart === numEnd ? `지문 ${numStart}` : `지문 ${numStart}~${numEnd}`;
-    }
+    // Wordbooks (단어장) - standard, exam prep (내신/수능), or general - always use DAY
     return numStart === numEnd ? `DAY ${numStart}` : `DAY ${numStart}~${numEnd}`;
+  };
+
+  const getDayRangeLabel = (session: any) => {
+    const wb = session.wordbookId ? wordbooksMap[session.wordbookId] : undefined;
+    const effectiveType = session.wordbookType || wb?.type;
+    const effectiveTitle = session.wordbookTitle || wb?.title;
+    const isSentenceOrder = effectiveType === 'sentence-order' || (effectiveTitle ? (effectiveTitle.includes('지문') || effectiveTitle.includes('문장 순서') || effectiveTitle.includes('문장순서')) : false);
+    const isGrammar = session.category === 'grammar' || (effectiveType ? ['irregular', 'relative-grammar', 'modal-grammar', 'basic-modal-grammar', 'verb-form-grammar', 'grammar-cramming', 'complement-grammar', 'to-ing-grammar', 'conversion-grammar', 'comparative-grammar'].includes(effectiveType) : false);
+    if (isSentenceOrder) return '지문:';
+    if (isGrammar) return '설정 세트:';
+    return session.type === 'test' ? '학습자 설정 DAY:' : '범위:';
   };
 
   const totalSessionPages = Math.ceil(stats.sessionHistory.length / SESSIONS_PER_PAGE);
@@ -242,7 +285,9 @@ export default function LearningReport() {
     (session.incorrectAnswers || []).map((ans: any) => ({
       ...ans,
       sessionId: session.id,
+      wordbookId: session.wordbookId,
       wordbookTitle: session.wordbookTitle,
+      wordbookType: session.wordbookType,
       dayStart: session.dayStart,
       dayEnd: session.dayEnd,
       category: session.category,
@@ -575,9 +620,9 @@ export default function LearningReport() {
                         }`}>
                           {session.type === 'test' && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse inline-block" />}
                           <span className="text-[10px] font-bold opacity-70">
-                            {session.type === 'test' ? '학습자 설정 DAY:' : '범위:'}
+                            {getDayRangeLabel(session)}
                           </span>
-                          {formatDayRange(session.dayStart, session.dayEnd, session.category)}
+                          {formatDayRange(session.dayStart, session.dayEnd, session.category, session.wordbookType, session.wordbookTitle, session.wordbookId)}
                         </span>
                       )}
                     </div>
@@ -591,7 +636,7 @@ export default function LearningReport() {
                         <>
                           <span>•</span>
                           <span className="font-bold text-rose-600 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
-                            설정 DAY: {formatDayRange(session.dayStart, session.dayEnd, session.category)}
+                            {getDayRangeLabel(session)} {formatDayRange(session.dayStart, session.dayEnd, session.category, session.wordbookType, session.wordbookTitle, session.wordbookId)}
                           </span>
                         </>
                       )}
@@ -687,7 +732,7 @@ export default function LearningReport() {
                     </span>
                     {ans.dayStart !== undefined && (
                       <span className="text-[9px] md:text-[10px] font-black text-indigo-600 bg-white px-2 py-0.5 rounded-md border border-indigo-100">
-                        {formatDayRange(ans.dayStart, ans.dayEnd, ans.category)}
+                        {formatDayRange(ans.dayStart, ans.dayEnd, ans.category, ans.wordbookType, ans.wordbookTitle, ans.wordbookId)}
                       </span>
                     )}
                     <span className="text-[9px] md:text-[10px] font-bold text-slate-400">

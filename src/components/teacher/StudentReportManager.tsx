@@ -69,6 +69,21 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
   const [editingContent, setEditingContent] = useState('');
   const [isDeletingAssignment, setIsDeletingAssignment] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [wordbooksMap, setWordbooksMap] = useState<Record<string, { type?: string; title?: string }>>({});
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'wordbooks'), (snapshot) => {
+      const map: Record<string, { type?: string; title?: string }> = {};
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        map[d.id] = { type: data.type, title: data.title };
+      });
+      setWordbooksMap(map);
+    }, (err) => {
+      console.warn('Failed to load wordbooks in StudentReportManager:', err);
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     // Fetch all users (students and teachers)
@@ -267,20 +282,48 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
     return `${yyyy}-${mm}-${dd} (${day})`;
   };
 
-  const formatDayRange = (start?: any, end?: any, category?: string) => {
+  const formatDayRange = (start?: any, end?: any, category?: string, wordbookType?: string, wordbookTitle?: string, wordbookId?: string) => {
     if (start === undefined || start === null || start === '') return null;
     const numStart = Number(start);
     const numEnd = (end !== undefined && end !== null && end !== '') ? Number(end) : numStart;
     if (isNaN(numStart)) return null;
-    const isGrammar = category === 'grammar';
-    const isExam = category === 'exam';
+
+    const wb = wordbookId ? wordbooksMap[wordbookId] : undefined;
+    const effectiveType = wordbookType || wb?.type;
+    const effectiveTitle = wordbookTitle || wb?.title;
+
+    // Reading passage / sentence-order is the ONLY type that uses '지문'
+    const isSentenceOrder = 
+      effectiveType === 'sentence-order' || 
+      (effectiveTitle ? (effectiveTitle.includes('지문') || effectiveTitle.includes('문장 순서') || effectiveTitle.includes('문장순서')) : false);
+
+    const isGrammar = 
+      category === 'grammar' || 
+      (effectiveType ? [
+        'irregular', 'relative-grammar', 'modal-grammar', 'basic-modal-grammar', 
+        'verb-form-grammar', 'grammar-cramming', 'complement-grammar', 
+        'to-ing-grammar', 'conversion-grammar', 'comparative-grammar'
+      ].includes(effectiveType) : false);
+
+    if (isSentenceOrder) {
+      return numStart === numEnd ? `지문 ${numStart}` : `지문 ${numStart}~${numEnd}`;
+    }
     if (isGrammar) {
       return numStart === numEnd ? `${numStart}세트` : `${numStart}~${numEnd}세트`;
     }
-    if (isExam) {
-      return numStart === numEnd ? `지문 ${numStart}` : `지문 ${numStart}~${numEnd}`;
-    }
+    // Wordbooks (단어장) always use DAY
     return numStart === numEnd ? `DAY ${numStart}` : `DAY ${numStart}~${numEnd}`;
+  };
+
+  const getDayRangeLabel = (session: any) => {
+    const wb = session.wordbookId ? wordbooksMap[session.wordbookId] : undefined;
+    const effectiveType = session.wordbookType || wb?.type;
+    const effectiveTitle = session.wordbookTitle || wb?.title;
+    const isSentenceOrder = effectiveType === 'sentence-order' || (effectiveTitle ? (effectiveTitle.includes('지문') || effectiveTitle.includes('문장 순서') || effectiveTitle.includes('문장순서')) : false);
+    const isGrammar = session.category === 'grammar' || (effectiveType ? ['irregular', 'relative-grammar', 'modal-grammar', 'basic-modal-grammar', 'verb-form-grammar', 'grammar-cramming', 'complement-grammar', 'to-ing-grammar', 'conversion-grammar', 'comparative-grammar'].includes(effectiveType) : false);
+    if (isSentenceOrder) return '지문:';
+    if (isGrammar) return '설정 세트:';
+    return session.type === 'test' ? '학습자 설정 DAY:' : '범위:';
   };
 
   const testSessions = sessionHistory.filter(s => s.type === 'test');
@@ -301,7 +344,9 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
   const allIncorrectAnswers = sessionHistory.flatMap(session => 
     (session.incorrectAnswers || []).map((ans: any) => ({
       ...ans,
+      wordbookId: session.wordbookId,
       wordbookTitle: session.wordbookTitle,
+      wordbookType: session.wordbookType,
       dayStart: session.dayStart,
       dayEnd: session.dayEnd,
       category: session.category,
@@ -648,7 +693,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                         <div className="text-2xl font-black text-slate-900">{testSessions.length}회</div>
                         {testSessions[0] && (
                           <div className="text-[10px] font-bold text-rose-400 mt-0.5">
-                            최근: {formatDayRange(testSessions[0].dayStart, testSessions[0].dayEnd, testSessions[0].category) || '완료'}
+                            최근: {formatDayRange(testSessions[0].dayStart, testSessions[0].dayEnd, testSessions[0].category, testSessions[0].wordbookType, testSessions[0].wordbookTitle, testSessions[0].wordbookId) || '완료'}
                           </div>
                         )}
                       </div>
@@ -679,7 +724,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                         {testSessions.slice(0, 4).map((ts, idx) => {
                           const percentage = ts.totalItems ? Math.round((ts.score! / ts.totalItems) * 100) : 0;
                           const isPassed = percentage >= 90;
-                          const dayText = formatDayRange(ts.dayStart, ts.dayEnd, ts.category);
+                          const dayText = formatDayRange(ts.dayStart, ts.dayEnd, ts.category, ts.wordbookType, ts.wordbookTitle, ts.wordbookId);
                           return (
                             <div key={idx} className="bg-white p-4 rounded-2xl border border-rose-100 shadow-2xs flex flex-col justify-between gap-3 hover:shadow-sm transition-all">
                               <div className="flex items-start justify-between gap-2">
@@ -690,7 +735,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                                     </span>
                                     {dayText && (
                                       <span className="text-xs font-black text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-lg border border-rose-200 inline-flex items-center gap-1">
-                                        <span className="text-[9px] font-bold text-rose-400">설정 DAY:</span>
+                                        <span className="text-[9px] font-bold text-rose-400">{getDayRangeLabel(ts)}</span>
                                         {dayText}
                                       </span>
                                     )}
@@ -794,9 +839,9 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                                     }`}>
                                       {session.type === 'test' && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse inline-block" />}
                                       <span className="text-[10px] font-bold opacity-70">
-                                        {session.type === 'test' ? '학습자 설정 DAY:' : '범위:'}
+                                        {getDayRangeLabel(session)}
                                       </span>
-                                      {formatDayRange(session.dayStart, session.dayEnd, session.category)}
+                                      {formatDayRange(session.dayStart, session.dayEnd, session.category, session.wordbookType, session.wordbookTitle, session.wordbookId)}
                                     </span>
                                   )}
                                 </div>
@@ -812,7 +857,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                                     <>
                                       <span>•</span>
                                       <span className="font-bold text-rose-600 bg-rose-50/80 px-1.5 py-0.5 rounded text-[10px] border border-rose-100">
-                                        설정 DAY: {formatDayRange(session.dayStart, session.dayEnd, session.category)}
+                                        {getDayRangeLabel(session)} {formatDayRange(session.dayStart, session.dayEnd, session.category, session.wordbookType, session.wordbookTitle, session.wordbookId)}
                                       </span>
                                     </>
                                   )}
@@ -885,7 +930,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                                 </span>
                                 {ans.dayStart !== undefined && (
                                   <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
-                                    {formatDayRange(ans.dayStart, ans.dayEnd, ans.category)}
+                                    {formatDayRange(ans.dayStart, ans.dayEnd, ans.category, ans.wordbookType, ans.wordbookTitle, ans.wordbookId)}
                                   </span>
                                 )}
                                 <span className="text-[9px] font-bold text-slate-400">

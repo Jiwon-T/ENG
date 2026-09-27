@@ -360,6 +360,7 @@ export async function recordStudySession(data: {
   uid: string;
   wordbookId: string;
   wordbookTitle?: string;
+  wordbookType?: string;
   type: 'quiz' | 'flashcard' | 'match' | 'conjugation' | 'test';
   category?: 'word' | 'grammar' | 'exam';
   duration: number; // in seconds
@@ -424,6 +425,7 @@ export async function recordStudySession(data: {
       uid: data.uid,
       wordbookId: data.wordbookId,
       wordbookTitle: (data.wordbookTitle || '단어장').slice(0, 450),
+      wordbookType: data.wordbookType || undefined,
       type: data.type,
       category: data.category || 'word',
       duration: safeDuration,
