@@ -1,21 +1,34 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson } from '../_lib/http.ts';
-import { NotionReportWebhookSchema, type StoredLessonReport } from '../_lib/reportSchemas.ts';
+import {
+  NotionReportWebhookSchema,
+  type StoredLessonReport,
+  type StoredNotionStudentMapping,
+} from '../_lib/reportSchemas.ts';
+import { lookupStudentAndGuardianContact } from '../_lib/notion.ts';
+import { generateInternalStudentId, hashStudentKey, getSecretOrThrow } from '../_lib/security.ts';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.ts';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-  if (req.method !== 'POST') {
-    return sendJson(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
-  }
-
-  const expectedSecret = process.env.MAKE_NOTION_WEBHOOK_SECRET;
-  const providedSecret = req.headers['x-webhook-secret'];
-
-  if (!expectedSecret || providedSecret !== expectedSecret) {
-    return sendJson(res, 401, { ok: false, error: 'UNAUTHORIZED_WEBHOOK' });
-  }
-
   try {
+    if (req.method !== 'POST') {
+      res.setHeader('Allow', 'POST');
+      return sendJson(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
+    }
+
+    // 최소 32자 시크릿 검증
+    let expectedSecret: string;
+    try {
+      expectedSecret = getSecretOrThrow('MAKE_NOTION_WEBHOOK_SECRET', 32);
+    } catch {
+      return sendJson(res, 500, { ok: false, error: 'SERVER_CONFIG_ERROR' });
+    }
+
+    const providedSecret = req.headers['x-webhook-secret'];
+    if (!providedSecret || providedSecret !== expectedSecret) {
+      return sendJson(res, 401, { ok: false, error: 'UNAUTHORIZED_WEBHOOK' });
+    }
+
     const rawBody = await parseJsonBody(req);
     const parsed = NotionReportWebhookSchema.safeParse(rawBody);
 
@@ -30,32 +43,55 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const data = parsed.data;
     const { db } = getFirebaseAdmin();
 
-    // 학생 studentId 매핑:
-    // 테스트 학생 고정 식별자, 또는 users 컬렉션 notionStudentKey 매핑
-    let studentId: string;
-    if (data.studentKey === '테스트 (복제고1)') {
-      studentId = 'test-student-bokje-uid';
+    const studentKeyHash = hashStudentKey(data.studentKey);
+    const notionMappingDocRef = db.collection('notionStudentMappings').doc(studentKeyHash);
+    const mappingSnap = await notionMappingDocRef.get();
+
+    let internalStudentId: string;
+
+    if (mappingSnap.exists) {
+      const mapping = mappingSnap.data() as StoredNotionStudentMapping;
+      internalStudentId = mapping.internalStudentId;
     } else {
-      const userSnap = await db.collection('users').where('notionStudentKey', '==', data.studentKey).limit(1).get();
-      if (!userSnap.empty) {
-        studentId = userSnap.docs[0].id;
-      } else {
+      // notionStudentMappings가 아직 없다면 Notion API를 조회하여 안전하게 매핑 생성
+      let notionLookup;
+      try {
+        notionLookup = await lookupStudentAndGuardianContact(data.studentKey);
+      } catch (notionErr: any) {
         return sendJson(res, 422, {
           ok: false,
-          error: 'STUDENT_NOT_MAPPED',
-          message: '수강생 시스템에 매핑되지 않은 학생입니다.',
+          error: 'STUDENT_NOT_FOUND_IN_NOTION',
+          message: 'Notion [DB_학생 관리]에서 학생 정보를 찾을 수 없습니다.',
         });
       }
+
+      internalStudentId = generateInternalStudentId(notionLookup.notionStudentPageId);
+      const now = new Date().toISOString();
+
+      // 신규 Notion 매핑 생성 시 firebaseUid는 항상 null (관리자 명시적 연결 전 자동 지정 금지)
+      const newMapping: StoredNotionStudentMapping = {
+        internalStudentId,
+        studentKey: data.studentKey,
+        studentDisplayName: notionLookup.studentDisplayName,
+        notionStudentPageId: notionLookup.notionStudentPageId,
+        firebaseUid: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await notionMappingDocRef.set(newMapping);
     }
 
     const now = new Date().toISOString();
     const docRef = db.collection('lessonReports').doc(data.notionPageId);
     const prevSnap = await docRef.get();
 
+    const sourceUpdatedAt = data.sourceUpdatedAt || now;
+
+    // lessonReports 저장 시 Firebase UID가 아닌 internalStudentId를 학생 식별자로 저장
     const storedReport: StoredLessonReport = {
       notionPageId: data.notionPageId,
       studentKey: data.studentKey,
-      studentId,
+      internalStudentId,
       lessonDateStart: data.lessonDateStart,
       lessonDateEnd: data.lessonDateEnd || null,
       lessonTime: data.lessonTime || '',
@@ -68,7 +104,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       vocabularyScore: data.vocabularyScore ?? null,
       schoolExamScore: data.schoolExamScore ?? null,
       feedback: data.feedback || '',
-      sourceUpdatedAt: now,
+      sourceUpdatedAt,
       serverReceivedAt: prevSnap.exists ? (prevSnap.data() as StoredLessonReport).serverReceivedAt : now,
       serverUpdatedAt: now,
     };
@@ -81,10 +117,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       isNew: !prevSnap.exists,
     });
   } catch (err: any) {
-    return sendJson(res, 500, {
-      ok: false,
-      error: 'SERVER_ERROR',
-      message: err.message?.startsWith('CONFIG_ERROR') ? err.message : 'Internal Server Error',
-    });
+    return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });
   }
 }

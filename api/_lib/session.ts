@@ -1,19 +1,22 @@
 import { getFirebaseAdmin } from './firebaseAdmin.ts';
 import { hashToken, generateSecureToken } from './security.ts';
+import type { StoredReportSlug } from './reportSchemas.ts';
 
 export interface ParentSessionData {
   sessionHash: string;
   reportSlug: string;
-  studentId: string;
-  studentKey: string;
+  internalStudentId: string;
+  studentDisplayName: string;
+  authVersion: number;
   createdAt: string;
   expiresAt: string;
 }
 
 export async function createParentSession(params: {
   reportSlug: string;
-  studentId: string;
-  studentKey: string;
+  internalStudentId: string;
+  studentDisplayName: string;
+  authVersion: number;
 }): Promise<{ rawSessionToken: string; expiresAt: string }> {
   const { db } = getFirebaseAdmin();
   const rawSessionToken = generateSecureToken(32);
@@ -25,8 +28,9 @@ export async function createParentSession(params: {
   const sessionData: ParentSessionData = {
     sessionHash,
     reportSlug: params.reportSlug,
-    studentId: params.studentId,
-    studentKey: params.studentKey,
+    internalStudentId: params.internalStudentId,
+    studentDisplayName: params.studentDisplayName,
+    authVersion: params.authVersion,
     createdAt: new Date().toISOString(),
     expiresAt,
   };
@@ -36,6 +40,14 @@ export async function createParentSession(params: {
   return { rawSessionToken, expiresAt };
 }
 
+/**
+ * 학부모 세션 유효성 종합 검증:
+ * 1. 세션 만료 시간 검증
+ * 2. 현재 reportSlugs/{slug} 문서 재조회
+ * 3. active == true 검증 (비활성화 즉시 차단)
+ * 4. internalStudentId 일치 검증
+ * 5. authVersion 일치 검증 (PIN/링크 갱신 시 기존 세션 즉시 무효화)
+ */
 export async function getVerifiedParentSession(rawSessionToken: string): Promise<ParentSessionData | null> {
   if (!rawSessionToken) return null;
 
@@ -47,6 +59,24 @@ export async function getVerifiedParentSession(rawSessionToken: string): Promise
 
   const session = doc.data() as ParentSessionData;
   if (new Date(session.expiresAt) < new Date()) {
+    return null;
+  }
+
+  // 연결된 reportSlug 문서의 최신 상태 검증
+  const slugDoc = await db.collection('reportSlugs').doc(session.reportSlug).get();
+  if (!slugDoc.exists) return null;
+
+  const slugData = slugDoc.data() as StoredReportSlug;
+  if (!slugData.active) {
+    return null;
+  }
+
+  if (slugData.internalStudentId !== session.internalStudentId) {
+    return null;
+  }
+
+  // authVersion 검증 (불일치 시 즉시 무효화)
+  if (slugData.authVersion !== session.authVersion) {
     return null;
   }
 

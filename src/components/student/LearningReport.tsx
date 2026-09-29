@@ -4,6 +4,7 @@ import { BarChart3, TrendingUp, BookOpen, CheckCircle2, Clock, Calendar, Clipboa
 import { db, auth, handleFirestoreError, OperationType, markIncorrectAnswerReviewed } from '../../lib/firebase';
 import { PetService } from '../../lib/petService';
 import { collection, query, where, onSnapshot, doc, getDoc, orderBy, limit, updateDoc, getDocs } from 'firebase/firestore';
+import { safeFetchJson } from '../../lib/safeFetchJson';
 
 export default function LearningReport() {
   const [stats, setStats] = useState({
@@ -180,16 +181,17 @@ export default function LearningReport() {
     });
 
     // Fetch official lesson scores from server (StudentLessonReportDTO)
-    fetch(`/api/student/lesson-reports?studentId=${auth.currentUser.uid}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.ok && Array.isArray(data.reports)) {
-          setStudentLessonReports(data.reports);
+    auth.currentUser.getIdToken().then(idToken => {
+      safeFetchJson<{ ok: boolean; reports: any[] }>('/api/student/lesson-reports', {
+        headers: { Authorization: `Bearer ${idToken}` },
+      }).then(res => {
+        if (res.ok && res.data?.reports && Array.isArray(res.data.reports)) {
+          setStudentLessonReports(res.data.reports);
         }
-      })
-      .catch(err => {
-        console.warn('Failed to load official lesson reports for student:', err);
       });
+    }).catch(() => {
+      // safe fallback on token failure
+    });
 
     return () => {
       unsubWords();

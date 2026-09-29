@@ -6,21 +6,27 @@ import type { ParentLessonReportDTO, StoredLessonReport } from '../_lib/reportSc
 import crypto from 'crypto';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-  if (req.method !== 'GET') {
-    return sendJson(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
-  }
-
-  const cookies = parseCookies(req);
-  const sessionToken = cookies['parent_session'];
-
-  if (!sessionToken) {
-    return sendJson(res, 401, { ok: false, error: 'AUTH_REQUIRED', message: '보호자 인증이 필요합니다.' });
-  }
-
   try {
+    if (req.method !== 'GET') {
+      res.setHeader('Allow', 'GET');
+      return sendJson(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
+    }
+
+    const cookies = parseCookies(req);
+    const sessionToken = cookies['parent_session'];
+
+    if (!sessionToken) {
+      return sendJson(res, 401, { ok: false, error: 'AUTH_REQUIRED', message: '보호자 인증이 필요합니다.' });
+    }
+
+    // getVerifiedParentSession에서 active==true 및 authVersion 일치까지 함께 검증
     const session = await getVerifiedParentSession(sessionToken);
     if (!session) {
-      return sendJson(res, 401, { ok: false, error: 'SESSION_EXPIRED', message: '세션이 만료되었습니다. 다시 인증해 주세요.' });
+      return sendJson(res, 401, {
+        ok: false,
+        error: 'SESSION_EXPIRED',
+        message: '세션이 만료되었거나 비활성화되었습니다. 다시 인증해 주세요.',
+      });
     }
 
     // 접속한 reportSlug와 세션이 결속되어 있는지 검증
@@ -31,8 +37,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     const { db } = getFirebaseAdmin();
+    // internalStudentId 기준으로 수업 일지 조회
     const reportsSnap = await db.collection('lessonReports')
-      .where('studentId', '==', session.studentId)
+      .where('internalStudentId', '==', session.internalStudentId)
       .get();
 
     const storedReports: StoredLessonReport[] = [];
@@ -61,8 +68,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return sendJson(res, 200, {
       ok: true,
       student: {
-        studentKey: session.studentKey,
-        reportSlug: session.reportSlug,
+        // 내부 studentKey 및 Notion Page ID를 절대 노출하지 않고 학부모 표시명만 전달
+        studentDisplayName: session.studentDisplayName,
       },
       reports: parentDTOs,
     });

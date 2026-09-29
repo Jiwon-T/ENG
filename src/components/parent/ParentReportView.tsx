@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { ParentLessonReportDTO } from '../../types/lessonReport';
+import { safeFetchJson } from '../../lib/safeFetchJson';
 
 interface ParentReportViewProps {
   reportSlug: string;
@@ -11,6 +12,8 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
   const [errorMsg, setErrorMsg] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isInvalidSlug, setIsInvalidSlug] = useState(false);
+  const [isServerDown, setIsServerDown] = useState(false);
   const [studentDisplayName, setStudentDisplayName] = useState('');
 
   const [loadingReports, setLoadingReports] = useState(false);
@@ -24,8 +27,8 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     meta.content = 'noindex, nofollow';
     document.head.appendChild(meta);
 
-    // 기존 세션이 있는지 즉시 확인
-    checkExistingSession();
+    // 1단계: 공개 상태 확인 (슬러그 존재 및 활성 여부 검증)
+    checkReportStatus();
 
     return () => {
       if (document.head.contains(meta)) {
@@ -34,22 +37,47 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     };
   }, [reportSlug]);
 
-  const checkExistingSession = async () => {
+  const checkReportStatus = async () => {
     setLoadingReports(true);
+    const result = await safeFetchJson<{ ok: boolean; active: boolean }>(
+      `/api/parent/report-status?reportSlug=${encodeURIComponent(reportSlug)}`
+    );
+
+    if (result.status === 500 || result.error === 'NETWORK_ERROR') {
+      setIsServerDown(true);
+      setLoadingReports(false);
+      return;
+    }
+
+    if (!result.data || !result.data.active) {
+      setIsInvalidSlug(true);
+      setLoadingReports(false);
+      return;
+    }
+
+    // 활성 슬러그인 경우 기존 세션 검증
+    checkExistingSession();
+  };
+
+  const checkExistingSession = async () => {
     try {
-      const res = await fetch(`/api/parent/lesson-reports?reportSlug=${encodeURIComponent(reportSlug)}`);
-      const data = await res.json();
-      if (data.ok) {
+      const res = await safeFetchJson<{
+        ok: boolean;
+        student?: { studentDisplayName: string };
+        reports?: ParentLessonReportDTO[];
+      }>(`/api/parent/lesson-reports?reportSlug=${encodeURIComponent(reportSlug)}`);
+
+      if (res.ok && res.data) {
         setIsAuthenticated(true);
-        setStudentDisplayName(data.student?.studentKey || '');
-        setReports(data.reports || []);
-        if (data.reports?.length > 0) {
-          setSelectedReport(data.reports[0]);
+        setStudentDisplayName(res.data.student?.studentDisplayName || '');
+        setReports(res.data.reports || []);
+        if (res.data.reports && res.data.reports.length > 0) {
+          setSelectedReport(res.data.reports[0]);
         }
       } else {
         setIsAuthenticated(false);
       }
-    } catch (e) {
+    } catch {
       setIsAuthenticated(false);
     } finally {
       setLoadingReports(false);
@@ -66,35 +94,37 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     setIsVerifying(true);
     setErrorMsg('');
 
-    try {
-      const res = await fetch('/api/parent/verify-pin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reportSlug,
-          pin: pin.trim(),
-        }),
-      });
+    const res = await safeFetchJson<{
+      ok: boolean;
+      studentDisplayName?: string;
+      remainingAttempts?: number;
+      message?: string;
+      error?: string;
+    }>('/api/parent/verify-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reportSlug,
+        pin: pin.trim(),
+      }),
+    });
 
-      const data = await res.json();
+    setIsVerifying(false);
 
-      if (data.ok) {
-        setIsAuthenticated(true);
-        setStudentDisplayName(data.studentDisplayName || '');
-        setPin('');
-        await checkExistingSession();
+    if (res.ok && res.data) {
+      setIsAuthenticated(true);
+      setStudentDisplayName(res.data.studentDisplayName || '');
+      setPin('');
+      await checkExistingSession();
+    } else {
+      if (res.data?.error === 'INVALID_OR_INACTIVE_REPORT') {
+        setIsInvalidSlug(true);
+      } else if (res.data?.error === 'TEMPORARILY_LOCKED') {
+        setErrorMsg('보안을 위해 조회가 15분간 잠겼습니다. 잠시 후 다시 시도해 주세요.');
       } else {
-        if (data.error === 'TEMPORARILY_LOCKED') {
-          setErrorMsg('보안을 위해 조회가 15분간 잠겼습니다. 잠시 후 다시 시도해 주세요.');
-        } else {
-          const remaining = data.remainingAttempts !== undefined ? ` (남은 횟수: ${data.remainingAttempts}회)` : '';
-          setErrorMsg((data.message || '인증번호가 일치하지 않습니다.') + remaining);
-        }
+        const remaining = res.data?.remainingAttempts !== undefined ? ` (남은 횟수: ${res.data.remainingAttempts}회)` : '';
+        setErrorMsg((res.data?.message || res.userMessage) + remaining);
       }
-    } catch (e) {
-      setErrorMsg('인증 처리 중 네트워크 오류가 발생했습니다.');
-    } finally {
-      setIsVerifying(false);
     }
   };
 
@@ -143,8 +173,44 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
         </div>
       </header>
 
-      {/* 1. 보호자 전화번호 뒤 4자리 인증 모달 */}
-      {!isAuthenticated && (
+      {/* 1. 서버 장애 화면 */}
+      {isServerDown && (
+        <main className="max-w-md mx-auto px-4 pt-20 text-center">
+          <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 space-y-4">
+            <div className="text-4xl">⚠️</div>
+            <h2 className="text-lg font-bold text-slate-900">현재 리포트를 불러올 수 없습니다</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              서버 연결이 원활하지 않습니다.<br />
+              잠시 후 다시 접속을 시도해 주세요.
+            </p>
+          </div>
+        </main>
+      )}
+
+      {/* 2. 유효하지 않은 주소일 때 표준 404 안내 화면 */}
+      {!isServerDown && isInvalidSlug && (
+        <main className="max-w-md mx-auto px-4 pt-20 text-center">
+          <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200 space-y-4">
+            <div className="text-4xl">🔍</div>
+            <h2 className="text-lg font-bold text-slate-900">페이지를 찾을 수 없습니다 (404)</h2>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              요청하신 학부모 리포트 주소가 유효하지 않거나 비활성화되었습니다.<br />
+              선생님께 올바른 주소를 다시 안내받아 주세요.
+            </p>
+            {onGoHome && (
+              <button
+                onClick={onGoHome}
+                className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition"
+              >
+                메인 홈으로 이동
+              </button>
+            )}
+          </div>
+        </main>
+      )}
+
+      {/* 3. 보호자 전화번호 뒤 4자리 인증 모달 */}
+      {!isServerDown && !isInvalidSlug && !isAuthenticated && (
         <main className="max-w-md mx-auto px-4 pt-16">
           <div className="bg-white rounded-2xl p-6 shadow-xl border border-slate-200 space-y-5">
             <div className="text-center space-y-2">
@@ -201,8 +267,8 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
         </main>
       )}
 
-      {/* 2. 인증 성공 후: 상세 수업 리포트 화면 */}
-      {isAuthenticated && (
+      {/* 3. 인증 성공 후: 상세 수업 리포트 화면 */}
+      {!isInvalidSlug && isAuthenticated && (
         <main className="max-w-4xl mx-auto px-4 pt-6 space-y-6">
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>

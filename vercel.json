@@ -1,5 +1,12 @@
 {
   "version": 2,
+  "redirects": [
+    {
+      "source": "/report/:slug",
+      "destination": "/:slug",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

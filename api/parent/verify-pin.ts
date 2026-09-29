@@ -6,11 +6,12 @@ import { createParentSession } from '../_lib/session.ts';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.ts';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-  if (req.method !== 'POST') {
-    return sendJson(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
-  }
-
   try {
+    if (req.method !== 'POST') {
+      res.setHeader('Allow', 'POST');
+      return sendJson(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
+    }
+
     const rawBody = await parseJsonBody(req);
     const parsed = VerifyPinSchema.safeParse(rawBody);
 
@@ -24,22 +25,64 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     const { reportSlug, pin } = parsed.data;
     const { db } = getFirebaseAdmin();
-
     const docRef = db.collection('reportSlugs').doc(reportSlug);
-    const snap = await docRef.get();
 
-    // 존재하지 않거나 비활성화된 경우 정보 노출 최소화
-    if (!snap.exists) {
+    let verifyOutcome: {
+      status: 'success' | 'incorrect' | 'locked' | 'inactive' | 'not_found';
+      remainingAttempts?: number;
+      studentDisplayName?: string;
+      internalStudentId?: string;
+      authVersion?: number;
+    };
+
+    // Firestore Transaction으로 동시성 및 잠금 상태 원자적 보호
+    verifyOutcome = await db.runTransaction(async (t) => {
+      const snap = await t.get(docRef);
+      if (!snap.exists) {
+        return { status: 'not_found' };
+      }
+
+      const record = snap.data() as StoredReportSlug;
+      if (!record.active) {
+        return { status: 'inactive' };
+      }
+
+      // 15분 잠금 확인
+      if (record.lockedUntil && new Date(record.lockedUntil) > new Date()) {
+        return { status: 'locked' };
+      }
+
+      const inputPinHash = hashPin(pin);
+      const isMatch = timingSafeCompare(inputPinHash, record.parentPhonePinHash);
+
+      if (!isMatch) {
+        const failedAttempts = (record.failedAttempts || 0) + 1;
+        const updates: any = { failedAttempts };
+        if (failedAttempts >= 5) {
+          updates.lockedUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        }
+        t.update(docRef, updates);
+        return {
+          status: 'incorrect',
+          remainingAttempts: Math.max(0, 5 - failedAttempts),
+        };
+      }
+
+      // 성공 시 실패 카운트 리셋
+      t.update(docRef, { failedAttempts: 0, lockedUntil: null });
+      return {
+        status: 'success',
+        studentDisplayName: record.studentDisplayName || record.studentKey,
+        internalStudentId: record.internalStudentId,
+        authVersion: record.authVersion || 1,
+      };
+    });
+
+    if (verifyOutcome.status === 'not_found' || verifyOutcome.status === 'inactive') {
       return sendJson(res, 404, { ok: false, error: 'INVALID_OR_INACTIVE_REPORT' });
     }
 
-    const record = snap.data() as StoredReportSlug;
-    if (!record.active) {
-      return sendJson(res, 403, { ok: false, error: 'REPORT_DEACTIVATED' });
-    }
-
-    // 5회 잠금 시간 확인
-    if (record.lockedUntil && new Date(record.lockedUntil) > new Date()) {
+    if (verifyOutcome.status === 'locked') {
       return sendJson(res, 429, {
         ok: false,
         error: 'TEMPORARILY_LOCKED',
@@ -47,39 +90,23 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       });
     }
 
-    // PIN HMAC 비교 (Timing-safe comparison)
-    const inputPinHash = hashPin(pin);
-    const isMatch = timingSafeCompare(inputPinHash, record.parentPhonePinHash);
-
-    if (!isMatch) {
-      const failedAttempts = (record.failedAttempts || 0) + 1;
-      const updates: any = { failedAttempts };
-
-      if (failedAttempts >= 5) {
-        updates.lockedUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-      }
-
-      await docRef.update(updates);
-
+    if (verifyOutcome.status === 'incorrect') {
       return sendJson(res, 401, {
         ok: false,
         error: 'INCORRECT_PIN',
-        remainingAttempts: Math.max(0, 5 - failedAttempts),
+        remainingAttempts: verifyOutcome.remainingAttempts,
         message: '보호자 전화번호 뒷자리가 일치하지 않습니다.',
       });
     }
 
-    // 인증 성공 시 실패 카운트 리셋
-    await docRef.update({ failedAttempts: 0, lockedUntil: null });
-
-    // 암호학적 난수 세션 생성 (해시는 Firestore에 저장)
+    // 성공 시 authVersion과 internalStudentId를 포함하여 24시간 세션 생성
     const { rawSessionToken } = await createParentSession({
-      reportSlug: record.reportSlug,
-      studentId: record.studentId,
-      studentKey: record.studentKey,
+      reportSlug,
+      internalStudentId: verifyOutcome.internalStudentId!,
+      studentDisplayName: verifyOutcome.studentDisplayName!,
+      authVersion: verifyOutcome.authVersion || 1,
     });
 
-    // 브라우저에 안전한 HttpOnly/Secure 쿠키 전송
     setCookie(res, 'parent_session', rawSessionToken, {
       maxAgeSeconds: 86400,
       path: '/',
@@ -88,16 +115,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       sameSite: 'Lax',
     });
 
+    // 내부 studentKey는 절대 노출하지 않고 학부모 화면 표시용 studentDisplayName만 전달
     return sendJson(res, 200, {
       ok: true,
       reportSlug,
-      studentDisplayName: record.studentKey,
+      studentDisplayName: verifyOutcome.studentDisplayName,
     });
   } catch (err: any) {
-    return sendJson(res, 500, {
-      ok: false,
-      error: 'SERVER_ERROR',
-      message: err.message?.startsWith('CONFIG_ERROR') ? err.message : 'Internal Server Error',
-    });
+    return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });
   }
 }

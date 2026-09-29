@@ -1,6 +1,7 @@
 import { hashPin } from './security.ts';
 
 export interface NotionStudentLookupResult {
+  notionStudentPageId: string;
   studentKey: string;
   studentDisplayName: string;
   parentPhonePinHash: string;
@@ -8,10 +9,13 @@ export interface NotionStudentLookupResult {
 
 export async function lookupStudentAndGuardianContact(studentKey: string): Promise<NotionStudentLookupResult> {
   const token = process.env.NOTION_INTEGRATION_TOKEN;
-  const dbId = process.env.NOTION_STUDENT_DATABASE_ID || 'e2b0d0f1-c79a-8262-a208-8116c9201cfc';
+  const dbId = process.env.NOTION_STUDENT_DATABASE_ID;
 
-  if (!token) {
-    throw new Error('CONFIG_ERROR: NOTION_INTEGRATION_TOKEN is not configured.');
+  // 두 환경변수 중 하나라도 없으면 즉시 설정 오류 (하드코딩 fallback 전면 금지)
+  if (!token || !dbId) {
+    throw new Error(
+      'CONFIG_ERROR: Required Notion configuration is missing. Both NOTION_INTEGRATION_TOKEN and NOTION_STUDENT_DATABASE_ID must be set.'
+    );
   }
 
   const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
@@ -61,12 +65,14 @@ export async function lookupStudentAndGuardianContact(studentKey: string): Promi
   const last4 = digitsOnly.slice(-4);
   const parentPhonePinHash = hashPin(last4);
 
+  // 학생 호칭 우선, 없으면 원본 구분명, fallback studentKey
   const studentDisplayName =
     props['학생 호칭']?.rich_text?.[0]?.plain_text ||
     props['원본 구분명']?.rich_text?.[0]?.plain_text ||
     studentKey;
 
   return {
+    notionStudentPageId: page.id,
     studentKey,
     studentDisplayName,
     parentPhonePinHash,

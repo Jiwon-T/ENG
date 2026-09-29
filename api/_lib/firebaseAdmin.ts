@@ -16,8 +16,11 @@ export function getFirebaseAdmin(): { db: Firestore; auth: Auth } {
   let privateKey = process.env.FIREBASE_PRIVATE_KEY;
   const databaseId = process.env.FIRESTORE_DATABASE_ID;
 
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error('CONFIG_ERROR: Firebase Admin credentials (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY) are not configured.');
+  // 4개 필수 환경변수 중 하나라도 없으면 즉시 실패 (기본 DB fallback 금지)
+  if (!projectId || !clientEmail || !privateKey || !databaseId) {
+    throw new Error(
+      'CONFIG_ERROR: Required Firebase Admin configuration is incomplete. All four environment variables (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, FIRESTORE_DATABASE_ID) must be set.'
+    );
   }
 
   if (privateKey.includes('\\n')) {
@@ -37,7 +40,8 @@ export function getFirebaseAdmin(): { db: Firestore; auth: Auth } {
     adminApp = getApps()[0];
   }
 
-  adminDb = databaseId ? getFirestore(adminApp, databaseId) : getFirestore(adminApp);
+  // 반드시 지정된 databaseId를 명시하여 초기화 (default DB fallback 전면 차단)
+  adminDb = getFirestore(adminApp, databaseId);
   adminDb.settings({ ignoreUndefinedProperties: true });
   adminAuthInstance = getAuth(adminApp);
 

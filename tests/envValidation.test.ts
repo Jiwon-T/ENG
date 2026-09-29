@@ -1,0 +1,133 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { getFirebaseAdmin } from '../api/_lib/firebaseAdmin.ts';
+import { lookupStudentAndGuardianContact } from '../api/_lib/notion.ts';
+
+// 공식 확정된 10대 서버 환경변수 목록
+export const OFFICIAL_SERVER_ENV_VARS = [
+  'FIREBASE_PROJECT_ID',
+  'FIREBASE_CLIENT_EMAIL',
+  'FIREBASE_PRIVATE_KEY',
+  'FIRESTORE_DATABASE_ID',
+  'ADMIN_UID',
+  'PHONE_PIN_PEPPER',
+  'PARENT_SESSION_SECRET',
+  'MAKE_NOTION_WEBHOOK_SECRET',
+  'NOTION_INTEGRATION_TOKEN',
+  'NOTION_STUDENT_DATABASE_ID',
+] as const;
+
+describe('Environment Variable and Configuration Enforcement Tests', () => {
+  it('1. .env.example strictly matches the 10 official environment variables with zero divergence', () => {
+    const envExample = fs.readFileSync('.env.example', 'utf8');
+    const parsedVars = envExample
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#') && line.includes('='))
+      .map(line => line.split('=')[0].trim());
+
+    assert.equal(
+      parsedVars.length,
+      OFFICIAL_SERVER_ENV_VARS.length,
+      `Expected exactly ${OFFICIAL_SERVER_ENV_VARS.length} vars in .env.example, found ${parsedVars.length}`
+    );
+
+    for (const officialVar of OFFICIAL_SERVER_ENV_VARS) {
+      assert.ok(
+        parsedVars.includes(officialVar),
+        `Official env var ${officialVar} is missing from .env.example`
+      );
+    }
+
+    for (const parsedVar of parsedVars) {
+      assert.ok(
+        (OFFICIAL_SERVER_ENV_VARS as readonly string[]).includes(parsedVar),
+        `Unexpected env var ${parsedVar} in .env.example`
+      );
+    }
+  });
+
+  it('2. All server code in api/ references ONLY the official environment variables', () => {
+    const allowedEnvNames = new Set<string>([
+      ...OFFICIAL_SERVER_ENV_VARS,
+      'NODE_ENV', // 표준 런타임 변수 허용 (verify-pin secure cookie 분기용)
+    ]);
+
+    const apiFiles: string[] = [];
+    function scanDir(dir: string) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) scanDir(full);
+        else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) apiFiles.push(full);
+      }
+    }
+    scanDir('api');
+
+    const referencedEnvVars = new Set<string>();
+    for (const file of apiFiles) {
+      // gemini.ts는 기존 Gemini 프록시이므로 이번 리포트 시스템 환경변수 검사에서 분리 확인
+      if (file.endsWith('gemini.ts')) continue;
+
+      const code = fs.readFileSync(file, 'utf8');
+      const matches1 = code.matchAll(/process\.env\.([A-Z0-9_]+)/g);
+      for (const m of matches1) referencedEnvVars.add(m[1]);
+
+      const matches2 = code.matchAll(/getSecretOrThrow\(['"]([A-Z0-9_]+)['"]/g);
+      for (const m of matches2) referencedEnvVars.add(m[1]);
+    }
+
+    for (const usedVar of referencedEnvVars) {
+      assert.ok(
+        allowedEnvNames.has(usedVar),
+        `api/ code uses unregistered environment variable: ${usedVar}`
+      );
+    }
+
+    for (const officialVar of OFFICIAL_SERVER_ENV_VARS) {
+      assert.ok(
+        referencedEnvVars.has(officialVar),
+        `Official variable ${officialVar} is not referenced by any server code in api/`
+      );
+    }
+  });
+
+  it('3. getFirebaseAdmin throws CONFIG_ERROR when FIRESTORE_DATABASE_ID is missing (no fallback)', () => {
+    const origDb = process.env.FIRESTORE_DATABASE_ID;
+    const origProj = process.env.FIREBASE_PROJECT_ID;
+    const origEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const origKey = process.env.FIREBASE_PRIVATE_KEY;
+
+    try {
+      process.env.FIREBASE_PROJECT_ID = 'test-proj';
+      process.env.FIREBASE_CLIENT_EMAIL = 'test@example.com';
+      process.env.FIREBASE_PRIVATE_KEY = 'test-key';
+      delete process.env.FIRESTORE_DATABASE_ID;
+
+      assert.throws(() => getFirebaseAdmin(), /CONFIG_ERROR.*FIRESTORE_DATABASE_ID/);
+    } finally {
+      if (origDb) process.env.FIRESTORE_DATABASE_ID = origDb;
+      if (origProj) process.env.FIREBASE_PROJECT_ID = origProj;
+      if (origEmail) process.env.FIREBASE_CLIENT_EMAIL = origEmail;
+      if (origKey) process.env.FIREBASE_PRIVATE_KEY = origKey;
+    }
+  });
+
+  it('4. lookupStudentAndGuardianContact throws CONFIG_ERROR when NOTION_STUDENT_DATABASE_ID is missing', async () => {
+    const origToken = process.env.NOTION_INTEGRATION_TOKEN;
+    const origDb = process.env.NOTION_STUDENT_DATABASE_ID;
+
+    try {
+      process.env.NOTION_INTEGRATION_TOKEN = 'test_token';
+      delete process.env.NOTION_STUDENT_DATABASE_ID;
+
+      await assert.rejects(
+        async () => await lookupStudentAndGuardianContact('학생1'),
+        /CONFIG_ERROR.*NOTION_STUDENT_DATABASE_ID/
+      );
+    } finally {
+      if (origToken) process.env.NOTION_INTEGRATION_TOKEN = origToken;
+      if (origDb) process.env.NOTION_STUDENT_DATABASE_ID = origDb;
+    }
+  });
+});

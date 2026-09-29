@@ -317,20 +317,34 @@ export default function App() {
     reset();
   };
 
-  // 0. 학부모 고정 주소 (/report/:slug 또는 /:slug) 접근 시: 학생 로그인 없이 학부모 화면 즉시 서빙
+  // 0. 학부모 고정 주소 (/:slug) 접근 시: 학생 로그인 없이 학부모 화면 서빙
   const getParentReportSlug = (): string | null => {
     if (typeof window === 'undefined') return null;
     const pathname = window.location.pathname;
 
-    // 1) /report/:reportSlug 형식
+    // 1) /report/:reportSlug 접근 시 즉시 /:reportSlug 로 301/replaceState 리다이렉트
     const reportMatch = pathname.match(/^\/report\/([a-z0-9]{3,30})$/);
-    if (reportMatch) return reportMatch[1];
+    if (reportMatch) {
+      const targetSlug = reportMatch[1];
+      window.history.replaceState({}, '', `/${targetSlug}`);
+      return targetSlug;
+    }
 
-    // 2) 최상위 예약 경로(home, login, api 등)를 제외한 단독 /:reportSlug 형식
-    const reservedPaths = ['/', '/login', '/api', '/report', '/auth', '/favicon.ico'];
-    if (!reservedPaths.includes(pathname) && !pathname.startsWith('/api/')) {
-      const slugMatch = pathname.match(/^\/([a-z0-9]{3,30})$/);
-      if (slugMatch) return slugMatch[1];
+    // 2) 최상위 예약 경로 제외한 단독 /:reportSlug
+    const reservedList = [
+      'api', 'admin', 'teacher', 'student', 'parent', 'report', 'reports',
+      'login', 'logout', 'signup', 'register', 'home', 'profile', 'settings',
+      'archive', 'analyzer', 'generator', 'library', 'auth', 'callback',
+      'assets', 'static', 'favicon', 'robots', 'sitemap', 'manifest', 'health',
+      'vocab', 'grammar', 'exam', 'tutor', 'teacher-room', 'pet', 'sw', 'icon'
+    ];
+
+    const slugMatch = pathname.match(/^\/([a-z0-9]{3,30})$/);
+    if (slugMatch) {
+      const candidate = slugMatch[1];
+      if (!reservedList.includes(candidate)) {
+        return candidate;
+      }
     }
 
     return null;

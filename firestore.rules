@@ -110,6 +110,11 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.keys().hasOnly([
+               'uid', 'email', 'role', 'name', 'alias', 'photoURL',
+               'isNameSet', 'teacherNote', 'notionStudentKey',
+               'petStats', 'createdAt', 'updatedAt'
+             ]) &&
              data.uid is string && data.uid.size() <= 128 &&
              data.email is string && isValidEmail(data.email) &&
              data.role in ['teacher', 'student', 'admin'] &&
@@ -118,6 +123,7 @@ service cloud.firestore {
              (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 2000)) &&
              (!('isNameSet' in data) || data.isNameSet is bool) &&
              (!('teacherNote' in data) || data.teacherNote == null || (data.teacherNote is string && data.teacherNote.size() <= 2000)) &&
+             (!('notionStudentKey' in data) || data.notionStudentKey == null || (data.notionStudentKey is string && data.notionStudentKey.size() <= 100)) &&
              (!('petStats' in data) || (
                data.petStats is map && 
                data.petStats.points is number &&
@@ -128,6 +134,20 @@ service cloud.firestore {
              )) &&
              (!('createdAt' in data) || data.createdAt is timestamp) &&
              (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidNewUserCreation(uid, data) {
+      return isValidUser(data) &&
+             data.uid == uid &&
+             data.uid == request.auth.uid &&
+             data.email == request.auth.token.email &&
+             // 일반 신규 가입 사용자는 오직 'student' 역할만 가능
+             (data.role == 'student' || isAdmin()) &&
+             // 일반 사용자는 생성 시 notionStudentKey 및 관리자 전용 필드 지정 불가
+             (!('notionStudentKey' in data) || isAdmin()) &&
+             (!('teacherNote' in data) || isAdmin()) &&
+             (!('firebaseUid' in data)) &&
+             (!('admin' in data));
     }
 
     function isValidStudent(data) {
@@ -171,18 +191,20 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read: if isAuthenticated() && (isOwner(uid) || isTeacher());
-      // Allow authenticated user to create their own profile/document
-      allow create: if isOwner(uid) && isValidUser(request.resource.data);
+      // 일반 사용자는 student 역할로만 본인 문서 생성 가능. notionStudentKey 등 관리자 필드 설정 불가.
+      allow create: if isOwner(uid) && isValidNewUserCreation(uid, request.resource.data);
       allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
-        // Only Jiwon T (admin) can change the 'role' field
-        (request.resource.data.role == resource.data.role || isAdmin()) &&
-        (
-          isTeacher() ||
-          (isOwner(uid) && 
-           // Student cannot change their own teacherNote
-           (resource.data.role != 'student' || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['teacherNote']))
-          )
-        )
+        // 1) 관리자(Jiwon T)는 모든 유효한 사용자 필드 수정 가능
+        isAdmin() ||
+        // 2) 일반 선생님: 본인 계정 수정 또는 학생의 teacherNote 수정 허용 (학생의 notionStudentKey나 role 변경 불가)
+        (isTeacher() && (
+          (isOwner(uid) && request.resource.data.role == resource.data.role && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'notionStudentKey', 'firebaseUid', 'admin'])) ||
+          (!isOwner(uid) && resource.data.role == 'student' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['teacherNote', 'updatedAt']))
+        )) ||
+        // 3) 학생 본인: 프로필 관련 지정된 화이트리스트 필드만 수정 가능
+        // role, uid, email, teacherNote, notionStudentKey, firebaseUid, admin 수정 전면 차단
+        (isOwner(uid) && resource.data.role == 'student' && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'alias', 'photoURL', 'isNameSet', 'petStats', 'updatedAt']))
       );
       allow delete: if isAdmin();
     }
@@ -315,6 +337,17 @@ service cloud.firestore {
       // 고정 주소 매핑 정보는 클라이언트에서 직접 쓰지 못하며 서버 API를 통해서만 관리
       allow read: if isAuthenticated() && (isTeacher() || isAdmin());
       allow write: if false;
+    }
+
+    match /studentReportMappings/{internalStudentId} {
+      // 학생당 단일 활성 슬러그 원자적 보장 매핑 문서는 서버 전용
+      allow read: if isAuthenticated() && (isTeacher() || isAdmin());
+      allow write: if false;
+    }
+
+    match /notionStudentMappings/{studentKeyHash} {
+      // Notion 학생 매핑 문서는 서버 전용 (클라이언트 직접 읽기/쓰기 전면 차단)
+      allow read, write: if false;
     }
 
     match /reportAliases/{alias} {

@@ -3,6 +3,14 @@ import type { IncomingMessage, ServerResponse } from 'http';
 export function sendJson(res: ServerResponse, statusCode: number, data: any) {
   res.statusCode = statusCode;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
+  // 보안 및 캐싱 방지 헤더 (Vercel Serverless Functions CDN/브라우저 캐시 방지)
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Vary', 'Cookie, Authorization');
+
   res.end(JSON.stringify(data));
 }
 
@@ -57,17 +65,18 @@ export function setCookie(
     sameSite?: 'Strict' | 'Lax' | 'None';
   } = {}
 ) {
-  const {
-    maxAgeSeconds = 86400,
-    path = '/',
-    httpOnly = true,
-    secure = process.env.NODE_ENV === 'production',
-    sameSite = 'Lax',
-  } = options;
+  const parts = [`${name}=${encodeURIComponent(value)}`];
+  if (options.maxAgeSeconds !== undefined) {
+    parts.push(`Max-Age=${options.maxAgeSeconds}`);
+  }
+  parts.push(`Path=${options.path || '/'}`);
+  if (options.httpOnly !== false) {
+    parts.push('HttpOnly');
+  }
+  if (options.secure !== false) {
+    parts.push('Secure');
+  }
+  parts.push(`SameSite=${options.sameSite || 'Lax'}`);
 
-  let cookieString = `${name}=${encodeURIComponent(value)}; Path=${path}; Max-Age=${maxAgeSeconds}; SameSite=${sameSite}`;
-  if (httpOnly) cookieString += '; HttpOnly';
-  if (secure) cookieString += '; Secure';
-
-  res.setHeader('Set-Cookie', cookieString);
+  res.setHeader('Set-Cookie', parts.join('; '));
 }

@@ -8,6 +8,7 @@ import WordbookManager from './WordbookManager';
 import StudentReportManager from './StudentReportManager';
 import { PetService } from '../../lib/petService';
 import { PetCharacter } from '../pet/PetCharacters';
+import { safeFetchJson } from '../../lib/safeFetchJson';
 
 interface StudentUser {
   uid: string;
@@ -98,16 +99,18 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
     try {
       if (!auth.currentUser) return;
       const idToken = await auth.currentUser.getIdToken();
-      const res = await fetch(`/api/teacher/report-slug?studentKey=${encodeURIComponent(studentKey)}`, {
-        headers: { 'Authorization': `Bearer ${idToken}` },
-      });
-      const data = await res.json();
-      if (data.ok && data.reportSlug) {
+      const res = await safeFetchJson<{ ok: boolean; reportSlug?: string; shortUrl?: string; reportUrl?: string }>(
+        `/api/teacher/report-slug?studentKey=${encodeURIComponent(studentKey)}`,
+        {
+          headers: { 'Authorization': `Bearer ${idToken}` },
+        }
+      );
+      if (res.ok && res.data?.reportSlug) {
         setReportSlugModal(prev => ({
           ...prev,
-          reportSlug: data.reportSlug,
+          reportSlug: res.data!.reportSlug!,
           guardianStatus: 'verified',
-          generatedUrl: `https://jiwont.kr${data.shortUrl || data.reportUrl}`,
+          generatedUrl: `https://jiwont.kr${res.data!.shortUrl || res.data!.reportUrl}`,
         }));
       } else {
         setReportSlugModal(prev => ({ ...prev, guardianStatus: 'idle' }));
@@ -128,7 +131,13 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
       if (!auth.currentUser) throw new Error('로그인이 필요합니다.');
       const idToken = await auth.currentUser.getIdToken();
 
-      const res = await fetch('/api/teacher/report-slug', {
+      const res = await safeFetchJson<{
+        ok: boolean;
+        reportUrl?: string;
+        shortUrl?: string;
+        message?: string;
+        error?: string;
+      }>('/api/teacher/report-slug', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,9 +149,8 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
         }),
       });
 
-      const data = await res.json();
-      if (data.ok) {
-        const fullUrl = `https://jiwont.kr${data.shortUrl || data.reportUrl}`;
+      if (res.ok && res.data) {
+        const fullUrl = `https://jiwont.kr${res.data.shortUrl || res.data.reportUrl}`;
         setReportSlugModal(prev => ({
           ...prev,
           generatedUrl: fullUrl,
@@ -150,18 +158,20 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
           loading: false,
         }));
       } else {
+        const errKey = res.data?.error;
+        const fallbackMsg = res.userMessage || '고정 주소 발급에 실패했습니다. 다시 시도해 주세요.';
         setReportSlugModal(prev => ({
           ...prev,
           loading: false,
-          errorMsg: data.message || `발급 실패 (${data.error})`,
-          guardianStatus: data.error === 'GUARDIAN_CONTACT_MISSING' ? 'missing' : 'error',
+          errorMsg: res.data?.message || fallbackMsg,
+          guardianStatus: errKey === 'GUARDIAN_CONTACT_MISSING' ? 'missing' : 'error',
         }));
       }
-    } catch (e: any) {
+    } catch {
       setReportSlugModal(prev => ({
         ...prev,
         loading: false,
-        errorMsg: e.message || '요청 중 오류가 발생했습니다.',
+        errorMsg: '서버 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.',
         guardianStatus: 'error',
       }));
     }

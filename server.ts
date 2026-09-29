@@ -50,9 +50,24 @@ async function startServer() {
     await handler(req as any, res as any);
   });
 
+  app.get("/api/parent/report-status", async (req, res) => {
+    const handler = (await import("./api/parent/report-status.ts")).default;
+    await handler(req as any, res as any);
+  });
+
   app.get("/api/student/lesson-reports", async (req, res) => {
     const handler = (await import("./api/student/lesson-reports.ts")).default;
     await handler(req as any, res as any);
+  });
+
+  app.all("/api/teacher/student-link", async (req, res) => {
+    const handler = (await import("./api/teacher/student-link.ts")).default;
+    await handler(req as any, res as any);
+  });
+
+  // Unmatched API route -> JSON 404 (prevent SPA HTML)
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({ ok: false, error: "API_ENDPOINT_NOT_FOUND" });
   });
 
   // ----------------------------------------------------
