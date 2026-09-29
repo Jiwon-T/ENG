@@ -130,4 +130,47 @@ describe('Environment Variable and Configuration Enforcement Tests', () => {
       if (origDb) process.env.NOTION_STUDENT_DATABASE_ID = origDb;
     }
   });
+
+  it('5. All relative imports in api/**/*.ts end strictly with .js and none end with .ts (Vercel ESM runtime compatibility)', () => {
+    const apiFiles: string[] = [];
+    function scanDir(dir: string) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) {
+          scanDir(full);
+        } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+          apiFiles.push(full);
+        }
+      }
+    }
+    scanDir('api');
+
+    assert.ok(apiFiles.length >= 10, `Expected at least 10 api TypeScript files, found ${apiFiles.length}`);
+
+    const relativeImportRegex = /from\s+['"](\.[^'"]+)['"]/g;
+
+    let relativeImportCount = 0;
+    for (const filePath of apiFiles) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      let match: RegExpExecArray | null;
+      while ((match = relativeImportRegex.exec(content)) !== null) {
+        relativeImportCount++;
+        const importPath = match[1];
+
+        // 상대 경로 import는 절대 .ts로 끝나면 안 됨
+        assert.ok(
+          !importPath.endsWith('.ts'),
+          `Vercel runtime violation: ${filePath} contains relative import ending in .ts: "${importPath}"`
+        );
+
+        // 상대 경로 import는 반드시 .js로 끝나야 함 (확장자 누락 방지)
+        assert.ok(
+          importPath.endsWith('.js'),
+          `Node ESM violation: ${filePath} contains relative import not ending in .js: "${importPath}"`
+        );
+      }
+    }
+
+    assert.ok(relativeImportCount >= 20, `Expected at least 20 relative imports in api files, found ${relativeImportCount}`);
+  });
 });

@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { parseJsonBody, sendJson, setCookie } from '../_lib/http.ts';
-import { VerifyPinSchema, type StoredReportSlug } from '../_lib/reportSchemas.ts';
-import { hashPin, timingSafeCompare } from '../_lib/security.ts';
-import { createParentSession } from '../_lib/session.ts';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.ts';
+import { parseJsonBody, sendJson, setCookie } from '../_lib/http.js';
+import { VerifyPinSchema, type StoredReportSlug } from '../_lib/reportSchemas.js';
+import { hashPin, timingSafeCompare } from '../_lib/security.js';
+import { createParentSession } from '../_lib/session.js';
+import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {

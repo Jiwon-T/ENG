@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { sendJson } from '../_lib/http.ts';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.ts';
-import type { StoredReportSlug } from '../_lib/reportSchemas.ts';
+import { sendJson } from '../_lib/http.js';
+import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
+import type { StoredReportSlug } from '../_lib/reportSchemas.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {

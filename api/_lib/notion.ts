@@ -1,4 +1,4 @@
-import { hashPin } from './security.ts';
+import { hashPin } from './security.js';
 
 export interface NotionStudentLookupResult {
   notionStudentPageId: string;
