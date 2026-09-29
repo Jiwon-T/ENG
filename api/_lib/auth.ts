@@ -1,5 +1,5 @@
 import type { IncomingMessage } from 'http';
-import { getFirebaseAdmin } from './firebaseAdmin.ts';
+import { getFirebaseAdmin } from './firebaseAdmin.js';
 
 export interface VerifiedAdminUser {
   uid: string;

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { parseJsonBody, sendJson } from '../_lib/http.ts';
-import { verifyAdminAuth } from '../_lib/auth.ts';
+import { parseJsonBody, sendJson } from '../_lib/http.js';
+import { verifyAdminAuth } from '../_lib/auth.js';
 import {
   CreateReportSlugSchema,
   PatchReportSlugSchema,
@@ -9,10 +9,10 @@ import {
   type StoredReportSlug,
   type StudentReportMapping,
   type StoredNotionStudentMapping,
-} from '../_lib/reportSchemas.ts';
-import { lookupStudentAndGuardianContact } from '../_lib/notion.ts';
-import { generateInternalStudentId, hashStudentKey } from '../_lib/security.ts';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.ts';
+} from '../_lib/reportSchemas.js';
+import { lookupStudentAndGuardianContact } from '../_lib/notion.js';
+import { generateInternalStudentId, hashStudentKey } from '../_lib/security.js';
+import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {

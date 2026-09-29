@@ -1,13 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { parseJsonBody, sendJson } from '../_lib/http.ts';
+import { parseJsonBody, sendJson } from '../_lib/http.js';
 import {
   NotionReportWebhookSchema,
   type StoredLessonReport,
   type StoredNotionStudentMapping,
-} from '../_lib/reportSchemas.ts';
-import { lookupStudentAndGuardianContact } from '../_lib/notion.ts';
-import { generateInternalStudentId, hashStudentKey, getSecretOrThrow } from '../_lib/security.ts';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.ts';
+} from '../_lib/reportSchemas.js';
+import { lookupStudentAndGuardianContact } from '../_lib/notion.js';
+import { generateInternalStudentId, hashStudentKey, getSecretOrThrow } from '../_lib/security.js';
+import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {

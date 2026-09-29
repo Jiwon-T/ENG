@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { parseCookies, sendJson } from '../_lib/http.ts';
-import { getVerifiedParentSession } from '../_lib/session.ts';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.ts';
-import type { ParentLessonReportDTO, StoredLessonReport } from '../_lib/reportSchemas.ts';
+import { parseCookies, sendJson } from '../_lib/http.js';
+import { getVerifiedParentSession } from '../_lib/session.js';
+import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
+import type { ParentLessonReportDTO, StoredLessonReport } from '../_lib/reportSchemas.js';
 import crypto from 'crypto';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {

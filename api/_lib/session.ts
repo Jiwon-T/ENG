@@ -1,6 +1,6 @@
-import { getFirebaseAdmin } from './firebaseAdmin.ts';
-import { hashToken, generateSecureToken } from './security.ts';
-import type { StoredReportSlug } from './reportSchemas.ts';
+import { getFirebaseAdmin } from './firebaseAdmin.js';
+import { hashToken, generateSecureToken } from './security.js';
+import type { StoredReportSlug } from './reportSchemas.js';
 
 export interface ParentSessionData {
   sessionHash: string;

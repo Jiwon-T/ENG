@@ -1,4 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy, Component } from 'react';
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { auth, db, recordAttendance, logout } from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, collection, query, where, setDoc } from 'firebase/firestore';
@@ -1016,6 +1018,8 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      <Analytics />
+      <SpeedInsights />
     </ErrorBoundary>
   );
 }

@@ -1,10 +1,108 @@
 import React, { useState, useEffect } from 'react';
 import type { ParentLessonReportDTO } from '../../types/lessonReport';
 import { safeFetchJson } from '../../lib/safeFetchJson';
+import {
+  formatReportDetailDate,
+  formatReportListDate,
+  formatAssignedTime,
+} from '../../lib/reportDateUtils';
 
 interface ParentReportViewProps {
   reportSlug: string;
   onGoHome?: () => void;
+}
+
+/**
+ * Notion 원문 상태값 보존 함수:
+ * - 유효한 문자열이면 trim한 원문을 절대 변환/재해석/축약 없이 그대로 반환
+ * - 값이 null, undefined, 비문자열 또는 공백일 때만 '미확인' 반환
+ */
+export function getDisplayStatus(value: string | null | undefined): string {
+  if (!value || typeof value !== 'string' || value.trim() === '') {
+    return '미확인';
+  }
+  return value.trim();
+}
+
+/**
+ * 상태별 배지 색상 매핑:
+ * 상태 텍스트는 원문 그대로 유지하며 시각적 스타일만 일관되게 부여
+ * - 미확인: 중립 회색
+ * - 없는 날: 연한 회색
+ * - 미제출: 로즈 또는 붉은색
+ * - 최하: 진한 로즈
+ * - 하: 연한 로즈
+ * - 중하: 주황 / 앰버
+ * - 중: 노랑 / 골드
+ * - 중상: 하늘색
+ * - 상: 청록색
+ * - 최상: 에메랄드색
+ * - 출석: 에메랄드색
+ * - 지각: 앰버색
+ * - 결석: 로즈색
+ * - 기타 알려지지 않은 새로운 상태값: 중립 회색
+ */
+export function getStatusBadgeClass(statusRaw: string | null | undefined): string {
+  const status = getDisplayStatus(statusRaw);
+
+  switch (status) {
+    case '미확인':
+      return 'bg-slate-100 text-slate-600 border border-slate-200';
+    case '없는 날':
+      return 'bg-slate-100 text-slate-500 border border-slate-200';
+    case '미제출':
+      return 'bg-rose-50 text-rose-700 border border-rose-200 font-bold';
+    case '최하':
+      return 'bg-rose-100 text-rose-800 border border-rose-300 font-bold';
+    case '하':
+      return 'bg-rose-50 text-rose-600 border border-rose-200';
+    case '중하':
+      return 'bg-amber-100 text-amber-800 border border-amber-300';
+    case '중':
+      return 'bg-yellow-100 text-yellow-800 border border-yellow-300';
+    case '중상':
+      return 'bg-sky-100 text-sky-800 border border-sky-300 font-bold';
+    case '상':
+      return 'bg-teal-100 text-teal-800 border border-teal-300 font-bold';
+    case '최상':
+      return 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-black';
+    default:
+      // 출석 관련 키워드 처리
+      if (status.includes('출석')) {
+        return 'bg-emerald-500 text-white border border-emerald-600 font-bold';
+      }
+      if (status.includes('지각')) {
+        return 'bg-amber-500 text-white border border-amber-600 font-bold';
+      }
+      if (status.includes('결석')) {
+        return 'bg-rose-500 text-white border border-rose-600 font-bold';
+      }
+      // 그 외 알 수 없는 모든 새로운 상태값: 텍스트는 원문 그대로, 중립 회색 스타일
+      return 'bg-slate-100 text-slate-700 border border-slate-200 font-medium';
+  }
+}
+
+/**
+ * 출결 전용 배지 스타일 (상단 날짜 옆 및 목록용 배지)
+ */
+export function getAttendanceBadgeClass(statusRaw: string | null | undefined): string {
+  const status = getDisplayStatus(statusRaw);
+  if (status === '미확인') {
+    return 'bg-slate-100 text-slate-600 border border-slate-200';
+  }
+  if (status === '없는 날') {
+    return 'bg-slate-100 text-slate-500 border border-slate-200';
+  }
+  if (status.includes('출석')) {
+    return 'bg-emerald-500 text-white';
+  }
+  if (status.includes('지각')) {
+    return 'bg-amber-500 text-white';
+  }
+  if (status.includes('결석')) {
+    return 'bg-rose-500 text-white';
+  }
+  return getStatusBadgeClass(status);
 }
 
 export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, onGoHome }) => {
@@ -128,44 +226,29 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     }
   };
 
-  const getAttitudeColor = (att: string) => {
-    switch (att) {
-      case '최상':
-      case '상':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
-      case '중상':
-      case '중':
-        return 'bg-blue-100 text-blue-800 border-blue-300';
-      default:
-        return 'bg-amber-100 text-amber-800 border-amber-300';
-    }
-  };
-
-  const getAttendanceBadge = (att: string) => {
-    if (att.includes('출석')) return 'bg-emerald-500 text-white';
-    if (att.includes('지각')) return 'bg-amber-500 text-white';
-    if (att.includes('결석')) return 'bg-rose-500 text-white';
-    return 'bg-gray-400 text-white';
+  const isValidNumberScore = (score: number | null | undefined): boolean => {
+    return score !== null && score !== undefined && typeof score === 'number' && !isNaN(score);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 pb-16">
+    <div className="min-h-screen bg-slate-50 text-slate-800 pb-16 overflow-x-hidden">
       {/* 상단 헤더 */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center text-sm">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-8 h-8 shrink-0 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
               JW
             </span>
-            <div>
-              <h1 className="text-base font-bold text-slate-900 leading-tight">지원T 영어 수업 리포트</h1>
-              <p className="text-xs text-slate-500">학부모 안심 브리핑</p>
+            <div className="min-w-0">
+              <h1 className="text-base font-bold text-slate-900 leading-tight truncate">
+                지원T 수업 리포트
+              </h1>
             </div>
           </div>
           {onGoHome && (
             <button
               onClick={onGoHome}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition"
+              className="shrink-0 min-h-[44px] px-3.5 py-2 text-xs font-semibold rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 transition active:scale-[0.98]"
             >
               메인 홈으로
             </button>
@@ -181,7 +264,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
             <h2 className="text-lg font-bold text-slate-900">현재 리포트를 불러올 수 없습니다</h2>
             <p className="text-xs text-slate-500 leading-relaxed">
               서버 연결이 원활하지 않습니다.<br />
-              잠시 후 다시 접속을 시도해 주세요.
+              잠시 후 다시 시도해 주세요.
             </p>
           </div>
         </main>
@@ -200,7 +283,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
             {onGoHome && (
               <button
                 onClick={onGoHome}
-                className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition"
+                className="mt-4 min-h-[44px] px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition"
               >
                 메인 홈으로 이동
               </button>
@@ -212,21 +295,21 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       {/* 3. 보호자 전화번호 뒤 4자리 인증 모달 */}
       {!isServerDown && !isInvalidSlug && !isAuthenticated && (
         <main className="max-w-md mx-auto px-4 pt-16">
-          <div className="bg-white rounded-2xl p-6 shadow-xl border border-slate-200 space-y-5">
+          <div className="bg-white rounded-2xl p-6 sm:p-7 shadow-xl border border-slate-200 space-y-5">
             <div className="text-center space-y-2">
-              <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-xl">
+              <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-xl shadow-xs">
                 🔒
               </div>
               <h2 className="text-lg font-bold text-slate-900">학부모 안심 본인 확인</h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 leading-relaxed">
                 학생의 수업 기록과 상세 피드백 보호를 위해<br />
-                등록된 <strong className="text-slate-700">보호자 전화번호 뒤 4자리</strong>를 입력해 주세요.
+                등록된 <strong className="text-slate-700 font-semibold">보호자 전화번호 뒷 4자리</strong>를 입력해 주세요.
               </p>
             </div>
 
             <form onSubmit={handleVerifyPin} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   보호자 연락처 뒷 4자리
                 </label>
                 <input
@@ -237,7 +320,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
                   placeholder="••••"
-                  className="w-full text-center tracking-[1em] text-2xl font-mono py-3 border border-slate-300 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 outline-none transition"
+                  className="w-full text-center tracking-[1em] text-2xl font-mono py-3.5 border border-slate-300 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 outline-none transition"
                   autoFocus
                 />
               </div>
@@ -251,76 +334,138 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
               <button
                 type="submit"
                 disabled={isVerifying || pin.length !== 4}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-bold text-sm transition shadow-sm"
+                className="w-full min-h-[44px] py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-bold text-sm transition shadow-sm active:scale-[0.99]"
               >
                 {isVerifying ? '인증 확인 중...' : '리포트 열람하기'}
               </button>
             </form>
 
             <div className="pt-2 border-t border-slate-100 text-center">
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-400 leading-relaxed">
                 5회 이상 실패 시 안전을 위해 15분간 열람이 제한됩니다.<br />
-                문의사항은 지원T 카카오톡 채널로 연락해 주세요.
+                문의사항은 지원T에게 전달해 주세요.
               </p>
             </div>
           </div>
         </main>
       )}
 
-      {/* 3. 인증 성공 후: 상세 수업 리포트 화면 */}
+      {/* 4. 인증 성공 후: 상세 수업 리포트 화면 */}
       {!isInvalidSlug && isAuthenticated && (
         <main className="max-w-4xl mx-auto px-4 pt-6 space-y-6">
-          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md">
-                열람 권한 인증 완료
-              </span>
-              <h2 className="text-xl font-black text-slate-900 mt-1">
-                {studentDisplayName || '학생'} 수업 일지 & 리포트
-              </h2>
-            </div>
-            <div className="text-xs text-slate-500 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              안심 세션이 유지되는 동안 본 기기에서 바로 열람 가능합니다.
-            </div>
+          {/* 상단 타이틀 카드 (세션 안내 문구 및 컨테이너 완전 제거, 깔끔한 헤더 구성) */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs">
+            <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md inline-block mb-1.5">
+              열람 권한 인증 완료
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 break-words leading-tight">
+              {studentDisplayName || '학생'} 수업 일지
+            </h2>
           </div>
 
           {loadingReports ? (
-            <div className="py-20 text-center text-slate-400 text-sm animate-pulse">
-              수업 리포트 데이터를 불러오는 중입니다...
+            <div className="py-20 text-center text-slate-400 text-sm animate-pulse font-medium">
+              리포트 데이터를 불러오는 중입니다...
             </div>
           ) : reports.length === 0 ? (
             <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
               <p className="text-slate-500 text-sm font-medium">아직 등록된 수업 일지가 없습니다.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* 왼쪽: 회차 목록 리스트 */}
+            <div className="space-y-6 md:space-y-0 md:grid md:grid-cols-3 md:gap-6">
+              {/* 회차 목록 영역 */}
               <div className="md:col-span-1 space-y-2">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider px-1">
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider px-1">
                   수업 회차 목록 ({reports.length}회차)
                 </h3>
-                <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+
+                {/* 모바일 뷰: 가로 스크롤 카드 레이아웃 */}
+                <div className="md:hidden flex gap-2.5 overflow-x-auto pb-2 pt-1 -mx-4 px-4 scrollbar-none snap-x snap-mandatory">
                   {reports.map((rep) => {
                     const isSelected = selectedReport?.reportId === rep.reportId;
+                    const listDate = formatReportListDate(rep.lessonDateStart);
+                    const assignedTime = formatAssignedTime(rep.lessonDateStart, rep.lessonDateEnd);
+                    const actualTime = rep.lessonTime ? rep.lessonTime.trim() : null;
+                    const attendanceDisplay = getDisplayStatus(rep.attendance);
+
                     return (
                       <button
-                        key={rep.reportId}
+                        key={`m-${rep.reportId}`}
+                        type="button"
+                        aria-pressed={isSelected}
                         onClick={() => setSelectedReport(rep)}
-                        className={`w-full text-left p-3.5 rounded-xl border transition-all ${
+                        className={`min-h-[44px] shrink-0 w-[240px] text-left p-3.5 rounded-2xl border transition-all snap-start ${
                           isSelected
-                            ? 'bg-indigo-50 border-indigo-300 shadow-xs ring-2 ring-indigo-200'
+                            ? 'bg-indigo-50/90 border-indigo-500 shadow-xs ring-2 ring-indigo-200 font-semibold'
                             : 'bg-white border-slate-200 hover:border-slate-300'
                         }`}
                       >
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="font-bold text-slate-900">{rep.lessonDateStart}</span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${getAttendanceBadge(rep.attendance)}`}>
-                            {rep.attendance || '출석'}
+                        <div className="flex items-center justify-between text-xs mb-1.5 gap-2">
+                          <span className={`text-sm ${isSelected ? 'font-black text-indigo-950' : 'font-bold text-slate-900'} truncate`}>
+                            {listDate}
+                          </span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${getAttendanceBadgeClass(rep.attendance)}`}>
+                            {attendanceDisplay}
                           </span>
                         </div>
-                        <div className="text-xs text-slate-600 line-clamp-1">
-                          {rep.lessonTime ? `수업: ${rep.lessonTime}` : rep.category}
+                        {actualTime && (
+                          <div className="text-[11px] text-indigo-900/80 truncate font-medium">
+                            <span className="text-indigo-600 font-bold mr-1">수업 시간</span>
+                            {actualTime}
+                          </div>
+                        )}
+                        {assignedTime && (
+                          <div className="text-[11px] text-slate-500 truncate">
+                            <span className="font-semibold text-slate-600 mr-1">배정</span>
+                            {assignedTime}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 데스크톱 뷰: 세로 스크롤 리스트 */}
+                <div className="hidden md:block space-y-2 max-h-[620px] overflow-y-auto pr-1">
+                  {reports.map((rep) => {
+                    const isSelected = selectedReport?.reportId === rep.reportId;
+                    const listDate = formatReportListDate(rep.lessonDateStart);
+                    const assignedTime = formatAssignedTime(rep.lessonDateStart, rep.lessonDateEnd);
+                    const actualTime = rep.lessonTime ? rep.lessonTime.trim() : null;
+                    const attendanceDisplay = getDisplayStatus(rep.attendance);
+
+                    return (
+                      <button
+                        key={`d-${rep.reportId}`}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => setSelectedReport(rep)}
+                        className={`w-full text-left p-3.5 rounded-xl border transition-all min-h-[44px] ${
+                          isSelected
+                            ? 'bg-indigo-50/90 border-indigo-500 shadow-xs ring-2 ring-indigo-200'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-xs mb-1.5 gap-2">
+                          <span className={`text-sm ${isSelected ? 'font-black text-indigo-950' : 'font-bold text-slate-900'} truncate`}>
+                            {listDate}
+                          </span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${getAttendanceBadgeClass(rep.attendance)}`}>
+                            {attendanceDisplay}
+                          </span>
                         </div>
+                        {actualTime && (
+                          <div className="text-xs text-indigo-950 font-medium truncate">
+                            <span className="text-indigo-600 font-bold mr-1">수업 시간</span>
+                            {actualTime}
+                          </div>
+                        )}
+                        {assignedTime && (
+                          <div className="text-xs text-slate-500 truncate">
+                            <span className="font-semibold text-slate-600 mr-1">배정</span>
+                            {assignedTime}
+                          </div>
+                        )}
                       </button>
                     );
                   })}
@@ -329,72 +474,134 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
 
               {/* 오른쪽: 선택된 회차 상세 브리핑 카드 */}
               {selectedReport && (
-                <div className="md:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-6">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
+                <div className="md:col-span-2 bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-6">
+                  {/* 상단 날짜 및 배정 시간 / 수업 시간 헤더 */}
+                  <div className="border-b border-slate-100 pb-5 space-y-3.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5">
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-slate-500 block mb-0.5">수업 날짜</span>
+                        <h4 className="text-xl sm:text-2xl font-black text-slate-900 break-words leading-tight">
+                          {formatReportDetailDate(selectedReport.lessonDateStart)}
+                        </h4>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* 출결 (attendance 원문 보존) */}
+                        <span className={`text-xs px-2.5 py-1 rounded-lg font-bold shadow-2xs ${getAttendanceBadgeClass(selectedReport.attendance)}`}>
+                          {getDisplayStatus(selectedReport.attendance)}
+                        </span>
+                        {/* 수업 범주 */}
+                        <span className="text-xs px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-700">
+                          {selectedReport.category || '수업'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 배정 시간, 수업 시간, 자습 시간 (독립된 간결한 정보 영역) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                      {/* 배정 시간 (lessonDateStart ~ lessonDateEnd) */}
+                      {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd) && (
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
+                          <span className="text-[11px] font-bold text-slate-500 block mb-0.5">배정 시간</span>
+                          <span className="text-sm font-bold text-slate-800 break-words">
+                            {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* 수업 시간 (lessonTime 원문) */}
+                      {selectedReport.lessonTime && selectedReport.lessonTime.trim() && (
+                        <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 min-w-0">
+                          <span className="text-[11px] font-bold text-indigo-700 block mb-0.5">수업 시간</span>
+                          <span className="text-sm font-black text-indigo-950 break-words">
+                            {selectedReport.lessonTime.trim()}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* 자습 시간 (selfStudyTime 원문, 있을 때만 독립 블록으로 표시) */}
+                      {selectedReport.selfStudyTime && selectedReport.selfStudyTime.trim() && (
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0 sm:col-span-2">
+                          <span className="text-[11px] font-bold text-slate-500 block mb-0.5">자습 시간</span>
+                          <span className="text-sm font-bold text-slate-800 break-words">
+                            {selectedReport.selfStudyTime.trim()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 학습 평가 지표 그리드: 태도, 숙제, 테스트는 동일한 중요도의 평가 항목으로 항상 표시 */}
+                  <div>
+                    <h5 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2.5 px-0.5">
+                      학습 평가
+                    </h5>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3 text-center">
+                      {/* 1. 태도 (attitude 원문 그대로 표시) */}
+                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                        <div className="text-[11px] font-bold text-slate-500 mb-1.5">태도</div>
+                        <div className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(selectedReport.attitude)}`}>
+                          {getDisplayStatus(selectedReport.attitude)}
+                        </div>
+                      </div>
+
+                      {/* 2. 숙제 (homework 원문 그대로 표시) */}
+                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                        <div className="text-[11px] font-bold text-slate-500 mb-1.5">숙제</div>
+                        <div className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(selectedReport.homework)}`}>
+                          {getDisplayStatus(selectedReport.homework)}
+                        </div>
+                      </div>
+
+                      {/* 3. 테스트 (test 원문 그대로 항상 동일 평가 항목으로 표시) */}
+                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center col-span-2 sm:col-span-1">
+                        <div className="text-[11px] font-bold text-slate-500 mb-1.5">테스트</div>
+                        <div className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(selectedReport.test)}`}>
+                          {getDisplayStatus(selectedReport.test)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 점수 카드 그리드: 유효한 숫자일 때만 표시, 0점 포함, 2개/1개 남아도 자연스럽게 정렬 */}
+                  {(isValidNumberScore(selectedReport.vocabularyScore) || isValidNumberScore(selectedReport.schoolExamScore)) && (
                     <div>
-                      <span className="text-xs font-bold text-slate-400">수업 일시</span>
-                      <h4 className="text-lg font-black text-slate-900">
-                        {selectedReport.lessonDateStart} {selectedReport.lessonTime && `(${selectedReport.lessonTime})`}
-                      </h4>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2.5 py-1 rounded-lg font-bold ${getAttendanceBadge(selectedReport.attendance)}`}>
-                        {selectedReport.attendance || '출석 확인'}
-                      </span>
-                      <span className="text-xs px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-700">
-                        {selectedReport.category}
-                      </span>
-                    </div>
-                  </div>
+                      <h5 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2.5 px-0.5">
+                        성취 점수
+                      </h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-center">
+                        {/* 단어 점수 */}
+                        {isValidNumberScore(selectedReport.vocabularyScore) && (
+                          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                            <div className="text-[11px] font-bold text-slate-500 mb-1">단어 점수</div>
+                            <div className="text-base sm:text-lg font-black text-indigo-600">
+                              {selectedReport.vocabularyScore}점
+                            </div>
+                          </div>
+                        )}
 
-                  {/* 학습 태도 및 평가 지표 그리드 */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="text-[11px] font-bold text-slate-400 mb-1">수업 태도</div>
-                      <div className={`text-xs font-black inline-block px-2 py-0.5 rounded border ${getAttitudeColor(selectedReport.attitude)}`}>
-                        {selectedReport.attitude || '확인'}
+                        {/* 내신 대비 점수 (null, undefined, NaN일 때 완전 숨김) */}
+                        {isValidNumberScore(selectedReport.schoolExamScore) && (
+                          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                            <div className="text-[11px] font-bold text-slate-500 mb-1">내신 대비 점수</div>
+                            <div className="text-base sm:text-lg font-black text-indigo-600">
+                              {selectedReport.schoolExamScore}점
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="text-[11px] font-bold text-slate-400 mb-1">과제 수행</div>
-                      <div className="text-xs font-black text-slate-800">
-                        {selectedReport.homework || '완료'}
-                      </div>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="text-[11px] font-bold text-slate-400 mb-1">단어 점수</div>
-                      <div className="text-xs font-black text-indigo-600">
-                        {selectedReport.vocabularyScore !== null ? `${selectedReport.vocabularyScore}점` : '—'}
-                      </div>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="text-[11px] font-bold text-slate-400 mb-1">내신 대비 점수</div>
-                      <div className="text-xs font-black text-indigo-600">
-                        {selectedReport.schoolExamScore !== null ? `${selectedReport.schoolExamScore}점` : '—'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 자습시간 및 테스트 정보 */}
-                  {(selectedReport.selfStudyTime || selectedReport.test) && (
-                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-1">
-                      {selectedReport.selfStudyTime && (
-                        <p><strong className="text-slate-700">자습 진행 시간:</strong> {selectedReport.selfStudyTime}</p>
-                      )}
-                      {selectedReport.test && (
-                        <p><strong className="text-slate-700">테스트 진행:</strong> {selectedReport.test}</p>
-                      )}
                     </div>
                   )}
 
-                  {/* 선생님 맞춤 상세 피드백 */}
-                  <div className="space-y-2">
+                  {/* 수업 내용 및 피드백 */}
+                  <div className="space-y-2 pt-1">
                     <h5 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
                       <span>📝</span>
-                      <span>지원T 맞춤 학습 피드백 & 코멘트</span>
+                      <span>수업 내용 및 피드백</span>
                     </h5>
-                    <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">
-                      {selectedReport.feedback || '등록된 피드백 내용이 없습니다.'}
+                    <div className="p-4 sm:p-5 bg-indigo-50/40 border border-indigo-100/80 rounded-2xl text-sm sm:text-[15px] text-slate-800 leading-[1.65] whitespace-pre-wrap break-words font-medium">
+                      {selectedReport.feedback && selectedReport.feedback.trim()
+                        ? selectedReport.feedback.trim()
+                        : '등록된 피드백 내용이 없습니다.'}
                     </div>
                   </div>
                 </div>

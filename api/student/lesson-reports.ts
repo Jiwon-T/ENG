@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { sendJson } from '../_lib/http.ts';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.ts';
-import type { StudentLessonReportDTO, StoredLessonReport, StoredNotionStudentMapping } from '../_lib/reportSchemas.ts';
-import { hashStudentKey } from '../_lib/security.ts';
+import { sendJson } from '../_lib/http.js';
+import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
+import type { StudentLessonReportDTO, StoredLessonReport, StoredNotionStudentMapping } from '../_lib/reportSchemas.js';
+import { hashStudentKey } from '../_lib/security.js';
 import crypto from 'crypto';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {

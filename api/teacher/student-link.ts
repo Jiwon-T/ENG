@@ -1,14 +1,14 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { parseJsonBody, sendJson } from '../_lib/http.ts';
-import { verifyAdminAuth } from '../_lib/auth.ts';
+import { parseJsonBody, sendJson } from '../_lib/http.js';
+import { verifyAdminAuth } from '../_lib/auth.js';
 import {
   LinkStudentAccountSchema,
   UnlinkStudentAccountSchema,
   type StoredNotionStudentMapping,
-} from '../_lib/reportSchemas.ts';
-import { lookupStudentAndGuardianContact } from '../_lib/notion.ts';
-import { generateInternalStudentId, hashStudentKey } from '../_lib/security.ts';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.ts';
+} from '../_lib/reportSchemas.js';
+import { lookupStudentAndGuardianContact } from '../_lib/notion.js';
+import { generateInternalStudentId, hashStudentKey } from '../_lib/security.js';
+import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 
 /**
  * 관리자 전용 학생 계정 연결/해제 API (지속적인 관리자 권한 확인)
