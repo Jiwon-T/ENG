@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import { getFirebaseAdmin } from '../api/_lib/firebaseAdmin.ts';
 import { lookupStudentAndGuardianContact } from '../api/_lib/notion.ts';
 
@@ -172,5 +173,42 @@ describe('Environment Variable and Configuration Enforcement Tests', () => {
     }
 
     assert.ok(relativeImportCount >= 20, `Expected at least 20 relative imports in api files, found ${relativeImportCount}`);
+  });
+
+  it('6. jwks-rsa dependency strictly overrides jose to 5.10.0 and loads via CommonJS without ERR_REQUIRE_ESM', () => {
+    // 1. package.json overrides 검증
+    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    assert.equal(
+      pkg.overrides?.['jwks-rsa']?.jose,
+      '5.10.0',
+      'package.json must contain "overrides": { "jwks-rsa": { "jose": "5.10.0" } }'
+    );
+
+    // 2. package-lock.json 검증
+    const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+    const packages = lock.packages || {};
+    
+    // node_modules/jose 버전 확인
+    const directJose = packages['node_modules/jose'];
+    if (directJose) {
+      assert.equal(directJose.version, '5.10.0', 'node_modules/jose in package-lock.json must be 5.10.0');
+    }
+    
+    // jwks-rsa 하위 또는 루트의 jose가 6.x가 아님을 확인
+    for (const [pkgPath, pkgInfo] of Object.entries(packages) as [string, { version?: string }][]) {
+      if (pkgPath.endsWith('node_modules/jose') || pkgPath.includes('jwks-rsa/node_modules/jose')) {
+        assert.ok(
+          !pkgInfo.version?.startsWith('6.'),
+          `Found jose 6.x in package-lock.json at ${pkgPath}: ${pkgInfo.version}`
+        );
+      }
+    }
+
+    // 3. CommonJS require('jwks-rsa') 테스트
+    assert.doesNotThrow(() => {
+      const req = createRequire(import.meta.url);
+      const jwks = req('jwks-rsa');
+      assert.ok(jwks, 'jwks-rsa module should be defined');
+    }, 'require("jwks-rsa") threw an error');
   });
 });
