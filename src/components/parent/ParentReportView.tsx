@@ -2,66 +2,64 @@ import React, { useState, useEffect } from 'react';
 import type { ParentLessonReportDTO } from '../../types/lessonReport';
 
 interface ParentReportViewProps {
-  initialToken?: string;
+  reportSlug: string;
   onGoHome?: () => void;
 }
 
-export const ParentReportView: React.FC<ParentReportViewProps> = ({ initialToken, onGoHome }) => {
-  const [token, setToken] = useState(initialToken || '');
-  const [requiresPin, setRequiresPin] = useState(false);
-  const [studentName, setStudentName] = useState('');
+export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, onGoHome }) => {
   const [pin, setPin] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [studentDisplayName, setStudentDisplayName] = useState('');
 
   const [loadingReports, setLoadingReports] = useState(false);
   const [reports, setReports] = useState<ParentLessonReportDTO[]>([]);
   const [selectedReport, setSelectedReport] = useState<ParentLessonReportDTO | null>(null);
 
-  // 1. Initial token check from URL
   useEffect(() => {
-    // Add meta noindex, nofollow for parent privacy
+    // 개인정보 보호 및 검색엔진 색인 방지 (noindex, nofollow)
     const meta = document.createElement('meta');
     meta.name = 'robots';
     meta.content = 'noindex, nofollow';
     document.head.appendChild(meta);
 
-    const params = new URLSearchParams(window.location.search);
-    const urlToken = params.get('token');
-
-    if (urlToken) {
-      setToken(urlToken);
-      checkTokenStatus(urlToken);
-    } else {
-      // Check if session cookie already exists
-      fetchReports();
-    }
+    // 기존 세션이 있는지 즉시 확인
+    checkExistingSession();
 
     return () => {
-      document.head.removeChild(meta);
+      if (document.head.contains(meta)) {
+        document.head.removeChild(meta);
+      }
     };
-  }, []);
+  }, [reportSlug]);
 
-  const checkTokenStatus = async (tok: string) => {
+  const checkExistingSession = async () => {
+    setLoadingReports(true);
     try {
-      const res = await fetch(`/api/parent/access/${encodeURIComponent(tok)}`);
+      const res = await fetch(`/api/parent/lesson-reports?reportSlug=${encodeURIComponent(reportSlug)}`);
       const data = await res.json();
       if (data.ok) {
-        setRequiresPin(true);
-        setStudentName(data.studentName || '학생');
+        setIsAuthenticated(true);
+        setStudentDisplayName(data.student?.studentKey || '');
+        setReports(data.reports || []);
+        if (data.reports?.length > 0) {
+          setSelectedReport(data.reports[0]);
+        }
       } else {
-        setErrorMsg('유효하지 않거나 만료된 접근 링크입니다. 선생님께 문의해 주세요.');
+        setIsAuthenticated(false);
       }
     } catch (e) {
-      setErrorMsg('서버와 통신할 수 없습니다.');
+      setIsAuthenticated(false);
+    } finally {
+      setLoadingReports(false);
     }
   };
 
   const handleVerifyPin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (pin.length !== 4) {
-      setErrorMsg('전화번호 뒷 4자리를 정확히 입력해 주세요.');
+      setErrorMsg('보호자 전화번호 뒷 4자리를 정확히 입력해 주세요.');
       return;
     }
 
@@ -69,54 +67,34 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ initialToken
     setErrorMsg('');
 
     try {
-      const res = await fetch(`/api/parent/access/${encodeURIComponent(token)}/verify`, {
+      const res = await fetch('/api/parent/verify-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin }),
+        body: JSON.stringify({
+          reportSlug,
+          pin: pin.trim(),
+        }),
       });
+
       const data = await res.json();
 
       if (data.ok) {
-        // Remove token from browser URL for clean security
-        window.history.replaceState({}, document.title, '/report');
-        setRequiresPin(false);
         setIsAuthenticated(true);
-        fetchReports();
+        setStudentDisplayName(data.studentDisplayName || '');
+        setPin('');
+        await checkExistingSession();
       } else {
         if (data.error === 'TEMPORARILY_LOCKED') {
-          setErrorMsg('보안을 위해 조회가 일시적으로 잠겼습니다. 15분 후 다시 시도해 주세요.');
+          setErrorMsg('보안을 위해 조회가 15분간 잠겼습니다. 잠시 후 다시 시도해 주세요.');
         } else {
-          setErrorMsg(`인증번호가 일치하지 않습니다. (남은 횟수: ${data.remainingAttempts ?? '확인 요망'})`);
+          const remaining = data.remainingAttempts !== undefined ? ` (남은 횟수: ${data.remainingAttempts}회)` : '';
+          setErrorMsg((data.message || '인증번호가 일치하지 않습니다.') + remaining);
         }
       }
     } catch (e) {
-      setErrorMsg('인증 처리 중 오류가 발생했습니다.');
+      setErrorMsg('인증 처리 중 네트워크 오류가 발생했습니다.');
     } finally {
       setIsVerifying(false);
-    }
-  };
-
-  const fetchReports = async () => {
-    setLoadingReports(true);
-    try {
-      const res = await fetch('/api/parent/lesson-reports');
-      const data = await res.json();
-      if (data.ok) {
-        setIsAuthenticated(true);
-        setReports(data.reports || []);
-        if (data.reports?.length > 0) {
-          setSelectedReport(data.reports[0]);
-        }
-      } else {
-        // Need verification
-        if (!token) {
-          setErrorMsg('학부모 전용 접속 링크를 통해 접속해 주세요.');
-        }
-      }
-    } catch (e) {
-      setErrorMsg('리포트를 불러오는 중 오류가 발생했습니다.');
-    } finally {
-      setLoadingReports(false);
     }
   };
 
@@ -142,7 +120,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ initialToken
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-16">
-      {/* Header */}
+      {/* 상단 헤더 */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -159,226 +137,206 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ initialToken
               onClick={onGoHome}
               className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition"
             >
-              학생 로그인
+              메인 홈으로
             </button>
           )}
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-4xl mx-auto px-4 pt-6">
-        {/* PIN Verification Modal / Card */}
-        {requiresPin && !isAuthenticated && (
-          <div className="max-w-md mx-auto my-12 bg-white rounded-2xl shadow-xl border border-slate-200 p-6 md:p-8">
-            <div className="text-center mb-6">
-              <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-3 text-xl">
+      {/* 1. 보호자 전화번호 뒤 4자리 인증 모달 */}
+      {!isAuthenticated && (
+        <main className="max-w-md mx-auto px-4 pt-16">
+          <div className="bg-white rounded-2xl p-6 shadow-xl border border-slate-200 space-y-5">
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto text-xl">
                 🔒
               </div>
-              <h2 className="text-xl font-bold text-slate-900 mb-1">{studentName} 학부모 안심 확인</h2>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                학생 정보 보호를 위해 등록된 <span className="font-semibold text-slate-700">보호자 전화번호 뒤 4자리</span>를 입력해 주세요.
+              <h2 className="text-lg font-bold text-slate-900">학부모 안심 본인 확인</h2>
+              <p className="text-xs text-slate-500">
+                학생의 수업 기록과 상세 피드백 보호를 위해<br />
+                등록된 <strong className="text-slate-700">보호자 전화번호 뒤 4자리</strong>를 입력해 주세요.
               </p>
             </div>
 
             <form onSubmit={handleVerifyPin} className="space-y-4">
               <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  보호자 연락처 뒷 4자리
+                </label>
                 <input
                   type="password"
                   maxLength={4}
-                  pattern="[0-9]*"
+                  pattern="\d{4}"
                   inputMode="numeric"
-                  placeholder="전화번호 뒤 4자리"
                   value={pin}
-                  onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ''))}
-                  className="w-full text-center text-2xl tracking-widest font-mono py-3 px-4 border-2 border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-hidden transition"
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••"
+                  className="w-full text-center tracking-[1em] text-2xl font-mono py-3 border border-slate-300 rounded-xl focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 outline-none transition"
                   autoFocus
                 />
               </div>
 
               {errorMsg && (
-                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 text-center font-medium">
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium">
                   {errorMsg}
                 </div>
               )}
 
               <button
                 type="submit"
-                disabled={pin.length !== 4 || isVerifying}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold rounded-xl transition shadow-md"
+                disabled={isVerifying || pin.length !== 4}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-bold text-sm transition shadow-sm"
               >
-                {isVerifying ? '보안 확인 중...' : '학습 리포트 열람하기'}
+                {isVerifying ? '인증 확인 중...' : '리포트 열람하기'}
               </button>
             </form>
-          </div>
-        )}
 
-        {/* Global Error if not PIN required */}
-        {!requiresPin && errorMsg && !isAuthenticated && (
-          <div className="max-w-md mx-auto my-12 p-6 bg-white rounded-2xl border border-rose-200 text-center shadow-sm">
-            <div className="text-3xl mb-3">⚠️</div>
-            <h3 className="font-bold text-slate-900 mb-2">접근 권한이 필요합니다</h3>
-            <p className="text-xs text-slate-600 leading-relaxed mb-6">{errorMsg}</p>
-            {onGoHome && (
-              <button
-                onClick={onGoHome}
-                className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800"
-              >
-                홈으로 돌아가기
-              </button>
-            )}
+            <div className="pt-2 border-t border-slate-100 text-center">
+              <p className="text-[11px] text-slate-400">
+                5회 이상 실패 시 안전을 위해 15분간 열람이 제한됩니다.<br />
+                문의사항은 지원T 카카오톡 채널로 연락해 주세요.
+              </p>
+            </div>
           </div>
-        )}
+        </main>
+      )}
 
-        {/* Loading */}
-        {loadingReports && (
-          <div className="text-center py-20 text-slate-400">
-            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-            <p className="text-xs">학습 리포트를 불러오는 중입니다...</p>
+      {/* 2. 인증 성공 후: 상세 수업 리포트 화면 */}
+      {isAuthenticated && (
+        <main className="max-w-4xl mx-auto px-4 pt-6 space-y-6">
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md">
+                열람 권한 인증 완료
+              </span>
+              <h2 className="text-xl font-black text-slate-900 mt-1">
+                {studentDisplayName || '학생'} 수업 일지 & 리포트
+              </h2>
+            </div>
+            <div className="text-xs text-slate-500 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+              안심 세션이 유지되는 동안 본 기기에서 바로 열람 가능합니다.
+            </div>
           </div>
-        )}
 
-        {/* Verified Parent Report View */}
-        {isAuthenticated && (
-          <div className="space-y-6">
-            {reports.length === 0 ? (
-              <div className="bg-white rounded-2xl p-8 text-center border border-slate-200">
-                <div className="text-4xl mb-3">📝</div>
-                <h3 className="font-bold text-slate-900 mb-1">등록된 최근 수업 일지가 없습니다</h3>
-                <p className="text-xs text-slate-500">선생님이 수업 일지를 등록하면 여기에 자동으로 브리핑 카드가 생성됩니다.</p>
+          {loadingReports ? (
+            <div className="py-20 text-center text-slate-400 text-sm animate-pulse">
+              수업 리포트 데이터를 불러오는 중입니다...
+            </div>
+          ) : reports.length === 0 ? (
+            <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
+              <p className="text-slate-500 text-sm font-medium">아직 등록된 수업 일지가 없습니다.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* 왼쪽: 회차 목록 리스트 */}
+              <div className="md:col-span-1 space-y-2">
+                <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider px-1">
+                  수업 회차 목록 ({reports.length}회차)
+                </h3>
+                <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                  {reports.map((rep) => {
+                    const isSelected = selectedReport?.reportId === rep.reportId;
+                    return (
+                      <button
+                        key={rep.reportId}
+                        onClick={() => setSelectedReport(rep)}
+                        className={`w-full text-left p-3.5 rounded-xl border transition-all ${
+                          isSelected
+                            ? 'bg-indigo-50 border-indigo-300 shadow-xs ring-2 ring-indigo-200'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="font-bold text-slate-900">{rep.lessonDateStart}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${getAttendanceBadge(rep.attendance)}`}>
+                            {rep.attendance || '출석'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 line-clamp-1">
+                          {rep.lessonTime ? `수업: ${rep.lessonTime}` : rep.category}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            ) : (
-              <>
-                {/* 1. Recent Lesson Featured Card */}
-                {selectedReport && (
-                  <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-200 space-y-6">
-                    {/* Header line */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
-                      <div>
-                        <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 mr-2">
-                          {selectedReport.category}
-                        </span>
-                        <span className="text-sm font-bold text-slate-900">
-                          {new Date(selectedReport.lessonDateStart).toLocaleDateString('ko-KR', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric',
-                            weekday: 'short',
-                          })}
-                        </span>
-                        {selectedReport.lessonTime && (
-                          <span className="text-xs text-slate-500 ml-2 font-mono">({selectedReport.lessonTime})</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${getAttendanceBadge(selectedReport.attendance)}`}>
-                          {selectedReport.attendance}
-                        </span>
-                      </div>
-                    </div>
 
-                    {/* Quick Metric Badges */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
-                        <p className="text-[11px] text-slate-500 mb-0.5">수업 태도</p>
-                        <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded-md border ${getAttitudeColor(selectedReport.attitude)}`}>
-                          {selectedReport.attitude}
-                        </span>
-                      </div>
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
-                        <p className="text-[11px] text-slate-500 mb-0.5">숙제 검사</p>
-                        <span className="text-xs font-bold text-slate-800">{selectedReport.homework}</span>
-                      </div>
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
-                        <p className="text-[11px] text-slate-500 mb-0.5">단어 시험</p>
-                        <p className="text-sm font-bold text-indigo-600">
-                          {selectedReport.vocabularyScore !== null ? `${selectedReport.vocabularyScore}점` : '미응시'}
-                        </p>
-                      </div>
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
-                        <p className="text-[11px] text-slate-500 mb-0.5">내신 대비 점수</p>
-                        <p className="text-sm font-bold text-emerald-600">
-                          {selectedReport.schoolExamScore !== null ? `${selectedReport.schoolExamScore}점` : '-'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Self Study Time if present */}
-                    {selectedReport.selfStudyTime && (
-                      <div className="flex items-center gap-2 text-xs bg-amber-50/70 border border-amber-200/70 p-3 rounded-xl text-amber-900 font-medium">
-                        <span>⏳</span>
-                        <span>자습 기록: {selectedReport.selfStudyTime}</span>
-                      </div>
-                    )}
-
-                    {/* Detailed Teacher Feedback */}
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                        <span>💬</span> 수업 내용 및 지도 피드백
+              {/* 오른쪽: 선택된 회차 상세 브리핑 카드 */}
+              {selectedReport && (
+                <div className="md:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-6">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
+                    <div>
+                      <span className="text-xs font-bold text-slate-400">수업 일시</span>
+                      <h4 className="text-lg font-black text-slate-900">
+                        {selectedReport.lessonDateStart} {selectedReport.lessonTime && `(${selectedReport.lessonTime})`}
                       </h4>
-                      <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-                        {selectedReport.feedback || '등록된 수업 코멘트가 없습니다.'}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2.5 py-1 rounded-lg font-bold ${getAttendanceBadge(selectedReport.attendance)}`}>
+                        {selectedReport.attendance || '출석 확인'}
+                      </span>
+                      <span className="text-xs px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-700">
+                        {selectedReport.category}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 학습 태도 및 평가 지표 그리드 */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="text-[11px] font-bold text-slate-400 mb-1">수업 태도</div>
+                      <div className={`text-xs font-black inline-block px-2 py-0.5 rounded border ${getAttitudeColor(selectedReport.attitude)}`}>
+                        {selectedReport.attitude || '확인'}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="text-[11px] font-bold text-slate-400 mb-1">과제 수행</div>
+                      <div className="text-xs font-black text-slate-800">
+                        {selectedReport.homework || '완료'}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="text-[11px] font-bold text-slate-400 mb-1">단어 점수</div>
+                      <div className="text-xs font-black text-indigo-600">
+                        {selectedReport.vocabularyScore !== null ? `${selectedReport.vocabularyScore}점` : '—'}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="text-[11px] font-bold text-slate-400 mb-1">내신 대비 점수</div>
+                      <div className="text-xs font-black text-indigo-600">
+                        {selectedReport.schoolExamScore !== null ? `${selectedReport.schoolExamScore}점` : '—'}
                       </div>
                     </div>
                   </div>
-                )}
 
-                {/* 2. Previous Lessons List */}
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-4">
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center justify-between">
-                    <span>📚 지난 수업 기록 목록 ({reports.length}회차)</span>
-                  </h3>
-                  <div className="divide-y divide-slate-100">
-                    {reports.map((r) => {
-                      const isSelected = selectedReport?.reportId === r.reportId;
-                      return (
-                        <div
-                          key={r.reportId}
-                          onClick={() => setSelectedReport(r)}
-                          className={`py-3 px-3 rounded-xl cursor-pointer transition flex items-center justify-between ${
-                            isSelected ? 'bg-indigo-50 border border-indigo-200' : 'hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-slate-900">
-                                {new Date(r.lessonDateStart).toLocaleDateString('ko-KR', {
-                                  month: 'numeric',
-                                  day: 'numeric',
-                                  weekday: 'short',
-                                })}
-                              </span>
-                              <span className="text-[11px] text-slate-500 font-mono">{r.lessonTime}</span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-slate-100 text-slate-600 font-medium">
-                                {r.category}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-500 line-clamp-1 max-w-md">
-                              {r.feedback || '수업 코멘트 완료'}
-                            </p>
-                          </div>
+                  {/* 자습시간 및 테스트 정보 */}
+                  {(selectedReport.selfStudyTime || selectedReport.test) && (
+                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-1">
+                      {selectedReport.selfStudyTime && (
+                        <p><strong className="text-slate-700">자습 진행 시간:</strong> {selectedReport.selfStudyTime}</p>
+                      )}
+                      {selectedReport.test && (
+                        <p><strong className="text-slate-700">테스트 진행:</strong> {selectedReport.test}</p>
+                      )}
+                    </div>
+                  )}
 
-                          <div className="flex items-center gap-3 text-right">
-                            <div className="text-xs font-bold">
-                              {r.vocabularyScore !== null ? (
-                                <span className="text-indigo-600 font-mono">{r.vocabularyScore}점</span>
-                              ) : (
-                                <span className="text-slate-400 text-[11px]">-</span>
-                              )}
-                            </div>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${getAttendanceBadge(r.attendance)}`}>
-                              {r.attendance}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  {/* 선생님 맞춤 상세 피드백 */}
+                  <div className="space-y-2">
+                    <h5 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                      <span>📝</span>
+                      <span>지원T 맞춤 학습 피드백 & 코멘트</span>
+                    </h5>
+                    <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">
+                      {selectedReport.feedback || '등록된 피드백 내용이 없습니다.'}
+                    </div>
                   </div>
                 </div>
-              </>
-            )}
-          </div>
-        )}
-      </main>
+              )}
+            </div>
+          )}
+        </main>
+      )}
     </div>
   );
 };

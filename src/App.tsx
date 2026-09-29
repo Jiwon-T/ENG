@@ -317,23 +317,41 @@ export default function App() {
     reset();
   };
 
-  // 0. 학부모 매직 링크 또는 /report 직접 접근 시: 학생 로그인 없이 학부모 화면 즉시 서빙
-  const isParentReportPath = typeof window !== 'undefined' && (
-    window.location.pathname === '/report' ||
-    new URLSearchParams(window.location.search).has('token')
-  );
+  // 0. 학부모 고정 주소 (/report/:slug 또는 /:slug) 접근 시: 학생 로그인 없이 학부모 화면 즉시 서빙
+  const getParentReportSlug = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    const pathname = window.location.pathname;
 
-  if (isParentReportPath) {
+    // 1) /report/:reportSlug 형식
+    const reportMatch = pathname.match(/^\/report\/([a-z0-9]{3,30})$/);
+    if (reportMatch) return reportMatch[1];
+
+    // 2) 최상위 예약 경로(home, login, api 등)를 제외한 단독 /:reportSlug 형식
+    const reservedPaths = ['/', '/login', '/api', '/report', '/auth', '/favicon.ico'];
+    if (!reservedPaths.includes(pathname) && !pathname.startsWith('/api/')) {
+      const slugMatch = pathname.match(/^\/([a-z0-9]{3,30})$/);
+      if (slugMatch) return slugMatch[1];
+    }
+
+    return null;
+  };
+
+  const activeReportSlug = getParentReportSlug();
+
+  if (activeReportSlug) {
     return (
       <Suspense fallback={
         <div className="min-h-screen flex items-center justify-center bg-slate-50">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
         </div>
       }>
-        <ParentReportView onGoHome={() => {
-          window.history.pushState({}, '', '/');
-          window.location.href = '/';
-        }} />
+        <ParentReportView
+          reportSlug={activeReportSlug}
+          onGoHome={() => {
+            window.history.pushState({}, '', '/');
+            window.location.href = '/';
+          }}
+        />
       </Suspense>
     );
   }

@@ -301,7 +301,7 @@ service cloud.firestore {
     }
 
     // ----------------------------------------------------
-    // Notion-Make 학습 리포트 및 학부모 매직 링크 보안 규칙
+    // Notion-Make 학습 리포트 및 학부모 안심 고정 주소 보안 규칙
     // 학생/학부모는 클라이언트에서 직접 전체 문서를 읽지 못하며,
     // 반드시 서버 API(/api/student/*, /api/parent/*)를 통해 DTO로만 조회됩니다.
     // ----------------------------------------------------
@@ -311,10 +311,19 @@ service cloud.firestore {
       allow write: if false; // 클라이언트 직접 쓰기 전면 차단
     }
 
-    match /magicLinkTokens/{tokenHash} {
-      // 학부모 매직 링크 메타데이터는 서버 전용
+    match /reportSlugs/{slug} {
+      // 고정 주소 매핑 정보는 클라이언트에서 직접 쓰지 못하며 서버 API를 통해서만 관리
       allow read: if isAuthenticated() && (isTeacher() || isAdmin());
-      allow write: if false; // 클라이언트 직접 쓰기 차단
+      allow write: if false;
+    }
+
+    match /reportAliases/{alias} {
+      allow read: if isAuthenticated() && (isTeacher() || isAdmin());
+      allow write: if false;
+    }
+
+    match /magicLinkTokens/{tokenHash} {
+      allow read, write: if false;
     }
 
     match /parentSessions/{sessionHash} {

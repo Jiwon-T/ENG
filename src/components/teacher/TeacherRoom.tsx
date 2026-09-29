@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Calendar, ClipboardList, Plus, Search, MoreVertical, Phone, GraduationCap, Clock, MessageSquare, Trash2, Save, X, FileSpreadsheet, BookOpen, BarChart3, Sparkles, FileText, Languages, History } from 'lucide-react';
+import { Users, Calendar, ClipboardList, Plus, Search, MoreVertical, Phone, GraduationCap, Clock, MessageSquare, Trash2, Save, X, FileSpreadsheet, BookOpen, BarChart3, Sparkles, FileText, Languages, History, Link } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, getDocs, writeBatch } from 'firebase/firestore';
 
@@ -58,47 +58,112 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
     }
   };
 
-  // 학부모 매직 링크 발급 모달 상태
-  const [magicLinkModal, setMagicLinkModal] = useState<{
+  // 학부모 고정 주소 (reportSlug) 발급 모달 상태
+  const [reportSlugModal, setReportSlugModal] = useState<{
     open: boolean;
     studentKey: string;
     studentName: string;
-    parentPhoneLast4: string;
+    reportSlug: string;
+    guardianStatus: 'idle' | 'checking' | 'verified' | 'missing' | 'error';
     generatedUrl: string | null;
     copied: boolean;
     loading: boolean;
+    errorMsg: string | null;
   }>({
     open: false,
     studentKey: '테스트 (복제고1)',
     studentName: '테스트 학생 (복제고1)',
-    parentPhoneLast4: '4601',
+    reportSlug: 'bokjego1test',
+    guardianStatus: 'idle',
     generatedUrl: null,
     copied: false,
     loading: false,
+    errorMsg: null,
   });
 
-  const handleGenerateMagicLink = async () => {
-    setMagicLinkModal(prev => ({ ...prev, loading: true }));
+  const handleOpenReportSlugModal = async (studentKey: string = '테스트 (복제고1)', studentName: string = '테스트 학생 (복제고1)') => {
+    setReportSlugModal({
+      open: true,
+      studentKey,
+      studentName,
+      reportSlug: studentKey === '테스트 (복제고1)' ? 'bokjego1test' : '',
+      guardianStatus: 'checking',
+      generatedUrl: null,
+      copied: false,
+      loading: false,
+      errorMsg: null,
+    });
+
+    // 기존 발급된 슬러그가 있는지 조회
     try {
-      const res = await fetch('/api/teacher/magic-links', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentKey: magicLinkModal.studentKey,
-          parentPhoneLast4: magicLinkModal.parentPhoneLast4,
-        }),
+      if (!auth.currentUser) return;
+      const idToken = await auth.currentUser.getIdToken();
+      const res = await fetch(`/api/teacher/report-slug?studentKey=${encodeURIComponent(studentKey)}`, {
+        headers: { 'Authorization': `Bearer ${idToken}` },
       });
       const data = await res.json();
-      if (data.ok) {
-        const fullUrl = `${window.location.origin}${data.accessUrl}`;
-        setMagicLinkModal(prev => ({ ...prev, generatedUrl: fullUrl, loading: false }));
+      if (data.ok && data.reportSlug) {
+        setReportSlugModal(prev => ({
+          ...prev,
+          reportSlug: data.reportSlug,
+          guardianStatus: 'verified',
+          generatedUrl: `https://jiwont.kr${data.shortUrl || data.reportUrl}`,
+        }));
       } else {
-        alert(`발급 실패: ${data.error}`);
-        setMagicLinkModal(prev => ({ ...prev, loading: false }));
+        setReportSlugModal(prev => ({ ...prev, guardianStatus: 'idle' }));
+      }
+    } catch {
+      setReportSlugModal(prev => ({ ...prev, guardianStatus: 'idle' }));
+    }
+  };
+
+  const handleGenerateReportSlug = async () => {
+    if (!reportSlugModal.reportSlug.trim()) {
+      alert('리포트 고정 주소(영문 소문자/숫자 3~30자)를 입력해 주세요.');
+      return;
+    }
+
+    setReportSlugModal(prev => ({ ...prev, loading: true, errorMsg: null }));
+    try {
+      if (!auth.currentUser) throw new Error('로그인이 필요합니다.');
+      const idToken = await auth.currentUser.getIdToken();
+
+      const res = await fetch('/api/teacher/report-slug', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          studentKey: reportSlugModal.studentKey,
+          reportSlug: reportSlugModal.reportSlug.trim().toLowerCase(),
+        }),
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        const fullUrl = `https://jiwont.kr${data.shortUrl || data.reportUrl}`;
+        setReportSlugModal(prev => ({
+          ...prev,
+          generatedUrl: fullUrl,
+          guardianStatus: 'verified',
+          loading: false,
+        }));
+      } else {
+        setReportSlugModal(prev => ({
+          ...prev,
+          loading: false,
+          errorMsg: data.message || `발급 실패 (${data.error})`,
+          guardianStatus: data.error === 'GUARDIAN_CONTACT_MISSING' ? 'missing' : 'error',
+        }));
       }
     } catch (e: any) {
-      alert(`오류: ${e.message}`);
-      setMagicLinkModal(prev => ({ ...prev, loading: false }));
+      setReportSlugModal(prev => ({
+        ...prev,
+        loading: false,
+        errorMsg: e.message || '요청 중 오류가 발생했습니다.',
+        guardianStatus: 'error',
+      }));
     }
   };
 
@@ -235,90 +300,131 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setMagicLinkModal(prev => ({ ...prev, open: true, generatedUrl: null }))}
+                    onClick={() => handleOpenReportSlugModal('테스트 (복제고1)', '테스트 학생 (복제고1)')}
                     className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5"
                   >
                     <span>🔗</span>
-                    <span>학부모 안심 매직 링크 발급</span>
+                    <span>학부모 고정 주소 (jiwont.kr/...) 관리</span>
                   </button>
                 </div>
               </div>
 
-              {/* 매직 링크 발급 모달 */}
-              {magicLinkModal.open && (
+              {/* 학부모 고정 리포트 주소 발급 모달 */}
+              {reportSlugModal.open && (
                 <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
                   <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                        <span>🔒</span> 학부모 안심 매직 링크 생성
+                        <span>🏷️</span> 학부모 고정 주소 발급
                       </h3>
                       <button
-                        onClick={() => setMagicLinkModal(prev => ({ ...prev, open: false }))}
+                        onClick={() => setReportSlugModal(prev => ({ ...prev, open: false }))}
                         className="text-slate-400 hover:text-slate-600"
                       >
                         ✕
                       </button>
                     </div>
 
-                    <div className="space-y-3 text-xs">
+                    <div className="space-y-3.5 text-xs">
                       <div>
-                        <label className="font-bold text-slate-700 block mb-1">대상 학생</label>
+                        <label className="font-bold text-slate-700 block mb-1">대상 수강생</label>
                         <input
                           type="text"
-                          value={magicLinkModal.studentKey}
+                          value={`${reportSlugModal.studentName} (${reportSlugModal.studentKey})`}
                           readOnly
                           className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2.5 font-medium text-slate-700"
                         />
                       </div>
 
                       <div>
-                        <label className="font-bold text-slate-700 block mb-1">보호자 전화번호 뒤 4자리 (PIN)</label>
-                        <input
-                          type="text"
-                          maxLength={4}
-                          value={magicLinkModal.parentPhoneLast4}
-                          onChange={(e) => setMagicLinkModal(prev => ({ ...prev, parentPhoneLast4: e.target.value }))}
-                          placeholder="4601"
-                          className="w-full border border-slate-200 rounded-lg p-2.5 font-mono text-slate-800"
-                        />
-                        <p className="text-[11px] text-slate-400 mt-1">학부모 접속 시 이 4자리를 입력해야 열람됩니다.</p>
+                        <label className="font-bold text-slate-700 block mb-1">
+                          고정 주소 식별자 (Slug)
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs text-slate-400 font-bold">jiwont.kr/</span>
+                          <input
+                            type="text"
+                            value={reportSlugModal.reportSlug}
+                            onChange={(e) => setReportSlugModal(prev => ({
+                              ...prev,
+                              reportSlug: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''),
+                            }))}
+                            placeholder="bokjego1test"
+                            className="flex-1 border border-slate-300 rounded-lg p-2 font-mono text-indigo-700 font-bold focus:ring-2 focus:ring-indigo-100 outline-none"
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          영문 소문자와 숫자(3~30자)만 가능하며 학부모에게 깔끔한 전용 주소로 제공됩니다.
+                        </p>
                       </div>
 
-                      {magicLinkModal.generatedUrl && (
+                      {/* 보호자 연락처 연동 상태 (전화번호 원문은 노출하지 않음) */}
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-600">Notion 보호자 연락처:</span>
+                          {reportSlugModal.guardianStatus === 'checking' && (
+                            <span className="text-[11px] text-slate-500 font-bold animate-pulse">조회 확인 중...</span>
+                          )}
+                          {reportSlugModal.guardianStatus === 'verified' && (
+                            <span className="text-[11px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              확인됨 (인증값 자동 연동) ✅
+                            </span>
+                          )}
+                          {reportSlugModal.guardianStatus === 'missing' && (
+                            <span className="text-[11px] text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                              연락처 없음 ⚠️
+                            </span>
+                          )}
+                          {reportSlugModal.guardianStatus === 'idle' && (
+                            <span className="text-[11px] text-slate-500 font-medium">발급 시 자동 검증</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          학부모는 접속 시 노션에 등록된 전화번호 뒤 4자리를 입력하여 열람하게 됩니다.
+                        </p>
+                      </div>
+
+                      {reportSlugModal.errorMsg && (
+                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium">
+                          {reportSlugModal.errorMsg}
+                        </div>
+                      )}
+
+                      {reportSlugModal.generatedUrl && (
                         <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
-                          <p className="text-xs font-bold text-indigo-900">생성된 학부모 열람 주소:</p>
+                          <p className="text-xs font-bold text-indigo-900">학부모 전달용 고정 주소:</p>
                           <input
                             type="text"
                             readOnly
-                            value={magicLinkModal.generatedUrl}
-                            className="w-full text-xs font-mono bg-white border border-indigo-200 rounded p-2 text-indigo-800"
+                            value={reportSlugModal.generatedUrl}
+                            className="w-full text-xs font-mono font-bold bg-white border border-indigo-200 rounded p-2 text-indigo-800"
                           />
                           <button
                             onClick={() => {
-                              navigator.clipboard.writeText(magicLinkModal.generatedUrl || '');
-                              setMagicLinkModal(prev => ({ ...prev, copied: true }));
-                              setTimeout(() => setMagicLinkModal(prev => ({ ...prev, copied: false })), 2000);
+                              navigator.clipboard.writeText(reportSlugModal.generatedUrl || '');
+                              setReportSlugModal(prev => ({ ...prev, copied: true }));
+                              setTimeout(() => setReportSlugModal(prev => ({ ...prev, copied: false })), 2000);
                             }}
                             className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition"
                           >
-                            {magicLinkModal.copied ? '복사 완료! ✅' : '링크 복사하기'}
+                            {reportSlugModal.copied ? '복사 완료! ✅' : '주소 복사하기'}
                           </button>
                         </div>
                       )}
 
                       <div className="pt-2 flex justify-end gap-2">
                         <button
-                          onClick={() => setMagicLinkModal(prev => ({ ...prev, open: false }))}
+                          onClick={() => setReportSlugModal(prev => ({ ...prev, open: false }))}
                           className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg font-bold"
                         >
                           닫기
                         </button>
                         <button
-                          onClick={handleGenerateMagicLink}
-                          disabled={magicLinkModal.loading || magicLinkModal.parentPhoneLast4.length !== 4}
+                          onClick={handleGenerateReportSlug}
+                          disabled={reportSlugModal.loading || reportSlugModal.reportSlug.length < 3}
                           className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded-lg font-bold"
                         >
-                          {magicLinkModal.loading ? '생성 중...' : '새 링크 발급'}
+                          {reportSlugModal.loading ? '발급 처리 중...' : '고정 주소 저장 및 활성화'}
                         </button>
                       </div>
                     </div>
@@ -514,6 +620,13 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                               title="리포트 보기"
                             >
                               <BarChart3 size={18} />
+                            </button>
+                            <button
+                              onClick={() => handleOpenReportSlugModal(student.alias || student.name, student.name)}
+                              className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"
+                              title="학부모 고정 주소 설정"
+                            >
+                              <Link size={18} />
                             </button>
                             {isSuperAdmin && student.role !== 'teacher' && (
                               confirmDeleteUid === student.uid ? (
