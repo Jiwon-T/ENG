@@ -5,10 +5,13 @@ import { GraduationCap, Languages, BookOpen, History, BarChart3, FileText, Users
 interface HomeProps {
   onNavigate: (view: 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'exam' | 'vocab-mobile' | 'tutor' | 'report' | 'archive' | 'teacher-room' | 'pet') => void;
   userRole?: 'teacher' | 'student' | 'admin';
+  userEmail?: string;
   hasNewAssignment?: boolean;
 }
 
-export default function Home({ onNavigate, userRole, hasNewAssignment }: HomeProps) {
+export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment }: HomeProps) {
+  const isSuperAdmin = userEmail === 'lizzieshere1@gmail.com';
+
   const menuItems = [
     {
       id: 'vocab',
@@ -48,7 +51,7 @@ export default function Home({ onNavigate, userRole, hasNewAssignment }: HomePro
       color: 'bg-blue-50',
       borderColor: 'border-blue-100',
       textColor: 'text-blue-600',
-      show: userRole === 'teacher' || userRole === 'admin'
+      show: isSuperAdmin
     },
     {
       id: 'generator',
@@ -58,7 +61,7 @@ export default function Home({ onNavigate, userRole, hasNewAssignment }: HomePro
       color: 'bg-amber-50',
       borderColor: 'border-amber-100',
       textColor: 'text-amber-600',
-      show: userRole === 'teacher' || userRole === 'admin'
+      show: isSuperAdmin
     },
     {
       id: 'pet',

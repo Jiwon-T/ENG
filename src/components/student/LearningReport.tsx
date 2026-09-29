@@ -18,6 +18,7 @@ export default function LearningReport() {
     hasNewAssignment: false,
     sessionHistory: [] as any[]
   });
+  const [studentLessonReports, setStudentLessonReports] = useState<any[]>([]);
   const [userRole, setUserRole] = useState<string>('student');
   const [assignmentPage, setAssignmentPage] = useState(1);
   const [sessionPage, setSessionPage] = useState(1);
@@ -177,6 +178,18 @@ export default function LearningReport() {
       console.error('Failed to load study sessions in LearningReport:', error);
       handleFirestoreError(error, OperationType.LIST, 'studySessions');
     });
+
+    // Fetch official lesson scores from server (StudentLessonReportDTO)
+    fetch(`/api/student/lesson-reports?studentId=${auth.currentUser.uid}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok && Array.isArray(data.reports)) {
+          setStudentLessonReports(data.reports);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load official lesson reports for student:', err);
+      });
 
     return () => {
       unsubWords();
@@ -590,6 +603,59 @@ export default function LearningReport() {
           </div>
         </div>
       </div>
+
+      {/* Official Lesson Test Scores Section (StudentLessonReportDTO: 날짜, 종류, 점수만 노출) */}
+      {studentLessonReports.length > 0 && (
+        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
+              <Trophy className="text-indigo-600" size={20} />
+              수업 정기 테스트 점수
+            </h3>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
+              최근 {studentLessonReports.length}회
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {studentLessonReports.map((report) => (
+              <div
+                key={report.reportId}
+                className="p-5 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-500">
+                    {new Date(report.lessonDate).toLocaleDateString('ko-KR', {
+                      month: 'long',
+                      day: 'numeric',
+                      weekday: 'short',
+                    })}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                    {report.category}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-around py-2 border-t border-b border-slate-200/60">
+                  <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">단어 시험</p>
+                    <p className="text-lg font-black text-indigo-600 font-mono">
+                      {report.vocabularyScore !== null ? `${report.vocabularyScore}점` : '-'}
+                    </p>
+                  </div>
+                  <div className="w-px h-8 bg-slate-200"></div>
+                  <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">내신 점수</p>
+                    <p className="text-lg font-black text-emerald-600 font-mono">
+                      {report.schoolExamScore !== null ? `${report.schoolExamScore}점` : '-'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Activity Log Section */}
       <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">

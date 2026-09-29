@@ -92,19 +92,14 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && (
-        (request.auth.token.email == "lizzieshere1@gmail.com") ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'teacher'])
-      );
+      return isAuthenticated() && (request.auth.token.email == "lizzieshere1@gmail.com");
     }
 
     function isTeacher() {
       return isAuthenticated() && (
         (request.auth.token.email == "lizzieshere1@gmail.com") ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher') ||
-        isAdmin()
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher')
       );
     }
 
@@ -179,13 +174,14 @@ service cloud.firestore {
       // Allow authenticated user to create their own profile/document
       allow create: if isOwner(uid) && isValidUser(request.resource.data);
       allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
-        isTeacher() ||
-        (isOwner(uid) && (
-          request.resource.data.role == resource.data.role ||
-          (request.auth.token.email == "lizzieshere1@gmail.com" && request.resource.data.role == 'teacher')
-        ) && 
-         // Student cannot change their own teacherNote
-         (resource.data.role != 'student' || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['teacherNote']))
+        // Only Jiwon T (admin) can change the 'role' field
+        (request.resource.data.role == resource.data.role || isAdmin()) &&
+        (
+          isTeacher() ||
+          (isOwner(uid) && 
+           // Student cannot change their own teacherNote
+           (resource.data.role != 'student' || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['teacherNote']))
+          )
         )
       );
       allow delete: if isAdmin();
@@ -302,6 +298,28 @@ service cloud.firestore {
 
     match /petSystems/{uid} {
       allow read, write: if isAuthenticated() && (isOwner(uid) || isTeacher() || isAdmin());
+    }
+
+    // ----------------------------------------------------
+    // Notion-Make 학습 리포트 및 학부모 매직 링크 보안 규칙
+    // 학생/학부모는 클라이언트에서 직접 전체 문서를 읽지 못하며,
+    // 반드시 서버 API(/api/student/*, /api/parent/*)를 통해 DTO로만 조회됩니다.
+    // ----------------------------------------------------
+    match /lessonReports/{reportId} {
+      // 오직 선생님/관리자만 클라이언트에서 조회 가능, 생성/수정은 서버(Firebase Admin SDK) 전용
+      allow read: if isAuthenticated() && (isTeacher() || isAdmin());
+      allow write: if false; // 클라이언트 직접 쓰기 전면 차단
+    }
+
+    match /magicLinkTokens/{tokenHash} {
+      // 학부모 매직 링크 메타데이터는 서버 전용
+      allow read: if isAuthenticated() && (isTeacher() || isAdmin());
+      allow write: if false; // 클라이언트 직접 쓰기 차단
+    }
+
+    match /parentSessions/{sessionHash} {
+      // 학부모 세션은 서버 전용
+      allow read, write: if false;
     }
   }
 }

@@ -95,6 +95,7 @@ const WordbookView = lazy(() => import('./components/student/WordbookView'));
 const LearningReport = lazy(() => import('./components/student/LearningReport'));
 const ArchiveView = lazy(() => import('./components/student/ArchiveView'));
 const PetHome = lazy(() => import('./components/pet/PetHome'));
+const ParentReportView = lazy(() => import('./components/parent/ParentReportView').then(m => ({ default: m.ParentReportView })));
 
 type View = 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'exam' | 'tutor' | 'report' | 'archive' | 'teacher-room' | 'pet';
 
@@ -316,6 +317,27 @@ export default function App() {
     reset();
   };
 
+  // 0. 학부모 매직 링크 또는 /report 직접 접근 시: 학생 로그인 없이 학부모 화면 즉시 서빙
+  const isParentReportPath = typeof window !== 'undefined' && (
+    window.location.pathname === '/report' ||
+    new URLSearchParams(window.location.search).has('token')
+  );
+
+  if (isParentReportPath) {
+    return (
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      }>
+        <ParentReportView onGoHome={() => {
+          window.history.pushState({}, '', '/');
+          window.location.href = '/';
+        }} />
+      </Suspense>
+    );
+  }
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#fafafa]">
@@ -441,7 +463,7 @@ export default function App() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-1">
-                {(profile?.role === 'teacher' || profile?.role === 'admin') && (
+                {profile?.email === 'lizzieshere1@gmail.com' && (
                   <MenuNavItem 
                     icon={<History size={18} />} 
                     label="보관소" 
@@ -552,6 +574,7 @@ export default function App() {
               <Home 
                 onNavigate={setCurrentView} 
                 userRole={profile?.role} 
+                userEmail={profile?.email}
                 hasNewAssignment={hasNewAssignment}
               />
             </motion.div>
@@ -564,7 +587,7 @@ export default function App() {
             >
               <PetHome onBack={() => setCurrentView('home')} />
             </motion.div>
-          ) : currentView === 'analyzer' && (profile?.role === 'teacher' || profile?.role === 'admin') ? (
+          ) : currentView === 'analyzer' && (profile?.email === 'lizzieshere1@gmail.com') ? (
             <motion.div
               key="analyzer"
               initial={{ opacity: 0, y: 20 }}
@@ -649,7 +672,7 @@ export default function App() {
                 </AnimatePresence>
               </main>
             </motion.div>
-          ) : currentView === 'generator' && (profile?.role === 'teacher' || profile?.role === 'admin') ? (
+          ) : currentView === 'generator' && (profile?.email === 'lizzieshere1@gmail.com') ? (
             <motion.div
               key="generator"
               initial={{ opacity: 0, y: 20 }}
@@ -809,7 +832,7 @@ export default function App() {
             >
               <LearningReport />
             </motion.div>
-          ) : currentView === 'archive' && (profile?.role === 'teacher' || profile?.role === 'admin') ? (
+          ) : currentView === 'archive' && (profile?.email === 'lizzieshere1@gmail.com') ? (
             <motion.div
               key="archive"
               initial={{ opacity: 0, x: 20 }}

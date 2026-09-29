@@ -42,6 +42,66 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteUid, setConfirmDeleteUid] = useState<string | null>(null);
 
+  // 최고 관리자(지원T) 여부 확인
+  const isSuperAdmin = auth.currentUser?.email === 'lizzieshere1@gmail.com';
+
+  const handleUpdateRole = async (targetUid: string, newRole: 'teacher' | 'student') => {
+    if (!isSuperAdmin) {
+      alert('선생님 권한 승격 및 변경은 최고 관리자(지원T)만 가능합니다.');
+      return;
+    }
+    try {
+      await updateDoc(doc(db, 'users', targetUid), { role: newRole });
+    } catch (e: any) {
+      console.error('Failed to change role:', e);
+      alert('권한 변경 중 오류가 발생했습니다: ' + e.message);
+    }
+  };
+
+  // 학부모 매직 링크 발급 모달 상태
+  const [magicLinkModal, setMagicLinkModal] = useState<{
+    open: boolean;
+    studentKey: string;
+    studentName: string;
+    parentPhoneLast4: string;
+    generatedUrl: string | null;
+    copied: boolean;
+    loading: boolean;
+  }>({
+    open: false,
+    studentKey: '테스트 (복제고1)',
+    studentName: '테스트 학생 (복제고1)',
+    parentPhoneLast4: '4601',
+    generatedUrl: null,
+    copied: false,
+    loading: false,
+  });
+
+  const handleGenerateMagicLink = async () => {
+    setMagicLinkModal(prev => ({ ...prev, loading: true }));
+    try {
+      const res = await fetch('/api/teacher/magic-links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentKey: magicLinkModal.studentKey,
+          parentPhoneLast4: magicLinkModal.parentPhoneLast4,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        const fullUrl = `${window.location.origin}${data.accessUrl}`;
+        setMagicLinkModal(prev => ({ ...prev, generatedUrl: fullUrl, loading: false }));
+      } else {
+        alert(`발급 실패: ${data.error}`);
+        setMagicLinkModal(prev => ({ ...prev, loading: false }));
+      }
+    } catch (e: any) {
+      alert(`오류: ${e.message}`);
+      setMagicLinkModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
   useEffect(() => {
     if (!auth.currentUser) return;
 
@@ -124,27 +184,31 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
           <TabButton active={activeTab === 'exam'} onClick={() => setActiveTab('exam')} icon={<FileText size={18} />} label="시험기간 관리" />
           <TabButton active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} icon={<BarChart3 size={18} />} label="학습 리포트" />
           <div className="w-px h-6 bg-slate-100 mx-2 self-center hidden md:block" />
-          <button
-            onClick={() => onNavigate?.('analyzer')}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-blue-500 hover:bg-blue-50 transition-all whitespace-nowrap"
-          >
-            <Languages size={18} />
-            지문 분석기
-          </button>
-          <button
-            onClick={() => onNavigate?.('generator')}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-amber-500 hover:bg-amber-50 transition-all whitespace-nowrap"
-          >
-            <Sparkles size={18} />
-            문제 생성기
-          </button>
-          <button
-            onClick={() => onNavigate?.('archive')}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-50 transition-all whitespace-nowrap"
-          >
-            <History size={18} />
-            보관소
-          </button>
+          {isSuperAdmin && (
+            <>
+              <button
+                onClick={() => onNavigate?.('analyzer')}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-blue-500 hover:bg-blue-50 transition-all whitespace-nowrap"
+              >
+                <Languages size={18} />
+                지문 분석기
+              </button>
+              <button
+                onClick={() => onNavigate?.('generator')}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-amber-500 hover:bg-amber-50 transition-all whitespace-nowrap"
+              >
+                <Sparkles size={18} />
+                문제 생성기
+              </button>
+              <button
+                onClick={() => onNavigate?.('archive')}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-50 transition-all whitespace-nowrap"
+              >
+                <History size={18} />
+                보관소
+              </button>
+            </>
+          )}
         </div>
       </header>
 
@@ -157,7 +221,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
             >
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
                 <div className="relative w-72">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   <input
@@ -168,7 +232,99 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                     className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none transition-all text-sm font-medium"
                   />
                 </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setMagicLinkModal(prev => ({ ...prev, open: true, generatedUrl: null }))}
+                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5"
+                  >
+                    <span>🔗</span>
+                    <span>학부모 안심 매직 링크 발급</span>
+                  </button>
+                </div>
               </div>
+
+              {/* 매직 링크 발급 모달 */}
+              {magicLinkModal.open && (
+                <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                        <span>🔒</span> 학부모 안심 매직 링크 생성
+                      </h3>
+                      <button
+                        onClick={() => setMagicLinkModal(prev => ({ ...prev, open: false }))}
+                        className="text-slate-400 hover:text-slate-600"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">대상 학생</label>
+                        <input
+                          type="text"
+                          value={magicLinkModal.studentKey}
+                          readOnly
+                          className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2.5 font-medium text-slate-700"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-bold text-slate-700 block mb-1">보호자 전화번호 뒤 4자리 (PIN)</label>
+                        <input
+                          type="text"
+                          maxLength={4}
+                          value={magicLinkModal.parentPhoneLast4}
+                          onChange={(e) => setMagicLinkModal(prev => ({ ...prev, parentPhoneLast4: e.target.value }))}
+                          placeholder="4601"
+                          className="w-full border border-slate-200 rounded-lg p-2.5 font-mono text-slate-800"
+                        />
+                        <p className="text-[11px] text-slate-400 mt-1">학부모 접속 시 이 4자리를 입력해야 열람됩니다.</p>
+                      </div>
+
+                      {magicLinkModal.generatedUrl && (
+                        <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
+                          <p className="text-xs font-bold text-indigo-900">생성된 학부모 열람 주소:</p>
+                          <input
+                            type="text"
+                            readOnly
+                            value={magicLinkModal.generatedUrl}
+                            className="w-full text-xs font-mono bg-white border border-indigo-200 rounded p-2 text-indigo-800"
+                          />
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(magicLinkModal.generatedUrl || '');
+                              setMagicLinkModal(prev => ({ ...prev, copied: true }));
+                              setTimeout(() => setMagicLinkModal(prev => ({ ...prev, copied: false })), 2000);
+                            }}
+                            className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition"
+                          >
+                            {magicLinkModal.copied ? '복사 완료! ✅' : '링크 복사하기'}
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="pt-2 flex justify-end gap-2">
+                        <button
+                          onClick={() => setMagicLinkModal(prev => ({ ...prev, open: false }))}
+                          className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg font-bold"
+                        >
+                          닫기
+                        </button>
+                        <button
+                          onClick={handleGenerateMagicLink}
+                          disabled={magicLinkModal.loading || magicLinkModal.parentPhoneLast4.length !== 4}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded-lg font-bold"
+                        >
+                          {magicLinkModal.loading ? '생성 중...' : '새 링크 발급'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-x-auto">
                 <table className="w-full text-left min-w-[900px] xl:min-w-full">
@@ -331,11 +487,24 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                           <span className="text-sm font-medium text-slate-500">{student.email}</span>
                         </td>
                         <td className="px-4 lg:px-6 xl:px-8 py-5 whitespace-nowrap">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                            student.role === 'teacher' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'
-                          }`}>
-                            {student.role === 'teacher' ? '선생님' : '수강생'}
-                          </span>
+                          {isSuperAdmin ? (
+                            <select
+                              value={student.role}
+                              onChange={(e) => handleUpdateRole(student.uid, e.target.value as 'teacher' | 'student')}
+                              className={`text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full cursor-pointer border border-transparent focus:outline-hidden ${
+                                student.role === 'teacher' ? 'bg-indigo-100 text-indigo-600 focus:border-indigo-300' : 'bg-emerald-100 text-emerald-600 focus:border-emerald-300'
+                              }`}
+                            >
+                              <option value="student">수강생</option>
+                              <option value="teacher">선생님</option>
+                            </select>
+                          ) : (
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              student.role === 'teacher' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'
+                            }`}>
+                              {student.role === 'teacher' ? '선생님' : '수강생'}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 lg:px-6 xl:px-8 py-5 whitespace-nowrap">
                           <div className="flex items-center gap-2">
@@ -346,7 +515,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                             >
                               <BarChart3 size={18} />
                             </button>
-                            {student.role !== 'teacher' && (
+                            {isSuperAdmin && student.role !== 'teacher' && (
                               confirmDeleteUid === student.uid ? (
                                 <div className="flex flex-col items-end gap-1">
                                   <div className="text-[10px] text-red-400 font-medium mb-1 text-right leading-tight">
