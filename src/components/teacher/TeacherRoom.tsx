@@ -18,6 +18,7 @@ interface StudentUser {
   photoURL?: string;
   alias?: string;
   teacherNote?: string;
+  notionStudentKey?: string | null;
   petStats?: {
     points: number;
     totalXP: number;
@@ -25,6 +26,14 @@ interface StudentUser {
     petName: string;
     character: string;
   };
+}
+
+interface NotionStudentSummary {
+  studentKey: string;
+  studentDisplayName: string;
+  hasGuardianContact: boolean;
+  linkedFirebaseUid: string | null;
+  reportSlug: string | null;
 }
 
 interface TeacherRoomProps {
@@ -42,6 +51,9 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
   const [selectedStudentUid, setSelectedStudentUid] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteUid, setConfirmDeleteUid] = useState<string | null>(null);
+  const [notionStudents, setNotionStudents] = useState<NotionStudentSummary[]>([]);
+  const [notionStudentsLoading, setNotionStudentsLoading] = useState(false);
+  const [linkingStudentUid, setLinkingStudentUid] = useState<string | null>(null);
 
   // 최고 관리자(지원T) 여부 확인
   const isSuperAdmin = auth.currentUser?.email === 'lizzieshere1@gmail.com';
@@ -177,6 +189,38 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
     }
   };
 
+  const loadNotionStudents = async () => {
+    if (!auth.currentUser || !isSuperAdmin) return;
+    setNotionStudentsLoading(true);
+    const idToken = await auth.currentUser.getIdToken();
+    const res = await safeFetchJson<{ ok: boolean; students: NotionStudentSummary[] }>(
+      '/api/teacher/notion-students',
+      { headers: { 'Authorization': `Bearer ${idToken}` } }
+    );
+    if (res.ok && Array.isArray(res.data?.students)) setNotionStudents(res.data.students);
+    setNotionStudentsLoading(false);
+  };
+
+  const handleLinkStudentAccount = async (firebaseUid: string, studentKey: string) => {
+    if (!auth.currentUser || !studentKey) return;
+    setLinkingStudentUid(firebaseUid);
+    const idToken = await auth.currentUser.getIdToken();
+    const res = await safeFetchJson<{ ok: boolean; message?: string }>('/api/teacher/student-link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({ firebaseUid, studentKey }),
+    });
+    setLinkingStudentUid(null);
+    if (!res.ok) {
+      alert(res.data?.message || res.userMessage || '학생 계정 연결에 실패했습니다.');
+      return;
+    }
+    await loadNotionStudents();
+  };
+
   useEffect(() => {
     if (!auth.currentUser) return;
 
@@ -200,6 +244,10 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    loadNotionStudents().catch(() => setNotionStudentsLoading(false));
+  }, [isSuperAdmin]);
 
   const handleUpdateAlias = async (uid: string) => {
     try {
@@ -308,16 +356,42 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                   />
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleOpenReportSlugModal('테스트 (복제고1)', '테스트 학생 (복제고1)')}
-                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5"
-                  >
-                    <span>🔗</span>
-                    <span>학부모 고정 주소 (jiwont.kr/...) 관리</span>
-                  </button>
+                <div className="text-xs font-semibold text-slate-500">
+                  Notion 학생 {notionStudentsLoading ? '불러오는 중…' : `${notionStudents.length}명 연동 가능`}
                 </div>
               </div>
+
+              {isSuperAdmin && (
+                <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-5 md:p-6 mb-6">
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h3 className="font-black text-slate-900">Notion 학생 · 학부모 리포트</h3>
+                      <p className="text-xs text-slate-500 mt-1">앱 계정이 없는 학생도 학부모 링크를 발급할 수 있습니다.</p>
+                    </div>
+                    <button onClick={loadNotionStudents} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">새로고침</button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
+                    {notionStudents.map(student => (
+                      <div key={student.studentKey} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-bold text-sm text-slate-900 truncate">{student.studentKey}</p>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            {student.reportSlug ? `jiwont.kr/${student.reportSlug}` : '학부모 링크 미발급'} · {student.linkedFirebaseUid ? '학생 계정 연결됨' : '앱 계정 없음/미연결'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleOpenReportSlugModal(student.studentKey, student.studentDisplayName)}
+                          disabled={!student.hasGuardianContact}
+                          className="shrink-0 p-2 rounded-xl bg-indigo-600 text-white disabled:bg-slate-300"
+                          title={student.hasGuardianContact ? '학부모 링크 관리' : 'Notion 보호자 연락처가 필요합니다'}
+                        >
+                          <Link size={17} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 학부모 고정 리포트 주소 발급 모달 */}
               {reportSlugModal.open && (
@@ -632,12 +706,32 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                               <BarChart3 size={18} />
                             </button>
                             <button
-                              onClick={() => handleOpenReportSlugModal(student.alias || student.name, student.name)}
+                              onClick={() => {
+                                const matched = notionStudents.find(item => item.linkedFirebaseUid === student.uid || item.studentKey === student.notionStudentKey);
+                                if (matched) handleOpenReportSlugModal(matched.studentKey, matched.studentDisplayName);
+                                else alert('먼저 오른쪽의 Notion 학생 연결 목록에서 이 계정을 연결해 주세요.');
+                              }}
                               className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"
                               title="학부모 고정 주소 설정"
                             >
                               <Link size={18} />
                             </button>
+                            {isSuperAdmin && student.role === 'student' && (
+                              <select
+                                value={student.notionStudentKey || ''}
+                                disabled={linkingStudentUid === student.uid}
+                                onChange={(e) => handleLinkStudentAccount(student.uid, e.target.value)}
+                                className="max-w-40 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[11px] font-semibold text-slate-600"
+                                title="이 앱 계정과 연결할 Notion 학생"
+                              >
+                                <option value="">Notion 학생 연결</option>
+                                {notionStudents.map(item => (
+                                  <option key={item.studentKey} value={item.studentKey} disabled={!!item.linkedFirebaseUid && item.linkedFirebaseUid !== student.uid}>
+                                    {item.studentKey}{item.linkedFirebaseUid === student.uid ? ' (연결됨)' : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
                             {isSuperAdmin && student.role !== 'teacher' && (
                               confirmDeleteUid === student.uid ? (
                                 <div className="flex flex-col items-end gap-1">

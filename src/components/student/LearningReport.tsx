@@ -22,6 +22,7 @@ export default function LearningReport() {
   });
   const [studentLessonReports, setStudentLessonReports] = useState<StudentLessonReportDTO[]>([]);
   const [studentSchedules, setStudentSchedules] = useState<StudentScheduleDTO[]>([]);
+  const [notionLinkNotice, setNotionLinkNotice] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>('student');
   const [assignmentPage, setAssignmentPage] = useState(1);
   const [sessionPage, setSessionPage] = useState(1);
@@ -52,6 +53,14 @@ export default function LearningReport() {
     });
     return () => unsub();
   }, []);
+
+  const [lessonPage, setLessonPage] = useState(1);
+  const LESSONS_PER_PAGE = 3;
+  const totalLessonPages = Math.ceil(studentLessonReports.length / LESSONS_PER_PAGE);
+  const currentLessonPage = Math.min(lessonPage, Math.max(1, totalLessonPages));
+  const paginatedLessonReports = studentLessonReports.slice(
+    (currentLessonPage - 1) * LESSONS_PER_PAGE, currentLessonPage * LESSONS_PER_PAGE
+  );
 
   const ASSIGNMENTS_PER_PAGE = 5;
   const SESSIONS_PER_PAGE = 5;
@@ -186,9 +195,14 @@ export default function LearningReport() {
     auth.currentUser.getIdToken().then(idToken => {
       const headers = { Authorization: `Bearer ${idToken}` };
       Promise.all([
-        safeFetchJson<{ ok: boolean; reports: StudentLessonReportDTO[] }>('/api/student/lesson-reports', { headers }),
-        safeFetchJson<{ ok: boolean; schedules: StudentScheduleDTO[] }>('/api/student/schedules', { headers }),
+        safeFetchJson<{ ok: boolean; error?: string; message?: string; reports: StudentLessonReportDTO[] }>('/api/student/lesson-reports', { headers }),
+        safeFetchJson<{ ok: boolean; error?: string; message?: string; schedules: StudentScheduleDTO[] }>('/api/student/schedules', { headers }),
       ]).then(([reportsRes, schedulesRes]) => {
+        const isUnlinked = reportsRes.data?.error === 'STUDENT_REPORT_NOT_LINKED'
+          || schedulesRes.data?.error === 'STUDENT_REPORT_NOT_LINKED';
+        setNotionLinkNotice(isUnlinked
+          ? '수업 기록과 일정이 아직 이 계정에 연결되지 않았어요. 선생님이 Notion 학생을 연결하면 이곳에 자동으로 표시됩니다.'
+          : null);
         if (reportsRes.ok && Array.isArray(reportsRes.data?.reports)) {
           setStudentLessonReports(reportsRes.data.reports);
         }
@@ -500,6 +514,12 @@ export default function LearningReport() {
         </div>
       </header>
 
+      {notionLinkNotice && (
+        <div className="mb-6 md:mb-8 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold leading-relaxed text-amber-800">
+          {notionLinkNotice}
+        </div>
+      )}
+
       {/* Assignments Section */}
       <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-12">
         <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
@@ -585,6 +605,127 @@ export default function LearningReport() {
         </div>
       </div>
 
+      {/* 일정은 학생이 가장 자주 확인하는 과제 바로 아래에 배치 */}
+      <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-12">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
+            <CalendarDays className="text-violet-600" size={20} />
+            일정
+          </h3>
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700">
+            {studentSchedules.length}개
+          </span>
+        </div>
+        {studentSchedules.length > 0 ? (
+          <div className="space-y-3">
+            {studentSchedules.map(schedule => (
+              <div key={schedule.scheduleId} className="p-4 md:p-5 rounded-2xl bg-slate-50 border border-slate-100">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-black text-slate-900 break-words">{schedule.title}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-600">
+                      {formatKoreanDateTime(schedule.startAt)}
+                      {schedule.endAt ? ` ~ ${formatKoreanDateTime(schedule.endAt)}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-white border border-slate-200 text-slate-600">{schedule.scheduleType}</span>
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${schedule.status === '취소' ? 'bg-rose-100 text-rose-700' : schedule.status === '완료' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}>{schedule.status}</span>
+                  </div>
+                </div>
+                {schedule.notice && <p className="mt-3 text-sm text-slate-600 whitespace-pre-wrap break-words">{schedule.notice}</p>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-10 text-center text-sm font-medium text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            등록된 일정이 없습니다.
+          </div>
+        )}
+      </div>
+
+      {/* Offline lesson records: the server DTO excludes attitude, test evaluation and feedback. */}
+      {studentLessonReports.length > 0 && (
+        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
+              <Trophy className="text-indigo-600" size={20} />
+              수업 기록
+            </h3>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
+              총 {studentLessonReports.length}회
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+            {paginatedLessonReports.map((report) => (
+              <div
+                key={report.reportId}
+                className="p-4 md:p-5 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-500">
+                    {new Date(report.lessonDate).toLocaleDateString('ko-KR', {
+                      timeZone: 'Asia/Seoul',
+                      month: 'long',
+                      day: 'numeric',
+                      weekday: 'short',
+                    })}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                    {report.category}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-around py-2 border-t border-b border-slate-200/60">
+                  <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">출결</p>
+                    <p className="text-sm font-black text-slate-700">{report.attendance || '미확인'}</p>
+                  </div>
+                  <div className="w-px h-8 bg-slate-200"></div>
+                  <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">숙제</p>
+                    <p className="text-sm font-black text-slate-700">{report.homework || '미확인'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-around py-2">
+                  <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">단어 시험</p>
+                    <p className="text-xl font-bold text-indigo-600 tabular-nums tracking-tight">
+                      {report.vocabularyScore !== null ? `${report.vocabularyScore}점` : '-'}
+                    </p>
+                  </div>
+                  <div className="w-px h-8 bg-slate-200"></div>
+                  <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">내신 점수</p>
+                    <p className="text-xl font-bold text-emerald-600 tabular-nums tracking-tight">
+                      {report.schoolExamScore !== null ? `${report.schoolExamScore}점` : '-'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {totalLessonPages > 1 && (
+            <nav aria-label="수업 기록 페이지" className="flex justify-center items-center gap-4 mt-5">
+              <button type="button" aria-label="이전 수업 기록" disabled={currentLessonPage === 1}
+                onClick={() => setLessonPage(currentLessonPage - 1)}
+                className="p-3 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-colors">
+                <ChevronLeft size={20} />
+              </button>
+              <span aria-live="polite" className="text-sm font-semibold text-slate-600 tabular-nums">
+                {currentLessonPage} / {totalLessonPages}
+              </span>
+              <button type="button" aria-label="다음 수업 기록" disabled={currentLessonPage === totalLessonPages}
+                onClick={() => setLessonPage(currentLessonPage + 1)}
+                className="p-3 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-colors">
+                <ChevronRight size={20} />
+              </button>
+            </nav>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-16">
         <StatCard 
           icon={<BookOpen className="text-blue-500" />} 
@@ -651,109 +792,6 @@ export default function LearningReport() {
             ))}
           </div>
         </div>
-      </div>
-
-      {/* Offline lesson records: the server DTO excludes attitude, test evaluation and feedback. */}
-      {studentLessonReports.length > 0 && (
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
-              <Trophy className="text-indigo-600" size={20} />
-              오프라인 수업 기록
-            </h3>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
-              최근 {studentLessonReports.length}회
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {studentLessonReports.map((report) => (
-              <div
-                key={report.reportId}
-                className="p-5 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-500">
-                    {new Date(report.lessonDate).toLocaleDateString('ko-KR', {
-                      month: 'long',
-                      day: 'numeric',
-                      weekday: 'short',
-                    })}
-                  </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
-                    {report.category}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-around py-2 border-t border-b border-slate-200/60">
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">출결</p>
-                    <p className="text-sm font-black text-slate-700">{report.attendance || '미확인'}</p>
-                  </div>
-                  <div className="w-px h-8 bg-slate-200"></div>
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">숙제</p>
-                    <p className="text-sm font-black text-slate-700">{report.homework || '미확인'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-around py-2">
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">단어 시험</p>
-                    <p className="text-lg font-black text-indigo-600 font-mono">
-                      {report.vocabularyScore !== null ? `${report.vocabularyScore}점` : '-'}
-                    </p>
-                  </div>
-                  <div className="w-px h-8 bg-slate-200"></div>
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">내신 점수</p>
-                    <p className="text-lg font-black text-emerald-600 font-mono">
-                      {report.schoolExamScore !== null ? `${report.schoolExamScore}점` : '-'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Notion DB_일정표에서 동기화된 학생 일정 */}
-      <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
-            <CalendarDays className="text-violet-600" size={20} />
-            일정
-          </h3>
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700">
-            {studentSchedules.length}개
-          </span>
-        </div>
-        {studentSchedules.length > 0 ? (
-          <div className="space-y-3">
-            {studentSchedules.map(schedule => (
-              <div key={schedule.scheduleId} className="p-4 md:p-5 rounded-2xl bg-slate-50 border border-slate-100">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-black text-slate-900 break-words">{schedule.title}</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-600">
-                      {formatKoreanDateTime(schedule.startAt)}
-                      {schedule.endAt ? ` ~ ${formatKoreanDateTime(schedule.endAt)}` : ''}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-white border border-slate-200 text-slate-600">{schedule.scheduleType}</span>
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${schedule.status === '취소' ? 'bg-rose-100 text-rose-700' : schedule.status === '완료' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}>{schedule.status}</span>
-                  </div>
-                </div>
-                {schedule.notice && <p className="mt-3 text-sm text-slate-600 whitespace-pre-wrap break-words">{schedule.notice}</p>}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="py-10 text-center text-sm font-medium text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-            등록된 일정이 없습니다.
-          </div>
-        )}
       </div>
 
       {/* Activity Log Section */}

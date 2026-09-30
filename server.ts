@@ -80,6 +80,11 @@ async function startServer() {
     await handler(req as any, res as any);
   });
 
+  app.get("/api/teacher/notion-students", async (req, res) => {
+    const handler = (await import("./api/teacher/notion-students.ts")).default;
+    await handler(req as any, res as any);
+  });
+
   // Unmatched API route -> JSON 404 (prevent SPA HTML)
   app.all("/api/*", (req, res) => {
     res.status(404).json({ ok: false, error: "API_ENDPOINT_NOT_FOUND" });

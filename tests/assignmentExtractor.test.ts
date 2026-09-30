@@ -22,3 +22,10 @@ test('returns null when marker or content is absent', () => {
   assert.equal(extractAssignmentFromFeedback('과제:'), null);
   assert.equal(extractAssignmentFromFeedback(null), null);
 });
+
+test('extracts assignments after a spaced colon with multiline Korean homework', () => {
+  assert.equal(
+    extractAssignmentFromFeedback('오늘은 관계대명사를 배웠습니다.\n\n과제 : 교재 25쪽 풀기\n단어 DAY 3 암기'),
+    '교재 25쪽 풀기\n단어 DAY 3 암기'
+  );
+});
