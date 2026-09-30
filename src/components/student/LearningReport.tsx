@@ -54,6 +54,14 @@ export default function LearningReport() {
     return () => unsub();
   }, []);
 
+  const [lessonPage, setLessonPage] = useState(1);
+  const LESSONS_PER_PAGE = 3;
+  const totalLessonPages = Math.ceil(studentLessonReports.length / LESSONS_PER_PAGE);
+  const currentLessonPage = Math.min(lessonPage, Math.max(1, totalLessonPages));
+  const paginatedLessonReports = studentLessonReports.slice(
+    (currentLessonPage - 1) * LESSONS_PER_PAGE, currentLessonPage * LESSONS_PER_PAGE
+  );
+
   const ASSIGNMENTS_PER_PAGE = 5;
   const SESSIONS_PER_PAGE = 5;
   const WRONG_PER_PAGE = 5;
@@ -193,7 +201,7 @@ export default function LearningReport() {
         const isUnlinked = reportsRes.data?.error === 'STUDENT_REPORT_NOT_LINKED'
           || schedulesRes.data?.error === 'STUDENT_REPORT_NOT_LINKED';
         setNotionLinkNotice(isUnlinked
-          ? '오프라인 수업 기록과 일정이 아직 이 계정에 연결되지 않았어요. 선생님이 Notion 학생을 연결하면 이곳에 자동으로 표시됩니다.'
+          ? '수업 기록과 일정이 아직 이 계정에 연결되지 않았어요. 선생님이 Notion 학생을 연결하면 이곳에 자동으로 표시됩니다.'
           : null);
         if (reportsRes.ok && Array.isArray(reportsRes.data?.reports)) {
           setStudentLessonReports(reportsRes.data.reports);
@@ -636,6 +644,88 @@ export default function LearningReport() {
         )}
       </div>
 
+      {/* Offline lesson records: the server DTO excludes attitude, test evaluation and feedback. */}
+      {studentLessonReports.length > 0 && (
+        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
+              <Trophy className="text-indigo-600" size={20} />
+              수업 기록
+            </h3>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
+              총 {studentLessonReports.length}회
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+            {paginatedLessonReports.map((report) => (
+              <div
+                key={report.reportId}
+                className="p-4 md:p-5 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-500">
+                    {new Date(report.lessonDate).toLocaleDateString('ko-KR', {
+                      timeZone: 'Asia/Seoul',
+                      month: 'long',
+                      day: 'numeric',
+                      weekday: 'short',
+                    })}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                    {report.category}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-around py-2 border-t border-b border-slate-200/60">
+                  <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">출결</p>
+                    <p className="text-sm font-black text-slate-700">{report.attendance || '미확인'}</p>
+                  </div>
+                  <div className="w-px h-8 bg-slate-200"></div>
+                  <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">숙제</p>
+                    <p className="text-sm font-black text-slate-700">{report.homework || '미확인'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-around py-2">
+                  <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">단어 시험</p>
+                    <p className="text-xl font-bold text-indigo-600 tabular-nums tracking-tight">
+                      {report.vocabularyScore !== null ? `${report.vocabularyScore}점` : '-'}
+                    </p>
+                  </div>
+                  <div className="w-px h-8 bg-slate-200"></div>
+                  <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">내신 점수</p>
+                    <p className="text-xl font-bold text-emerald-600 tabular-nums tracking-tight">
+                      {report.schoolExamScore !== null ? `${report.schoolExamScore}점` : '-'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {totalLessonPages > 1 && (
+            <nav aria-label="수업 기록 페이지" className="flex justify-center items-center gap-4 mt-5">
+              <button type="button" aria-label="이전 수업 기록" disabled={currentLessonPage === 1}
+                onClick={() => setLessonPage(currentLessonPage - 1)}
+                className="p-3 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-colors">
+                <ChevronLeft size={20} />
+              </button>
+              <span aria-live="polite" className="text-sm font-semibold text-slate-600 tabular-nums">
+                {currentLessonPage} / {totalLessonPages}
+              </span>
+              <button type="button" aria-label="다음 수업 기록" disabled={currentLessonPage === totalLessonPages}
+                onClick={() => setLessonPage(currentLessonPage + 1)}
+                className="p-3 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-colors">
+                <ChevronRight size={20} />
+              </button>
+            </nav>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-16">
         <StatCard 
           icon={<BookOpen className="text-blue-500" />} 
@@ -703,70 +793,6 @@ export default function LearningReport() {
           </div>
         </div>
       </div>
-
-      {/* Offline lesson records: the server DTO excludes attitude, test evaluation and feedback. */}
-      {studentLessonReports.length > 0 && (
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
-              <Trophy className="text-indigo-600" size={20} />
-              오프라인 수업 기록
-            </h3>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
-              최근 {studentLessonReports.length}회
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {studentLessonReports.map((report) => (
-              <div
-                key={report.reportId}
-                className="p-5 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-500">
-                    {new Date(report.lessonDate).toLocaleDateString('ko-KR', {
-                      month: 'long',
-                      day: 'numeric',
-                      weekday: 'short',
-                    })}
-                  </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
-                    {report.category}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-around py-2 border-t border-b border-slate-200/60">
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">출결</p>
-                    <p className="text-sm font-black text-slate-700">{report.attendance || '미확인'}</p>
-                  </div>
-                  <div className="w-px h-8 bg-slate-200"></div>
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">숙제</p>
-                    <p className="text-sm font-black text-slate-700">{report.homework || '미확인'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-around py-2">
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">단어 시험</p>
-                    <p className="text-lg font-black text-indigo-600 font-mono">
-                      {report.vocabularyScore !== null ? `${report.vocabularyScore}점` : '-'}
-                    </p>
-                  </div>
-                  <div className="w-px h-8 bg-slate-200"></div>
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">내신 점수</p>
-                    <p className="text-lg font-black text-emerald-600 font-mono">
-                      {report.schoolExamScore !== null ? `${report.schoolExamScore}점` : '-'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Activity Log Section */}
       <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
