@@ -130,3 +130,74 @@ export function formatAssignedTimeShort(
 ): string | null {
   return formatAssignedTime(lessonDateStart, lessonDateEnd);
 }
+
+/**
+ * 5. 월별 그룹 키 및 표시 라벨 추출 (Asia/Seoul 기준)
+ * 예: { groupKey: '2026-09', groupLabel: '2026년 9월' }
+ */
+export function getReportMonthGroup(lessonDateStart: string | null | undefined): {
+  groupKey: string;
+  groupLabel: string;
+} {
+  const parts = parseSeoulDateParts(lessonDateStart);
+  if (!parts) {
+    return { groupKey: 'unknown', groupLabel: '기타 수업 일지' };
+  }
+  const paddedMonth = String(parts.month).padStart(2, '0');
+  return {
+    groupKey: `${parts.year}-${paddedMonth}`,
+    groupLabel: `${parts.year}년 ${parts.month}월`,
+  };
+}
+
+/**
+ * 6. 수업 회차 정렬: lessonDateStart 기준 내림차순 (최신 수업 -> 과거 순서)
+ * 같은 날짜에 여러 수업이 있을 경우 시각(hour, minute, second)까지 완벽 비교
+ * 원본 배열을 변형(mutate)하지 않고 얕은 복사 후 정렬 반환
+ */
+export function sortReportsByDate<T extends { lessonDateStart: string }>(reports: T[]): T[] {
+  if (!Array.isArray(reports)) return [];
+  return [...reports].sort((a, b) => {
+    const timeA = new Date(a.lessonDateStart).getTime();
+    const timeB = new Date(b.lessonDateStart).getTime();
+
+    const validA = !isNaN(timeA);
+    const validB = !isNaN(timeB);
+
+    if (validA && validB) {
+      return timeB - timeA; // 내림차순 (최신순)
+    }
+    if (validA && !validB) return -1;
+    if (!validA && validB) return 1;
+    return 0;
+  });
+}
+
+/**
+ * 7. 정렬된 회차 목록을 월별(Asia/Seoul)로 그룹화
+ */
+export interface ReportMonthGroup<T> {
+  groupKey: string;
+  groupLabel: string;
+  reports: T[];
+}
+
+export function groupReportsByMonth<T extends { lessonDateStart: string }>(
+  reports: T[]
+): ReportMonthGroup<T>[] {
+  const groups: ReportMonthGroup<T>[] = [];
+  const map = new Map<string, ReportMonthGroup<T>>();
+
+  for (const report of reports) {
+    const { groupKey, groupLabel } = getReportMonthGroup(report.lessonDateStart);
+    let group = map.get(groupKey);
+    if (!group) {
+      group = { groupKey, groupLabel, reports: [] };
+      map.set(groupKey, group);
+      groups.push(group);
+    }
+    group.reports.push(report);
+  }
+
+  return groups;
+}

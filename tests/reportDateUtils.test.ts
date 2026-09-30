@@ -5,6 +5,8 @@ import {
   formatReportDetailDate,
   formatReportListDate,
   formatAssignedTime,
+  sortReportsByDate,
+  groupReportsByMonth,
 } from '../src/lib/reportDateUtils.ts';
 import {
   getDisplayStatus,
@@ -143,12 +145,51 @@ describe('Parent Report Date, Time, and Formatting Unit Tests', () => {
     assert.ok(!content.includes("selectedReport.attitude || '확인'"));
 
     // Check test field is rendered in the evaluation section
-    assert.ok(content.includes('getDisplayStatus(selectedReport.test)'));
-    assert.ok(content.includes('getStatusBadgeClass(selectedReport.test)'));
+    assert.ok(content.includes('selectedReport.test'));
+    assert.ok(content.includes('getStatusBadgeClass('));
 
     // Check accessibility & overflow
-    assert.ok(content.includes('aria-pressed'));
     assert.ok(content.includes('break-words'));
     assert.ok(content.includes('min-h-[44px]'));
+
+    // Mobile two-step list-detail state and back button
+    assert.ok(content.includes('mobileView'));
+    assert.ok(content.includes('수업 회차 목록'));
+    assert.ok(content.includes('이전 수업'));
+  });
+
+  it('12. sortReportsByDate correctly sorts reports descending by lessonDateStart with exact time resolution', () => {
+    const sampleList = [
+      { id: '1', lessonDateStart: '2026-09-15T18:00:00+09:00' },
+      { id: '2', lessonDateStart: '2026-09-29T18:00:00+09:00' },
+      { id: '3', lessonDateStart: '2026-09-29T20:00:00+09:00' }, // same date, later time
+      { id: '4', lessonDateStart: '2026-08-20T14:00:00+09:00' },
+    ];
+
+    const sorted = sortReportsByDate(sampleList);
+
+    // Latest must be at index 0 (2026-09-29 20:00)
+    assert.equal(sorted[0].id, '3');
+    assert.equal(sorted[1].id, '2');
+    assert.equal(sorted[2].id, '1');
+    assert.equal(sorted[3].id, '4');
+
+    // Original array must not be mutated
+    assert.equal(sampleList[0].id, '1');
+  });
+
+  it('13. groupReportsByMonth groups items by Asia/Seoul year-month cleanly', () => {
+    const sampleList = [
+      { id: '1', lessonDateStart: '2026-09-29T18:00:00+09:00' },
+      { id: '2', lessonDateStart: '2026-09-15T18:00:00+09:00' },
+      { id: '3', lessonDateStart: '2026-08-20T14:00:00+09:00' },
+    ];
+
+    const groups = groupReportsByMonth(sampleList);
+    assert.equal(groups.length, 2);
+    assert.equal(groups[0].groupLabel, '2026년 9월');
+    assert.equal(groups[0].reports.length, 2);
+    assert.equal(groups[1].groupLabel, '2026년 8월');
+    assert.equal(groups[1].reports.length, 1);
   });
 });

@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { ParentLessonReportDTO } from '../../types/lessonReport';
 import { safeFetchJson } from '../../lib/safeFetchJson';
 import {
   formatReportDetailDate,
   formatReportListDate,
   formatAssignedTime,
+  sortReportsByDate,
+  groupReportsByMonth,
 } from '../../lib/reportDateUtils';
 
 interface ParentReportViewProps {
@@ -105,6 +107,8 @@ export function getAttendanceBadgeClass(statusRaw: string | null | undefined): s
   return getStatusBadgeClass(status);
 }
 
+const PAGE_SIZE = 10;
+
 export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, onGoHome }) => {
   const [pin, setPin] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -118,6 +122,33 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
   const [reports, setReports] = useState<ParentLessonReportDTO[]>([]);
   const [selectedReport, setSelectedReport] = useState<ParentLessonReportDTO | null>(null);
 
+  // 모바일·태블릿 화면 상태: 'list' (목록만 표시) | 'detail' (상세만 표시)
+  // 1024px 미만 환경에서는 인증 직후 'list'로 시작합니다.
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
+
+  // 페이징: 10개씩 더 보기
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+
+  // 목록 화면 스크롤 위치 보존
+  const listScrollYRef = useRef<number>(0);
+
+  // 화면 폭 1024px 이상 여부 감지 (SSR-safe 기본값 false)
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1024;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      const desktop = window.innerWidth >= 1024;
+      setIsDesktop(desktop);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   useEffect(() => {
     // 개인정보 보호 및 검색엔진 색인 방지 (noindex, nofollow)
     const meta = document.createElement('meta');
@@ -128,12 +159,36 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     // 1단계: 공개 상태 확인 (슬러그 존재 및 활성 여부 검증)
     checkReportStatus();
 
+    // 슬러그가 변경되면 상태를 'list'로 초기화
+    setMobileView('list');
+    setVisibleCount(PAGE_SIZE);
+
     return () => {
       if (document.head.contains(meta)) {
         document.head.removeChild(meta);
       }
     };
   }, [reportSlug]);
+
+  // 브라우저 뒤로 가기 (popstate) 안전 지원
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state;
+      // popstate 발생 시 모바일 화면이 detail 상태였다면 list로 안전하게 복귀
+      if (state && state.parentReportView === 'detail') {
+        setMobileView('detail');
+      } else {
+        setMobileView('list');
+        // 복귀 시 저장된 스크롤 위치 복원
+        setTimeout(() => {
+          window.scrollTo({ top: listScrollYRef.current, behavior: 'instant' });
+        }, 10);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const checkReportStatus = async () => {
     setLoadingReports(true);
@@ -168,9 +223,15 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       if (res.ok && res.data) {
         setIsAuthenticated(true);
         setStudentDisplayName(res.data.student?.studentDisplayName || '');
-        setReports(res.data.reports || []);
-        if (res.data.reports && res.data.reports.length > 0) {
-          setSelectedReport(res.data.reports[0]);
+
+        // 원본 reports를 mutate하지 않고 최신순으로 정렬
+        const rawReports = res.data.reports || [];
+        const sorted = sortReportsByDate(rawReports);
+        setReports(sorted);
+
+        // 데스크톱(>=1024px)에서는 최신 회차를 기본 선택, 모바일에서는 선택해두되 화면은 list 유지
+        if (sorted.length > 0) {
+          setSelectedReport(sorted[0]);
         }
       } else {
         setIsAuthenticated(false);
@@ -213,6 +274,9 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       setIsAuthenticated(true);
       setStudentDisplayName(res.data.studentDisplayName || '');
       setPin('');
+      // 인증 직후 모바일은 반드시 'list' 화면으로 시작
+      setMobileView('list');
+      setVisibleCount(PAGE_SIZE);
       await checkExistingSession();
     } else {
       if (res.data?.error === 'INVALID_OR_INACTIVE_REPORT') {
@@ -226,8 +290,77 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     }
   };
 
+  /**
+   * 모바일/태블릿에서 회차 선택 시:
+   * 1) 현재 window.scrollY 스크롤 위치 저장
+   * 2) selectedReport 설정
+   * 3) mobileView를 'detail'로 전환
+   * 4) history.pushState로 브라우저 뒤로 가기 상태 안전하게 추가
+   * 5) 상세 화면 맨 위로 스크롤
+   */
+  const handleSelectReport = (rep: ParentLessonReportDTO) => {
+    if (!isDesktop) {
+      listScrollYRef.current = window.scrollY;
+      setSelectedReport(rep);
+      setMobileView('detail');
+
+      try {
+        window.history.pushState(
+          { parentReportView: 'detail', reportId: rep.reportId },
+          '',
+          window.location.href
+        );
+      } catch {
+        // history API 미지원 환경 무시
+      }
+
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    } else {
+      setSelectedReport(rep);
+    }
+  };
+
+  /**
+   * 모바일/태블릿에서 '수업 회차 목록' 뒤로 가기 버튼 클릭 시:
+   * 1) mobileView를 'list'로 복귀
+   * 2) 브라우저 히스토리 상태 되돌리기 (detail 상태였다면 history.back())
+   * 3) 기존 목록의 스크롤 위치 복원
+   */
+  const handleBackToList = () => {
+    setMobileView('list');
+
+    try {
+      if (window.history.state && window.history.state.parentReportView === 'detail') {
+        window.history.back();
+      }
+    } catch {
+      // 무시
+    }
+
+    setTimeout(() => {
+      window.scrollTo({ top: listScrollYRef.current, behavior: 'instant' });
+    }, 10);
+  };
+
   const isValidNumberScore = (score: number | null | undefined): boolean => {
     return score !== null && score !== undefined && typeof score === 'number' && !isNaN(score);
+  };
+
+  // 10개씩 더 보기 적용된 목록
+  const visibleReports = useMemo(() => {
+    return reports.slice(0, visibleCount);
+  }, [reports, visibleCount]);
+
+  // 월별 그룹화 (Asia/Seoul 기준)
+  const monthGroups = useMemo(() => {
+    return groupReportsByMonth(visibleReports);
+  }, [visibleReports]);
+
+  const remainingCount = Math.max(0, reports.length - visibleCount);
+  const nextAddCount = Math.min(PAGE_SIZE, remainingCount);
+
+  const handleLoadMore = () => {
+    setVisibleCount((prev) => prev + PAGE_SIZE);
   };
 
   return (
@@ -350,10 +483,10 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
         </main>
       )}
 
-      {/* 4. 인증 성공 후: 상세 수업 리포트 화면 */}
+      {/* 4. 인증 성공 후 화면 */}
       {!isInvalidSlug && isAuthenticated && (
         <main className="max-w-4xl mx-auto px-4 pt-6 space-y-6">
-          {/* 상단 타이틀 카드 (세션 안내 문구 및 컨테이너 완전 제거, 깔끔한 헤더 구성) */}
+          {/* 상단 타이틀 카드 */}
           <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs">
             <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md inline-block mb-1.5">
               열람 권한 인증 완료
@@ -372,241 +505,541 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
               <p className="text-slate-500 text-sm font-medium">아직 등록된 수업 일지가 없습니다.</p>
             </div>
           ) : (
-            <div className="space-y-6 md:space-y-0 md:grid md:grid-cols-3 md:gap-6">
-              {/* 회차 목록 영역 */}
-              <div className="md:col-span-1 space-y-2">
-                <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider px-1">
-                  수업 회차 목록 ({reports.length}회차)
-                </h3>
+            <>
+              {/* ============================================================== */}
+              {/* [A] 모바일/태블릿 뷰 (< 1024px): 목록-상세 2단계 완전 분리 구조 */}
+              {/* ============================================================== */}
+              <div className="lg:hidden">
+                {/* 1단계: 모바일 목록 화면 (mobileView === 'list') */}
+                {mobileView === 'list' && (
+                  <div className="space-y-4">
+                    <div className="flex items-baseline justify-between px-1">
+                      <div>
+                        <h3 className="text-base font-black text-slate-900">수업 회차</h3>
+                        <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                          총 {reports.length}회의 수업 기록이 있습니다.
+                        </p>
+                      </div>
+                    </div>
 
-                {/* 모바일 뷰: 가로 스크롤 카드 레이아웃 */}
-                <div className="md:hidden flex gap-2.5 overflow-x-auto pb-2 pt-1 -mx-4 px-4 scrollbar-none snap-x snap-mandatory">
-                  {reports.map((rep) => {
-                    const isSelected = selectedReport?.reportId === rep.reportId;
-                    const listDate = formatReportListDate(rep.lessonDateStart);
-                    const assignedTime = formatAssignedTime(rep.lessonDateStart, rep.lessonDateEnd);
-                    const actualTime = rep.lessonTime ? rep.lessonTime.trim() : null;
-                    const attendanceDisplay = getDisplayStatus(rep.attendance);
+                    {/* 월별 구분 및 세로 카드 목록 */}
+                    <div className="space-y-6">
+                      {monthGroups.map((group) => (
+                        <div key={`m-group-${group.groupKey}`} className="space-y-2.5">
+                          {/* 월별 헤더 (Asia/Seoul 기준) */}
+                          <div className="flex items-center gap-2 px-1 pt-1">
+                            <span className="text-xs font-black text-indigo-900 bg-indigo-50/80 px-2.5 py-1 rounded-lg border border-indigo-100/60">
+                              {group.groupLabel}
+                            </span>
+                            <div className="h-px bg-slate-200 flex-1"></div>
+                          </div>
 
-                    return (
-                      <button
-                        key={`m-${rep.reportId}`}
-                        type="button"
-                        aria-pressed={isSelected}
-                        onClick={() => setSelectedReport(rep)}
-                        className={`min-h-[44px] shrink-0 w-[240px] text-left p-3.5 rounded-2xl border transition-all snap-start ${
-                          isSelected
-                            ? 'bg-indigo-50/90 border-indigo-500 shadow-xs ring-2 ring-indigo-200 font-semibold'
-                            : 'bg-white border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between text-xs mb-1.5 gap-2">
-                          <span className={`text-sm ${isSelected ? 'font-black text-indigo-950' : 'font-bold text-slate-900'} truncate`}>
-                            {listDate}
-                          </span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${getAttendanceBadgeClass(rep.attendance)}`}>
-                            {attendanceDisplay}
-                          </span>
+                          {/* 해당 월의 회차 카드 목록 */}
+                          <div className="space-y-2.5">
+                            {group.reports.map((rep) => {
+                              const isSelected = selectedReport?.reportId === rep.reportId;
+                              const listDate = formatReportListDate(rep.lessonDateStart);
+                              const actualTime = rep.lessonTime ? rep.lessonTime.trim() : null;
+                              const attendanceDisplay = getDisplayStatus(rep.attendance);
+                              const attitudeDisplay = rep.attitude ? getDisplayStatus(rep.attitude) : null;
+
+                              // 단어 점수 또는 내신 대비 점수 중 존재하는 점수 확인
+                              const hasVocab = isValidNumberScore(rep.vocabularyScore);
+                              const hasExam = isValidNumberScore(rep.schoolExamScore);
+
+                              return (
+                                <button
+                                  key={`m-card-${rep.reportId}`}
+                                  type="button"
+                                  onClick={() => handleSelectReport(rep)}
+                                  aria-label={`${listDate} 수업 리포트 열람하기`}
+                                  className={`w-full min-h-[72px] text-left p-4 rounded-2xl border transition-all active:scale-[0.99] flex flex-col justify-between gap-2 shadow-2xs ${
+                                    isSelected
+                                      ? 'bg-indigo-50/90 border-indigo-500 ring-2 ring-indigo-200'
+                                      : 'bg-white border-slate-200 hover:border-slate-300'
+                                  }`}
+                                >
+                                  {/* 상단: 날짜 + 출결 배지 + 범주 배지 */}
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-sm sm:text-base font-black text-slate-900 truncate">
+                                        {listDate}
+                                      </span>
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 shrink-0">
+                                        {rep.category || '수업'}
+                                      </span>
+                                    </div>
+                                    <span
+                                      className={`text-[11px] px-2.5 py-0.5 rounded-md font-bold shrink-0 ${getAttendanceBadgeClass(
+                                        rep.attendance
+                                      )}`}
+                                    >
+                                      {attendanceDisplay}
+                                    </span>
+                                  </div>
+
+                                  {/* 중간: 수업 시간 (lessonTime이 있을 때만 표시, 배정 시간은 상세 화면에서 확인) */}
+                                  {actualTime && (
+                                    <div className="text-xs text-indigo-950 font-medium truncate">
+                                      <span className="text-indigo-600 font-bold mr-1">수업 시간</span>
+                                      {actualTime}
+                                    </div>
+                                  )}
+
+                                  {/* 하단: 선택 표시 (태도 배지, 단어/내신 점수) */}
+                                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100/80 gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      {attitudeDisplay && attitudeDisplay !== '미확인' && (
+                                        <span className="text-[11px] text-slate-500 font-medium truncate">
+                                          태도 <strong className="text-slate-700 font-bold">{attitudeDisplay}</strong>
+                                        </span>
+                                      )}
+                                      {hasVocab && (
+                                        <span className="text-[11px] text-indigo-600 font-bold truncate">
+                                          단어 {rep.vocabularyScore}점
+                                        </span>
+                                      )}
+                                      {!hasVocab && hasExam && (
+                                        <span className="text-[11px] text-indigo-600 font-bold truncate">
+                                          내신 {rep.schoolExamScore}점
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <span className="text-xs font-bold text-indigo-600 shrink-0 flex items-center gap-0.5">
+                                      상세보기 →
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                        {actualTime && (
-                          <div className="text-[11px] text-indigo-900/80 truncate font-medium">
-                            <span className="text-indigo-600 font-bold mr-1">수업 시간</span>
-                            {actualTime}
-                          </div>
-                        )}
-                        {assignedTime && (
-                          <div className="text-[11px] text-slate-500 truncate">
-                            <span className="font-semibold text-slate-600 mr-1">배정</span>
-                            {assignedTime}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                      ))}
+                    </div>
 
-                {/* 데스크톱 뷰: 세로 스크롤 리스트 */}
-                <div className="hidden md:block space-y-2 max-h-[620px] overflow-y-auto pr-1">
-                  {reports.map((rep) => {
-                    const isSelected = selectedReport?.reportId === rep.reportId;
-                    const listDate = formatReportListDate(rep.lessonDateStart);
-                    const assignedTime = formatAssignedTime(rep.lessonDateStart, rep.lessonDateEnd);
-                    const actualTime = rep.lessonTime ? rep.lessonTime.trim() : null;
-                    const attendanceDisplay = getDisplayStatus(rep.attendance);
+                    {/* 10개씩 더 보기 버튼 */}
+                    {remainingCount > 0 && (
+                      <div className="pt-2 text-center">
+                        <button
+                          type="button"
+                          onClick={handleLoadMore}
+                          className="w-full min-h-[44px] py-3 px-4 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 transition active:scale-[0.99] shadow-2xs"
+                        >
+                          이전 수업 {nextAddCount}개 더 보기 (남은 기록 {remainingCount}개)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                    return (
+                {/* 2단계: 모바일 상세 화면 (mobileView === 'detail') */}
+                {mobileView === 'detail' && selectedReport && (
+                  <div className="space-y-4">
+                    {/* 최상단 뒤로 가기 버튼 (최소 44px 터치 영역 확보) */}
+                    <div>
                       <button
-                        key={`d-${rep.reportId}`}
                         type="button"
-                        aria-pressed={isSelected}
-                        onClick={() => setSelectedReport(rep)}
-                        className={`w-full text-left p-3.5 rounded-xl border transition-all min-h-[44px] ${
-                          isSelected
-                            ? 'bg-indigo-50/90 border-indigo-500 shadow-xs ring-2 ring-indigo-200'
-                            : 'bg-white border-slate-200 hover:border-slate-300'
-                        }`}
+                        onClick={handleBackToList}
+                        className="min-h-[44px] px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-1.5 transition active:scale-[0.98] shadow-2xs"
                       >
-                        <div className="flex items-center justify-between text-xs mb-1.5 gap-2">
-                          <span className={`text-sm ${isSelected ? 'font-black text-indigo-950' : 'font-bold text-slate-900'} truncate`}>
-                            {listDate}
-                          </span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${getAttendanceBadgeClass(rep.attendance)}`}>
-                            {attendanceDisplay}
-                          </span>
-                        </div>
-                        {actualTime && (
-                          <div className="text-xs text-indigo-950 font-medium truncate">
-                            <span className="text-indigo-600 font-bold mr-1">수업 시간</span>
-                            {actualTime}
-                          </div>
-                        )}
-                        {assignedTime && (
-                          <div className="text-xs text-slate-500 truncate">
-                            <span className="font-semibold text-slate-600 mr-1">배정</span>
-                            {assignedTime}
-                          </div>
-                        )}
+                        <span className="text-sm">←</span>
+                        <span>수업 회차 목록</span>
                       </button>
-                    );
-                  })}
-                </div>
+                    </div>
+
+                    {/* 선택된 회차 상세 리포트 카드 */}
+                    <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-6">
+                      {/* 날짜, 출결, 범주 */}
+                      <div className="border-b border-slate-100 pb-5 space-y-3.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2.5">
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-slate-500 block mb-0.5">수업 날짜</span>
+                            <h4 className="text-xl font-black text-slate-900 break-words leading-tight">
+                              {formatReportDetailDate(selectedReport.lessonDateStart)}
+                            </h4>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className={`text-xs px-2.5 py-1 rounded-lg font-bold shadow-2xs ${getAttendanceBadgeClass(
+                                selectedReport.attendance
+                              )}`}
+                            >
+                              {getDisplayStatus(selectedReport.attendance)}
+                            </span>
+                            <span className="text-xs px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-700">
+                              {selectedReport.category || '수업'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 시간 영역 (배정 시간, 수업 시간, 자습 시간) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                          {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd) && (
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
+                              <span className="text-[11px] font-bold text-slate-500 block mb-0.5">배정 시간</span>
+                              <span className="text-sm font-bold text-slate-800 break-words">
+                                {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd)}
+                              </span>
+                            </div>
+                          )}
+
+                          {selectedReport.lessonTime && selectedReport.lessonTime.trim() && (
+                            <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 min-w-0">
+                              <span className="text-[11px] font-bold text-indigo-700 block mb-0.5">수업 시간</span>
+                              <span className="text-sm font-black text-indigo-950 break-words">
+                                {selectedReport.lessonTime.trim()}
+                              </span>
+                            </div>
+                          )}
+
+                          {selectedReport.selfStudyTime && selectedReport.selfStudyTime.trim() && (
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0 sm:col-span-2">
+                              <span className="text-[11px] font-bold text-slate-500 block mb-0.5">자습 시간</span>
+                              <span className="text-sm font-bold text-slate-800 break-words">
+                                {selectedReport.selfStudyTime.trim()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 학습 평가 지표 그리드 (태도, 숙제, 테스트 상시 표시) */}
+                      <div>
+                        <h5 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2.5 px-0.5">
+                          학습 평가
+                        </h5>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3 text-center">
+                          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                            <div className="text-[11px] font-bold text-slate-500 mb-1.5">태도</div>
+                            <div
+                              className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(
+                                selectedReport.attitude
+                              )}`}
+                            >
+                              {getDisplayStatus(selectedReport.attitude)}
+                            </div>
+                          </div>
+
+                          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                            <div className="text-[11px] font-bold text-slate-500 mb-1.5">숙제</div>
+                            <div
+                              className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(
+                                selectedReport.homework
+                              )}`}
+                            >
+                              {getDisplayStatus(selectedReport.homework)}
+                            </div>
+                          </div>
+
+                          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center col-span-2 sm:col-span-1">
+                            <div className="text-[11px] font-bold text-slate-500 mb-1.5">테스트</div>
+                            <div
+                              className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(
+                                selectedReport.test
+                              )}`}
+                            >
+                              {getDisplayStatus(selectedReport.test)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 성취 점수 (단어 점수, 내신 대비 점수) */}
+                      {(isValidNumberScore(selectedReport.vocabularyScore) ||
+                        isValidNumberScore(selectedReport.schoolExamScore)) && (
+                        <div>
+                          <h5 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2.5 px-0.5">
+                            성취 점수
+                          </h5>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-center">
+                            {isValidNumberScore(selectedReport.vocabularyScore) && (
+                              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                                <div className="text-[11px] font-bold text-slate-500 mb-1">단어 점수</div>
+                                <div className="text-base sm:text-lg font-black text-indigo-600">
+                                  {selectedReport.vocabularyScore}점
+                                </div>
+                              </div>
+                            )}
+
+                            {isValidNumberScore(selectedReport.schoolExamScore) && (
+                              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                                <div className="text-[11px] font-bold text-slate-500 mb-1">내신 대비 점수</div>
+                                <div className="text-base sm:text-lg font-black text-indigo-600">
+                                  {selectedReport.schoolExamScore}점
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 수업 내용 및 피드백 */}
+                      <div className="space-y-2 pt-1">
+                        <h5 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                          <span>📝</span>
+                          <span>수업 내용 및 피드백</span>
+                        </h5>
+                        <div className="p-4 sm:p-5 bg-indigo-50/40 border border-indigo-100/80 rounded-2xl text-sm sm:text-[15px] text-slate-800 leading-[1.65] whitespace-pre-wrap break-words font-medium">
+                          {selectedReport.feedback && selectedReport.feedback.trim()
+                            ? selectedReport.feedback.trim()
+                            : '등록된 피드백 내용이 없습니다.'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* 오른쪽: 선택된 회차 상세 브리핑 카드 */}
-              {selectedReport && (
-                <div className="md:col-span-2 bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-6">
-                  {/* 상단 날짜 및 배정 시간 / 수업 시간 헤더 */}
-                  <div className="border-b border-slate-100 pb-5 space-y-3.5">
-                    <div className="flex flex-wrap items-center justify-between gap-2.5">
-                      <div className="min-w-0">
-                        <span className="text-xs font-bold text-slate-500 block mb-0.5">수업 날짜</span>
-                        <h4 className="text-xl sm:text-2xl font-black text-slate-900 break-words leading-tight">
-                          {formatReportDetailDate(selectedReport.lessonDateStart)}
-                        </h4>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {/* 출결 (attendance 원문 보존) */}
-                        <span className={`text-xs px-2.5 py-1 rounded-lg font-bold shadow-2xs ${getAttendanceBadgeClass(selectedReport.attendance)}`}>
-                          {getDisplayStatus(selectedReport.attendance)}
-                        </span>
-                        {/* 수업 범주 */}
-                        <span className="text-xs px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-700">
-                          {selectedReport.category || '수업'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* 배정 시간, 수업 시간, 자습 시간 (독립된 간결한 정보 영역) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                      {/* 배정 시간 (lessonDateStart ~ lessonDateEnd) */}
-                      {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd) && (
-                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
-                          <span className="text-[11px] font-bold text-slate-500 block mb-0.5">배정 시간</span>
-                          <span className="text-sm font-bold text-slate-800 break-words">
-                            {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd)}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* 수업 시간 (lessonTime 원문) */}
-                      {selectedReport.lessonTime && selectedReport.lessonTime.trim() && (
-                        <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 min-w-0">
-                          <span className="text-[11px] font-bold text-indigo-700 block mb-0.5">수업 시간</span>
-                          <span className="text-sm font-black text-indigo-950 break-words">
-                            {selectedReport.lessonTime.trim()}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* 자습 시간 (selfStudyTime 원문, 있을 때만 독립 블록으로 표시) */}
-                      {selectedReport.selfStudyTime && selectedReport.selfStudyTime.trim() && (
-                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0 sm:col-span-2">
-                          <span className="text-[11px] font-bold text-slate-500 block mb-0.5">자습 시간</span>
-                          <span className="text-sm font-bold text-slate-800 break-words">
-                            {selectedReport.selfStudyTime.trim()}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+              {/* ============================================================== */}
+              {/* [B] 데스크톱 뷰 (>= 1024px): 좌측 회차 목록 + 우측 상세 브리핑 */}
+              {/* ============================================================== */}
+              <div className="hidden lg:grid lg:grid-cols-3 lg:gap-6">
+                {/* 좌측: 회차 목록 (최신순 세로 스크롤 및 월별 그룹, 10개씩 더 보기) */}
+                <div className="lg:col-span-1 space-y-3">
+                  <div className="flex items-baseline justify-between px-1">
+                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                      수업 회차 ({reports.length}회)
+                    </h3>
                   </div>
 
-                  {/* 학습 평가 지표 그리드: 태도, 숙제, 테스트는 동일한 중요도의 평가 항목으로 항상 표시 */}
-                  <div>
-                    <h5 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2.5 px-0.5">
-                      학습 평가
-                    </h5>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3 text-center">
-                      {/* 1. 태도 (attitude 원문 그대로 표시) */}
-                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
-                        <div className="text-[11px] font-bold text-slate-500 mb-1.5">태도</div>
-                        <div className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(selectedReport.attitude)}`}>
-                          {getDisplayStatus(selectedReport.attitude)}
+                  <div className="space-y-4 max-h-[720px] overflow-y-auto pr-1">
+                    {monthGroups.map((group) => (
+                      <div key={`d-group-${group.groupKey}`} className="space-y-2">
+                        {/* 월별 헤더 */}
+                        <div className="text-[11px] font-black text-indigo-900 bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-100/50 inline-block">
+                          {group.groupLabel}
+                        </div>
+
+                        {/* 해당 월 회차 카드 */}
+                        <div className="space-y-2">
+                          {group.reports.map((rep) => {
+                            const isSelected = selectedReport?.reportId === rep.reportId;
+                            const listDate = formatReportListDate(rep.lessonDateStart);
+                            const actualTime = rep.lessonTime ? rep.lessonTime.trim() : null;
+                            const attendanceDisplay = getDisplayStatus(rep.attendance);
+                            const attitudeDisplay = rep.attitude ? getDisplayStatus(rep.attitude) : null;
+                            const hasVocab = isValidNumberScore(rep.vocabularyScore);
+                            const hasExam = isValidNumberScore(rep.schoolExamScore);
+
+                            return (
+                              <button
+                                key={`d-card-${rep.reportId}`}
+                                type="button"
+                                aria-pressed={isSelected}
+                                onClick={() => setSelectedReport(rep)}
+                                aria-label={`${listDate} 수업 리포트 선택`}
+                                className={`w-full min-h-[72px] text-left p-3.5 rounded-xl border transition-all ${
+                                  isSelected
+                                    ? 'bg-indigo-50/90 border-indigo-500 shadow-xs ring-2 ring-indigo-200'
+                                    : 'bg-white border-slate-200 hover:border-slate-300'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between text-xs mb-1.5 gap-2">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span
+                                      className={`text-sm ${
+                                        isSelected ? 'font-black text-indigo-950' : 'font-bold text-slate-900'
+                                      } truncate`}
+                                    >
+                                      {listDate}
+                                    </span>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold shrink-0">
+                                      {rep.category || '수업'}
+                                    </span>
+                                  </div>
+                                  <span
+                                    className={`text-[10px] px-2 py-0.5 rounded-md font-bold shrink-0 ${getAttendanceBadgeClass(
+                                      rep.attendance
+                                    )}`}
+                                  >
+                                    {attendanceDisplay}
+                                  </span>
+                                </div>
+
+                                {actualTime && (
+                                  <div className="text-xs text-indigo-950 font-medium truncate mb-1">
+                                    <span className="text-indigo-600 font-bold mr-1">수업 시간</span>
+                                    {actualTime}
+                                  </div>
+                                )}
+
+                                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+                                  <span className="truncate">
+                                    {attitudeDisplay && attitudeDisplay !== '미확인' ? `태도: ${attitudeDisplay}` : ''}
+                                  </span>
+                                  {hasVocab && (
+                                    <span className="text-indigo-600 font-bold shrink-0">단어 {rep.vocabularyScore}점</span>
+                                  )}
+                                  {!hasVocab && hasExam && (
+                                    <span className="text-indigo-600 font-bold shrink-0">내신 {rep.schoolExamScore}점</span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
+                    ))}
 
-                      {/* 2. 숙제 (homework 원문 그대로 표시) */}
-                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
-                        <div className="text-[11px] font-bold text-slate-500 mb-1.5">숙제</div>
-                        <div className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(selectedReport.homework)}`}>
-                          {getDisplayStatus(selectedReport.homework)}
-                        </div>
+                    {/* 10개씩 더 보기 버튼 */}
+                    {remainingCount > 0 && (
+                      <div className="pt-2 text-center">
+                        <button
+                          type="button"
+                          onClick={handleLoadMore}
+                          className="w-full min-h-[44px] py-2.5 px-3 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 transition active:scale-[0.99] shadow-2xs"
+                        >
+                          이전 수업 {nextAddCount}개 더 보기 (남은 기록 {remainingCount}개)
+                        </button>
                       </div>
-
-                      {/* 3. 테스트 (test 원문 그대로 항상 동일 평가 항목으로 표시) */}
-                      <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center col-span-2 sm:col-span-1">
-                        <div className="text-[11px] font-bold text-slate-500 mb-1.5">테스트</div>
-                        <div className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(selectedReport.test)}`}>
-                          {getDisplayStatus(selectedReport.test)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 점수 카드 그리드: 유효한 숫자일 때만 표시, 0점 포함, 2개/1개 남아도 자연스럽게 정렬 */}
-                  {(isValidNumberScore(selectedReport.vocabularyScore) || isValidNumberScore(selectedReport.schoolExamScore)) && (
-                    <div>
-                      <h5 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2.5 px-0.5">
-                        성취 점수
-                      </h5>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-center">
-                        {/* 단어 점수 */}
-                        {isValidNumberScore(selectedReport.vocabularyScore) && (
-                          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
-                            <div className="text-[11px] font-bold text-slate-500 mb-1">단어 점수</div>
-                            <div className="text-base sm:text-lg font-black text-indigo-600">
-                              {selectedReport.vocabularyScore}점
-                            </div>
-                          </div>
-                        )}
-
-                        {/* 내신 대비 점수 (null, undefined, NaN일 때 완전 숨김) */}
-                        {isValidNumberScore(selectedReport.schoolExamScore) && (
-                          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
-                            <div className="text-[11px] font-bold text-slate-500 mb-1">내신 대비 점수</div>
-                            <div className="text-base sm:text-lg font-black text-indigo-600">
-                              {selectedReport.schoolExamScore}점
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 수업 내용 및 피드백 */}
-                  <div className="space-y-2 pt-1">
-                    <h5 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                      <span>📝</span>
-                      <span>수업 내용 및 피드백</span>
-                    </h5>
-                    <div className="p-4 sm:p-5 bg-indigo-50/40 border border-indigo-100/80 rounded-2xl text-sm sm:text-[15px] text-slate-800 leading-[1.65] whitespace-pre-wrap break-words font-medium">
-                      {selectedReport.feedback && selectedReport.feedback.trim()
-                        ? selectedReport.feedback.trim()
-                        : '등록된 피드백 내용이 없습니다.'}
-                    </div>
+                    )}
                   </div>
                 </div>
-              )}
-            </div>
+
+                {/* 우측: 선택된 회차 상세 브리핑 카드 */}
+                {selectedReport && (
+                  <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-6">
+                    {/* 날짜, 출결, 범주 */}
+                    <div className="border-b border-slate-100 pb-5 space-y-3.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2.5">
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-slate-500 block mb-0.5">수업 날짜</span>
+                          <h4 className="text-2xl font-black text-slate-900 break-words leading-tight">
+                            {formatReportDetailDate(selectedReport.lessonDateStart)}
+                          </h4>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={`text-xs px-2.5 py-1 rounded-lg font-bold shadow-2xs ${getAttendanceBadgeClass(
+                              selectedReport.attendance
+                            )}`}
+                          >
+                            {getDisplayStatus(selectedReport.attendance)}
+                          </span>
+                          <span className="text-xs px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-700">
+                            {selectedReport.category || '수업'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 시간 영역 (배정 시간, 수업 시간, 자습 시간) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                        {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd) && (
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
+                            <span className="text-[11px] font-bold text-slate-500 block mb-0.5">배정 시간</span>
+                            <span className="text-sm font-bold text-slate-800 break-words">
+                              {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd)}
+                            </span>
+                          </div>
+                        )}
+
+                        {selectedReport.lessonTime && selectedReport.lessonTime.trim() && (
+                          <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 min-w-0">
+                            <span className="text-[11px] font-bold text-indigo-700 block mb-0.5">수업 시간</span>
+                            <span className="text-sm font-black text-indigo-950 break-words">
+                              {selectedReport.lessonTime.trim()}
+                            </span>
+                          </div>
+                        )}
+
+                        {selectedReport.selfStudyTime && selectedReport.selfStudyTime.trim() && (
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0 sm:col-span-2">
+                            <span className="text-[11px] font-bold text-slate-500 block mb-0.5">자습 시간</span>
+                            <span className="text-sm font-bold text-slate-800 break-words">
+                              {selectedReport.selfStudyTime.trim()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 학습 평가 지표 그리드 (태도, 숙제, 테스트 상시 표시) */}
+                    <div>
+                      <h5 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2.5 px-0.5">
+                        학습 평가
+                      </h5>
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                          <div className="text-[11px] font-bold text-slate-500 mb-1.5">태도</div>
+                          <div
+                            className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(
+                              selectedReport.attitude
+                            )}`}
+                          >
+                            {getDisplayStatus(selectedReport.attitude)}
+                          </div>
+                        </div>
+
+                        <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                          <div className="text-[11px] font-bold text-slate-500 mb-1.5">숙제</div>
+                          <div
+                            className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(
+                              selectedReport.homework
+                            )}`}
+                          >
+                            {getDisplayStatus(selectedReport.homework)}
+                          </div>
+                        </div>
+
+                        <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                          <div className="text-[11px] font-bold text-slate-500 mb-1.5">테스트</div>
+                          <div
+                            className={`text-xs font-black inline-block px-2.5 py-1 rounded-lg break-words max-w-full ${getStatusBadgeClass(
+                              selectedReport.test
+                            )}`}
+                          >
+                            {getDisplayStatus(selectedReport.test)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 성취 점수 */}
+                    {(isValidNumberScore(selectedReport.vocabularyScore) ||
+                      isValidNumberScore(selectedReport.schoolExamScore)) && (
+                      <div>
+                        <h5 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2.5 px-0.5">
+                          성취 점수
+                        </h5>
+                        <div className="grid grid-cols-2 gap-3 text-center">
+                          {isValidNumberScore(selectedReport.vocabularyScore) && (
+                            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                              <div className="text-[11px] font-bold text-slate-500 mb-1">단어 점수</div>
+                              <div className="text-lg font-black text-indigo-600">
+                                {selectedReport.vocabularyScore}점
+                              </div>
+                            </div>
+                          )}
+
+                          {isValidNumberScore(selectedReport.schoolExamScore) && (
+                            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
+                              <div className="text-[11px] font-bold text-slate-500 mb-1">내신 대비 점수</div>
+                              <div className="text-lg font-black text-indigo-600">
+                                {selectedReport.schoolExamScore}점
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 수업 내용 및 피드백 */}
+                    <div className="space-y-2 pt-1">
+                      <h5 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                        <span>📝</span>
+                        <span>수업 내용 및 피드백</span>
+                      </h5>
+                      <div className="p-5 bg-indigo-50/40 border border-indigo-100/80 rounded-2xl text-[15px] text-slate-800 leading-[1.65] whitespace-pre-wrap break-words font-medium">
+                        {selectedReport.feedback && selectedReport.feedback.trim()
+                          ? selectedReport.feedback.trim()
+                          : '등록된 피드백 내용이 없습니다.'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </main>
       )}
