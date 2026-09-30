@@ -7,6 +7,64 @@ export interface NotionStudentLookupResult {
   parentPhonePinHash: string;
 }
 
+export interface NotionStudentListItem {
+  studentKey: string;
+  studentDisplayName: string;
+  hasGuardianContact: boolean;
+}
+
+function getStudentKeyAndName(page: any): Omit<NotionStudentListItem, 'hasGuardianContact'> {
+  const props = page.properties || {};
+  const studentKey =
+    props['원본 구분명']?.rich_text?.[0]?.plain_text ||
+    props['이름 및 일지']?.title?.[0]?.plain_text ||
+    '';
+  const studentDisplayName =
+    props['학생 호칭']?.rich_text?.[0]?.plain_text ||
+    studentKey;
+
+  return { studentKey, studentDisplayName };
+}
+
+export async function listNotionStudents(): Promise<NotionStudentListItem[]> {
+  const token = process.env.NOTION_INTEGRATION_TOKEN;
+  const dbId = process.env.NOTION_STUDENT_DATABASE_ID;
+  if (!token || !dbId) {
+    throw new Error('CONFIG_ERROR: Required Notion configuration is missing.');
+  }
+
+  const students: NotionStudentListItem[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ page_size: 100, ...(cursor ? { start_cursor: cursor } : {}) }),
+    });
+    if (!res.ok) throw new Error(`NOTION_QUERY_FAILED: ${res.status}`);
+
+    const data = await res.json();
+    for (const page of data.results || []) {
+      const { studentKey, studentDisplayName } = getStudentKeyAndName(page);
+      if (!studentKey) continue;
+      const digitsOnly = String(page.properties?.['보호자연락처']?.phone_number || '').replace(/\D/g, '');
+      students.push({
+        studentKey,
+        studentDisplayName,
+        hasGuardianContact: digitsOnly.length >= 9,
+      });
+    }
+    cursor = data.has_more ? data.next_cursor : undefined;
+  } while (cursor);
+
+  return students.sort((a, b) => a.studentKey.localeCompare(b.studentKey, 'ko'));
+}
+
 function parseStudentPage(page: any, fallbackStudentKey: string): NotionStudentLookupResult {
   const props = page.properties || {};
   const rawParentPhone = props['보호자연락처']?.phone_number || '';
