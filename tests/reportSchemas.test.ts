@@ -75,6 +75,7 @@ describe('Report Schemas Validation Tests', () => {
   it('NotionReportWebhookSchema handles null scores and optional sourceUpdatedAt', () => {
     const parsed = NotionReportWebhookSchema.parse({
       notionPageId: 'page_123',
+      notionStudentPageId: 'student_page_123',
       studentKey: '홍길동',
       lessonDateStart: '2026-09-28',
       category: '수업',

@@ -7,6 +7,57 @@ export interface NotionStudentLookupResult {
   parentPhonePinHash: string;
 }
 
+function parseStudentPage(page: any, fallbackStudentKey: string): NotionStudentLookupResult {
+  const props = page.properties || {};
+  const rawParentPhone = props['보호자연락처']?.phone_number || '';
+  const digitsOnly = rawParentPhone.replace(/\D/g, '');
+
+  if (!digitsOnly || digitsOnly.length < 9) {
+    throw new Error('GUARDIAN_CONTACT_MISSING_OR_INVALID');
+  }
+
+  const studentKey =
+    props['원본 구분명']?.rich_text?.[0]?.plain_text ||
+    props['이름 및 일지']?.title?.[0]?.plain_text ||
+    fallbackStudentKey;
+  const studentDisplayName =
+    props['학생 호칭']?.rich_text?.[0]?.plain_text ||
+    studentKey;
+
+  return {
+    notionStudentPageId: page.id,
+    studentKey,
+    studentDisplayName,
+    parentPhonePinHash: hashPin(digitsOnly.slice(-4)),
+  };
+}
+
+export async function lookupStudentByPageId(
+  notionStudentPageId: string,
+  fallbackStudentKey = ''
+): Promise<NotionStudentLookupResult> {
+  const token = process.env.NOTION_INTEGRATION_TOKEN;
+  if (!token) {
+    throw new Error('CONFIG_ERROR: NOTION_INTEGRATION_TOKEN is missing.');
+  }
+
+  const normalizedPageId = notionStudentPageId.replace(/-/g, '');
+  if (!/^[0-9a-f]{32}$/i.test(normalizedPageId)) {
+    throw new Error('INVALID_NOTION_STUDENT_PAGE_ID');
+  }
+
+  const res = await fetch(`https://api.notion.com/v1/pages/${normalizedPageId}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Notion-Version': '2022-06-28',
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`NOTION_STUDENT_PAGE_LOOKUP_FAILED: ${res.status}`);
+  }
+  return parseStudentPage(await res.json(), fallbackStudentKey);
+}
+
 export async function lookupStudentAndGuardianContact(studentKey: string): Promise<NotionStudentLookupResult> {
   const token = process.env.NOTION_INTEGRATION_TOKEN;
   const dbId = process.env.NOTION_STUDENT_DATABASE_ID;
@@ -52,29 +103,5 @@ export async function lookupStudentAndGuardianContact(studentKey: string): Promi
     throw new Error('MULTIPLE_STUDENTS_MATCHED');
   }
 
-  const page = results[0];
-  const props = page.properties;
-
-  const rawParentPhone = props['보호자연락처']?.phone_number || '';
-  const digitsOnly = rawParentPhone.replace(/\D/g, '');
-
-  if (!digitsOnly || digitsOnly.length < 9) {
-    throw new Error('GUARDIAN_CONTACT_MISSING_OR_INVALID');
-  }
-
-  const last4 = digitsOnly.slice(-4);
-  const parentPhonePinHash = hashPin(last4);
-
-  // 학생 호칭 우선, 없으면 원본 구분명, fallback studentKey
-  const studentDisplayName =
-    props['학생 호칭']?.rich_text?.[0]?.plain_text ||
-    props['원본 구분명']?.rich_text?.[0]?.plain_text ||
-    studentKey;
-
-  return {
-    notionStudentPageId: page.id,
-    studentKey,
-    studentDisplayName,
-    parentPhonePinHash,
-  };
+  return parseStudentPage(results[0], studentKey);
 }

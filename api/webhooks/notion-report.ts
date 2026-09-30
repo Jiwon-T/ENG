@@ -5,7 +5,7 @@ import {
   type StoredLessonReport,
   type StoredNotionStudentMapping,
 } from '../_lib/reportSchemas.js';
-import { lookupStudentAndGuardianContact } from '../_lib/notion.js';
+import { lookupStudentByPageId } from '../_lib/notion.js';
 import { generateInternalStudentId, hashStudentKey, getSecretOrThrow } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 import { extractAssignmentFromFeedback } from '../_lib/assignmentExtractor.js';
@@ -30,7 +30,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return sendJson(res, 401, { ok: false, error: 'UNAUTHORIZED_WEBHOOK' });
     }
 
-    const rawBody = await parseJsonBody(req);
+    const receivedBody = await parseJsonBody(req) as Record<string, unknown>;
+    // Make의 JSON 문자열 본문에서 줄바꿈·따옴표가 포함된 피드백도 깨지지 않도록
+    // 문자열 필드는 base64로 받을 수 있다. 기존 평문 페이로드도 계속 지원한다.
+    const rawBody = receivedBody?.payloadEncoding === 'base64'
+      ? decodeMakeBase64Payload(receivedBody)
+      : receivedBody;
     const parsed = NotionReportWebhookSchema.safeParse(rawBody);
 
     if (!parsed.success) {
@@ -52,12 +57,20 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     if (mappingSnap.exists) {
       const mapping = mappingSnap.data() as StoredNotionStudentMapping;
+      const expectedInternalStudentId = generateInternalStudentId(data.notionStudentPageId);
+      if (mapping.internalStudentId !== expectedInternalStudentId) {
+        return sendJson(res, 409, {
+          ok: false,
+          error: 'STUDENT_ID_MISMATCH',
+          message: '학생 ID 관계와 기존 학생 매핑이 일치하지 않습니다.',
+        });
+      }
       internalStudentId = mapping.internalStudentId;
     } else {
-      // notionStudentMappings가 아직 없다면 Notion API를 조회하여 안전하게 매핑 생성
+      // 이름 검색 대신 원본 일지의 `학생 ID` 관계가 가리키는 학생 페이지를 직접 검증한다.
       let notionLookup;
       try {
-        notionLookup = await lookupStudentAndGuardianContact(data.studentKey);
+        notionLookup = await lookupStudentByPageId(data.notionStudentPageId, data.studentKey);
       } catch (notionErr: any) {
         return sendJson(res, 422, {
           ok: false,
@@ -66,7 +79,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         });
       }
 
-      internalStudentId = generateInternalStudentId(notionLookup.notionStudentPageId);
+      internalStudentId = generateInternalStudentId(data.notionStudentPageId);
       const now = new Date().toISOString();
 
       // 신규 Notion 매핑 생성 시 firebaseUid는 항상 null (관리자 명시적 연결 전 자동 지정 금지)
@@ -121,4 +134,30 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   } catch (err: any) {
     return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });
   }
+}
+
+export function decodeMakeBase64Payload(payload: Record<string, unknown>): Record<string, unknown> {
+  const stringFields = [
+    'notionPageId', 'notionStudentPageId', 'studentKey', 'lessonDateStart',
+    'lessonDateEnd', 'lessonTime', 'selfStudyTime', 'category', 'attendance',
+    'attitude', 'homework', 'test', 'feedback', 'sourceUpdatedAt',
+  ];
+  const decoded: Record<string, unknown> = { schemaVersion: Number(payload.schemaVersion || 1) };
+
+  for (const field of stringFields) {
+    const value = payload[field];
+    if (typeof value !== 'string' || value === '') {
+      decoded[field] = field === 'lessonDateEnd' ? null : '';
+      continue;
+    }
+    decoded[field] = Buffer.from(value, 'base64').toString('utf8');
+  }
+
+  for (const field of ['vocabularyScore', 'schoolExamScore']) {
+    const value = payload[field];
+    decoded[field] = value === '' || value === null || value === undefined
+      ? null
+      : Number(value);
+  }
+  return decoded;
 }
