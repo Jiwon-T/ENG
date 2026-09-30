@@ -333,6 +333,13 @@ service cloud.firestore {
       allow write: if false; // 클라이언트 직접 쓰기 전면 차단
     }
 
+    match /studentSchedules/{scheduleId} {
+      // 학생/학부모는 클라이언트 SDK 직접 읽기/쓰기 불가 (반드시 서버 DTO API를 통해서만 조회)
+      // 오직 선생님/관리자만 클라이언트에서 조회 가능, 생성/수정은 서버(Firebase Admin SDK) 전용
+      allow read: if isAuthenticated() && (isTeacher() || isAdmin());
+      allow write: if false;
+    }
+
     match /reportSlugs/{slug} {
       // 고정 주소 매핑 정보는 클라이언트에서 직접 쓰지 못하며 서버 API를 통해서만 관리
       allow read: if isAuthenticated() && (isTeacher() || isAdmin());

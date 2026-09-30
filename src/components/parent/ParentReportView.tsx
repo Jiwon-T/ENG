@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import type { ParentLessonReportDTO } from '../../types/lessonReport';
+import type { ParentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 import { safeFetchJson } from '../../lib/safeFetchJson';
 import {
   formatReportDetailDate,
@@ -7,6 +7,7 @@ import {
   formatAssignedTime,
   sortReportsByDate,
   groupReportsByMonth,
+  formatScheduleDateTime,
 } from '../../lib/reportDateUtils';
 
 interface ParentReportViewProps {
@@ -122,6 +123,12 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
   const [reports, setReports] = useState<ParentLessonReportDTO[]>([]);
   const [selectedReport, setSelectedReport] = useState<ParentLessonReportDTO | null>(null);
 
+
+  // 학부모 화면 상단 탭: 'reports' (수업 기록) | 'schedules' (일정)
+  const [activeTab, setActiveTab] = useState<'reports' | 'schedules'>('reports');
+  const [schedules, setSchedules] = useState<StudentScheduleDTO[]>([]);
+  const [loadingSchedules, setLoadingSchedules] = useState(false);
+
   // 모바일·태블릿 화면 상태: 'list' (목록만 표시) | 'detail' (상세만 표시)
   // 1024px 미만 환경에서는 인증 직후 'list'로 시작합니다.
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
@@ -233,6 +240,9 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
         if (sorted.length > 0) {
           setSelectedReport(sorted[0]);
         }
+
+        // 일정 데이터 병렬 조회
+        fetchSchedules();
       } else {
         setIsAuthenticated(false);
       }
@@ -240,6 +250,24 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       setIsAuthenticated(false);
     } finally {
       setLoadingReports(false);
+    }
+  };
+
+  const fetchSchedules = async () => {
+    setLoadingSchedules(true);
+    try {
+      const res = await safeFetchJson<{
+        ok: boolean;
+        schedules?: StudentScheduleDTO[];
+      }>(`/api/parent/schedules?reportSlug=${encodeURIComponent(reportSlug)}`);
+
+      if (res.ok && res.data?.schedules) {
+        setSchedules(res.data.schedules);
+      }
+    } catch {
+      // safe fallback
+    } finally {
+      setLoadingSchedules(false);
     }
   };
 
@@ -494,9 +522,127 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 break-words leading-tight">
               {studentDisplayName || '학생'} 수업 일지
             </h2>
+
           </div>
 
-          {loadingReports ? (
+          {/* 학부모 탭 바: 수업 기록 / 일정 */}
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-2 px-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('reports')}
+              className={`px-4 py-2.5 rounded-xl font-bold text-sm transition flex items-center gap-2 min-h-[44px] ${
+                activeTab === 'reports'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <span>📖</span>
+              <span>수업 기록</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                activeTab === 'reports' ? 'bg-indigo-700/60 text-white' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {reports.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('schedules')}
+              className={`px-4 py-2.5 rounded-xl font-bold text-sm transition flex items-center gap-2 min-h-[44px] ${
+                activeTab === 'schedules'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <span>📅</span>
+              <span>일정</span>
+              {schedules.length > 0 && (
+                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                  activeTab === 'schedules' ? 'bg-indigo-700/60 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {schedules.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {activeTab === 'schedules' ? (
+            <div className="space-y-4">
+              <div className="flex items-baseline justify-between px-1">
+                <h3 className="text-base font-black text-slate-900">학습 및 시험 일정</h3>
+                <span className="text-xs text-slate-500 font-medium">총 {schedules.length}개 일정</span>
+              </div>
+
+              {loadingSchedules ? (
+                <div className="py-16 text-center text-slate-400 text-sm animate-pulse font-medium">
+                  일정 데이터를 불러오는 중입니다...
+                </div>
+              ) : schedules.length === 0 ? (
+                <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
+                  <p className="text-slate-500 text-sm font-medium">등록된 일정이 없습니다.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {schedules.map((item) => {
+                    const { dateStr, timeStr } = formatScheduleDateTime(item.startAt, item.endAt);
+                    const isCancelled = item.status === '취소';
+                    const isCompleted = item.status === '완료';
+
+                    return (
+                      <div
+                        key={item.scheduleId}
+                        className={`bg-white rounded-2xl p-4 sm:p-5 border transition ${
+                          isCancelled
+                            ? 'border-slate-200 bg-slate-50/70 opacity-75'
+                            : 'border-slate-200 shadow-xs hover:border-indigo-200'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              {item.scheduleType || '일정'}
+                            </span>
+                            <span
+                              className={`text-xs font-bold px-2 py-0.5 rounded-md ${
+                                isCancelled
+                                  ? 'bg-rose-100 text-rose-700'
+                                  : isCompleted
+                                  ? 'bg-slate-100 text-slate-600'
+                                  : 'bg-emerald-100 text-emerald-800 font-bold'
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                          </div>
+                          <span className="text-xs text-slate-500 font-medium">
+                            {dateStr}
+                          </span>
+                        </div>
+
+                        <h4 className={`text-base font-bold text-slate-900 break-words mb-1 ${
+                          isCancelled ? 'line-through text-slate-400' : ''
+                        }`}>
+                          {item.title}
+                        </h4>
+
+                        {timeStr && (
+                          <div className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 mt-1">
+                            <span>⏰</span>
+                            <span>{timeStr}</span>
+                          </div>
+                        )}
+
+                        {item.notice && (
+                          <div className="mt-2.5 p-3 bg-slate-50 rounded-xl text-xs text-slate-600 leading-relaxed break-words border border-slate-100">
+                            {item.notice}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : loadingReports ? (
             <div className="py-20 text-center text-slate-400 text-sm animate-pulse font-medium">
               리포트 데이터를 불러오는 중입니다...
             </div>
@@ -704,6 +850,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                         </div>
                       </div>
 
+
                       {/* 학습 평가 지표 그리드 (태도, 숙제, 테스트 상시 표시) */}
                       <div>
                         <h5 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2.5 px-0.5">
@@ -802,6 +949,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                       수업 회차 ({reports.length}회)
                     </h3>
                   </div>
+
 
                   <div className="space-y-4 max-h-[720px] overflow-y-auto pr-1">
                     {monthGroups.map((group) => (

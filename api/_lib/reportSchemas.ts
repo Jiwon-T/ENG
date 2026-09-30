@@ -48,6 +48,7 @@ export function isReservedSlug(slug: string): boolean {
 export const NotionReportWebhookSchema = z.object({
   schemaVersion: z.number().optional().default(1),
   notionPageId: z.string().min(1, 'notionPageId is required'),
+  notionStudentPageId: z.string().min(1, 'notionStudentPageId is required'),
   studentKey: z.string().min(1, 'studentKey is required'),
   lessonDateStart: z.string().min(1, 'lessonDateStart is required'),
   lessonDateEnd: z.string().nullable().optional(),
@@ -131,6 +132,7 @@ export interface StoredLessonReport {
   vocabularyScore: number | null;
   schoolExamScore: number | null;
   feedback: string;
+  derivedAssignment?: string | null;
   sourceUpdatedAt: string;
   serverReceivedAt: string;
   serverUpdatedAt: string;
@@ -182,18 +184,23 @@ export interface StudentReportMapping {
 }
 
 /**
- * 학생 로그인 시 반환하는 최소 DTO (피드백/출결/태도 제외)
+ * 학생 로그인 시 반환하는 오프라인 수업 제한 DTO (StudentLessonReportDTO)
+ * - 학생 공개 필드: reportId, lessonDate, category, attendance, homework, vocabularyScore, schoolExamScore, assignmentContent
+ * - 비공개 필드 (원천 배제): attitude, test, feedback, selfStudyTime, notionPageId, internalStudentId, studentKey
  */
 export interface StudentLessonReportDTO {
   reportId: string;
   lessonDate: string;
   category: '수업' | '테스트';
+  attendance: string;
+  homework: string;
   vocabularyScore: number | null;
   schoolExamScore: number | null;
+  assignmentContent: string | null;
 }
 
 /**
- * 학부모 리포트 DTO (내부 notionPageId 대신 해시 ID 반환)
+ * 학부모 리포트 DTO (내부 notionPageId 대신 해시 ID 반환, 전체 feedback 유지)
  */
 export interface ParentLessonReportDTO {
   reportId: string;
@@ -209,4 +216,59 @@ export interface ParentLessonReportDTO {
   vocabularyScore: number | null;
   schoolExamScore: number | null;
   feedback: string;
+}
+
+/**
+ * ----------------------------------------------------
+ * Notion 일정 동기화 및 일정 DTO 스키마
+ * ----------------------------------------------------
+ */
+
+export const NotionScheduleWebhookSchema = z.object({
+  schemaVersion: z.number().optional().default(1),
+  notionScheduleId: z.string().min(1, 'notionScheduleId is required'),
+  studentKeys: z.array(z.string().min(1, 'studentKey cannot be empty')).min(1, 'studentKeys array must not be empty'),
+  title: z.string().min(1, 'title is required'),
+  startAt: z.string().min(1, 'startAt is required'),
+  endAt: z.string().nullable().optional(),
+  scheduleType: z.string().optional().default('정규 수업'),
+  status: z.enum(['예정', '완료', '취소']).catch('예정'),
+  notice: z.string().nullable().optional(),
+  sourceUpdatedAt: z.string().optional(),
+});
+
+export type NotionScheduleWebhookPayload = z.infer<typeof NotionScheduleWebhookSchema>;
+
+/**
+ * Firestore studentSchedules 컬렉션 저장 모델
+ * 문서 ID: hash(notionScheduleId + ':' + internalStudentId)
+ */
+export interface StoredStudentSchedule {
+  scheduleDocId: string;
+  notionScheduleId: string;
+  internalStudentId: string;
+  studentKey: string;
+  title: string;
+  startAt: string;
+  endAt: string | null;
+  scheduleType: string;
+  status: '예정' | '완료' | '취소';
+  notice: string | null;
+  sourceUpdatedAt: string;
+  serverReceivedAt: string;
+  serverUpdatedAt: string;
+}
+
+/**
+ * 학생 및 학부모 화면 조회용 안전한 일정 DTO
+ * 내부 식별자(notionScheduleId, internalStudentId, studentKey) 원천 배제
+ */
+export interface StudentScheduleDTO {
+  scheduleId: string; // scheduleDocId
+  title: string;
+  startAt: string;
+  endAt: string | null;
+  scheduleType: string;
+  status: '예정' | '완료' | '취소';
+  notice: string | null;
 }

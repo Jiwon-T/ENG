@@ -201,3 +201,33 @@ export function groupReportsByMonth<T extends { lessonDateStart: string }>(
 
   return groups;
 }
+
+
+/**
+ * 8. 일정 날짜/시간 포맷팅 유틸리티
+ */
+export function formatScheduleDateTime(startAt: string, endAt: string | null | undefined): {
+  dateStr: string;
+  timeStr: string | null;
+} {
+  const startParts = parseSeoulDateParts(startAt);
+  if (!startParts) {
+    return { dateStr: '일정 날짜 확인 중', timeStr: null };
+  }
+
+  const dateStr = `${startParts.year}년 ${startParts.month}월 ${startParts.day}일 (${startParts.dayOfWeek})`;
+  const startTime = formatKoreanTime(startParts.hour, startParts.minute);
+
+  if (!endAt) {
+    return { dateStr, timeStr: startTime };
+  }
+
+  const endParts = parseSeoulDateParts(endAt);
+  if (!endParts) {
+    return { dateStr, timeStr: startTime };
+  }
+
+  const endTime = formatKoreanTime(endParts.hour, endParts.minute);
+  return { dateStr, timeStr: `${startTime} ~ ${endTime}` };
+}
+

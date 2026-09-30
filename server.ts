@@ -35,6 +35,11 @@ async function startServer() {
     await handler(req as any, res as any);
   });
 
+  app.post("/api/webhooks/notion-schedule", async (req, res) => {
+    const handler = (await import("./api/webhooks/notion-schedule.ts")).default;
+    await handler(req as any, res as any);
+  });
+
   app.all("/api/teacher/report-slug", async (req, res) => {
     const handler = (await import("./api/teacher/report-slug.ts")).default;
     await handler(req as any, res as any);
@@ -50,6 +55,11 @@ async function startServer() {
     await handler(req as any, res as any);
   });
 
+  app.get("/api/parent/schedules", async (req, res) => {
+    const handler = (await import("./api/parent/schedules.ts")).default;
+    await handler(req as any, res as any);
+  });
+
   app.get("/api/parent/report-status", async (req, res) => {
     const handler = (await import("./api/parent/report-status.ts")).default;
     await handler(req as any, res as any);
@@ -57,6 +67,11 @@ async function startServer() {
 
   app.get("/api/student/lesson-reports", async (req, res) => {
     const handler = (await import("./api/student/lesson-reports.ts")).default;
+    await handler(req as any, res as any);
+  });
+
+  app.get("/api/student/schedules", async (req, res) => {
+    const handler = (await import("./api/student/schedules.ts")).default;
     await handler(req as any, res as any);
   });
 
