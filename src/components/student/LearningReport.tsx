@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BarChart3, TrendingUp, BookOpen, CheckCircle2, Clock, Calendar, ClipboardList, ChevronLeft, ChevronRight, Gamepad2, XCircle, Play, RotateCcw, X, Trophy, ArrowRight, Trash2, Check, Sparkles } from 'lucide-react';
+import { BarChart3, TrendingUp, BookOpen, CheckCircle2, Clock, Calendar, ClipboardList, ChevronLeft, ChevronRight, Gamepad2, XCircle, Play, RotateCcw, X, Trophy, ArrowRight, Trash2, Check, Sparkles, CalendarDays } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType, markIncorrectAnswerReviewed } from '../../lib/firebase';
 import { PetService } from '../../lib/petService';
 import { collection, query, where, onSnapshot, doc, getDoc, orderBy, limit, updateDoc, getDocs } from 'firebase/firestore';
 import { safeFetchJson } from '../../lib/safeFetchJson';
+import type { StudentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 
 export default function LearningReport() {
   const [stats, setStats] = useState({
@@ -19,7 +20,8 @@ export default function LearningReport() {
     hasNewAssignment: false,
     sessionHistory: [] as any[]
   });
-  const [studentLessonReports, setStudentLessonReports] = useState<any[]>([]);
+  const [studentLessonReports, setStudentLessonReports] = useState<StudentLessonReportDTO[]>([]);
+  const [studentSchedules, setStudentSchedules] = useState<StudentScheduleDTO[]>([]);
   const [userRole, setUserRole] = useState<string>('student');
   const [assignmentPage, setAssignmentPage] = useState(1);
   const [sessionPage, setSessionPage] = useState(1);
@@ -180,13 +182,18 @@ export default function LearningReport() {
       handleFirestoreError(error, OperationType.LIST, 'studySessions');
     });
 
-    // Fetch official lesson scores from server (StudentLessonReportDTO)
+    // Fetch server-owned offline lesson reports and schedules with one verified ID token.
     auth.currentUser.getIdToken().then(idToken => {
-      safeFetchJson<{ ok: boolean; reports: any[] }>('/api/student/lesson-reports', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      }).then(res => {
-        if (res.ok && res.data?.reports && Array.isArray(res.data.reports)) {
-          setStudentLessonReports(res.data.reports);
+      const headers = { Authorization: `Bearer ${idToken}` };
+      Promise.all([
+        safeFetchJson<{ ok: boolean; reports: StudentLessonReportDTO[] }>('/api/student/lesson-reports', { headers }),
+        safeFetchJson<{ ok: boolean; schedules: StudentScheduleDTO[] }>('/api/student/schedules', { headers }),
+      ]).then(([reportsRes, schedulesRes]) => {
+        if (reportsRes.ok && Array.isArray(reportsRes.data?.reports)) {
+          setStudentLessonReports(reportsRes.data.reports);
+        }
+        if (schedulesRes.ok && Array.isArray(schedulesRes.data?.schedules)) {
+          setStudentSchedules(schedulesRes.data.schedules);
         }
       });
     }).catch(() => {
@@ -244,10 +251,46 @@ export default function LearningReport() {
     return `${yyyy}-${mm}-${dd} (${day})`;
   };
 
+  const parseDisplayDate = (value: any): Date | null => {
+    if (!value) return null;
+    if (typeof value.toDate === 'function') return value.toDate();
+    if (typeof value.toMillis === 'function') return new Date(value.toMillis());
+    if (typeof value.seconds === 'number') return new Date(value.seconds * 1000);
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const formatKoreanDateTime = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '일정 시간 확인 필요';
+    return new Intl.DateTimeFormat('ko-KR', {
+      timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short',
+      hour: 'numeric', minute: '2-digit',
+    }).format(date);
+  };
+
   const maxTrend = Math.max(...stats.weeklyTrend, 1);
 
-  const totalAssignmentPages = Math.ceil(stats.assignments.length / ASSIGNMENTS_PER_PAGE);
-  const paginatedAssignments = stats.assignments.slice((assignmentPage - 1) * ASSIGNMENTS_PER_PAGE, assignmentPage * ASSIGNMENTS_PER_PAGE);
+  // 앱에서 등록한 과제와 수업일지의 마지막 `과제:` 구간을 하나의 목록으로 합친다.
+  // 화면에는 출처를 노출하지 않지만 내부 키는 충돌하지 않도록 분리한다.
+  const lessonAssignments = studentLessonReports
+    .filter(report => Boolean(report.assignmentContent?.trim()))
+    .map(report => ({
+      id: `lesson-${report.reportId}`,
+      content: report.assignmentContent as string,
+      createdAt: report.lessonDate,
+      isNew: false,
+      isDone: false,
+      isLessonAssignment: true,
+      homeworkStatus: report.homework || '미확인',
+    }));
+  const combinedAssignments = [...stats.assignments, ...lessonAssignments].sort((a: any, b: any) => {
+    const aTime = parseDisplayDate(a.createdAt)?.getTime() || 0;
+    const bTime = parseDisplayDate(b.createdAt)?.getTime() || 0;
+    return bTime - aTime;
+  });
+  const totalAssignmentPages = Math.ceil(combinedAssignments.length / ASSIGNMENTS_PER_PAGE);
+  const paginatedAssignments = combinedAssignments.slice((assignmentPage - 1) * ASSIGNMENTS_PER_PAGE, assignmentPage * ASSIGNMENTS_PER_PAGE);
 
   const formatDayRange = (start?: any, end?: any, category?: string, wordbookType?: string, wordbookTitle?: string, wordbookId?: string) => {
     if (start === undefined || start === null || start === '') return null;
@@ -471,14 +514,18 @@ export default function LearningReport() {
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${item.isNew ? 'bg-blue-500 animate-pulse' : item.isDone ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    {item.createdAt && formatDateWithDay(item.createdAt.toDate())}
+                    {parseDisplayDate(item.createdAt) && formatDateWithDay(parseDisplayDate(item.createdAt) as Date)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   {item.isNew && (
                     <span className="px-2 py-0.5 bg-blue-500 text-white text-[10px] font-black rounded-md uppercase">New</span>
                   )}
-                  <button
+                  {item.isLessonAssignment ? (
+                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black bg-white text-slate-500 border border-slate-200">
+                      {item.homeworkStatus}
+                    </span>
+                  ) : <button
                     onClick={() => toggleAssignmentDone(item.id, !!item.isDone)}
                     className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black transition-all ${
                       item.isDone 
@@ -488,7 +535,7 @@ export default function LearningReport() {
                   >
                     <CheckCircle2 size={12} />
                     {item.isDone ? '완료' : '미완료'}
-                  </button>
+                  </button>}
                 </div>
               </div>
               <p className={`text-slate-700 text-sm md:text-base font-medium leading-relaxed whitespace-pre-wrap ${item.isDone ? 'opacity-50 line-through' : ''}`}>
@@ -497,7 +544,7 @@ export default function LearningReport() {
             </div>
           ))}
 
-          {stats.assignments.length === 0 && (
+          {combinedAssignments.length === 0 && (
             <div className="py-12 text-center">
               <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                 <ClipboardList className="text-slate-200" size={32} />
@@ -606,13 +653,13 @@ export default function LearningReport() {
         </div>
       </div>
 
-      {/* Official Lesson Test Scores Section (StudentLessonReportDTO: 날짜, 종류, 점수만 노출) */}
+      {/* Offline lesson records: the server DTO excludes attitude, test evaluation and feedback. */}
       {studentLessonReports.length > 0 && (
         <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
               <Trophy className="text-indigo-600" size={20} />
-              수업 정기 테스트 점수
+              오프라인 수업 기록
             </h3>
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
               최근 {studentLessonReports.length}회
@@ -640,6 +687,17 @@ export default function LearningReport() {
 
                 <div className="flex items-center justify-around py-2 border-t border-b border-slate-200/60">
                   <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">출결</p>
+                    <p className="text-sm font-black text-slate-700">{report.attendance || '미확인'}</p>
+                  </div>
+                  <div className="w-px h-8 bg-slate-200"></div>
+                  <div className="text-center">
+                    <p className="text-[11px] text-slate-400 font-medium">숙제</p>
+                    <p className="text-sm font-black text-slate-700">{report.homework || '미확인'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-around py-2">
+                  <div className="text-center">
                     <p className="text-[11px] text-slate-400 font-medium">단어 시험</p>
                     <p className="text-lg font-black text-indigo-600 font-mono">
                       {report.vocabularyScore !== null ? `${report.vocabularyScore}점` : '-'}
@@ -658,6 +716,45 @@ export default function LearningReport() {
           </div>
         </div>
       )}
+
+      {/* Notion DB_일정표에서 동기화된 학생 일정 */}
+      <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
+            <CalendarDays className="text-violet-600" size={20} />
+            일정
+          </h3>
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700">
+            {studentSchedules.length}개
+          </span>
+        </div>
+        {studentSchedules.length > 0 ? (
+          <div className="space-y-3">
+            {studentSchedules.map(schedule => (
+              <div key={schedule.scheduleId} className="p-4 md:p-5 rounded-2xl bg-slate-50 border border-slate-100">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-black text-slate-900 break-words">{schedule.title}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-600">
+                      {formatKoreanDateTime(schedule.startAt)}
+                      {schedule.endAt ? ` ~ ${formatKoreanDateTime(schedule.endAt)}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-white border border-slate-200 text-slate-600">{schedule.scheduleType}</span>
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${schedule.status === '취소' ? 'bg-rose-100 text-rose-700' : schedule.status === '완료' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}>{schedule.status}</span>
+                  </div>
+                </div>
+                {schedule.notice && <p className="mt-3 text-sm text-slate-600 whitespace-pre-wrap break-words">{schedule.notice}</p>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-10 text-center text-sm font-medium text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            등록된 일정이 없습니다.
+          </div>
+        )}
+      </div>
 
       {/* Activity Log Section */}
       <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">

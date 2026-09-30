@@ -8,6 +8,7 @@ import {
 import { lookupStudentAndGuardianContact } from '../_lib/notion.js';
 import { generateInternalStudentId, hashStudentKey, getSecretOrThrow } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
+import { extractAssignmentFromFeedback } from '../_lib/assignmentExtractor.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
@@ -104,6 +105,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       vocabularyScore: data.vocabularyScore ?? null,
       schoolExamScore: data.schoolExamScore ?? null,
       feedback: data.feedback || '',
+      derivedAssignment: extractAssignmentFromFeedback(data.feedback),
       sourceUpdatedAt,
       serverReceivedAt: prevSnap.exists ? (prevSnap.data() as StoredLessonReport).serverReceivedAt : now,
       serverUpdatedAt: now,

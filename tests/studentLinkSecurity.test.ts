@@ -86,18 +86,23 @@ describe('Student Account Linking and Ownership Protection Tests', () => {
       feedback: '극비 피드백 내용 (학생 열람 금지)',
     };
 
-    // 제한 DTO 변환: 피드백, 출결, 태도, 숙제 일체 배제
+    // 제한 DTO 변환: 허용된 출결/숙제/과제만 포함하고 정성평가와 원문 피드백은 배제
     const limitedDTO: StudentLessonReportDTO = {
       reportId: 'hash1234',
       lessonDate: fullLessonReport.lessonDateStart,
       category: fullLessonReport.category,
+      attendance: fullLessonReport.attendance,
+      homework: fullLessonReport.homework,
       vocabularyScore: fullLessonReport.vocabularyScore,
       schoolExamScore: fullLessonReport.schoolExamScore,
+      assignmentContent: '교재 10쪽',
     };
 
     assert.equal('feedback' in limitedDTO, false, 'Feedback must not be in StudentLessonReportDTO');
-    assert.equal('attendance' in limitedDTO, false, 'Attendance must not be in StudentLessonReportDTO');
     assert.equal('attitude' in limitedDTO, false, 'Attitude must not be in StudentLessonReportDTO');
+    assert.equal('test' in limitedDTO, false, 'Qualitative test evaluation must not be in StudentLessonReportDTO');
+    assert.equal(limitedDTO.attendance, '출석');
+    assert.equal(limitedDTO.homework, '완료');
     assert.equal(limitedDTO.vocabularyScore, 95);
   });
 

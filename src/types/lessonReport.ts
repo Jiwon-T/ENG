@@ -51,14 +51,18 @@ export interface StoredLessonReport {
 
 /**
  * 학생용 제한 응답 모델 (StudentLessonReportDTO)
- * 피드백, 출결, 태도, 숙제, 자습시간, 원본 notionPageId 등 일체 제외
+ * - 학생 공개 필드: reportId, lessonDate, category, attendance, homework, vocabularyScore, schoolExamScore, assignmentContent
+ * - 비공개 필드 (원천 배제): attitude, test, feedback, selfStudyTime, notionPageId, internalStudentId, studentKey
  */
 export interface StudentLessonReportDTO {
   reportId: string; // 사이트 내부용 안전한 해시 ID
   lessonDate: string;
   category: '수업' | '테스트';
+  attendance: string;
+  homework: string;
   vocabularyScore: number | null;
   schoolExamScore: number | null;
+  assignmentContent: string | null;
 }
 
 /**
@@ -78,6 +82,19 @@ export interface ParentLessonReportDTO {
   vocabularyScore: number | null;
   schoolExamScore: number | null;
   feedback: string;
+}
+
+/**
+ * 학생 및 학부모 화면 조회용 안전한 일정 DTO
+ */
+export interface StudentScheduleDTO {
+  scheduleId: string;
+  title: string;
+  startAt: string;
+  endAt: string | null;
+  scheduleType: string;
+  status: '예정' | '완료' | '취소';
+  notice: string | null;
 }
 
 /**

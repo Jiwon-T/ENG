@@ -1,9 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { sendJson } from '../_lib/http.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
-import type { StudentLessonReportDTO, StoredLessonReport, StoredNotionStudentMapping } from '../_lib/reportSchemas.js';
+import type { StudentScheduleDTO, StoredStudentSchedule, StoredNotionStudentMapping } from '../_lib/reportSchemas.js';
 import { hashStudentKey } from '../_lib/security.js';
-import crypto from 'crypto';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
@@ -46,12 +45,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return sendJson(res, 403, {
         ok: false,
         error: 'STUDENT_REPORT_NOT_LINKED',
-        message: '아직 수업 리포트가 계정과 연결되지 않았습니다. 선생님께 문의해 주세요.',
-        reports: [],
+        schedules: [],
+        message: '연결된 학생 일정이 없습니다.',
       });
     }
 
-    // 2) notionStudentMappings에서 서버가 관리하는 학생 매핑 문서 확인
+    // 2) notionStudentMappings에서 관리자 승인 매핑 검증
     const studentKeyHash = hashStudentKey(notionStudentKey);
     const mappingDoc = await db.collection('notionStudentMappings').doc(studentKeyHash).get();
 
@@ -59,22 +58,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return sendJson(res, 403, {
         ok: false,
         error: 'STUDENT_REPORT_NOT_LINKED',
-        message: '아직 수업 리포트가 계정과 연결되지 않았습니다. 선생님께 문의해 주세요.',
-        reports: [],
+        schedules: [],
       });
     }
 
     const mappingData = mappingDoc.data() as StoredNotionStudentMapping;
 
-    // 3) 엄격한 보안 검증: 매핑 문서의 firebaseUid가 현재 로그인한 studentUid와 정확히 일치해야 함
-    // null이거나, 다른 UID이거나, 사용자가 본인 문서에 임의로 적은 경우 절대 반환하지 않음
-    // 학생 API에서 firebaseUid를 자동 업데이트하거나 소유권을 주장하는 코드는 완전히 제거됨
+    // 3) 엄격한 보안 검증: mappingData.firebaseUid === studentUid
     if (!mappingData.firebaseUid || mappingData.firebaseUid !== studentUid) {
       return sendJson(res, 403, {
         ok: false,
         error: 'STUDENT_REPORT_NOT_LINKED',
-        message: '아직 수업 리포트가 계정과 연결되지 않았습니다. 선생님께 문의해 주세요.',
-        reports: [],
+        schedules: [],
       });
     }
 
@@ -83,42 +78,34 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return sendJson(res, 403, {
         ok: false,
         error: 'STUDENT_REPORT_NOT_LINKED',
-        message: '아직 수업 리포트가 계정과 연결되지 않았습니다. 선생님께 문의해 주세요.',
-        reports: [],
+        schedules: [],
       });
     }
 
-    // 4) 검증 완료된 internalStudentId의 수업 일지 조회
-    let reportsSnap;
-    try {
-      reportsSnap = await db.collection('lessonReports')
-        .where('internalStudentId', '==', internalStudentId)
-        .get();
-    } catch (dbErr) {
-      return sendJson(res, 503, { ok: false, error: 'DATASTORE_UNAVAILABLE' });
-    }
+    // 4) 해당 학생의 studentSchedules 컬렉션 문서 조회
+    const schedulesSnap = await db.collection('studentSchedules')
+      .where('internalStudentId', '==', internalStudentId)
+      .get();
 
-    const storedReports: StoredLessonReport[] = [];
-    reportsSnap.forEach(d => storedReports.push(d.data() as StoredLessonReport));
-    storedReports.sort((a, b) => new Date(b.lessonDateStart).getTime() - new Date(a.lessonDateStart).getTime());
+    const storedSchedules: StoredStudentSchedule[] = [];
+    schedulesSnap.forEach(d => storedSchedules.push(d.data() as StoredStudentSchedule));
 
-    // 학생용 제한 DTO:
-    // - 공개 필드: reportId, lessonDate, category, attendance, homework, vocabularyScore, schoolExamScore, assignmentContent
-    // - 비공개 필드 (원천 배제): attitude, test, feedback, selfStudyTime, notionPageId, internalStudentId, studentKey
-    const studentDTOs: StudentLessonReportDTO[] = storedReports.map(r => ({
-      reportId: crypto.createHash('sha256').update(r.notionPageId).digest('hex').slice(0, 16),
-      lessonDate: r.lessonDateStart,
-      category: r.category,
-      attendance: r.attendance || '',
-      homework: r.homework || '',
-      vocabularyScore: r.vocabularyScore,
-      schoolExamScore: r.schoolExamScore,
-      assignmentContent: r.derivedAssignment || null,
+    storedSchedules.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+
+    // 5) 학생용 안전한 DTO 변환 (내부 notionScheduleId, internalStudentId, studentKey 원천 배제)
+    const studentDTOs: StudentScheduleDTO[] = storedSchedules.map(s => ({
+      scheduleId: s.scheduleDocId,
+      title: s.title,
+      startAt: s.startAt,
+      endAt: s.endAt,
+      scheduleType: s.scheduleType,
+      status: s.status,
+      notice: s.notice,
     }));
 
     return sendJson(res, 200, {
       ok: true,
-      reports: studentDTOs,
+      schedules: studentDTOs,
     });
   } catch (err: any) {
     return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });
