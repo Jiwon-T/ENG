@@ -230,5 +230,4 @@ export function formatScheduleDateTime(startAt: string, endAt: string | null | u
   const endTime = formatKoreanTime(endParts.hour, endParts.minute);
   return { dateStr, timeStr: `${startTime} ~ ${endTime}` };
 }
-=======
 
