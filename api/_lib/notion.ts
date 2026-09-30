@@ -11,9 +11,10 @@ export interface NotionStudentListItem {
   studentKey: string;
   studentDisplayName: string;
   hasGuardianContact: boolean;
+  enrollmentStatus: string;
 }
 
-function getStudentKeyAndName(page: any): Omit<NotionStudentListItem, 'hasGuardianContact'> {
+function getStudentKeyAndName(page: any): Omit<NotionStudentListItem, 'hasGuardianContact' | 'enrollmentStatus'> {
   const props = page.properties || {};
   const studentKey =
     props['원본 구분명']?.rich_text?.[0]?.plain_text ||
@@ -57,6 +58,7 @@ export async function listNotionStudents(): Promise<NotionStudentListItem[]> {
         studentKey,
         studentDisplayName,
         hasGuardianContact: digitsOnly.length >= 9,
+        enrollmentStatus: page.properties?.['등록상태']?.status?.name || '',
       });
     }
     cursor = data.has_more ? data.next_cursor : undefined;

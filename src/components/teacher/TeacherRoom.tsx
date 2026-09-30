@@ -32,6 +32,7 @@ interface NotionStudentSummary {
   studentKey: string;
   studentDisplayName: string;
   hasGuardianContact: boolean;
+  enrollmentStatus: string;
   linkedFirebaseUid: string | null;
   reportSlug: string | null;
 }
@@ -52,6 +53,15 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteUid, setConfirmDeleteUid] = useState<string | null>(null);
   const [notionStudents, setNotionStudents] = useState<NotionStudentSummary[]>([]);
+  const [notionStudentTab, setNotionStudentTab] = useState<'enrolled' | 'other'>('enrolled');
+  const [notionStudentSearch, setNotionStudentSearch] = useState('');
+  const filteredNotionStudents = notionStudents.filter(student => {
+    const isEnrolled = student.enrollmentStatus === '등록';
+    const matchesTab = notionStudentTab === 'enrolled' ? isEnrolled : !isEnrolled;
+    const search = notionStudentSearch.trim().toLocaleLowerCase('ko-KR').replace(/\s+/g, '');
+    const text = `${student.studentKey} ${student.studentDisplayName}`.toLocaleLowerCase('ko-KR').replace(/\s+/g, '');
+    return matchesTab && text.includes(search);
+  });
   const [notionStudentsLoading, setNotionStudentsLoading] = useState(false);
   const [linkingStudentUid, setLinkingStudentUid] = useState<string | null>(null);
 
@@ -370,8 +380,28 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                     </div>
                     <button onClick={loadNotionStudents} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">새로고침</button>
                   </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+                    <div role="tablist" aria-label="Notion 학생 등록 상태" className="flex gap-2">
+                      {([['enrolled', '재원생'], ['other', '이외']] as const).map(([tab, label]) => (
+                        <button key={tab} type="button" role="tab" aria-selected={notionStudentTab === tab}
+                          onClick={() => setNotionStudentTab(tab)}
+                          className={`px-4 py-2.5 rounded-xl text-sm font-bold ${notionStudentTab === tab ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="relative flex-1">
+                      <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input type="search" aria-label="Notion 학생 검색" placeholder="학생 이름·학교·학년 검색"
+                        value={notionStudentSearch} onChange={event => setNotionStudentSearch(event.target.value)}
+                        className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+                    </div>
+                  </div>
+                  {!notionStudentsLoading && filteredNotionStudents.length === 0 && (
+                    <p className="py-8 text-center text-sm text-slate-500">{notionStudentSearch.trim() ? '검색 결과가 없습니다.' : '해당하는 학생이 없습니다.'}</p>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
-                    {notionStudents.map(student => (
+                    {filteredNotionStudents.map(student => (
                       <div key={student.studentKey} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="font-bold text-sm text-slate-900 truncate">{student.studentKey}</p>

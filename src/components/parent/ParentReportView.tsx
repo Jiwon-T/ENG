@@ -112,6 +112,9 @@ const PAGE_SIZE = 10;
 
 export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, onGoHome }) => {
   const [pin, setPin] = useState('');
+  // 브라우저 저장소에 보관하지 않아 새 접속/새로고침마다 PIN이 필요합니다.
+  const parentSessionRef = useRef<string | null>(null);
+  const authEpochRef = useRef(0);
   const [errorMsg, setErrorMsg] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -163,6 +166,18 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     meta.content = 'noindex, nofollow';
     document.head.appendChild(meta);
 
+    authEpochRef.current += 1;
+    parentSessionRef.current = null;
+    setIsAuthenticated(false);
+    setReports([]);
+    setSchedules([]);
+    setSelectedReport(null);
+    setStudentDisplayName('');
+    setPin('');
+    setErrorMsg('');
+    setIsInvalidSlug(false);
+    setIsServerDown(false);
+
     // 1단계: 공개 상태 확인 (슬러그 존재 및 활성 여부 검증)
     checkReportStatus();
 
@@ -176,6 +191,23 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       }
     };
   }, [reportSlug]);
+
+  useEffect(() => {
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      authEpochRef.current += 1;
+      parentSessionRef.current = null;
+      setIsAuthenticated(false);
+      setReports([]);
+      setSchedules([]);
+      setSelectedReport(null);
+      setStudentDisplayName('');
+      setPin('');
+      setIsVerifying(false);
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
 
   // 브라우저 뒤로 가기 (popstate) 안전 지원
   useEffect(() => {
@@ -215,17 +247,23 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       return;
     }
 
-    // 활성 슬러그인 경우 기존 세션 검증
-    checkExistingSession();
+    // 활성 주소여도 자동 인증하지 않고 PIN 입력을 기다립니다.
+    setLoadingReports(false);
   };
 
   const checkExistingSession = async () => {
+    const token = parentSessionRef.current;
+    const epoch = authEpochRef.current;
+    if (!token) return;
     try {
       const res = await safeFetchJson<{
         ok: boolean;
         student?: { studentDisplayName: string };
         reports?: ParentLessonReportDTO[];
-      }>(`/api/parent/lesson-reports?reportSlug=${encodeURIComponent(reportSlug)}`);
+      }>(`/api/parent/lesson-reports?reportSlug=${encodeURIComponent(reportSlug)}`, {
+        headers: { 'X-Parent-Session': token },
+      });
+      if (epoch !== authEpochRef.current) return;
 
       if (res.ok && res.data) {
         setIsAuthenticated(true);
@@ -254,12 +292,18 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
   };
 
   const fetchSchedules = async () => {
+    const token = parentSessionRef.current;
+    const epoch = authEpochRef.current;
+    if (!token) return;
     setLoadingSchedules(true);
     try {
       const res = await safeFetchJson<{
         ok: boolean;
         schedules?: StudentScheduleDTO[];
-      }>(`/api/parent/schedules?reportSlug=${encodeURIComponent(reportSlug)}`);
+      }>(`/api/parent/schedules?reportSlug=${encodeURIComponent(reportSlug)}`, {
+        headers: { 'X-Parent-Session': token },
+      });
+      if (epoch !== authEpochRef.current) return;
 
       if (res.ok && res.data?.schedules) {
         setSchedules(res.data.schedules);
@@ -278,12 +322,14 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       return;
     }
 
+    const epoch = authEpochRef.current;
     setIsVerifying(true);
     setErrorMsg('');
 
     const res = await safeFetchJson<{
       ok: boolean;
       studentDisplayName?: string;
+      sessionToken?: string;
       remainingAttempts?: number;
       message?: string;
       error?: string;
@@ -296,9 +342,11 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       }),
     });
 
+    if (epoch !== authEpochRef.current) return;
     setIsVerifying(false);
 
-    if (res.ok && res.data) {
+    if (res.ok && res.data?.sessionToken) {
+      parentSessionRef.current = res.data.sessionToken;
       setIsAuthenticated(true);
       setStudentDisplayName(res.data.studentDisplayName || '');
       setPin('');
@@ -538,11 +586,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
             >
               <span>📖</span>
               <span>수업 기록</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                activeTab === 'reports' ? 'bg-indigo-700/60 text-white' : 'bg-slate-100 text-slate-600'
-              }`}>
-                {reports.length}
-              </span>
+
             </button>
             <button
               type="button"
@@ -555,21 +599,15 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
             >
               <span>📅</span>
               <span>일정</span>
-              {schedules.length > 0 && (
-                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                  activeTab === 'schedules' ? 'bg-indigo-700/60 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {schedules.length}
-                </span>
-              )}
+
             </button>
           </div>
 
           {activeTab === 'schedules' ? (
             <div className="space-y-4">
               <div className="flex items-baseline justify-between px-1">
-                <h3 className="text-base font-black text-slate-900">학습 및 시험 일정</h3>
-                <span className="text-xs text-slate-500 font-medium">총 {schedules.length}개 일정</span>
+                <h3 className="text-base font-black text-slate-900">학습 일정</h3>
+
               </div>
 
               {loadingSchedules ? (
@@ -663,7 +701,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                       <div>
                         <h3 className="text-base font-black text-slate-900">수업 회차</h3>
                         <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                          총 {reports.length}회의 수업 기록이 있습니다.
+                          수업 기록을 선택해 상세 내용을 확인하세요.
                         </p>
                       </div>
                     </div>
@@ -946,7 +984,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                 <div className="lg:col-span-1 space-y-3">
                   <div className="flex items-baseline justify-between px-1">
                     <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">
-                      수업 회차 ({reports.length}회)
+                      수업 회차
                     </h3>
                   </div>
 

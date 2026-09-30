@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { parseCookies, sendJson } from '../_lib/http.js';
+import { sendJson } from '../_lib/http.js';
 import { getVerifiedParentSession } from '../_lib/session.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 import type { StudentScheduleDTO, StoredStudentSchedule } from '../_lib/reportSchemas.js';
@@ -11,8 +11,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return sendJson(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
     }
 
-    const cookies = parseCookies(req);
-    const sessionToken = cookies['parent_session'];
+    // 기존 쿠키 대신 현재 페이지의 PIN 인증 토큰만 허용합니다.
+    const header = req.headers['x-parent-session'];
+    const sessionToken = typeof header === 'string' ? header : '';
 
     if (!sessionToken) {
       return sendJson(res, 401, { ok: false, error: 'AUTH_REQUIRED', message: '보호자 인증이 필요합니다.' });

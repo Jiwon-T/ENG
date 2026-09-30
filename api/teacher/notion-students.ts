@@ -36,6 +36,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         studentKey: student.studentKey,
         studentDisplayName: student.studentDisplayName,
         hasGuardianContact: student.hasGuardianContact,
+        enrollmentStatus: student.enrollmentStatus,
         linkedFirebaseUid: mapping?.firebaseUid || null,
         reportSlug,
       };

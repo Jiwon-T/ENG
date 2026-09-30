@@ -22,7 +22,6 @@ export default function LearningReport() {
   });
   const [studentLessonReports, setStudentLessonReports] = useState<StudentLessonReportDTO[]>([]);
   const [studentSchedules, setStudentSchedules] = useState<StudentScheduleDTO[]>([]);
-  const [notionLinkNotice, setNotionLinkNotice] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string>('student');
   const [assignmentPage, setAssignmentPage] = useState(1);
   const [sessionPage, setSessionPage] = useState(1);
@@ -198,11 +197,6 @@ export default function LearningReport() {
         safeFetchJson<{ ok: boolean; error?: string; message?: string; reports: StudentLessonReportDTO[] }>('/api/student/lesson-reports', { headers }),
         safeFetchJson<{ ok: boolean; error?: string; message?: string; schedules: StudentScheduleDTO[] }>('/api/student/schedules', { headers }),
       ]).then(([reportsRes, schedulesRes]) => {
-        const isUnlinked = reportsRes.data?.error === 'STUDENT_REPORT_NOT_LINKED'
-          || schedulesRes.data?.error === 'STUDENT_REPORT_NOT_LINKED';
-        setNotionLinkNotice(isUnlinked
-          ? '수업 기록과 일정이 아직 이 계정에 연결되지 않았어요. 선생님이 Notion 학생을 연결하면 이곳에 자동으로 표시됩니다.'
-          : null);
         if (reportsRes.ok && Array.isArray(reportsRes.data?.reports)) {
           setStudentLessonReports(reportsRes.data.reports);
         }
@@ -513,12 +507,6 @@ export default function LearningReport() {
           <p className="text-slate-500 font-medium">나의 학습 성장 과정을 한눈에 확인하세요.</p>
         </div>
       </header>
-
-      {notionLinkNotice && (
-        <div className="mb-6 md:mb-8 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold leading-relaxed text-amber-800">
-          {notionLinkNotice}
-        </div>
-      )}
 
       {/* Assignments Section */}
       <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-12">

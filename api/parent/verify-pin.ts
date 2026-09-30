@@ -99,7 +99,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       });
     }
 
-    // 성공 시 authVersion과 internalStudentId를 포함하여 24시간 세션 생성
+    // 성공 시 authVersion과 internalStudentId를 포함하여 페이지 전용 세션 생성
     const { rawSessionToken } = await createParentSession({
       reportSlug,
       internalStudentId: verifyOutcome.internalStudentId!,
@@ -107,8 +107,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       authVersion: verifyOutcome.authVersion || 1,
     });
 
-    setCookie(res, 'parent_session', rawSessionToken, {
-      maxAgeSeconds: 86400,
+    setCookie(res, 'parent_session', '', {
+      maxAgeSeconds: 0,
       path: '/',
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -118,6 +118,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     // 내부 studentKey는 절대 노출하지 않고 학부모 화면 표시용 studentDisplayName만 전달
     return sendJson(res, 200, {
       ok: true,
+      sessionToken: rawSessionToken,
       reportSlug,
       studentDisplayName: verifyOutcome.studentDisplayName,
     });

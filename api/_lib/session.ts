@@ -4,6 +4,7 @@ import type { StoredReportSlug } from './reportSchemas.js';
 
 export interface ParentSessionData {
   sessionHash: string;
+  authenticationMode?: 'page-pin-v1';
   reportSlug: string;
   internalStudentId: string;
   studentDisplayName: string;
@@ -22,11 +23,12 @@ export async function createParentSession(params: {
   const rawSessionToken = generateSecureToken(32);
   const sessionHash = hashToken(rawSessionToken);
 
-  // 24시간 세션
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  // 페이지 메모리에서만 사용되는 30분 PIN 인증 세션
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
   const sessionData: ParentSessionData = {
     sessionHash,
+    authenticationMode: 'page-pin-v1',
     reportSlug: params.reportSlug,
     internalStudentId: params.internalStudentId,
     studentDisplayName: params.studentDisplayName,
@@ -58,7 +60,8 @@ export async function getVerifiedParentSession(rawSessionToken: string): Promise
   if (!doc.exists) return null;
 
   const session = doc.data() as ParentSessionData;
-  if (new Date(session.expiresAt) < new Date()) {
+  const expiresAt = Date.parse(session.expiresAt);
+  if (session.authenticationMode !== 'page-pin-v1' || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
     return null;
   }
 

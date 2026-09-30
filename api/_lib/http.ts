@@ -9,7 +9,7 @@ export function sendJson(res: ServerResponse, statusCode: number, data: any) {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Vary', 'Cookie, Authorization');
+  res.setHeader('Vary', 'Cookie, Authorization, X-Parent-Session');
 
   res.end(JSON.stringify(data));
 }
