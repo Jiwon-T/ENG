@@ -202,6 +202,7 @@ export function groupReportsByMonth<T extends { lessonDateStart: string }>(
   return groups;
 }
 
+
 /**
  * 8. 일정 날짜/시간 포맷팅 유틸리티
  */
@@ -229,3 +230,5 @@ export function formatScheduleDateTime(startAt: string, endAt: string | null | u
   const endTime = formatKoreanTime(endParts.hour, endParts.minute);
   return { dateStr, timeStr: `${startTime} ~ ${endTime}` };
 }
+=======
+

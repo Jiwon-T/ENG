@@ -123,6 +123,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
   const [reports, setReports] = useState<ParentLessonReportDTO[]>([]);
   const [selectedReport, setSelectedReport] = useState<ParentLessonReportDTO | null>(null);
 
+
   // 학부모 화면 상단 탭: 'reports' (수업 기록) | 'schedules' (일정)
   const [activeTab, setActiveTab] = useState<'reports' | 'schedules'>('reports');
   const [schedules, setSchedules] = useState<StudentScheduleDTO[]>([]);
@@ -521,6 +522,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 break-words leading-tight">
               {studentDisplayName || '학생'} 수업 일지
             </h2>
+
           </div>
 
           {/* 학부모 탭 바: 수업 기록 / 일정 */}
@@ -848,6 +850,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                         </div>
                       </div>
 
+
                       {/* 학습 평가 지표 그리드 (태도, 숙제, 테스트 상시 표시) */}
                       <div>
                         <h5 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2.5 px-0.5">
@@ -946,6 +949,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                       수업 회차 ({reports.length}회)
                     </h3>
                   </div>
+
 
                   <div className="space-y-4 max-h-[720px] overflow-y-auto pr-1">
                     {monthGroups.map((group) => (
