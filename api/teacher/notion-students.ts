@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { sendJson } from '../_lib/http.js';
 import { verifyAdminAuth } from '../_lib/auth.js';
 import { listNotionStudents } from '../_lib/notion.js';
-import { migrateStudentMapping } from '../_lib/studentIdentity.js';
+import { readStudentDirectoryMappings } from '../_lib/studentDirectoryMappings.js';
 import { randomUUID } from 'node:crypto';
 import { studentDirectoryError } from '../_lib/studentDirectoryError.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
@@ -31,8 +31,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     stage = 'notion_query';
     const notionStudents = await listNotionStudents();
     stage = 'student_mapping';
+    const mappings = await readStudentDirectoryMappings(db);
     const students = await Promise.all(notionStudents.map(async student => {
-      const mapping = await migrateStudentMapping(db, student.studentKey, student.studentDisplayName);
+      const mapping = mappings.get(student.studentKey);
       let reportSlug: string | null = null;
       if (mapping?.internalStudentId) {
         const reportMapping = await db.collection('studentReportMappings').doc(mapping.internalStudentId).get();
