@@ -50,6 +50,7 @@ export const NotionReportWebhookSchema = z.object({
   notionPageId: z.string().min(1, 'notionPageId is required'),
   notionStudentPageId: z.string().min(1, 'notionStudentPageId is required'),
   studentKey: z.string().min(1, 'studentKey is required'),
+  studentKey: z.string().optional(),
   lessonDateStart: z.string().min(1, 'lessonDateStart is required'),
   lessonDateEnd: z.string().nullable().optional(),
   lessonTime: z.string().optional().default(''),
@@ -197,6 +198,7 @@ export interface StudentLessonReportDTO {
   vocabularyScore: number | null;
   schoolExamScore: number | null;
   assignmentContent: string | null;
+  assignmentCompleted?: boolean;
 }
 
 /**
@@ -227,7 +229,9 @@ export interface ParentLessonReportDTO {
 export const NotionScheduleWebhookSchema = z.object({
   schemaVersion: z.number().optional().default(1),
   notionScheduleId: z.string().min(1, 'notionScheduleId is required'),
-  studentKeys: z.array(z.string().min(1, 'studentKey cannot be empty')).min(1, 'studentKeys array must not be empty'),
+  // Legacy display keys exist only for mixed-version rollout; IDs always take precedence.
+  studentKeys: z.array(z.string().min(1, 'studentKey cannot be empty')).optional(),
+  notionStudentPageIds: z.array(z.string().regex(/^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i)).optional(),
   title: z.string().min(1, 'title is required'),
   startAt: z.string().min(1, 'startAt is required'),
   endAt: z.string().nullable().optional(),
@@ -235,7 +239,7 @@ export const NotionScheduleWebhookSchema = z.object({
   status: z.enum(['예정', '완료', '취소']).catch('예정'),
   notice: z.string().nullable().optional(),
   sourceUpdatedAt: z.string().optional(),
-});
+}).refine(data => data.notionStudentPageIds !== undefined || (data.studentKeys?.length || 0) > 0, { message: 'Student page IDs are required.' });
 
 export type NotionScheduleWebhookPayload = z.infer<typeof NotionScheduleWebhookSchema>;
 
@@ -257,6 +261,7 @@ export interface StoredStudentSchedule {
   sourceUpdatedAt: string;
   serverReceivedAt: string;
   serverUpdatedAt: string;
+  completedAt?: string | null;
 }
 
 /**
@@ -271,4 +276,5 @@ export interface StudentScheduleDTO {
   scheduleType: string;
   status: '예정' | '완료' | '취소';
   notice: string | null;
+  completedAt?: string | null;
 }

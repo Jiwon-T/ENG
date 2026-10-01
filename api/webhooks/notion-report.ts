@@ -3,11 +3,11 @@ import { parseJsonBody, sendJson } from '../_lib/http.js';
 import {
   NotionReportWebhookSchema,
   type StoredLessonReport,
-  type StoredNotionStudentMapping,
 } from '../_lib/reportSchemas.js';
 import { lookupStudentByPageId } from '../_lib/notion.js';
-import { generateInternalStudentId, hashStudentKey, getSecretOrThrow } from '../_lib/security.js';
+import { getSecretOrThrow } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
+import { migrateStudentMapping } from '../_lib/studentIdentity.js';
 import { extractAssignmentFromFeedback } from '../_lib/assignmentExtractor.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
@@ -49,51 +49,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const data = parsed.data;
     const { db } = getFirebaseAdmin();
 
-    const studentKeyHash = hashStudentKey(data.studentKey);
-    const notionMappingDocRef = db.collection('notionStudentMappings').doc(studentKeyHash);
-    const mappingSnap = await notionMappingDocRef.get();
-
-    let internalStudentId: string;
-
-    if (mappingSnap.exists) {
-      const mapping = mappingSnap.data() as StoredNotionStudentMapping;
-      const expectedInternalStudentId = generateInternalStudentId(data.notionStudentPageId);
-      if (mapping.internalStudentId !== expectedInternalStudentId) {
-        return sendJson(res, 409, {
-          ok: false,
-          error: 'STUDENT_ID_MISMATCH',
-          message: '학생 ID 관계와 기존 학생 매핑이 일치하지 않습니다.',
-        });
-      }
-      internalStudentId = mapping.internalStudentId;
-    } else {
-      // 이름 검색 대신 원본 일지의 `학생 ID` 관계가 가리키는 학생 페이지를 직접 검증한다.
-      let notionLookup;
-      try {
-        notionLookup = await lookupStudentByPageId(data.notionStudentPageId, data.studentKey);
-      } catch (notionErr: any) {
-        return sendJson(res, 422, {
-          ok: false,
-          error: 'STUDENT_NOT_FOUND_IN_NOTION',
-          message: 'Notion [DB_학생 관리]에서 학생 정보를 찾을 수 없습니다.',
-        });
-      }
-
-      internalStudentId = generateInternalStudentId(data.notionStudentPageId);
-      const now = new Date().toISOString();
-
-      // 신규 Notion 매핑 생성 시 firebaseUid는 항상 null (관리자 명시적 연결 전 자동 지정 금지)
-      const newMapping: StoredNotionStudentMapping = {
-        internalStudentId,
-        studentKey: data.studentKey,
-        studentDisplayName: notionLookup.studentDisplayName,
-        notionStudentPageId: notionLookup.notionStudentPageId,
-        firebaseUid: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await notionMappingDocRef.set(newMapping);
+    // The student's relation page ID is the only identity; legacy display keys are ignored.
+    let notionLookup;
+    try {
+      notionLookup = await lookupStudentByPageId(data.notionStudentPageId, '', false);
+    } catch {
+      return sendJson(res, 422, { ok: false, error: 'STUDENT_NOT_FOUND_IN_NOTION' });
     }
+    const mapping = await migrateStudentMapping(db, notionLookup.notionStudentPageId, notionLookup.studentDisplayName);
+    const internalStudentId = mapping.internalStudentId;
 
     const now = new Date().toISOString();
     const docRef = db.collection('lessonReports').doc(data.notionPageId);
@@ -104,7 +68,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     // lessonReports 저장 시 Firebase UID가 아닌 internalStudentId를 학생 식별자로 저장
     const storedReport: StoredLessonReport = {
       notionPageId: data.notionPageId,
-      studentKey: data.studentKey,
+      studentKey: mapping.studentKey,
       internalStudentId,
       lessonDateStart: data.lessonDateStart,
       lessonDateEnd: data.lessonDateEnd || null,

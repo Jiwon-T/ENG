@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson, setCookie } from '../_lib/http.js';
 import { VerifyPinSchema, type StoredReportSlug } from '../_lib/reportSchemas.js';
 import { hashPin, timingSafeCompare } from '../_lib/security.js';
+import { lookupStudentIdentity } from '../_lib/studentIdentity.js';
 import { createParentSession } from '../_lib/session.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 
@@ -31,6 +32,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       status: 'success' | 'incorrect' | 'locked' | 'inactive' | 'not_found';
       remainingAttempts?: number;
       studentDisplayName?: string;
+      studentKey?: string;
       internalStudentId?: string;
       authVersion?: number;
     };
@@ -72,6 +74,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       t.update(docRef, { failedAttempts: 0, lockedUntil: null });
       return {
         status: 'success',
+        studentKey: record.studentKey,
         studentDisplayName: record.studentDisplayName || record.studentKey,
         internalStudentId: record.internalStudentId,
         authVersion: record.authVersion || 1,
@@ -98,6 +101,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         message: '보호자 전화번호 뒷자리가 일치하지 않습니다.',
       });
     }
+
+    // 이미 발급한 링크도 현재 Notion 제목을 사용합니다.
+    const currentStudent = await lookupStudentIdentity(db, verifyOutcome.studentKey!);
+    verifyOutcome.studentDisplayName = currentStudent.studentDisplayName;
 
     // 성공 시 authVersion과 internalStudentId를 포함하여 페이지 전용 세션 생성
     const { rawSessionToken } = await createParentSession({

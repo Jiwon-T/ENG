@@ -2,9 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { sendJson } from '../_lib/http.js';
 import { verifyAdminAuth } from '../_lib/auth.js';
 import { listNotionStudents } from '../_lib/notion.js';
-import { hashStudentKey } from '../_lib/security.js';
+import { migrateStudentMapping } from '../_lib/studentIdentity.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
-import type { StoredNotionStudentMapping } from '../_lib/reportSchemas.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
@@ -25,8 +24,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const { db } = getFirebaseAdmin();
     const notionStudents = await listNotionStudents();
     const students = await Promise.all(notionStudents.map(async student => {
-      const mappingSnap = await db.collection('notionStudentMappings').doc(hashStudentKey(student.studentKey)).get();
-      const mapping = mappingSnap.exists ? mappingSnap.data() as StoredNotionStudentMapping : null;
+      const mapping = await migrateStudentMapping(db, student.studentKey, student.studentDisplayName);
       let reportSlug: string | null = null;
       if (mapping?.internalStudentId) {
         const reportMapping = await db.collection('studentReportMappings').doc(mapping.internalStudentId).get();

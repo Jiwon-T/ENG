@@ -64,6 +64,7 @@ export interface StudentLessonReportDTO {
   vocabularyScore: number | null;
   schoolExamScore: number | null;
   assignmentContent: string | null;
+  assignmentCompleted?: boolean;
 }
 
 /**
@@ -96,6 +97,7 @@ export interface StudentScheduleDTO {
   scheduleType: string;
   status: '예정' | '완료' | '취소';
   notice: string | null;
+  completedAt?: string | null;
 }
 
 /**

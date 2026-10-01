@@ -94,9 +94,9 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
     errorMsg: string | null;
   }>({
     open: false,
-    studentKey: '테스트 (복제고1)',
-    studentName: '테스트 학생 (복제고1)',
-    reportSlug: 'bokjego1test',
+    studentKey: '',
+    studentName: '',
+    reportSlug: '',
     guardianStatus: 'idle',
     generatedUrl: null,
     copied: false,
@@ -104,12 +104,12 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
     errorMsg: null,
   });
 
-  const handleOpenReportSlugModal = async (studentKey: string = '테스트 (복제고1)', studentName: string = '테스트 학생 (복제고1)') => {
+  const handleOpenReportSlugModal = async (studentKey: string, studentName: string) => {
     setReportSlugModal({
       open: true,
       studentKey,
       studentName,
-      reportSlug: studentKey === '테스트 (복제고1)' ? 'bokjego1test' : '',
+      reportSlug: '',
       guardianStatus: 'checking',
       generatedUrl: null,
       copied: false,
@@ -404,7 +404,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                     {filteredNotionStudents.map(student => (
                       <div key={student.studentKey} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="font-bold text-sm text-slate-900 truncate">{student.studentKey}</p>
+                          <p className="font-bold text-sm text-slate-900 truncate">{student.studentDisplayName}</p>
                           <p className="text-[11px] text-slate-500 mt-1">
                             {student.reportSlug ? `jiwont.kr/${student.reportSlug}` : '학부모 링크 미발급'} · {student.linkedFirebaseUid ? '학생 계정 연결됨' : '앱 계정 없음/미연결'}
                           </p>
@@ -444,7 +444,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                         <label className="font-bold text-slate-700 block mb-1">대상 수강생</label>
                         <input
                           type="text"
-                          value={`${reportSlugModal.studentName} (${reportSlugModal.studentKey})`}
+                          value={reportSlugModal.studentName}
                           readOnly
                           className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2.5 font-medium text-slate-700"
                         />
@@ -748,7 +748,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                             </button>
                             {isSuperAdmin && student.role === 'student' && (
                               <select
-                                value={student.notionStudentKey || ''}
+                                value={notionStudents.find(item => item.linkedFirebaseUid === student.uid)?.studentKey || student.notionStudentKey || ''}
                                 disabled={linkingStudentUid === student.uid}
                                 onChange={(e) => handleLinkStudentAccount(student.uid, e.target.value)}
                                 className="max-w-40 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[11px] font-semibold text-slate-600"
@@ -757,7 +757,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                                 <option value="">Notion 학생 연결</option>
                                 {notionStudents.map(item => (
                                   <option key={item.studentKey} value={item.studentKey} disabled={!!item.linkedFirebaseUid && item.linkedFirebaseUid !== student.uid}>
-                                    {item.studentKey}{item.linkedFirebaseUid === student.uid ? ' (연결됨)' : ''}
+                                    {item.studentDisplayName}{item.linkedFirebaseUid === student.uid ? ' (연결됨)' : ''}
                                   </option>
                                 ))}
                               </select>

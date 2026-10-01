@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { sendJson } from '../_lib/http.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
-import type { StudentScheduleDTO, StoredStudentSchedule, StoredNotionStudentMapping } from '../_lib/reportSchemas.js';
-import { hashStudentKey } from '../_lib/security.js';
+import type { StudentScheduleDTO, StoredStudentSchedule } from '../_lib/reportSchemas.js';
+import { readStudentMapping } from '../_lib/studentIdentity.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
@@ -51,10 +51,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     // 2) notionStudentMappings에서 관리자 승인 매핑 검증
-    const studentKeyHash = hashStudentKey(notionStudentKey);
-    const mappingDoc = await db.collection('notionStudentMappings').doc(studentKeyHash).get();
+    const mappingData = await readStudentMapping(db, notionStudentKey);
 
-    if (!mappingDoc.exists) {
+    if (!mappingData) {
       return sendJson(res, 403, {
         ok: false,
         error: 'STUDENT_REPORT_NOT_LINKED',
@@ -62,7 +61,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       });
     }
 
-    const mappingData = mappingDoc.data() as StoredNotionStudentMapping;
 
     // 3) 엄격한 보안 검증: mappingData.firebaseUid === studentUid
     if (!mappingData.firebaseUid || mappingData.firebaseUid !== studentUid) {
@@ -101,6 +99,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       scheduleType: s.scheduleType,
       status: s.status,
       notice: s.notice,
+      completedAt: s.status === '완료' ? s.completedAt || s.serverUpdatedAt || s.endAt || s.startAt : null,
     }));
 
     return sendJson(res, 200, {

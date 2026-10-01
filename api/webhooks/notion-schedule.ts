@@ -3,10 +3,9 @@ import { parseJsonBody, sendJson } from '../_lib/http.js';
 import {
   NotionScheduleWebhookSchema,
   type StoredStudentSchedule,
-  type StoredNotionStudentMapping,
 } from '../_lib/reportSchemas.js';
-import { lookupStudentAndGuardianContact } from '../_lib/notion.js';
-import { generateInternalStudentId, hashStudentKey, getSecretOrThrow } from '../_lib/security.js';
+import { lookupStudentIdentity, migrateStudentMapping } from '../_lib/studentIdentity.js';
+import { getSecretOrThrow } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 import crypto from 'crypto';
 
@@ -61,8 +60,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const sourceUpdatedAt = data.sourceUpdatedAt || now;
 
     // 3) 중복 studentKey 제거 및 정규화
-    const uniqueStudentKeys = Array.from(new Set(data.studentKeys.map(k => k.trim()))).filter(Boolean);
-    if (uniqueStudentKeys.length === 0) {
+    const identities = data.notionStudentPageIds ?? data.studentKeys ?? [];
+    const uniqueStudentKeys = Array.from(new Set(identities.map(k => k.trim()))).filter(Boolean);
+    if (uniqueStudentKeys.length === 0 && data.notionStudentPageIds === undefined) {
       return sendJson(res, 400, {
         ok: false,
         error: 'EMPTY_STUDENT_KEYS',
@@ -77,38 +77,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const unresolvableKeys: string[] = [];
 
     for (const key of uniqueStudentKeys) {
-      const studentKeyHash = hashStudentKey(key);
-      const mappingRef = db.collection('notionStudentMappings').doc(studentKeyHash);
-      const mappingSnap = await mappingRef.get();
-
-      if (mappingSnap.exists) {
-        const mapping = mappingSnap.data() as StoredNotionStudentMapping;
-        resolvedStudents.push({
-          studentKey: key,
-          internalStudentId: mapping.internalStudentId,
-        });
-      } else {
-        // Notion DB_학생 관리에서 학생 정보 조회
-        try {
-          const notionLookup = await lookupStudentAndGuardianContact(key);
-          const internalStudentId = generateInternalStudentId(notionLookup.notionStudentPageId);
-          const newMapping: StoredNotionStudentMapping = {
-            internalStudentId,
-            studentKey: key,
-            studentDisplayName: notionLookup.studentDisplayName,
-            notionStudentPageId: notionLookup.notionStudentPageId,
-            firebaseUid: null,
-            createdAt: now,
-            updatedAt: now,
-          };
-          await mappingRef.set(newMapping);
-          resolvedStudents.push({
-            studentKey: key,
-            internalStudentId,
-          });
-        } catch {
-          unresolvableKeys.push(key);
-        }
+      try {
+        const student = await lookupStudentIdentity(db, key, false);
+        const mapping = await migrateStudentMapping(db, student.notionStudentPageId, student.studentDisplayName);
+        resolvedStudents.push({ studentKey: mapping.studentKey, internalStudentId: mapping.internalStudentId });
+      } catch {
+        unresolvableKeys.push(key);
       }
     }
 
@@ -165,6 +139,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         endAt: data.endAt || null,
         scheduleType: data.scheduleType || '정규 수업',
         status: data.status,
+        completedAt: data.status === '완료'
+          ? (existingSchedule?.status === '완료'
+            ? existingSchedule.completedAt || existingSchedule.serverUpdatedAt || now
+            : now)
+          : null,
         notice: data.notice || null,
         sourceUpdatedAt,
         serverReceivedAt: existingSchedule?.serverReceivedAt || now,

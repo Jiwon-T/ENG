@@ -6,8 +6,9 @@ import {
   UnlinkStudentAccountSchema,
   type StoredNotionStudentMapping,
 } from '../_lib/reportSchemas.js';
-import { lookupStudentAndGuardianContact } from '../_lib/notion.js';
-import { generateInternalStudentId, hashStudentKey } from '../_lib/security.js';
+import { lookupStudentIdentity, migrateStudentMapping, readStudentMapping } from '../_lib/studentIdentity.js';
+import { hashStudentKey } from '../_lib/security.js';
+import { normalizeNotionPageId } from '../_lib/notionPageId.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 
 /**
@@ -56,10 +57,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
         let mappingData: StoredNotionStudentMapping | null = null;
         if (currentKey) {
-          const mapSnap = await db.collection('notionStudentMappings').doc(hashStudentKey(currentKey)).get();
-          if (mapSnap.exists) {
-            mappingData = mapSnap.data() as StoredNotionStudentMapping;
-          }
+          mappingData = await readStudentMapping(db, currentKey);
         }
 
         return sendJson(res, 200, {
@@ -74,11 +72,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       }
 
       if (studentKey) {
-        const mapSnap = await db.collection('notionStudentMappings').doc(hashStudentKey(studentKey)).get();
-        if (!mapSnap.exists) {
+        const mappingData = await readStudentMapping(db, studentKey);
+        if (!mappingData) {
           return sendJson(res, 200, { ok: true, studentKey, isLinked: false, firebaseUid: null });
         }
-        const mappingData = mapSnap.data() as StoredNotionStudentMapping;
         return sendJson(res, 200, {
           ok: true,
           studentKey,
@@ -103,7 +100,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         });
       }
 
-      const { firebaseUid, studentKey } = parsed.data;
+      const { firebaseUid } = parsed.data;
+      let studentKey = parsed.data.studentKey;
 
       // 1) 대상 Firebase 사용자 문서 존재 및 역할 확인 (오직 student만 가능)
       const userRef = db.collection('users').doc(firebaseUid);
@@ -128,7 +126,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       // 2) Notion DB_학생 관리에서 학생이 정확히 1명 존재하는지 검증
       let notionLookup;
       try {
-        notionLookup = await lookupStudentAndGuardianContact(studentKey);
+        notionLookup = await lookupStudentIdentity(db, studentKey, false);
       } catch (notionErr: any) {
         if (notionErr.message === 'STUDENT_NOT_FOUND') {
           return sendJson(res, 404, {
@@ -147,7 +145,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         throw notionErr;
       }
 
-      const internalStudentId = generateInternalStudentId(notionLookup.notionStudentPageId);
+      const existingIdentity = await migrateStudentMapping(db, notionLookup.notionStudentPageId, notionLookup.studentDisplayName);
+      studentKey = existingIdentity.studentKey;
+      const internalStudentId = existingIdentity.internalStudentId;
       const studentKeyHash = hashStudentKey(studentKey);
       const mappingRef = db.collection('notionStudentMappings').doc(studentKeyHash);
 
@@ -166,8 +166,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         const currentData = currentUserSnap.data();
         if (currentData?.notionStudentKey && currentData.notionStudentKey !== studentKey) {
           // 기존에 연결된 이전 매핑이 있다면 이전 매핑의 firebaseUid를 해제
-          const prevMappingRef = db.collection('notionStudentMappings').doc(hashStudentKey(currentData.notionStudentKey));
-          const prevMappingSnap = await t.get(prevMappingRef);
+          let prevMappingRef = db.collection('notionStudentMappings').doc(hashStudentKey(currentData.notionStudentKey));
+          let prevMappingSnap = await t.get(prevMappingRef);
+          if (prevMappingSnap.exists && prevMappingSnap.data()?.notionStudentPageId) {
+            const canonicalRef = db.collection('notionStudentMappings').doc(hashStudentKey(normalizeNotionPageId(prevMappingSnap.data()!.notionStudentPageId)));
+            const canonicalSnap = await t.get(canonicalRef);
+            if (canonicalSnap.exists) { prevMappingRef = canonicalRef; prevMappingSnap = canonicalSnap; }
+          }
           if (prevMappingSnap.exists && prevMappingSnap.data()?.firebaseUid === firebaseUid) {
             t.update(prevMappingRef, { firebaseUid: null, updatedAt: now });
           }
@@ -244,8 +249,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         const currentKey = currentData?.notionStudentKey;
 
         if (currentKey) {
-          const mappingRef = db.collection('notionStudentMappings').doc(hashStudentKey(currentKey));
-          const mappingSnap = await t.get(mappingRef);
+          let mappingRef = db.collection('notionStudentMappings').doc(hashStudentKey(currentKey));
+          let mappingSnap = await t.get(mappingRef);
+          if (mappingSnap.exists && mappingSnap.data()?.notionStudentPageId) {
+            const canonicalRef = db.collection('notionStudentMappings').doc(hashStudentKey(normalizeNotionPageId(mappingSnap.data()!.notionStudentPageId)));
+            const canonicalSnap = await t.get(canonicalRef);
+            if (canonicalSnap.exists) { mappingRef = canonicalRef; mappingSnap = canonicalSnap; }
+          }
           if (mappingSnap.exists) {
             const mdata = mappingSnap.data() as StoredNotionStudentMapping;
             if (mdata.firebaseUid === firebaseUid) {

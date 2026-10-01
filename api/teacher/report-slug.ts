@@ -10,8 +10,8 @@ import {
   type StudentReportMapping,
   type StoredNotionStudentMapping,
 } from '../_lib/reportSchemas.js';
-import { lookupStudentAndGuardianContact } from '../_lib/notion.js';
-import { generateInternalStudentId, hashStudentKey } from '../_lib/security.js';
+import { lookupStudentIdentity, migrateStudentMapping } from '../_lib/studentIdentity.js';
+import { hashStudentKey } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
@@ -43,17 +43,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       }
 
       try {
+        const page = await lookupStudentIdentity(db, studentKey, false);
+        const mapping = await migrateStudentMapping(db, page.notionStudentPageId, page.studentDisplayName);
         const snap = await db.collection('reportSlugs')
-          .where('studentKey', '==', studentKey)
-          .where('active', '==', true)
-          .limit(1)
+          .where('internalStudentId', '==', mapping.internalStudentId)
           .get();
 
-        if (snap.empty) {
+        const activeDocument = snap.docs.find(doc => doc.data().active === true);
+        if (!activeDocument) {
           return sendJson(res, 200, { ok: true, reportSlug: null });
         }
 
-        const current = snap.docs[0].data() as StoredReportSlug;
+        const current = activeDocument.data() as StoredReportSlug;
         return sendJson(res, 200, {
           ok: true,
           reportSlug: current.reportSlug,
@@ -80,7 +81,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         });
       }
 
-      const { reportSlug, studentKey } = parsed.data;
+      const { reportSlug } = parsed.data;
+      let studentKey = parsed.data.studentKey;
 
       if (isReservedSlug(reportSlug)) {
         return sendJson(res, 400, {
@@ -93,7 +95,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       // 1) Notion DB_학생 관리에서 학생 및 보호자 연락처, Notion Page ID 조회
       let notionLookup;
       try {
-        notionLookup = await lookupStudentAndGuardianContact(studentKey);
+        notionLookup = await lookupStudentIdentity(db, studentKey);
       } catch (notionErr: any) {
         if (notionErr.message === 'STUDENT_NOT_FOUND') {
           return sendJson(res, 404, {
@@ -123,7 +125,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       }
 
       // 2) Notion 학생 페이지 ID로부터 안정적인 internalStudentId 생성
-      const internalStudentId = generateInternalStudentId(notionLookup.notionStudentPageId);
+      const existingIdentity = await migrateStudentMapping(db, notionLookup.notionStudentPageId, notionLookup.studentDisplayName);
+      studentKey = existingIdentity.studentKey;
+      const internalStudentId = existingIdentity.internalStudentId;
       const studentKeyHash = hashStudentKey(studentKey);
 
       const targetDocRef = db.collection('reportSlugs').doc(reportSlug);

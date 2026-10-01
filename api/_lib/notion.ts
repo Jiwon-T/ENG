@@ -1,4 +1,5 @@
 import { hashPin } from './security.js';
+import { normalizeNotionPageId } from './notionPageId.js';
 
 export interface NotionStudentLookupResult {
   notionStudentPageId: string;
@@ -14,15 +15,16 @@ export interface NotionStudentListItem {
   enrollmentStatus: string;
 }
 
+function studentTitle(props: any): string {
+  const title = props['학생'] || props['학생 이름'] || props['이름 및 일지']
+    || Object.values(props).find((property: any) => property.type === 'title');
+  return (title?.title || []).map((part: any) => part.plain_text ?? part.text?.content ?? '').join('');
+}
+
 function getStudentKeyAndName(page: any): Omit<NotionStudentListItem, 'hasGuardianContact' | 'enrollmentStatus'> {
   const props = page.properties || {};
-  const studentKey =
-    props['원본 구분명']?.rich_text?.[0]?.plain_text ||
-    props['이름 및 일지']?.title?.[0]?.plain_text ||
-    '';
-  const studentDisplayName =
-    props['학생 호칭']?.rich_text?.[0]?.plain_text ||
-    studentKey;
+  const studentKey = normalizeNotionPageId(page.id);
+  const studentDisplayName = studentTitle(props) || '학생';
 
   return { studentKey, studentDisplayName };
 }
@@ -31,7 +33,7 @@ export async function listNotionStudents(): Promise<NotionStudentListItem[]> {
   const token = process.env.NOTION_INTEGRATION_TOKEN;
   const dbId = process.env.NOTION_STUDENT_DATABASE_ID;
   if (!token || !dbId) {
-    throw new Error('CONFIG_ERROR: Required Notion configuration is missing.');
+    throw new Error('CONFIG_ERROR: NOTION_INTEGRATION_TOKEN and NOTION_STUDENT_DATABASE_ID are required.');
   }
 
   const students: NotionStudentListItem[] = [];
@@ -64,47 +66,40 @@ export async function listNotionStudents(): Promise<NotionStudentListItem[]> {
     cursor = data.has_more ? data.next_cursor : undefined;
   } while (cursor);
 
-  return students.sort((a, b) => a.studentKey.localeCompare(b.studentKey, 'ko'));
+  return students.sort((a, b) => a.studentDisplayName.localeCompare(b.studentDisplayName, 'ko'));
 }
 
-function parseStudentPage(page: any, fallbackStudentKey: string): NotionStudentLookupResult {
+function parseStudentPage(page: any, requireGuardianContact: boolean): NotionStudentLookupResult {
   const props = page.properties || {};
   const rawParentPhone = props['보호자연락처']?.phone_number || '';
   const digitsOnly = rawParentPhone.replace(/\D/g, '');
 
-  if (!digitsOnly || digitsOnly.length < 9) {
+  if (requireGuardianContact && (!digitsOnly || digitsOnly.length < 9)) {
     throw new Error('GUARDIAN_CONTACT_MISSING_OR_INVALID');
   }
 
-  const studentKey =
-    props['원본 구분명']?.rich_text?.[0]?.plain_text ||
-    props['이름 및 일지']?.title?.[0]?.plain_text ||
-    fallbackStudentKey;
-  const studentDisplayName =
-    props['학생 호칭']?.rich_text?.[0]?.plain_text ||
-    studentKey;
+  const studentKey = normalizeNotionPageId(page.id);
+  const studentDisplayName = studentTitle(props) || '학생';
 
   return {
-    notionStudentPageId: page.id,
+    notionStudentPageId: studentKey,
     studentKey,
     studentDisplayName,
-    parentPhonePinHash: hashPin(digitsOnly.slice(-4)),
+    parentPhonePinHash: digitsOnly.length >= 9 ? hashPin(digitsOnly.slice(-4)) : '',
   };
 }
 
 export async function lookupStudentByPageId(
   notionStudentPageId: string,
-  fallbackStudentKey = ''
+  _legacyKey = '',
+  requireGuardianContact = true
 ): Promise<NotionStudentLookupResult> {
   const token = process.env.NOTION_INTEGRATION_TOKEN;
   if (!token) {
     throw new Error('CONFIG_ERROR: NOTION_INTEGRATION_TOKEN is missing.');
   }
 
-  const normalizedPageId = notionStudentPageId.replace(/-/g, '');
-  if (!/^[0-9a-f]{32}$/i.test(normalizedPageId)) {
-    throw new Error('INVALID_NOTION_STUDENT_PAGE_ID');
-  }
+  const normalizedPageId = normalizeNotionPageId(notionStudentPageId);
 
   const res = await fetch(`https://api.notion.com/v1/pages/${normalizedPageId}`, {
     headers: {
@@ -115,53 +110,20 @@ export async function lookupStudentByPageId(
   if (!res.ok) {
     throw new Error(`NOTION_STUDENT_PAGE_LOOKUP_FAILED: ${res.status}`);
   }
-  return parseStudentPage(await res.json(), fallbackStudentKey);
-}
-
-export async function lookupStudentAndGuardianContact(studentKey: string): Promise<NotionStudentLookupResult> {
-  const token = process.env.NOTION_INTEGRATION_TOKEN;
+  const page = await res.json();
   const dbId = process.env.NOTION_STUDENT_DATABASE_ID;
-
-  // 두 환경변수 중 하나라도 없으면 즉시 설정 오류 (하드코딩 fallback 전면 금지)
-  if (!token || !dbId) {
-    throw new Error(
-      'CONFIG_ERROR: Required Notion configuration is missing. Both NOTION_INTEGRATION_TOKEN and NOTION_STUDENT_DATABASE_ID must be set.'
-    );
-  }
-
-  const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Notion-Version': '2022-06-28',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      filter: {
-        or: [
-          { property: '원본 구분명', rich_text: { equals: studentKey } },
-          { property: '이름 및 일지', title: { equals: studentKey } },
-        ],
-      },
-      page_size: 10,
-    }),
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`NOTION_QUERY_FAILED: ${res.status}`);
-  }
-
-  const data = await res.json();
-  const results = data.results || [];
-
-  if (results.length === 0) {
+  if (!dbId) throw new Error('CONFIG_ERROR: NOTION_STUDENT_DATABASE_ID is missing.');
+  if (page.archived || page.in_trash || !page.parent?.database_id
+    || normalizeNotionPageId(page.parent.database_id) !== normalizeNotionPageId(dbId)
+    || normalizeNotionPageId(page.id) !== normalizedPageId) {
     throw new Error('STUDENT_NOT_FOUND');
   }
+  return parseStudentPage(page, requireGuardianContact);
+}
 
-  if (results.length > 1) {
-    throw new Error('MULTIPLE_STUDENTS_MATCHED');
+export async function lookupStudentAndGuardianContact(studentPageId: string): Promise<NotionStudentLookupResult> {
+  if (!process.env.NOTION_INTEGRATION_TOKEN || !process.env.NOTION_STUDENT_DATABASE_ID) {
+    throw new Error('CONFIG_ERROR: NOTION_INTEGRATION_TOKEN and NOTION_STUDENT_DATABASE_ID are required.');
   }
-
-  return parseStudentPage(results[0], studentKey);
+  return lookupStudentByPageId(studentPageId);
 }

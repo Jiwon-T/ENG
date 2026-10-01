@@ -125,7 +125,7 @@ describe('Parent Report Date, Time, and Formatting Unit Tests', () => {
 
     // Labels check
     assert.ok(content.includes('수업 날짜'));
-    assert.ok(content.includes('배정 시간'));
+    assert.ok(!content.includes('>배정 시간<'), 'Assigned time must be hidden');
     assert.ok(content.includes('수업 시간'));
     assert.ok(!content.includes('실제 수업 시간'), '"실제 수업 시간" label must NOT appear');
     assert.ok(content.includes('수업 내용 및 피드백'));

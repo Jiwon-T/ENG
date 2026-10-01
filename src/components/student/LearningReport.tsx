@@ -4,6 +4,7 @@ import { BarChart3, TrendingUp, BookOpen, CheckCircle2, Clock, Calendar, Clipboa
 import { db, auth, handleFirestoreError, OperationType, markIncorrectAnswerReviewed } from '../../lib/firebase';
 import { PetService } from '../../lib/petService';
 import { collection, query, where, onSnapshot, doc, getDoc, orderBy, limit, updateDoc, getDocs } from 'firebase/firestore';
+import { visibleStudentSchedules } from '../../lib/studentReportLists';
 import { safeFetchJson } from '../../lib/safeFetchJson';
 import type { StudentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 
@@ -61,7 +62,19 @@ export default function LearningReport() {
     (currentLessonPage - 1) * LESSONS_PER_PAGE, currentLessonPage * LESSONS_PER_PAGE
   );
 
-  const ASSIGNMENTS_PER_PAGE = 5;
+  const ASSIGNMENTS_PER_PAGE = 1;
+  const [completingAssignment, setCompletingAssignment] = useState<string | null>(null);
+  const [schedulePage, setSchedulePage] = useState(1);
+  const [scheduleNow, setScheduleNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setScheduleNow(Date.now()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const visibleSchedules = visibleStudentSchedules(studentSchedules, scheduleNow);
+  const totalSchedulePages = Math.ceil(visibleSchedules.length / 2);
+  const currentSchedulePage = Math.min(schedulePage, Math.max(1, totalSchedulePages));
+  const paginatedSchedules = visibleSchedules.slice((currentSchedulePage - 1) * 2, currentSchedulePage * 2);
+  const pendingScheduleCount = studentSchedules.filter(schedule => schedule.status === '예정').length;
   const SESSIONS_PER_PAGE = 5;
   const WRONG_PER_PAGE = 5;
 
@@ -282,7 +295,7 @@ export default function LearningReport() {
   // 앱에서 등록한 과제와 수업일지의 마지막 `과제:` 구간을 하나의 목록으로 합친다.
   // 화면에는 출처를 노출하지 않지만 내부 키는 충돌하지 않도록 분리한다.
   const lessonAssignments = studentLessonReports
-    .filter(report => Boolean(report.assignmentContent?.trim()))
+    .filter(report => Boolean(report.assignmentContent?.trim()) && !report.assignmentCompleted)
     .map(report => ({
       id: `lesson-${report.reportId}`,
       content: report.assignmentContent as string,
@@ -290,15 +303,15 @@ export default function LearningReport() {
       isNew: false,
       isDone: false,
       isLessonAssignment: true,
-      homeworkStatus: report.homework || '미확인',
     }));
-  const combinedAssignments = [...stats.assignments, ...lessonAssignments].sort((a: any, b: any) => {
+  const combinedAssignments = [...stats.assignments, ...lessonAssignments].filter(item => !item.isDone).sort((a: any, b: any) => {
     const aTime = parseDisplayDate(a.createdAt)?.getTime() || 0;
     const bTime = parseDisplayDate(b.createdAt)?.getTime() || 0;
     return bTime - aTime;
   });
   const totalAssignmentPages = Math.ceil(combinedAssignments.length / ASSIGNMENTS_PER_PAGE);
-  const paginatedAssignments = combinedAssignments.slice((assignmentPage - 1) * ASSIGNMENTS_PER_PAGE, assignmentPage * ASSIGNMENTS_PER_PAGE);
+  const currentAssignmentPage = Math.min(assignmentPage, Math.max(1, totalAssignmentPages));
+  const paginatedAssignments = combinedAssignments.slice((currentAssignmentPage - 1) * ASSIGNMENTS_PER_PAGE, currentAssignmentPage * ASSIGNMENTS_PER_PAGE);
 
   const formatDayRange = (start?: any, end?: any, category?: string, wordbookType?: string, wordbookTitle?: string, wordbookId?: string) => {
     if (start === undefined || start === null || start === '') return null;
@@ -482,13 +495,30 @@ export default function LearningReport() {
     }, 1500);
   };
 
-  const toggleAssignmentDone = async (id: string, currentStatus: boolean) => {
+  const completeAssignment = async (item: any) => {
+    if (!auth.currentUser || completingAssignment) return;
+    if (!window.confirm('해당 과제가 완료 되었나요?')) return;
+    setCompletingAssignment(item.id);
     try {
-      await updateDoc(doc(db, 'assignments', id), {
-        isDone: !currentStatus
-      });
+      if (item.isLessonAssignment) {
+        const token = await auth.currentUser.getIdToken();
+        const reportId = item.id.slice('lesson-'.length);
+        const result = await safeFetchJson<{ ok: boolean; message?: string }>('/api/student/assignment-completion', {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reportId, assignmentContent: item.content }),
+        });
+        if (!result.ok) throw new Error(result.data?.message || '완료 상태를 저장하지 못했습니다. 다시 시도해 주세요.');
+        setStudentLessonReports(previous => previous.map(report => report.reportId === reportId
+          ? { ...report, assignmentCompleted: true } : report));
+      } else {
+        await updateDoc(doc(db, 'assignments', item.id), { isDone: true });
+      }
+      setAssignmentPage(1);
     } catch (error) {
-      console.error('Failed to update assignment status:', error);
+      alert(error instanceof Error ? error.message : '완료 상태를 저장하지 못했습니다. 다시 시도해 주세요.');
+    } finally {
+      setCompletingAssignment(null);
     }
   };
 
@@ -529,21 +559,11 @@ export default function LearningReport() {
                   {item.isNew && (
                     <span className="px-2 py-0.5 bg-blue-500 text-white text-[10px] font-black rounded-md uppercase">New</span>
                   )}
-                  {item.isLessonAssignment ? (
-                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black bg-white text-slate-500 border border-slate-200">
-                      {item.homeworkStatus}
-                    </span>
-                  ) : <button
-                    onClick={() => toggleAssignmentDone(item.id, !!item.isDone)}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black transition-all ${
-                      item.isDone 
-                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' 
-                        : 'bg-white text-slate-400 border border-slate-200 hover:border-emerald-300 hover:text-emerald-500'
-                    }`}
-                  >
-                    <CheckCircle2 size={12} />
-                    {item.isDone ? '완료' : '미완료'}
-                  </button>}
+                  <button type="button" onClick={() => completeAssignment(item)} disabled={!!completingAssignment}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold bg-white text-emerald-600 border border-emerald-200 hover:bg-emerald-50 disabled:opacity-50">
+                    <CheckCircle2 size={14} />
+                    {completingAssignment === item.id ? '저장 중…' : '완료'}
+                  </button>
                 </div>
               </div>
               <p className={`text-slate-700 text-sm md:text-base font-medium leading-relaxed whitespace-pre-wrap ${item.isDone ? 'opacity-50 line-through' : ''}`}>
@@ -562,33 +582,13 @@ export default function LearningReport() {
           )}
 
           {totalAssignmentPages > 1 && (
-            <div className="flex justify-center items-center gap-4 pt-6">
-              <button
-                onClick={() => setAssignmentPage(prev => Math.max(1, prev - 1))}
-                disabled={assignmentPage === 1}
-                className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-all"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <div className="flex gap-2">
-                {Array.from({ length: totalAssignmentPages }).map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setAssignmentPage(i + 1)}
-                    className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${assignmentPage === i + 1 ? 'bg-blue-500 text-white shadow-lg shadow-blue-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => setAssignmentPage(prev => Math.min(totalAssignmentPages, prev + 1))}
-                disabled={assignmentPage === totalAssignmentPages}
-                className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-all"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
+            <nav aria-label="과제 페이지" className="flex justify-center items-center gap-4 pt-5">
+              <button type="button" aria-label="최근 과제" disabled={currentAssignmentPage === 1}
+                onClick={() => setAssignmentPage(currentAssignmentPage - 1)} className="p-3 rounded-xl hover:bg-slate-100 disabled:opacity-30"><ChevronLeft size={20} /></button>
+              <span className="text-sm font-semibold text-slate-600 tabular-nums">{currentAssignmentPage} / {totalAssignmentPages}</span>
+              <button type="button" aria-label="이전 과제" disabled={currentAssignmentPage === totalAssignmentPages}
+                onClick={() => setAssignmentPage(currentAssignmentPage + 1)} className="p-3 rounded-xl hover:bg-slate-100 disabled:opacity-30"><ChevronRight size={20} /></button>
+            </nav>
           )}
         </div>
       </div>
@@ -601,12 +601,12 @@ export default function LearningReport() {
             일정
           </h3>
           <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700">
-            {studentSchedules.length}개
+            예정 {pendingScheduleCount}개
           </span>
         </div>
-        {studentSchedules.length > 0 ? (
+        {visibleSchedules.length > 0 ? (
           <div className="space-y-3">
-            {studentSchedules.map(schedule => (
+            {paginatedSchedules.map(schedule => (
               <div key={schedule.scheduleId} className="p-4 md:p-5 rounded-2xl bg-slate-50 border border-slate-100">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -630,6 +630,15 @@ export default function LearningReport() {
             등록된 일정이 없습니다.
           </div>
         )}
+        {totalSchedulePages > 1 && (
+          <nav aria-label="일정 페이지" className="flex justify-center items-center gap-4 mt-5">
+            <button type="button" aria-label="이전 일정" disabled={currentSchedulePage === 1}
+              onClick={() => setSchedulePage(currentSchedulePage - 1)} className="p-3 rounded-xl hover:bg-slate-100 disabled:opacity-30"><ChevronLeft size={20} /></button>
+            <span className="text-sm font-semibold text-slate-600 tabular-nums">{currentSchedulePage} / {totalSchedulePages}</span>
+            <button type="button" aria-label="다음 일정" disabled={currentSchedulePage === totalSchedulePages}
+              onClick={() => setSchedulePage(currentSchedulePage + 1)} className="p-3 rounded-xl hover:bg-slate-100 disabled:opacity-30"><ChevronRight size={20} /></button>
+          </nav>
+        )}
       </div>
 
       {/* Offline lesson records: the server DTO excludes attitude, test evaluation and feedback. */}
@@ -640,9 +649,7 @@ export default function LearningReport() {
               <Trophy className="text-indigo-600" size={20} />
               수업 기록
             </h3>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
-              총 {studentLessonReports.length}회
-            </span>
+
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">

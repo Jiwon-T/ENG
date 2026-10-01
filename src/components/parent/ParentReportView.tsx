@@ -4,7 +4,6 @@ import { safeFetchJson } from '../../lib/safeFetchJson';
 import {
   formatReportDetailDate,
   formatReportListDate,
-  formatAssignedTime,
   sortReportsByDate,
   groupReportsByMonth,
   formatScheduleDateTime,
@@ -131,6 +130,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
   const [activeTab, setActiveTab] = useState<'reports' | 'schedules'>('reports');
   const [schedules, setSchedules] = useState<StudentScheduleDTO[]>([]);
   const [loadingSchedules, setLoadingSchedules] = useState(false);
+  const [scheduleLoadError, setScheduleLoadError] = useState(false);
 
   // 모바일·태블릿 화면 상태: 'list' (목록만 표시) | 'detail' (상세만 표시)
   // 1024px 미만 환경에서는 인증 직후 'list'로 시작합니다.
@@ -255,6 +255,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     const token = parentSessionRef.current;
     const epoch = authEpochRef.current;
     if (!token) return;
+    setLoadingReports(true);
     try {
       const res = await safeFetchJson<{
         ok: boolean;
@@ -279,15 +280,14 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
           setSelectedReport(sorted[0]);
         }
 
-        // 일정 데이터 병렬 조회
-        fetchSchedules();
+
       } else {
         setIsAuthenticated(false);
       }
     } catch {
       setIsAuthenticated(false);
     } finally {
-      setLoadingReports(false);
+      if (epoch === authEpochRef.current) setLoadingReports(false);
     }
   };
 
@@ -296,6 +296,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     const epoch = authEpochRef.current;
     if (!token) return;
     setLoadingSchedules(true);
+    setScheduleLoadError(false);
     try {
       const res = await safeFetchJson<{
         ok: boolean;
@@ -305,13 +306,15 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       });
       if (epoch !== authEpochRef.current) return;
 
-      if (res.ok && res.data?.schedules) {
+      if (res.ok && Array.isArray(res.data?.schedules)) {
         setSchedules(res.data.schedules);
+      } else {
+        setScheduleLoadError(true);
       }
     } catch {
-      // safe fallback
+      if (epoch === authEpochRef.current) setScheduleLoadError(true);
     } finally {
-      setLoadingSchedules(false);
+      if (epoch === authEpochRef.current) setLoadingSchedules(false);
     }
   };
 
@@ -347,13 +350,16 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
 
     if (res.ok && res.data?.sessionToken) {
       parentSessionRef.current = res.data.sessionToken;
+      // 인증 화면을 열기 전에 두 목록을 로딩 상태로 전환합니다.
+      setLoadingReports(true);
+      setLoadingSchedules(true);
       setIsAuthenticated(true);
       setStudentDisplayName(res.data.studentDisplayName || '');
       setPin('');
       // 인증 직후 모바일은 반드시 'list' 화면으로 시작
       setMobileView('list');
       setVisibleCount(PAGE_SIZE);
-      await checkExistingSession();
+      await Promise.all([checkExistingSession(), fetchSchedules()]);
     } else {
       if (res.data?.error === 'INVALID_OR_INACTIVE_REPORT') {
         setIsInvalidSlug(true);
@@ -568,7 +574,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
               열람 권한 인증 완료
             </span>
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 break-words leading-tight">
-              {studentDisplayName || '학생'} 수업 일지
+              {studentDisplayName || '학생'}
             </h2>
 
           </div>
@@ -611,8 +617,13 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
               </div>
 
               {loadingSchedules ? (
-                <div className="py-16 text-center text-slate-400 text-sm animate-pulse font-medium">
-                  일정 데이터를 불러오는 중입니다...
+                <div role="status" aria-live="polite" className="py-16 text-center text-slate-500 text-sm animate-pulse font-medium">
+                  일정을 불러오는 중입니다…
+                </div>
+              ) : scheduleLoadError ? (
+                <div role="status" className="py-12 text-center text-sm text-slate-500">
+                  <p>일정을 불러오지 못했습니다. 다시 시도해 주세요.</p>
+                  <button type="button" onClick={fetchSchedules} className="mt-3 px-4 py-2 rounded-xl bg-indigo-50 text-indigo-600 font-bold">다시 불러오기</button>
                 </div>
               ) : schedules.length === 0 ? (
                 <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
@@ -681,8 +692,8 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
               )}
             </div>
           ) : loadingReports ? (
-            <div className="py-20 text-center text-slate-400 text-sm animate-pulse font-medium">
-              리포트 데이터를 불러오는 중입니다...
+            <div role="status" aria-live="polite" className="py-20 text-center text-slate-500 text-sm animate-pulse font-medium">
+              수업 일지를 불러오는 중입니다…
             </div>
           ) : reports.length === 0 ? (
             <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
@@ -762,7 +773,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                                     </span>
                                   </div>
 
-                                  {/* 중간: 수업 시간 (lessonTime이 있을 때만 표시, 배정 시간은 상세 화면에서 확인) */}
+                                  {/* 중간: 수업 시간 (lessonTime이 있을 때만 표시) */}
                                   {actualTime && (
                                     <div className="text-xs text-indigo-950 font-medium truncate">
                                       <span className="text-indigo-600 font-bold mr-1">수업 시간</span>
@@ -857,16 +868,8 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                           </div>
                         </div>
 
-                        {/* 시간 영역 (배정 시간, 수업 시간, 자습 시간) */}
+                        {/* 시간 영역 (수업 시간, 자습 시간) */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                          {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd) && (
-                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
-                              <span className="text-[11px] font-bold text-slate-500 block mb-0.5">배정 시간</span>
-                              <span className="text-sm font-bold text-slate-800 break-words">
-                                {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd)}
-                              </span>
-                            </div>
-                          )}
 
                           {selectedReport.lessonTime && selectedReport.lessonTime.trim() && (
                             <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 min-w-0">
@@ -878,7 +881,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                           )}
 
                           {selectedReport.selfStudyTime && selectedReport.selfStudyTime.trim() && (
-                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0 sm:col-span-2">
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
                               <span className="text-[11px] font-bold text-slate-500 block mb-0.5">자습 시간</span>
                               <span className="text-sm font-bold text-slate-800 break-words">
                                 {selectedReport.selfStudyTime.trim()}
@@ -1109,16 +1112,8 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                         </div>
                       </div>
 
-                      {/* 시간 영역 (배정 시간, 수업 시간, 자습 시간) */}
+                      {/* 시간 영역 (수업 시간, 자습 시간) */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                        {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd) && (
-                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
-                            <span className="text-[11px] font-bold text-slate-500 block mb-0.5">배정 시간</span>
-                            <span className="text-sm font-bold text-slate-800 break-words">
-                              {formatAssignedTime(selectedReport.lessonDateStart, selectedReport.lessonDateEnd)}
-                            </span>
-                          </div>
-                        )}
 
                         {selectedReport.lessonTime && selectedReport.lessonTime.trim() && (
                           <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 min-w-0">
@@ -1130,7 +1125,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                         )}
 
                         {selectedReport.selfStudyTime && selectedReport.selfStudyTime.trim() && (
-                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0 sm:col-span-2">
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 min-w-0">
                             <span className="text-[11px] font-bold text-slate-500 block mb-0.5">자습 시간</span>
                             <span className="text-sm font-bold text-slate-800 break-words">
                               {selectedReport.selfStudyTime.trim()}
