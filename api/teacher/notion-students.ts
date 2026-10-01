@@ -52,7 +52,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   } catch (error) {
     const failure = studentDirectoryError(error);
     // Only allowlisted diagnostics: never log tokens, contacts, IDs or raw SDK messages.
-    console.error('STUDENT_DIRECTORY_FAILED', { diagnosticId, stage, code: failure.error, upstreamStatus: 'upstreamStatus' in failure ? failure.upstreamStatus : undefined });
-    return sendJson(res, 500, { ok: false, ...failure, diagnosticId });
+    console.error('STUDENT_DIRECTORY_FAILED', { diagnosticId, stage, code: failure.error, sdkCode: typeof (error as any)?.code === 'number' ? (error as any).code : undefined, upstreamStatus: 'upstreamStatus' in failure ? failure.upstreamStatus : undefined });
+    return sendJson(res, 500, { ok: false, ...failure, diagnosticId, failureStage: stage });
   }
 }
