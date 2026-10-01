@@ -62,7 +62,6 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
     const text = `${student.studentKey} ${student.studentDisplayName}`.toLocaleLowerCase('ko-KR').replace(/\s+/g, '');
     return matchesTab && text.includes(search);
   });
-  const [notionStudentsError, setNotionStudentsError] = useState('');
   const [notionStudentsLoading, setNotionStudentsLoading] = useState(false);
   const [linkingStudentUid, setLinkingStudentUid] = useState<string | null>(null);
 
@@ -203,24 +202,13 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
   const loadNotionStudents = async () => {
     if (!auth.currentUser || !isSuperAdmin) return;
     setNotionStudentsLoading(true);
-    setNotionStudentsError('');
-    try {
-      const idToken = await auth.currentUser.getIdToken();
-      const res = await safeFetchJson<{ ok: boolean; students: NotionStudentSummary[]; diagnosticId?: string }>(
-        '/api/teacher/notion-students',
-        { headers: { 'Authorization': `Bearer ${idToken}` }, cache: 'no-store' }
-      );
-      if (res.ok && Array.isArray(res.data?.students)) {
-        setNotionStudents(res.data.students);
-      } else {
-        const reference = res.data?.diagnosticId ? ` (확인 코드: ${res.data.diagnosticId})` : '';
-        setNotionStudentsError((res.userMessage || '학생 목록을 불러오지 못했습니다.') + reference);
-      }
-    } catch {
-      setNotionStudentsError('학생 목록을 불러오지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.');
-    } finally {
-      setNotionStudentsLoading(false);
-    }
+    const idToken = await auth.currentUser.getIdToken();
+    const res = await safeFetchJson<{ ok: boolean; students: NotionStudentSummary[] }>(
+      '/api/teacher/notion-students',
+      { headers: { 'Authorization': `Bearer ${idToken}` } }
+    );
+    if (res.ok && Array.isArray(res.data?.students)) setNotionStudents(res.data.students);
+    setNotionStudentsLoading(false);
   };
 
   const handleLinkStudentAccount = async (firebaseUid: string, studentKey: string) => {
@@ -379,7 +367,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                 </div>
 
                 <div className="text-xs font-semibold text-slate-500">
-                  Notion 학생 {notionStudentsLoading ? '불러오는 중…' : notionStudentsError ? '조회 실패' : `${notionStudents.length}명 연동 가능`}
+                  Notion 학생 {notionStudentsLoading ? '불러오는 중…' : `${notionStudents.length}명 연동 가능`}
                 </div>
               </div>
 
@@ -409,9 +397,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                         className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
                     </div>
                   </div>
-                  {notionStudentsError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-700">{notionStudentsError}{notionStudents.length > 0 && ' 마지막으로 불러온 목록을 표시하고 있습니다.'}</p>}
-                  {notionStudentsLoading && <p role="status" className="py-4 text-center text-sm text-slate-500">학생 목록을 불러오는 중…</p>}
-                  {!notionStudentsLoading && !notionStudentsError && filteredNotionStudents.length === 0 && (
+                  {!notionStudentsLoading && filteredNotionStudents.length === 0 && (
                     <p className="py-8 text-center text-sm text-slate-500">{notionStudentSearch.trim() ? '검색 결과가 없습니다.' : '해당하는 학생이 없습니다.'}</p>
                   )}
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">

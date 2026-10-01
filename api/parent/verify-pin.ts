@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson, setCookie } from '../_lib/http.js';
 import { VerifyPinSchema, type StoredReportSlug } from '../_lib/reportSchemas.js';
 import { hashPin, timingSafeCompare } from '../_lib/security.js';
-import { loadParentReportPage } from '../_lib/parentReportPage.js';
+import { lookupStudentIdentity } from '../_lib/studentIdentity.js';
 import { createParentSession } from '../_lib/session.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 
@@ -75,7 +75,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return {
         status: 'success',
         studentKey: record.studentKey,
-        studentDisplayName: record.studentDisplayName || '학생',
+        studentDisplayName: record.studentDisplayName || record.studentKey,
         internalStudentId: record.internalStudentId,
         authVersion: record.authVersion || 1,
       };
@@ -102,21 +102,17 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       });
     }
 
-    // PIN validation uses the saved name; Notion is never on the parent's login path.
-    // Prefetch reports while the session is persisted, after successful PIN validation only.
-    const [session, initialPage] = await Promise.all([
-      createParentSession({
-        reportSlug,
-        internalStudentId: verifyOutcome.internalStudentId!,
-        studentDisplayName: verifyOutcome.studentDisplayName!,
-        authVersion: verifyOutcome.authVersion || 1,
-      }),
-      loadParentReportPage(db, verifyOutcome.internalStudentId!).catch((err: any) => {
-        console.error('PARENT_REPORT_PREFETCH_FAILED', { code: err.code === 9 ? 'FIRESTORE_INDEX_REQUIRED' : 'QUERY_FAILED' });
-        return null;
-      }),
-    ]);
-    const { rawSessionToken } = session;
+    // 이미 발급한 링크도 현재 Notion 제목을 사용합니다.
+    const currentStudent = await lookupStudentIdentity(db, verifyOutcome.studentKey!);
+    verifyOutcome.studentDisplayName = currentStudent.studentDisplayName;
+
+    // 성공 시 authVersion과 internalStudentId를 포함하여 페이지 전용 세션 생성
+    const { rawSessionToken } = await createParentSession({
+      reportSlug,
+      internalStudentId: verifyOutcome.internalStudentId!,
+      studentDisplayName: verifyOutcome.studentDisplayName!,
+      authVersion: verifyOutcome.authVersion || 1,
+    });
 
     setCookie(res, 'parent_session', '', {
       maxAgeSeconds: 0,
@@ -131,7 +127,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       ok: true,
       sessionToken: rawSessionToken,
       reportSlug,
-      initialPage,
       studentDisplayName: verifyOutcome.studentDisplayName,
     });
   } catch (err: any) {

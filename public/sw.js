@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edu-manager-v13';
+const CACHE_NAME = 'edu-manager-v12';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -25,8 +25,6 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Authenticated API requests must reach the server without cache fallback.
-  if (new URL(event.request.url).pathname.startsWith('/api/')) return;
   // Use Network First strategy for all requests to ensure updates are reflected
   event.respondWith(
     fetch(event.request)

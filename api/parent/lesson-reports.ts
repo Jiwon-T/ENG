@@ -3,7 +3,7 @@ import { sendJson } from '../_lib/http.js';
 import { getVerifiedParentSession } from '../_lib/session.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 import type { ParentLessonReportDTO, StoredLessonReport } from '../_lib/reportSchemas.js';
-import { loadParentReportPage } from '../_lib/parentReportPage.js';
+import crypto from 'crypto';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
@@ -38,7 +38,33 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     const { db } = getFirebaseAdmin();
-    const page = await loadParentReportPage(db, session.internalStudentId, url.searchParams.get('cursor'));
+    // internalStudentId 기준으로 수업 일지 조회
+    const reportsSnap = await db.collection('lessonReports')
+      .where('internalStudentId', '==', session.internalStudentId)
+      .get();
+
+    const storedReports: StoredLessonReport[] = [];
+    reportsSnap.forEach(d => storedReports.push(d.data() as StoredLessonReport));
+
+    // 최신 수업순 정렬
+    storedReports.sort((a, b) => new Date(b.lessonDateStart).getTime() - new Date(a.lessonDateStart).getTime());
+
+    // 학부모 전용 DTO 변환 (내부 notionPageId 원본 대신 안전한 해시 ID 전달)
+    const parentDTOs: ParentLessonReportDTO[] = storedReports.map(r => ({
+      reportId: crypto.createHash('sha256').update(r.notionPageId).digest('hex').slice(0, 16),
+      lessonDateStart: r.lessonDateStart,
+      lessonDateEnd: r.lessonDateEnd,
+      lessonTime: r.lessonTime,
+      selfStudyTime: r.selfStudyTime,
+      category: r.category,
+      attendance: r.attendance,
+      attitude: r.attitude,
+      homework: r.homework,
+      test: r.test,
+      vocabularyScore: r.vocabularyScore,
+      schoolExamScore: r.schoolExamScore,
+      feedback: r.feedback,
+    }));
 
     return sendJson(res, 200, {
       ok: true,
@@ -46,11 +72,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         // 내부 studentKey 및 Notion Page ID를 절대 노출하지 않고 학부모 표시명만 전달
         studentDisplayName: session.studentDisplayName,
       },
-      ...page,
+      reports: parentDTOs,
     });
   } catch (err: any) {
-    if (err.message === 'INVALID_REPORT_CURSOR') return sendJson(res, 400, { ok: false, error: 'INVALID_REPORT_CURSOR' });
-    console.error('PARENT_REPORT_QUERY_FAILED', { code: err.code === 9 ? 'FIRESTORE_INDEX_REQUIRED' : 'QUERY_FAILED' });
-    return sendJson(res, 500, { ok: false, error: err.code === 9 ? 'FIRESTORE_INDEX_REQUIRED' : 'SERVER_ERROR', message: '수업 일지를 불러오지 못했습니다. 다시 시도해 주세요.' });
+    return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });
   }
 }
