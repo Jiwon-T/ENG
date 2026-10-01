@@ -49,7 +49,6 @@ export const NotionReportWebhookSchema = z.object({
   schemaVersion: z.number().optional().default(1),
   notionPageId: z.string().min(1, 'notionPageId is required'),
   notionStudentPageId: z.string().min(1, 'notionStudentPageId is required'),
-  studentKey: z.string().min(1, 'studentKey is required'),
   studentKey: z.string().optional(),
   lessonDateStart: z.string().min(1, 'lessonDateStart is required'),
   lessonDateEnd: z.string().nullable().optional(),
