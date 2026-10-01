@@ -123,6 +123,9 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
   const [studentDisplayName, setStudentDisplayName] = useState('');
 
   const [loadingReports, setLoadingReports] = useState(false);
+  const [nextReportCursor, setNextReportCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [reportLoadError, setReportLoadError] = useState('');
   const [reports, setReports] = useState<ParentLessonReportDTO[]>([]);
   const [selectedReport, setSelectedReport] = useState<ParentLessonReportDTO | null>(null);
 
@@ -170,6 +173,9 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     authEpochRef.current += 1;
     parentSessionRef.current = null;
     setIsAuthenticated(false);
+    setLoadingMore(false);
+    setNextReportCursor(null);
+    setReportLoadError('');
     setReports([]);
     setSchedules([]);
     setSelectedReport(null);
@@ -199,6 +205,9 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       authEpochRef.current += 1;
       parentSessionRef.current = null;
       setIsAuthenticated(false);
+      setLoadingMore(false);
+      setNextReportCursor(null);
+      setReportLoadError('');
       setReports([]);
       setSchedules([]);
       setSelectedReport(null);
@@ -257,11 +266,13 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     const epoch = authEpochRef.current;
     if (!token) return;
     setLoadingReports(true);
+    setReportLoadError('');
     try {
       const res = await safeFetchJson<{
         ok: boolean;
         student?: { studentDisplayName: string };
         reports?: ParentLessonReportDTO[];
+        nextCursor?: string | null;
       }>(`/api/parent/lesson-reports?reportSlug=${encodeURIComponent(reportSlug)}`, {
         headers: { 'X-Parent-Session': token },
       });
@@ -275,6 +286,8 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
         const rawReports = res.data.reports || [];
         const sorted = sortReportsByDate(rawReports);
         setReports(sorted);
+        setNextReportCursor(res.data.nextCursor || null);
+        setReportLoadError('');
 
         // 데스크톱(>=1024px)에서는 최신 회차를 기본 선택, 모바일에서는 선택해두되 화면은 list 유지
         if (sorted.length > 0) {
@@ -283,10 +296,11 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
 
 
       } else {
-        setIsAuthenticated(false);
+        if (res.status === 401 || res.status === 403) setIsAuthenticated(false);
+        setReportLoadError(res.userMessage || '수업 일지를 불러오지 못했습니다.');
       }
     } catch {
-      setIsAuthenticated(false);
+      if (epoch === authEpochRef.current) setReportLoadError('수업 일지를 불러오지 못했습니다.');
     } finally {
       if (epoch === authEpochRef.current) setLoadingReports(false);
     }
@@ -334,6 +348,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       ok: boolean;
       studentDisplayName?: string;
       sessionToken?: string;
+      initialPage?: { reports: ParentLessonReportDTO[]; nextCursor: string | null } | null;
       remainingAttempts?: number;
       message?: string;
       error?: string;
@@ -360,7 +375,17 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
       // 인증 직후 모바일은 반드시 'list' 화면으로 시작
       setMobileView('list');
       setVisibleCount(PAGE_SIZE);
-      await Promise.all([checkExistingSession(), fetchSchedules()]);
+      if (res.data.initialPage) {
+        const initial = sortReportsByDate(res.data.initialPage.reports);
+        setReports(initial);
+        setNextReportCursor(res.data.initialPage.nextCursor);
+        setReportLoadError('');
+        setSelectedReport(initial[0] || null);
+        setLoadingReports(false);
+        await fetchSchedules();
+      } else {
+        await Promise.all([checkExistingSession(), fetchSchedules()]);
+      }
     } else {
       if (res.data?.error === 'INVALID_OR_INACTIVE_REPORT') {
         setIsInvalidSlug(true);
@@ -439,15 +464,35 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     return groupReportsByMonth(visibleReports);
   }, [visibleReports]);
 
-  const remainingCount = Math.max(0, reports.length - visibleCount);
-  const nextAddCount = Math.min(PAGE_SIZE, remainingCount);
 
-  const handleLoadMore = () => {
-    setVisibleCount((prev) => prev + PAGE_SIZE);
+  const handleLoadMore = async () => {
+    if (!nextReportCursor || loadingMore || !parentSessionRef.current) return;
+    const epoch = authEpochRef.current;
+    setLoadingMore(true);
+    setReportLoadError('');
+    try {
+      const response = await safeFetchJson<{ reports: ParentLessonReportDTO[]; nextCursor: string | null }>(
+        `/api/parent/lesson-reports?reportSlug=${encodeURIComponent(reportSlug)}&cursor=${encodeURIComponent(nextReportCursor)}`,
+        { headers: { 'X-Parent-Session': parentSessionRef.current }, cache: 'no-store' }
+      );
+      if (epoch !== authEpochRef.current) return;
+      if (!response.ok || !Array.isArray(response.data?.reports)) {
+        if (response.status === 401 || response.status === 403) setIsAuthenticated(false);
+        setReportLoadError(response.userMessage || '이전 기록을 불러오지 못했습니다.');
+        return;
+      }
+      const page = response.data;
+      setReports(previous => Array.from(new Map([...previous, ...page.reports].map(item => [item.reportId, item])).values()));
+      setNextReportCursor(page.nextCursor || null);
+      setVisibleCount(previous => previous + PAGE_SIZE);
+    } finally {
+      if (epoch === authEpochRef.current) setLoadingMore(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 pb-16 overflow-x-hidden">
+      {reportLoadError && reports.length > 0 && <p role="alert" className="p-4 text-center text-sm text-red-600">{reportLoadError}</p>}
       {/* 상단 헤더 */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -696,6 +741,8 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
             <div role="status" aria-live="polite" className="py-20 text-center text-slate-500 text-sm animate-pulse font-medium">
               수업 일지를 불러오는 중입니다…
             </div>
+          ) : reportLoadError && reports.length === 0 ? (
+            <div role="alert" className="p-6 text-center text-sm text-red-600">{reportLoadError}<button onClick={checkExistingSession} className="block mx-auto mt-3 font-bold">다시 불러오기</button></div>
           ) : reports.length === 0 ? (
             <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
               <p className="text-slate-500 text-sm font-medium">아직 등록된 수업 일지가 없습니다.</p>
@@ -815,14 +862,15 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                     </div>
 
                     {/* 10개씩 더 보기 버튼 */}
-                    {remainingCount > 0 && (
+                    {nextReportCursor && (
                       <div className="pt-2 text-center">
                         <button
                           type="button"
                           onClick={handleLoadMore}
+                          disabled={loadingMore}
                           className="w-full min-h-[44px] py-3 px-4 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 transition active:scale-[0.99] shadow-2xs"
                         >
-                          이전 수업 {nextAddCount}개 더 보기 (남은 기록 {remainingCount}개)
+                          {loadingMore ? '이전 수업을 불러오는 중…' : '이전 수업 더 보기'}
                         </button>
                       </div>
                     )}
@@ -1073,14 +1121,15 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                     ))}
 
                     {/* 10개씩 더 보기 버튼 */}
-                    {remainingCount > 0 && (
+                    {nextReportCursor && (
                       <div className="pt-2 text-center">
                         <button
                           type="button"
                           onClick={handleLoadMore}
+                          disabled={loadingMore}
                           className="w-full min-h-[44px] py-2.5 px-3 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 transition active:scale-[0.99] shadow-2xs"
                         >
-                          이전 수업 {nextAddCount}개 더 보기 (남은 기록 {remainingCount}개)
+                          {loadingMore ? '이전 수업을 불러오는 중…' : '이전 수업 더 보기'}
                         </button>
                       </div>
                     )}

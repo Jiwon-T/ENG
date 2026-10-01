@@ -2,10 +2,10 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { sendJson } from '../_lib/http.js';
 import { getVerifiedParentSession } from '../_lib/session.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
-import type { ParentLessonReportDTO, StoredLessonReport } from '../_lib/reportSchemas.js';
-import crypto from 'crypto';
+import { loadParentReportPage } from '../_lib/parentReportPage.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
+  const startedAt = performance.now();
   try {
     if (req.method !== 'GET') {
       res.setHeader('Allow', 'GET');
@@ -37,44 +37,22 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return sendJson(res, 403, { ok: false, error: 'SESSION_MISMATCH', message: '다른 학생의 주소에는 접근할 수 없습니다.' });
     }
 
+    const sessionVerifiedAt = performance.now();
     const { db } = getFirebaseAdmin();
-    // internalStudentId 기준으로 수업 일지 조회
-    const reportsSnap = await db.collection('lessonReports')
-      .where('internalStudentId', '==', session.internalStudentId)
-      .get();
+    const page = await loadParentReportPage(db, session.internalStudentId, url.searchParams.get('cursor'));
 
-    const storedReports: StoredLessonReport[] = [];
-    reportsSnap.forEach(d => storedReports.push(d.data() as StoredLessonReport));
-
-    // 최신 수업순 정렬
-    storedReports.sort((a, b) => new Date(b.lessonDateStart).getTime() - new Date(a.lessonDateStart).getTime());
-
-    // 학부모 전용 DTO 변환 (내부 notionPageId 원본 대신 안전한 해시 ID 전달)
-    const parentDTOs: ParentLessonReportDTO[] = storedReports.map(r => ({
-      reportId: crypto.createHash('sha256').update(r.notionPageId).digest('hex').slice(0, 16),
-      lessonDateStart: r.lessonDateStart,
-      lessonDateEnd: r.lessonDateEnd,
-      lessonTime: r.lessonTime,
-      selfStudyTime: r.selfStudyTime,
-      category: r.category,
-      attendance: r.attendance,
-      attitude: r.attitude,
-      homework: r.homework,
-      test: r.test,
-      vocabularyScore: r.vocabularyScore,
-      schoolExamScore: r.schoolExamScore,
-      feedback: r.feedback,
-    }));
-
+    res.setHeader('Server-Timing', `session;dur=${(sessionVerifiedAt - startedAt).toFixed(1)}, reports;dur=${(performance.now() - sessionVerifiedAt).toFixed(1)}`);
     return sendJson(res, 200, {
       ok: true,
       student: {
         // 내부 studentKey 및 Notion Page ID를 절대 노출하지 않고 학부모 표시명만 전달
         studentDisplayName: session.studentDisplayName,
       },
-      reports: parentDTOs,
+      ...page,
     });
   } catch (err: any) {
-    return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });
+    if (err.message === 'INVALID_REPORT_CURSOR') return sendJson(res, 400, { ok: false, error: 'INVALID_REPORT_CURSOR' });
+    console.error('PARENT_REPORT_QUERY_FAILED', { code: err.code === 9 ? 'FIRESTORE_INDEX_REQUIRED' : 'QUERY_FAILED' });
+    return sendJson(res, 500, { ok: false, error: err.code === 9 ? 'FIRESTORE_INDEX_REQUIRED' : 'SERVER_ERROR', message: '수업 일지를 불러오지 못했습니다. 다시 시도해 주세요.' });
   }
 }

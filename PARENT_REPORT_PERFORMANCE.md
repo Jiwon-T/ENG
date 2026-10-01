@@ -21,3 +21,19 @@ Firebase Console에서 현재 앱이 사용하는 이름 있는 Firestore 데이
 ## 확인
 PIN 오입력 및 잠금, 새로고침 후 PIN 재요구, 최초 10개 표시, 동시간 수업 기록의 더보기, 마지막 페이지 버튼 제거, 다른 학생 커서 거부를 확인하세요.
 실제 속도 개선 폭은 배포 후 PIN 및 목록 API 응답 시간을 비교해 측정하세요.
+
+## 이번 최신 코드에서 확인한 회귀
+- PIN 인증에 lookupStudentIdentity(Notion 실시간 조회)가 다시 들어갔습니다.
+- lesson-reports가 전체 일지를 조회하고 서버에서 정렬했습니다. 화면의 10개 더보기는 다운로드량을 줄이지 못했습니다.
+- 최신 일정 정렬 sortParentSchedules는 유지하며 위 두 경로만 복구했습니다.
+- 성공 PIN의 실패 횟수가 이미 0이고 잠금이 없으면 불필요한 문서 갱신을 생략합니다. 오입력 횟수와 잠금은 기존 트랜잭션으로 보호합니다.
+- 서비스 워커 v14는 API 요청을 가로채거나 캐시하지 않습니다.
+
+## 배포 후 속도 확인
+브라우저 개발자 도구 Network에서 verify-pin 응답의 Server-Timing 헤더를 확인하세요.
+pin은 입력 검증·Firestore PIN 트랜잭션, session_and_reports는 세션 저장·최신 10건 병렬 조회 시간입니다.
+lesson-reports의 session과 reports는 각각 세션 검증과 페이지 조회 시간입니다. 콜드 스타트와 네트워크 왕복은 이 수치 밖에서 추가됩니다.
+인증 응답에 initialPage가 있으면 첫 화면에서 lesson-reports 요청이 별도로 발생하지 않아야 합니다.
+실제 프로덕션 PIN 인증 속도는 이번 작업에서 측정하지 않았습니다. 서버 리전은 Firestore 위치를 모르므로 바꾸지 않았습니다.
+
+검증: 테스트 83개 통과, TypeScript 검사 및 프로덕션 빌드 통과.

@@ -2,11 +2,12 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson, setCookie } from '../_lib/http.js';
 import { VerifyPinSchema, type StoredReportSlug } from '../_lib/reportSchemas.js';
 import { hashPin, timingSafeCompare } from '../_lib/security.js';
-import { lookupStudentIdentity } from '../_lib/studentIdentity.js';
+import { loadParentReportPage } from '../_lib/parentReportPage.js';
 import { createParentSession } from '../_lib/session.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
+  const startedAt = performance.now();
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
@@ -71,11 +72,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       }
 
       // 성공 시 실패 카운트 리셋
-      t.update(docRef, { failedAttempts: 0, lockedUntil: null });
+      if (record.failedAttempts || record.lockedUntil) {
+        t.update(docRef, { failedAttempts: 0, lockedUntil: null });
+      }
       return {
         status: 'success',
         studentKey: record.studentKey,
-        studentDisplayName: record.studentDisplayName || record.studentKey,
+        studentDisplayName: record.studentDisplayName || '학생',
         internalStudentId: record.internalStudentId,
         authVersion: record.authVersion || 1,
       };
@@ -102,17 +105,23 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       });
     }
 
-    // 이미 발급한 링크도 현재 Notion 제목을 사용합니다.
-    const currentStudent = await lookupStudentIdentity(db, verifyOutcome.studentKey!);
-    verifyOutcome.studentDisplayName = currentStudent.studentDisplayName;
+    const pinVerifiedAt = performance.now();
 
-    // 성공 시 authVersion과 internalStudentId를 포함하여 페이지 전용 세션 생성
-    const { rawSessionToken } = await createParentSession({
-      reportSlug,
-      internalStudentId: verifyOutcome.internalStudentId!,
-      studentDisplayName: verifyOutcome.studentDisplayName!,
-      authVersion: verifyOutcome.authVersion || 1,
-    });
+    // PIN validation uses the saved name; Notion is never on the parent's login path.
+    // Prefetch reports while the session is persisted, after successful PIN validation only.
+    const [session, initialPage] = await Promise.all([
+      createParentSession({
+        reportSlug,
+        internalStudentId: verifyOutcome.internalStudentId!,
+        studentDisplayName: verifyOutcome.studentDisplayName!,
+        authVersion: verifyOutcome.authVersion || 1,
+      }),
+      loadParentReportPage(db, verifyOutcome.internalStudentId!).catch((err: any) => {
+        console.error('PARENT_REPORT_PREFETCH_FAILED', { code: err.code === 9 ? 'FIRESTORE_INDEX_REQUIRED' : 'QUERY_FAILED' });
+        return null;
+      }),
+    ]);
+    const { rawSessionToken } = session;
 
     setCookie(res, 'parent_session', '', {
       maxAgeSeconds: 0,
@@ -122,11 +131,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       sameSite: 'Lax',
     });
 
+    res.setHeader('Server-Timing', `pin;dur=${(pinVerifiedAt - startedAt).toFixed(1)}, session_and_reports;dur=${(performance.now() - pinVerifiedAt).toFixed(1)}`);
+
     // 내부 studentKey는 절대 노출하지 않고 학부모 화면 표시용 studentDisplayName만 전달
     return sendJson(res, 200, {
       ok: true,
       sessionToken: rawSessionToken,
       reportSlug,
+      initialPage,
       studentDisplayName: verifyOutcome.studentDisplayName,
     });
   } catch (err: any) {

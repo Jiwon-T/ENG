@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edu-manager-v12';
+const CACHE_NAME = 'edu-manager-v14';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -25,6 +25,9 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  // 인증 API는 서비스 워커나 오프라인 캐시를 거치지 않습니다.
+  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/')) return;
   // Use Network First strategy for all requests to ensure updates are reflected
   event.respondWith(
     fetch(event.request)

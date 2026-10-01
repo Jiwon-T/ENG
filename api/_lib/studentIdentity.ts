@@ -18,23 +18,6 @@ export async function readStudentMapping(db: Firestore, key: string): Promise<St
 }
 
 /** Legacy keys are resolved only through saved server mappings, never by a student name. */
-export async function readDirectoryStudentMapping(db: Firestore, pageId: string): Promise<StoredNotionStudentMapping | null> {
-  const key = normalizeNotionPageId(pageId);
-  const canonical = await readStudentMapping(db, key);
-  if (canonical) return canonical;
-  const legacy = await db.collection('notionStudentMappings')
-    .where('notionStudentPageId', 'in', [key, key.replace(/-/g, '')]).get();
-  const records = legacy.docs.map(doc => doc.data() as StoredNotionStudentMapping);
-  if (records.some(record => normalizeNotionPageId(record.notionStudentPageId) !== key)) {
-    throw new Error('STUDENT_ID_MISMATCH');
-  }
-  if (new Set(records.map(record => record.internalStudentId)).size > 1
-    || new Set(records.map(record => record.firebaseUid).filter(Boolean)).size > 1) {
-    throw new Error('STUDENT_MAPPING_CONFLICT');
-  }
-  return records.find(record => record.firebaseUid) || records[0] || null;
-}
-
 export async function resolveStudentPageId(db: Firestore, key: string): Promise<string> {
   if (isNotionPageId(key)) return normalizeNotionPageId(key);
   const mapping = await readStudentMapping(db, key);

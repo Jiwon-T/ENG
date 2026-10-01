@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Firestore } from 'firebase-admin/firestore';
-import { migrateStudentMapping, readStudentMapping, readDirectoryStudentMapping, resolveStudentPageId } from '../api/_lib/studentIdentity.ts';
+import { migrateStudentMapping, readStudentMapping, resolveStudentPageId } from '../api/_lib/studentIdentity.ts';
 import { normalizeNotionPageId } from '../api/_lib/notionPageId.ts';
 import { hashStudentKey } from '../api/_lib/security.ts';
 import { lookupStudentByPageId } from '../api/_lib/notion.ts';
@@ -18,9 +18,7 @@ function fakeDb(initial: Record<string, any>) {
   const db = {
     collection: (name: string) => ({
       doc: (id: string) => ({ path: `${name}/${id}`, id, get: async () => snapshot(`${name}/${id}`) }),
-      where: (field: string, operator: string, values: string[]) => ({ name, field, operator, values,
-        get: async () => ({ docs: [...records].filter(([path, data]) => path.startsWith(`${name}/`) && values.includes(data[field])).map(([path]) => snapshot(path)) }),
-      }),
+      where: (field: string, operator: string, values: string[]) => ({ name, field, operator, values }),
     }),
     runTransaction: async (callback: any) => {
       const writes: Array<[string, any]> = [];
@@ -45,35 +43,6 @@ function oldMapping(overrides = {}) {
   return { notionStudentPageId: pageId, studentKey: legacyKey, internalStudentId: 'existing-stable-id',
     studentDisplayName: legacyKey, firebaseUid: 'verified-account', linkedAt: 'original-link-date', createdAt: 'original-date', ...overrides };
 }
-
-test('directory reads legacy links without transactions or changes to saved records', async () => {
-  const { db, records } = fakeDb({ [`notionStudentMappings/${hashStudentKey(legacyKey)}`]: oldMapping() });
-  db.runTransaction = async () => { throw new Error('GET must not transact'); };
-  const before = JSON.stringify([...records]);
-  const result = await readDirectoryStudentMapping(db, pageId);
-  assert.equal(result?.internalStudentId, 'existing-stable-id');
-  assert.equal(result?.firebaseUid, 'verified-account');
-  assert.equal(JSON.stringify([...records]), before);
-  assert.equal(await readDirectoryStudentMapping(db, '3e90d0f1-c79a-8105-94c4-ff6f31f73224'), null);
-});
-
-test('directory canonical unlink remains authoritative over stale legacy owner', async () => {
-  const { db } = fakeDb({
-    [`notionStudentMappings/${hashStudentKey(legacyKey)}`]: oldMapping(),
-    [`notionStudentMappings/${hashStudentKey(pageId)}`]: oldMapping({ studentKey: pageId, firebaseUid: null }),
-  });
-  assert.equal((await readDirectoryStudentMapping(db, pageId))?.firebaseUid, null);
-});
-
-test('directory rejects conflicting legacy links without modifying them', async () => {
-  const { db, records } = fakeDb({
-    'notionStudentMappings/one': oldMapping(),
-    'notionStudentMappings/two': oldMapping({ firebaseUid: 'another-account' }),
-  });
-  const before = JSON.stringify([...records]);
-  await assert.rejects(readDirectoryStudentMapping(db, pageId), /STUDENT_MAPPING_CONFLICT/);
-  assert.equal(JSON.stringify([...records]), before);
-});
 
 test('migration preserves existing reports, parent URLs, completion ownership and explicit account link across renaming', async () => {
   const oldPath = `notionStudentMappings/${hashStudentKey(legacyKey)}`;
