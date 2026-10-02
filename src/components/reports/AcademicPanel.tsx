@@ -7,7 +7,7 @@ export default function AcademicPanel({ load, subject = '' }: { load: () => Prom
   const [data, setData] = useState<AcademicData | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [view, setView] = useState<ScoreView>('학교 내신');
+  const [view, setView] = useState<ScoreView>('학원 단어');
   const [metric, setMetric] = useState<'score' | 'percentile'>('score');
   const [hidden, setHidden] = useState<string[]>([]);
   const refresh = async () => { setLoading(true); setError(''); try { setData(await load()); } catch { setError('성적을 불러오지 못했습니다. 다시 시도해 주세요.'); } finally { setLoading(false); } };
