@@ -59,29 +59,23 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-export async function ensureUserDocExists(user: FirebaseUser, name?: string) {
+export async function ensureUserDocExists(user: FirebaseUser, name?: string, deferAttendance = false) {
   const userDocRef = doc(db, 'users', user.uid);
   const userDoc = await getDoc(userDocRef);
-  
   const isTeacherEmail = user.email === 'lizzieshere1@gmail.com';
-  const role = isTeacherEmail ? 'teacher' : 'student';
-
-  if (!userDoc.exists()) {
-    await setDoc(userDocRef, {
-      uid: user.uid,
-      email: user.email,
-      name: name || user.displayName || '사용자',
-      photoURL: user.photoURL,
-      role: role,
-      createdAt: Timestamp.now(),
-      isNameSet: !!name 
-    });
-  } else if (isTeacherEmail && userDoc.data().role !== 'teacher') {
+  let profile = userDoc.exists() ? userDoc.data() : {
+    uid: user.uid, email: user.email, name: name || user.displayName || '사용자',
+    photoURL: user.photoURL, role: isTeacherEmail ? 'teacher' : 'student',
+    createdAt: Timestamp.now(), isNameSet: !!name,
+  };
+  if (!userDoc.exists()) await setDoc(userDocRef, profile);
+  else if (isTeacherEmail && profile.role !== 'teacher') {
     await setDoc(userDocRef, { role: 'teacher' }, { merge: true });
+    profile = { ...profile, role: 'teacher' };
   }
-
-  // Record attendance for today
-  await recordAttendance(user.uid);
+  if (deferAttendance) void recordAttendance(user.uid);
+  else await recordAttendance(user.uid);
+  return profile;
 }
 
 export async function signUpWithEmail(email: string, password: string) {

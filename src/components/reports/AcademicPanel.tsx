@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { AcademicData } from '../../types/academic';
-import { SCORE_VIEWS, scoreRows, chartValue, type ScoreView } from '../../lib/academicChart';
+import { SCORE_VIEWS, scoreRows, chartValue, inScorePeriod, type ScorePeriod, type ScoreView } from '../../lib/academicChart';
 
 const COLORS: Record<string, string> = { 영어: '#e65d80', 수학: '#219b71', 국어: '#9364ce', 과학: '#db8a30', 한국사: '#3887ce' };
 export default function AcademicPanel({ load, subject = '' }: { load: () => Promise<AcademicData>; subject?: string }) {
@@ -10,16 +10,17 @@ export default function AcademicPanel({ load, subject = '' }: { load: () => Prom
   const [view, setView] = useState<ScoreView>('학원 단어');
   const viewLabel = view === '모의고사' ? '학력평가' : view;
   const [metric, setMetric] = useState<'score' | 'percentile'>('score');
+  const [period, setPeriod] = useState<ScorePeriod>('all');
   const [hidden, setHidden] = useState<string[]>([]);
   const [selectedPoint, setSelectedPoint] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ scope: '', page: 1 });
-  const scope = JSON.stringify([view, subject, [...hidden].sort()]);
+  const scope = JSON.stringify([view, subject, period, [...hidden].sort()]);
   if (pagination.scope !== scope) { setPagination({ scope, page: 1 }); setSelectedPoint(null); }
   const refresh = async () => { setLoading(true); setError(''); try { setData(await load()); } catch { setError('성적을 불러오지 못했습니다. 다시 시도해 주세요.'); } finally { setLoading(false); } };
   useEffect(() => { let live = true; setLoading(true); setData(null); setError(''); load().then(d => { if (live) setData(d); }).catch(() => { if (live) setError('성적을 불러오지 못했습니다. 다시 시도해 주세요.'); }).finally(() => { if (live) setLoading(false); }); return () => { live = false; }; }, [load]);
   const rows = data ? scoreRows(data, view).filter(r => !subject || r.subject === subject) : [];
   const subjects = [...new Set(rows.map(r => r.subject))];
-  const visible = rows.filter(r => !hidden.includes(r.subject));
+  const visible = rows.filter(r => !hidden.includes(r.subject) && inScorePeriod(r.date, period));
   const sortedRows = [...visible].sort((a, b) => {
     const dateA = Date.parse(a.date || '');
     const dateB = Date.parse(b.date || '');
@@ -47,6 +48,11 @@ export default function AcademicPanel({ load, subject = '' }: { load: () => Prom
   return <section className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 space-y-4 min-w-0">
     <div className="flex justify-between gap-2"><h3 className="font-black text-slate-900">성적 변화</h3><button type="button" onClick={refresh} disabled={loading} className="text-sm text-indigo-600">새로고침</button></div>
     <div role="tablist" aria-label="시험 종류" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">{SCORE_VIEWS.map(v => <button type="button" key={v} role="tab" aria-selected={view === v} onClick={() => { setView(v); setMetric('score'); setSelectedPoint(null); }} className={`px-3 py-2 rounded-xl text-sm ${view === v ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{v === '모의고사' ? '학력평가' : v}</button>)}</div>
+    <label className="flex items-center gap-2 text-sm text-slate-600">조회 기간
+      <select value={period} onChange={e => setPeriod(e.target.value as ScorePeriod)} className="min-h-[44px] border border-slate-200 rounded-lg px-3 bg-white">
+        <option value="3">최근 3개월</option><option value="6">최근 6개월</option><option value="all">전체</option>
+      </select>
+    </label>
     {view === '모의고사' && <label className="text-sm">표시 기준 <select value={metric} onChange={e => { setMetric(e.target.value as 'score' | 'percentile'); setSelectedPoint(null); }} className="border rounded-lg p-2"><option value="score">원점수</option><option value="percentile">백분위</option></select></label>}
     <div className="flex flex-wrap gap-2">{subjects.map(s => <button key={s} type="button" aria-pressed={!hidden.includes(s)} onClick={() => setHidden(prev => prev.includes(s) ? prev.filter(v => v !== s) : [...prev, s])} className={`px-3 py-1 rounded-full border text-sm ${hidden.includes(s) ? 'opacity-40' : ''}`} style={{ color: COLORS[s] || '#64748b' }}>{s}</button>)}</div>
     {loading ? <p role="status" className="py-8 text-center text-slate-500">성적을 불러오는 중입니다…</p> : error ? <p role="alert" className="text-rose-600">{error}</p> : <>
@@ -63,7 +69,7 @@ export default function AcademicPanel({ load, subject = '' }: { load: () => Prom
       </div>)}</div>}
       {selectedRow && <p role="status" className="rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-900">{selectedRow.date?.slice(0, 10)} · {selectedRow.subject} · {selectedRow.title} · <strong>{chartValue(selectedRow, metric)}{metric === 'score' ? '점' : ' 백분위'}</strong></p>}
       {values.length > 0 && <p className="text-xs text-slate-500">그래프의 점을 누르면 날짜와 점수를 확인할 수 있습니다.</p>}
-      <div className="space-y-2">{pageRows.map(r => <div key={r.id} className="rounded-xl bg-slate-50 px-3 py-2 text-sm flex flex-wrap justify-between gap-2"><div className="min-w-0"><span style={{ color: COLORS[r.subject] }}>{r.subject}</span><span className="font-bold ml-2 break-words">{r.title}</span><p className="text-xs text-slate-500 mt-1">{r.date?.slice(0, 10) || '시험일 미입력'}{r.grade ? ` · 등급 ${r.grade}` : ''}</p></div><div className="font-bold">{r.status === '미제출' ? '미제출' : r.score === null ? '점수 미입력' : `${r.score}점${r.maxScore ? ` / ${r.maxScore}` : ''}`}<p className="text-xs font-normal text-slate-500">{r.status !== '미제출' ? r.status : ''}</p></div></div>)}{!visible.length && <p className="text-sm text-slate-500">등록된 시험 기록이 없습니다.</p>}</div>
+      <div className="space-y-2">{pageRows.map(r => <div key={r.id} className="rounded-xl bg-slate-50 px-3 py-2 text-sm flex flex-wrap justify-between gap-2"><div className="min-w-0"><span style={{ color: COLORS[r.subject] }}>{r.subject}</span><span className="font-bold ml-2 break-words">{r.title}</span><p className="text-xs text-slate-500 mt-1">{r.date?.slice(0, 10) || '시험일 미입력'}{r.grade ? ` · 등급 ${r.grade}` : ''}</p></div><div className="font-bold">{r.status === '미제출' ? '미제출' : r.score === null ? '점수 미입력' : `${r.score}점${r.maxScore ? ` / ${r.maxScore}` : ''}`}<p className="text-xs font-normal text-slate-500">{r.status !== '미제출' ? r.status : ''}</p></div></div>)}{!visible.length && <p className="text-sm text-slate-500">선택한 조건의 시험 기록이 없습니다.</p>}</div>
       {visible.length > 0 && <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
         <p className="text-slate-500">전체 {visible.length}건 · {(page - 1) * 10 + 1}–{Math.min(page * 10, visible.length)}건</p>
         {pageCount > 1 && <nav aria-label="성적 목록 페이지" className="flex items-center gap-2">

@@ -10,6 +10,11 @@ import { visibleStudentSchedules } from '../../lib/studentReportLists';
 import { safeFetchJson } from '../../lib/safeFetchJson';
 import type { StudentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 
+function activityDate(value: any) {
+  const date = value?.toDate ? value.toDate() : value?.toMillis ? new Date(value.toMillis()) : new Date(value);
+  if (!value || !Number.isFinite(date.getTime())) return '날짜 미상';
+  return date.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
 export default function LearningReport() {
   const [subjectFilter, setSubjectFilter] = useState('');
   const [enrollments, setEnrollments] = useState<SubjectEnrollment[]>([]);
@@ -374,7 +379,9 @@ export default function LearningReport() {
   };
 
   const totalSessionPages = Math.ceil(stats.sessionHistory.length / SESSIONS_PER_PAGE);
-  const paginatedSessions = stats.sessionHistory.slice((sessionPage - 1) * SESSIONS_PER_PAGE, sessionPage * SESSIONS_PER_PAGE);
+  const currentSessionPage = Math.min(sessionPage, Math.max(1, totalSessionPages));
+  if (sessionPage !== currentSessionPage) setSessionPage(currentSessionPage);
+  const paginatedSessions = stats.sessionHistory.slice((currentSessionPage - 1) * SESSIONS_PER_PAGE, currentSessionPage * SESSIONS_PER_PAGE);
 
   const allIncorrectAnswers = stats.sessionHistory.flatMap(session => 
     (session.incorrectAnswers || []).map((ans: any) => ({
@@ -416,7 +423,9 @@ export default function LearningReport() {
   };
   const activeIncorrectAnswers = allIncorrectAnswers.filter(ans => !ans.isReviewed);
   const totalWrongPages = Math.ceil(activeIncorrectAnswers.length / WRONG_PER_PAGE);
-  const paginatedWrongAnswers = activeIncorrectAnswers.slice((wrongPage - 1) * WRONG_PER_PAGE, wrongPage * WRONG_PER_PAGE);
+  const currentWrongPage = Math.min(wrongPage, Math.max(1, totalWrongPages));
+  if (wrongPage !== currentWrongPage) setWrongPage(currentWrongPage);
+  const paginatedWrongAnswers = activeIncorrectAnswers.slice((currentWrongPage - 1) * WRONG_PER_PAGE, currentWrongPage * WRONG_PER_PAGE);
 
   const startReviewQuiz = () => {
     // Get unique incorrect answers (by word) - only non-reviewed ones
@@ -867,13 +876,9 @@ export default function LearningReport() {
                     <div className="text-[10px] font-bold text-emerald-500 whitespace-nowrap">
                       정답: {session.score}/{session.totalItems ?? '-'}
                     </div>
-                  ) : (
-                    <div className="text-[10px] text-slate-400 font-medium sm:hidden">
-                      {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleDateString() : (session.createdAt ? new Date(session.createdAt).toLocaleDateString() : '방금 전')}
-                    </div>
-                  )}
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">
-                    {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (session.createdAt ? new Date(session.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '방금 전')}
+                  ) : null}
+                  <div className="text-[10px] text-slate-500 font-medium mt-0.5 text-right max-w-[105px] sm:max-w-none">
+                    {activityDate(session.createdAt)}
                   </div>
                 </div>
               </div>
@@ -886,33 +891,11 @@ export default function LearningReport() {
         </div>
 
         {totalSessionPages > 1 && (
-          <div className="flex justify-center items-center gap-2 pt-3">
-            <button
-              onClick={() => setSessionPage(prev => Math.max(1, prev - 1))}
-              disabled={sessionPage === 1}
-              className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-all"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <div className="flex flex-wrap justify-center gap-1">
-              {Array.from({ length: totalSessionPages }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSessionPage(i + 1)}
-                  className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${sessionPage === i + 1 ? 'bg-pastel-pink-500 text-white shadow-lg shadow-pastel-pink-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setSessionPage(prev => Math.min(totalSessionPages, prev + 1))}
-              disabled={sessionPage === totalSessionPages}
-              className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-all"
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
+          <nav aria-label="활동 로그 페이지" className="flex justify-center items-center gap-3 pt-3 text-sm">
+            <button type="button" disabled={currentSessionPage === 1} onClick={() => setSessionPage(currentSessionPage - 1)} className="min-h-[44px] px-3 rounded-lg border border-slate-200 disabled:opacity-30">이전</button>
+            <span aria-live="polite" aria-atomic="true" className="text-slate-600">{currentSessionPage} / {totalSessionPages}</span>
+            <button type="button" disabled={currentSessionPage === totalSessionPages} onClick={() => setSessionPage(currentSessionPage + 1)} className="min-h-[44px] px-3 rounded-lg border border-slate-200 disabled:opacity-30">다음</button>
+          </nav>
         )}
       </div>
 
@@ -1008,33 +991,11 @@ export default function LearningReport() {
           )}
 
           {totalWrongPages > 1 && (
-            <div className="flex justify-center items-center gap-2 pt-3">
-              <button
-                onClick={() => setWrongPage(prev => Math.max(1, prev - 1))}
-                disabled={wrongPage === 1}
-                className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-all"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <div className="flex flex-wrap justify-center gap-1">
-                {Array.from({ length: totalWrongPages }).map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setWrongPage(i + 1)}
-                    className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${wrongPage === i + 1 ? 'bg-rose-500 text-white shadow-lg shadow-rose-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => setWrongPage(prev => Math.min(totalWrongPages, prev + 1))}
-                disabled={wrongPage === totalWrongPages}
-                className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-all"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
+          <nav aria-label="오답 노트 페이지" className="flex justify-center items-center gap-3 pt-3 text-sm">
+            <button type="button" disabled={currentWrongPage === 1} onClick={() => setWrongPage(currentWrongPage - 1)} className="min-h-[44px] px-3 rounded-lg border border-slate-200 disabled:opacity-30">이전</button>
+            <span aria-live="polite" aria-atomic="true" className="text-slate-600">{currentWrongPage} / {totalWrongPages}</span>
+            <button type="button" disabled={currentWrongPage === totalWrongPages} onClick={() => setWrongPage(currentWrongPage + 1)} className="min-h-[44px] px-3 rounded-lg border border-slate-200 disabled:opacity-30">다음</button>
+          </nav>
           )}
         </div>
       </div>

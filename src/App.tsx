@@ -202,15 +202,13 @@ export default function App() {
       setUser(firebaseUser);
       
       if (firebaseUser) {
+        void import('./components/Home');
         try {
           const { ensureUserDocExists } = await import('./lib/firebase');
-          await ensureUserDocExists(firebaseUser);
-          
+          const profileData = await ensureUserDocExists(firebaseUser, undefined, true);
           const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          
-          if (userDoc.exists()) {
-            let data = userDoc.data() as UserProfile;
+          if (profileData) {
+            let data = profileData as UserProfile;
             
             // Force update role for teacher email if it's currently student
             if (firebaseUser.email === 'lizzieshere1@gmail.com' && data.role !== 'teacher') {

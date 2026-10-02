@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { parseAcademicPage, academicDTO, syncAcademicPage, GRADE_DATABASE, ENROLLMENT_DATABASE } from '../api/_lib/academic.ts';
 import { academicStudentId } from '../api/_lib/academicAuth.ts';
 import webhook from '../api/webhooks/notion-academic.ts';
-import { chartValue, scoreRows } from '../src/lib/academicChart.ts';
+import { chartValue, scoreRows, inScorePeriod } from '../src/lib/academicChart.ts';
 const studentId = '11111111-1111-4111-8111-111111111111';
 const pageId = '22222222-2222-4222-8222-222222222222';
 function page(overrides = {}) { return { id: pageId, parent: { database_id: GRADE_DATABASE }, last_edited_time: '2026-10-02T00:00:00Z', properties: {
@@ -132,3 +132,13 @@ test('source reassignment archives previous-ZIP copy in same transaction', async
   ], academyScores: [] };
   assert.deepEqual(scoreRows(data, '모의고사').map(r => r.id), ['old', 'new']);
  });
+
+test('score period uses Korean calendar dates, clamps month ends and retains undated rows in all', () => {
+  const now = new Date('2026-10-31T15:30:00Z'); // November 1 in Korea
+  assert.equal(inScorePeriod('2026-08-01', '3', now), true);
+  assert.equal(inScorePeriod('2026-07-31', '3', now), false);
+  assert.equal(inScorePeriod('2026-11-02', '3', now), false);
+  assert.equal(inScorePeriod(null, 'all', now), true);
+  assert.equal(inScorePeriod(null, '6', now), false);
+  assert.equal(inScorePeriod('2026-02-28', '3', new Date('2026-05-31T00:00:00Z')), true);
+});
