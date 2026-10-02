@@ -137,6 +137,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         title: data.title,
         startAt: data.startAt,
         endAt: data.endAt || null,
+        subject: data.subject || '영어',
         scheduleType: data.scheduleType || '정규 수업',
         status: data.status,
         completedAt: data.status === '완료'

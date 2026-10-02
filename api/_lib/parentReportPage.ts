@@ -34,6 +34,7 @@ export async function loadParentReportPage(db: Firestore, student: string, curso
       reportId: crypto.createHash('sha256').update(r.notionPageId).digest('hex').slice(0, 16),
       lessonDateStart: r.lessonDateStart, lessonDateEnd: r.lessonDateEnd,
       lessonTime: r.lessonTime, selfStudyTime: r.selfStudyTime, category: r.category,
+      subject: r.subject || '영어',
       attendance: r.attendance, attitude: r.attitude, homework: r.homework, test: r.test,
       vocabularyScore: r.vocabularyScore, schoolExamScore: r.schoolExamScore, feedback: r.feedback,
     };

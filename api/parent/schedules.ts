@@ -52,6 +52,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       title: s.title,
       startAt: s.startAt,
       endAt: s.endAt,
+      subject: s.subject || '영어',
       scheduleType: s.scheduleType,
       status: s.status,
       notice: s.notice,

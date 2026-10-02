@@ -90,6 +90,26 @@ async function startServer() {
     await handler(req as any, res as any);
   });
 
+  app.post("/api/webhooks/notion-academic", async (req, res) => {
+    const handler = (await import("./api/webhooks/notion-academic.ts")).default;
+    await handler(req as any, res as any);
+  });
+
+  app.post("/api/teacher/import-academic", async (req, res) => {
+    const handler = (await import("./api/teacher/import-academic.ts")).default;
+    await handler(req as any, res as any);
+  });
+
+  app.get("/api/student/academic", async (req, res) => {
+    const handler = (await import("./api/student/academic.ts")).default;
+    await handler(req as any, res as any);
+  });
+
+  app.get("/api/parent/academic", async (req, res) => {
+    const handler = (await import("./api/parent/academic.ts")).default;
+    await handler(req as any, res as any);
+  });
+
   // Unmatched API route -> JSON 404 (prevent SPA HTML)
   app.all("/api/*", (req, res) => {
     res.status(404).json({ ok: false, error: "API_ENDPOINT_NOT_FOUND" });

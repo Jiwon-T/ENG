@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import AcademicPanel from '../reports/AcademicPanel';
+import type { AcademicData, SubjectEnrollment } from '../../types/academic';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart3, TrendingUp, BookOpen, CheckCircle2, Clock, Calendar, ClipboardList, ChevronLeft, ChevronRight, Gamepad2, XCircle, Play, RotateCcw, X, Trophy, ArrowRight, Trash2, Check, Sparkles, CalendarDays } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType, markIncorrectAnswerReviewed } from '../../lib/firebase';
@@ -9,6 +11,17 @@ import { safeFetchJson } from '../../lib/safeFetchJson';
 import type { StudentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 
 export default function LearningReport() {
+  const [subjectFilter, setSubjectFilter] = useState('');
+  const [enrollments, setEnrollments] = useState<SubjectEnrollment[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showAcademic, setShowAcademic] = useState(false);
+  const loadAcademic = useCallback(async (): Promise<AcademicData> => {
+    if (!auth.currentUser) throw new Error('UNAUTHORIZED');
+    const token = await auth.currentUser.getIdToken();
+    const result = await safeFetchJson<AcademicData>('/api/student/academic', { headers: { Authorization: `Bearer ${token}` } });
+    if (!result.ok || !result.data) throw new Error('QUERY_FAILED');
+    return result.data;
+  }, []);
   const [stats, setStats] = useState({
     totalWords: 0,
     learnedWords: 0,
@@ -56,9 +69,10 @@ export default function LearningReport() {
 
   const [lessonPage, setLessonPage] = useState(1);
   const LESSONS_PER_PAGE = 3;
-  const totalLessonPages = Math.ceil(studentLessonReports.length / LESSONS_PER_PAGE);
+  const filteredLessonReports = studentLessonReports.filter(r => !subjectFilter || (r.subject || '영어') === subjectFilter);
+  const totalLessonPages = Math.ceil(filteredLessonReports.length / LESSONS_PER_PAGE);
   const currentLessonPage = Math.min(lessonPage, Math.max(1, totalLessonPages));
-  const paginatedLessonReports = studentLessonReports.slice(
+  const paginatedLessonReports = filteredLessonReports.slice(
     (currentLessonPage - 1) * LESSONS_PER_PAGE, currentLessonPage * LESSONS_PER_PAGE
   );
 
@@ -70,7 +84,7 @@ export default function LearningReport() {
     const timer = window.setInterval(() => setScheduleNow(Date.now()), 60000);
     return () => window.clearInterval(timer);
   }, []);
-  const visibleSchedules = visibleStudentSchedules(studentSchedules, scheduleNow);
+  const visibleSchedules = visibleStudentSchedules(studentSchedules.filter(r => !subjectFilter || (r.subject || '영어') === subjectFilter), scheduleNow);
   const totalSchedulePages = Math.ceil(visibleSchedules.length / 2);
   const currentSchedulePage = Math.min(schedulePage, Math.max(1, totalSchedulePages));
   const paginatedSchedules = visibleSchedules.slice((currentSchedulePage - 1) * 2, currentSchedulePage * 2);
@@ -207,11 +221,12 @@ export default function LearningReport() {
     auth.currentUser.getIdToken().then(idToken => {
       const headers = { Authorization: `Bearer ${idToken}` };
       Promise.all([
-        safeFetchJson<{ ok: boolean; error?: string; message?: string; reports: StudentLessonReportDTO[] }>('/api/student/lesson-reports', { headers }),
+        safeFetchJson<{ ok: boolean; error?: string; message?: string; reports: StudentLessonReportDTO[]; subjects?: SubjectEnrollment[] }>('/api/student/lesson-reports', { headers }),
         safeFetchJson<{ ok: boolean; error?: string; message?: string; schedules: StudentScheduleDTO[] }>('/api/student/schedules', { headers }),
       ]).then(([reportsRes, schedulesRes]) => {
         if (reportsRes.ok && Array.isArray(reportsRes.data?.reports)) {
           setStudentLessonReports(reportsRes.data.reports);
+          setEnrollments(reportsRes.data.subjects || []);
         }
         if (schedulesRes.ok && Array.isArray(schedulesRes.data?.schedules)) {
           setStudentSchedules(schedulesRes.data.schedules);
@@ -294,7 +309,7 @@ export default function LearningReport() {
 
   // 앱에서 등록한 과제와 수업일지의 마지막 `과제:` 구간을 하나의 목록으로 합친다.
   // 화면에는 출처를 노출하지 않지만 내부 키는 충돌하지 않도록 분리한다.
-  const lessonAssignments = studentLessonReports
+  const lessonAssignments = filteredLessonReports
     .filter(report => Boolean(report.assignmentContent?.trim()) && !report.assignmentCompleted)
     .map(report => ({
       id: `lesson-${report.reportId}`,
@@ -302,9 +317,10 @@ export default function LearningReport() {
       createdAt: report.lessonDate,
       isNew: false,
       isDone: false,
+      subject: report.subject || '영어',
       isLessonAssignment: true,
     }));
-  const combinedAssignments = [...stats.assignments, ...lessonAssignments].filter(item => !item.isDone).sort((a: any, b: any) => {
+  const combinedAssignments = [...stats.assignments, ...lessonAssignments].filter(item => !item.isDone && (!subjectFilter || (item.subject || '영어') === subjectFilter)).sort((a: any, b: any) => {
     const aTime = parseDisplayDate(a.createdAt)?.getTime() || 0;
     const bTime = parseDisplayDate(b.createdAt)?.getTime() || 0;
     return bTime - aTime;
@@ -524,6 +540,12 @@ export default function LearningReport() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12">
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => { setSubjectFilter(''); setLessonPage(1); setSchedulePage(1); setAssignmentPage(1); }} className={`px-3 py-2 rounded-xl text-sm font-bold ${!subjectFilter ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>전체 과목</button>
+        {[...new Set((showHistory ? enrollments : enrollments.filter(e => e.status === '등록')).map(e => e.subject))].map(subject => <button type="button" key={subject} onClick={() => { setSubjectFilter(subject); setLessonPage(1); setSchedulePage(1); setAssignmentPage(1); }} className={`px-3 py-2 rounded-xl text-sm font-bold ${subjectFilter === subject ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>{subject}</button>)}
+        <label className="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" checked={showHistory} onChange={e => { setShowHistory(e.target.checked); setSubjectFilter(''); }}/>지난 수강 기록</label>
+      </div>
       <header className="mb-8 md:mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-black text-slate-900 mb-2 tracking-tight flex items-center gap-3">
@@ -617,7 +639,7 @@ export default function LearningReport() {
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-white border border-slate-200 text-slate-600">{schedule.scheduleType}</span>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-white border border-slate-200 text-slate-600">{schedule.subject || '영어'} · {schedule.scheduleType}</span>
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${schedule.status === '취소' ? 'bg-rose-100 text-rose-700' : schedule.status === '완료' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}>{schedule.status}</span>
                   </div>
                 </div>
@@ -640,6 +662,8 @@ export default function LearningReport() {
           </nav>
         )}
       </div>
+
+      <div className="space-y-3"><button type="button" onClick={() => setShowAcademic(v => !v)} aria-expanded={showAcademic} className="px-4 py-3 rounded-xl bg-indigo-50 text-indigo-700 font-bold">{showAcademic ? '성적 닫기' : '성적 변화 보기'}</button>{showAcademic && <AcademicPanel load={loadAcademic} subject={subjectFilter} />}</div>
 
       {/* Offline lesson records: the server DTO excludes attitude, test evaluation and feedback. */}
       {studentLessonReports.length > 0 && (
@@ -668,7 +692,7 @@ export default function LearningReport() {
                     })}
                   </span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
-                    {report.category}
+                    {report.subject || '영어'} · {report.category}
                   </span>
                 </div>
 

@@ -12,6 +12,7 @@ export const NotionReportWebhookSchema = z.object({
   lessonDateEnd: z.string().nullable().optional(),
   lessonTime: z.string().nullable().optional(),
   selfStudyTime: z.string().nullable().optional(),
+  subject: z.string().optional().default('영어'),
   category: z.enum(['수업', '테스트']).default('수업'),
   attendance: z.string().nullable().optional(),
   attitude: z.string().nullable().optional(),
@@ -29,6 +30,7 @@ export type NotionReportWebhookPayload = z.infer<typeof NotionReportWebhookSchem
  * Firestore lessonReports 컬렉션에 저장되는 전체 원본 데이터 모델
  */
 export interface StoredLessonReport {
+  subject?: string;
   schemaVersion: number;
   notionPageId: string;
   studentKey: string;
@@ -56,6 +58,7 @@ export interface StoredLessonReport {
  * - 비공개 필드 (원천 배제): attitude, test, feedback, selfStudyTime, notionPageId, internalStudentId, studentKey
  */
 export interface StudentLessonReportDTO {
+  subject?: string;
   reportId: string; // 사이트 내부용 안전한 해시 ID
   lessonDate: string;
   category: '수업' | '테스트';
@@ -71,6 +74,7 @@ export interface StudentLessonReportDTO {
  * 학부모용 전체 공개 응답 모델 (ParentLessonReportDTO)
  */
 export interface ParentLessonReportDTO {
+  subject?: string;
   reportId: string;
   lessonDateStart: string;
   lessonDateEnd: string | null;
@@ -90,6 +94,7 @@ export interface ParentLessonReportDTO {
  * 학생 및 학부모 화면 조회용 안전한 일정 DTO
  */
 export interface StudentScheduleDTO {
+  subject?: string;
   scheduleId: string;
   title: string;
   startAt: string;

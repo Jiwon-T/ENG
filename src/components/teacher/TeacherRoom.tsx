@@ -1,3 +1,4 @@
+import AcademicImport from './AcademicImport';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Users, Calendar, ClipboardList, Plus, Search, MoreVertical, Phone, GraduationCap, Clock, MessageSquare, Trash2, Save, X, FileSpreadsheet, BookOpen, BarChart3, Sparkles, FileText, Languages, History, Link } from 'lucide-react';
@@ -375,7 +376,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                 <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-5 md:p-6 mb-6">
                   <div className="flex items-center justify-between gap-3 mb-4">
                     <div>
-                      <h3 className="font-black text-slate-900">Notion 학생 · 학부모 리포트</h3>
+                      <h3 className="font-black text-slate-900">Notion 학생 · 학부모 리포트</h3><AcademicImport />
                       <p className="text-xs text-slate-500 mt-1">앱 계정이 없는 학생도 학부모 링크를 발급할 수 있습니다.</p>
                     </div>
                     <button onClick={loadNotionStudents} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">새로고침</button>

@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import AcademicPanel from '../reports/AcademicPanel';
+import type { AcademicData } from '../../types/academic';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import type { ParentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 import { safeFetchJson } from '../../lib/safeFetchJson';
 import { sortParentSchedules } from '../../lib/studentReportLists';
@@ -126,12 +128,20 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
   const [nextReportCursor, setNextReportCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [reportLoadError, setReportLoadError] = useState('');
+  const [subjectFilter, setSubjectFilter] = useState('');
   const [reports, setReports] = useState<ParentLessonReportDTO[]>([]);
   const [selectedReport, setSelectedReport] = useState<ParentLessonReportDTO | null>(null);
 
 
   // 학부모 화면 상단 탭: 'reports' (수업 기록) | 'schedules' (일정)
-  const [activeTab, setActiveTab] = useState<'reports' | 'schedules'>('reports');
+  const [activeTab, setActiveTab] = useState<'reports' | 'schedules' | 'academic'>('reports');
+  const loadAcademic = useCallback(async (): Promise<AcademicData> => {
+    const token = parentSessionRef.current;
+    if (!token) throw new Error('AUTH_REQUIRED');
+    const result = await safeFetchJson<AcademicData>(`/api/parent/academic?reportSlug=${encodeURIComponent(reportSlug)}`, { headers: { 'X-Parent-Session': token } });
+    if (!result.ok || !result.data) throw new Error('QUERY_FAILED');
+    return result.data;
+  }, [reportSlug]);
   const [schedules, setSchedules] = useState<StudentScheduleDTO[]>([]);
   const [loadingSchedules, setLoadingSchedules] = useState(false);
   const [scheduleLoadError, setScheduleLoadError] = useState(false);
@@ -177,6 +187,8 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
     setNextReportCursor(null);
     setReportLoadError('');
     setReports([]);
+    setSubjectFilter('');
+    setActiveTab('reports');
     setSchedules([]);
     setSelectedReport(null);
     setStudentDisplayName('');
@@ -456,8 +468,8 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
 
   // 10개씩 더 보기 적용된 목록
   const visibleReports = useMemo(() => {
-    return reports.slice(0, visibleCount);
-  }, [reports, visibleCount]);
+    return reports.filter(r => !subjectFilter || (r.subject || '영어') === subjectFilter).slice(0, visibleCount);
+  }, [reports, visibleCount, subjectFilter]);
 
   // 월별 그룹화 (Asia/Seoul 기준)
   const monthGroups = useMemo(() => {
@@ -625,8 +637,9 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
 
           </div>
 
+          <label className="text-sm text-slate-600">과목 <select aria-label="리포트 과목" value={subjectFilter} onChange={e => { setSubjectFilter(e.target.value); setSelectedReport(reports.find(r => !e.target.value || (r.subject || '영어') === e.target.value) || null); setVisibleCount(PAGE_SIZE); }} className="border border-slate-200 rounded-xl px-3 py-2"><option value="">전체 과목</option>{['영어','수학','국어','과학','한국사'].map(s => <option key={s} value={s}>{s}</option>)}</select></label>
           {/* 학부모 탭 바: 수업 기록 / 일정 */}
-          <div className="flex items-center gap-2 border-b border-slate-200 pb-2 px-1">
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2 px-1">
             <button
               type="button"
               onClick={() => setActiveTab('reports')}
@@ -653,9 +666,10 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
               <span>일정</span>
 
             </button>
+            <button type="button" onClick={() => setActiveTab('academic')} className={`px-4 py-2.5 rounded-xl text-sm font-bold ${activeTab === 'academic' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>성적</button>
           </div>
 
-          {activeTab === 'schedules' ? (
+          {activeTab === 'academic' ? <AcademicPanel load={loadAcademic} subject={subjectFilter} /> : activeTab === 'schedules' ? (
             <div className="space-y-4">
               <div className="flex items-baseline justify-between px-1">
                 <h3 className="text-base font-black text-slate-900">학습 일정</h3>
@@ -677,7 +691,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {sortParentSchedules(schedules).map((item) => {
+                  {sortParentSchedules(schedules.filter(r => !subjectFilter || (r.subject || '영어') === subjectFilter)).map((item) => {
                     const { dateStr, timeStr } = formatScheduleDateTime(item.startAt, item.endAt);
                     const isCancelled = item.status === '취소';
                     const isCompleted = item.status === '완료';
@@ -694,7 +708,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100">
-                              {item.scheduleType || '일정'}
+                              {item.subject || '영어'} · {item.scheduleType || '일정'}
                             </span>
                             <span
                               className={`text-xs font-bold px-2 py-0.5 rounded-md ${
@@ -809,7 +823,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                                         {listDate}
                                       </span>
                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 shrink-0">
-                                        {rep.category || '수업'}
+                                        {rep.subject || '영어'} · {rep.category || '수업'}
                                       </span>
                                     </div>
                                     <span
@@ -912,7 +926,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                               {getDisplayStatus(selectedReport.attendance)}
                             </span>
                             <span className="text-xs px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-700">
-                              {selectedReport.category || '수업'}
+                              {selectedReport.subject || '영어'} · {selectedReport.category || '수업'}
                             </span>
                           </div>
                         </div>
@@ -1083,7 +1097,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                                       {listDate}
                                     </span>
                                     <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold shrink-0">
-                                      {rep.category || '수업'}
+                                      {rep.subject || '영어'} · {rep.category || '수업'}
                                     </span>
                                   </div>
                                   <span
@@ -1157,7 +1171,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                             {getDisplayStatus(selectedReport.attendance)}
                           </span>
                           <span className="text-xs px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-700">
-                            {selectedReport.category || '수업'}
+                            {selectedReport.subject || '영어'} · {selectedReport.category || '수업'}
                           </span>
                         </div>
                       </div>
