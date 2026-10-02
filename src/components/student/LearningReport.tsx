@@ -817,24 +817,24 @@ export default function LearningReport() {
       </div>
 
       {/* Activity Log Section */}
-      <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
-        <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+      <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-5">
+        <h3 className="text-base md:text-lg font-black text-slate-900 mb-3 flex items-center gap-2">
           <TrendingUp className="text-pastel-pink-500" size={20} />
           학습 활동 로그
         </h3>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {paginatedSessions.length > 0 ? (
             paginatedSessions.map((session, idx) => (
-              <div key={idx} className="bg-slate-50 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 hover:bg-slate-100 transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm shrink-0">
+              <div key={idx} className="bg-slate-50 px-3 py-2 rounded-xl flex flex-row justify-between items-center gap-2 hover:bg-slate-100 transition-all">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm shrink-0">
                     {session.type === 'quiz' && <CheckCircle2 size={18} />}
                     {session.type === 'flashcard' && <BookOpen size={18} />}
                     {session.type === 'match' && <Gamepad2 size={18} />}
                     {session.type === 'conjugation' && <TrendingUp size={18} />}
                     {session.type === 'test' && <Trophy size={18} className="text-pastel-pink-500" />}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-slate-900 text-sm line-clamp-1">{session.wordbookTitle}</span>
                       {session.dayStart !== undefined && (
@@ -857,18 +857,11 @@ export default function LearningReport() {
                       </span>
                       <span>•</span>
                       <span>{session.category === 'grammar' ? '문법' : session.category === 'exam' ? '시험대비' : '단어'}</span>
-                      {session.dayStart !== undefined && (
-                        <>
-                          <span>•</span>
-                          <span className="font-bold text-rose-600 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
-                            {getDayRangeLabel(session)} {formatDayRange(session.dayStart, session.dayEnd, session.category, session.wordbookType, session.wordbookTitle, session.wordbookId)}
-                          </span>
-                        </>
-                      )}
+
                     </div>
                   </div>
                 </div>
-                <div className="w-full sm:w-auto flex sm:flex-col justify-between sm:items-end">
+                <div className="shrink-0 flex flex-col items-end">
                   <div className="font-black text-pastel-pink-500 text-[11px] sm:text-sm">{session.duration}초</div>
                   {session.score !== undefined ? (
                     <div className="text-[10px] font-bold text-emerald-500 whitespace-nowrap">
@@ -879,21 +872,21 @@ export default function LearningReport() {
                       {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleDateString() : (session.createdAt ? new Date(session.createdAt).toLocaleDateString() : '방금 전')}
                     </div>
                   )}
-                  <div className="hidden sm:block text-[9px] text-slate-400 font-medium mt-0.5">
+                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">
                     {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (session.createdAt ? new Date(session.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '방금 전')}
                   </div>
                 </div>
               </div>
             ))
           ) : (
-            <div className="py-12 text-center text-slate-300 italic text-sm bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            <div className="py-4 text-center text-slate-300 italic text-sm bg-slate-50 rounded-2xl border border-dashed border-slate-200">
               기록된 학습 활동이 아직 없습니다.
             </div>
           )}
         </div>
 
         {totalSessionPages > 1 && (
-          <div className="flex justify-center items-center gap-4 pt-6">
+          <div className="flex justify-center items-center gap-2 pt-3">
             <button
               onClick={() => setSessionPage(prev => Math.max(1, prev - 1))}
               disabled={sessionPage === 1}
@@ -901,7 +894,7 @@ export default function LearningReport() {
             >
               <ChevronLeft size={20} />
             </button>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-center gap-1">
               {Array.from({ length: totalSessionPages }).map((_, i) => (
                 <button
                   key={i}
@@ -924,9 +917,9 @@ export default function LearningReport() {
       </div>
 
       {/* Incorrect Answers Section */}
-      <div id="incorrect-answers-section" className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
+      <div id="incorrect-answers-section" className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-5">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
+          <h3 className="text-base md:text-lg font-black text-slate-900 flex items-center gap-2">
             <XCircle className="text-rose-500" size={20} />
             오답 노트
             {activeIncorrectAnswers.length > 0 && (
@@ -938,7 +931,7 @@ export default function LearningReport() {
           {activeIncorrectAnswers.length > 0 && (
             <button
               onClick={startReviewQuiz}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 md:px-4 md:py-2 bg-rose-500 text-white rounded-xl text-xs font-black hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all"
+              className="flex items-center justify-center gap-2 px-3 py-2 min-h-[44px] bg-rose-500 text-white rounded-xl text-xs font-black hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all"
             >
               <RotateCcw size={14} />
               오답 다시 풀기
@@ -946,10 +939,10 @@ export default function LearningReport() {
           )}
         </div>
         
-        <div className="space-y-4">
+        <div className="space-y-2">
           {paginatedWrongAnswers.length > 0 ? (
             paginatedWrongAnswers.map((ans, idx) => (
-              <div key={idx} className="p-4 md:p-5 bg-rose-50/30 rounded-2xl md:rounded-3xl border border-rose-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div key={idx} className="px-3 py-2 bg-rose-50/30 rounded-xl border border-rose-100 flex flex-col md:flex-row md:items-center justify-between gap-2">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-[9px] md:text-[10px] font-black text-rose-400 bg-white px-2 py-0.5 rounded-md border border-rose-100 uppercase tracking-tighter line-clamp-1">
@@ -964,8 +957,8 @@ export default function LearningReport() {
                       {ans.createdAt?.toMillis ? new Date(ans.createdAt.toMillis()).toLocaleDateString() : '방금 전'}
                     </span>
                   </div>
-                  <div className="flex items-baseline flex-wrap gap-2 md:gap-3">
-                    <span className="text-base md:text-lg font-black text-slate-900 leading-tight">
+                  <div className="flex items-baseline flex-wrap gap-2">
+                    <span className="text-sm md:text-base font-black text-slate-900 leading-tight">
                       {ans.quizSentence ? (
                         <span className="italic block md:inline">"{ans.quizSentence}"</span>
                       ) : (
@@ -975,21 +968,21 @@ export default function LearningReport() {
                     {!ans.quizSentence && <span className="text-xs md:text-sm font-bold text-slate-500">{ans.meaning}</span>}
                   </div>
                 </div>
-                <div className="flex items-center justify-between md:justify-end gap-3 md:gap-4 mt-1 md:mt-0">
-                  <div className="flex items-center gap-2 md:gap-4 bg-white/50 p-2 md:p-3 rounded-xl md:rounded-2xl border border-rose-50 flex-1 md:flex-none">
-                    <div className="text-center px-2 md:px-4 border-r border-rose-100 flex-1 md:flex-none">
+                <div className="flex items-center justify-between md:justify-end gap-2 mt-1 md:mt-0">
+                  <div className="flex items-center gap-2 bg-white/50 p-2 rounded-lg border border-rose-50 flex-1 md:flex-none min-w-0">
+                    <div className="text-center px-2 border-r border-rose-100 flex-1 md:flex-none min-w-0">
                       <div className="text-[9px] md:text-[10px] font-black text-rose-400 uppercase mb-0.5">선택</div>
-                      <div className="text-xs md:text-sm font-bold text-rose-600 line-clamp-1">{ans.userChoice}</div>
+                      <div className="text-xs md:text-sm font-bold text-rose-600 break-words">{ans.userChoice}</div>
                     </div>
-                    <div className="text-center px-2 md:px-4 flex-1 md:flex-none">
+                    <div className="text-center px-2 flex-1 md:flex-none min-w-0">
                       <div className="text-[9px] md:text-[10px] font-black text-emerald-400 uppercase mb-0.5">정답</div>
-                      <div className="text-xs md:text-sm font-bold text-emerald-600 line-clamp-1">{ans.correctAnswer}</div>
+                      <div className="text-xs md:text-sm font-bold text-emerald-600 break-words">{ans.correctAnswer}</div>
                     </div>
                   </div>
                   <button
                     onClick={() => handleRemoveIncorrect(ans)}
                     disabled={processingId === `${ans.sessionId}-${ans.word}`}
-                    className={`p-3 md:p-3.5 rounded-xl md:rounded-2xl border transition-all shadow-sm group shrink-0 ${
+                    className={`p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg border transition-all shadow-sm group shrink-0 ${
                       processingId === `${ans.sessionId}-${ans.word}`
                         ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-wait'
                         : 'bg-white text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 hover:border-emerald-100 cursor-pointer'
@@ -1006,16 +999,16 @@ export default function LearningReport() {
               </div>
             ))
           ) : (
-            <div className="py-12 text-center">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <XCircle className="text-slate-200" size={32} />
+            <div className="py-4 text-center">
+              <div className="w-9 h-9 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <XCircle className="text-slate-200" size={20} />
               </div>
               <p className="text-slate-400 font-medium">아직 기록된 오답이 없습니다. 잘하고 있어요! 👍</p>
             </div>
           )}
 
           {totalWrongPages > 1 && (
-            <div className="flex justify-center items-center gap-4 pt-6">
+            <div className="flex justify-center items-center gap-2 pt-3">
               <button
                 onClick={() => setWrongPage(prev => Math.max(1, prev - 1))}
                 disabled={wrongPage === 1}
@@ -1023,7 +1016,7 @@ export default function LearningReport() {
               >
                 <ChevronLeft size={20} />
               </button>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap justify-center gap-1">
                 {Array.from({ length: totalWrongPages }).map((_, i) => (
                   <button
                     key={i}
