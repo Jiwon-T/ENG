@@ -1,8 +1,9 @@
+import { loadSubjectEnrollments } from '../academic.js';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { sendJson } from '../_lib/http.js';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
-import type { StudentLessonReportDTO, StoredLessonReport } from '../_lib/reportSchemas.js';
-import { readStudentMapping } from '../_lib/studentIdentity.js';
+import { sendJson } from '../http.js';
+import { getFirebaseAdmin } from '../firebaseAdmin.js';
+import type { StudentLessonReportDTO, StoredLessonReport } from '../reportSchemas.js';
+import { readStudentMapping } from '../studentIdentity.js';
 import crypto from 'crypto';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
@@ -113,6 +114,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const studentDTOs: StudentLessonReportDTO[] = storedReports.map(r => ({
       reportId: crypto.createHash('sha256').update(r.notionPageId).digest('hex').slice(0, 16),
       lessonDate: r.lessonDateStart,
+      subject: r.subject || '영어',
       category: r.category,
       attendance: r.attendance || '',
       homework: r.homework || '',
@@ -122,9 +124,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       assignmentCompleted: completionHashes.get(reportIdFor(r)) === assignmentHashFor(r),
     }));
 
+    const subjects = await loadSubjectEnrollments(db, internalStudentId);
     return sendJson(res, 200, {
       ok: true,
       reports: studentDTOs,
+      subjects,
     });
   } catch (err: any) {
     return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });

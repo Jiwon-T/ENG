@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { sendJson } from '../_lib/http.js';
-import { getVerifiedParentSession } from '../_lib/session.js';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
-import type { StudentScheduleDTO, StoredStudentSchedule } from '../_lib/reportSchemas.js';
+import { sendJson } from '../http.js';
+import { getVerifiedParentSession } from '../session.js';
+import { getFirebaseAdmin } from '../firebaseAdmin.js';
+import type { StudentScheduleDTO, StoredStudentSchedule } from '../reportSchemas.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
@@ -52,6 +52,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       title: s.title,
       startAt: s.startAt,
       endAt: s.endAt,
+      subject: s.subject || '영어',
       scheduleType: s.scheduleType,
       status: s.status,
       notice: s.notice,

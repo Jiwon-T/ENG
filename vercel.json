@@ -9,6 +9,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/parent/:endpoint",
+      "destination": "/api/parent?__endpoint=:endpoint"
+    },
+    {
+      "source": "/api/student/:endpoint",
+      "destination": "/api/student?__endpoint=:endpoint"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
