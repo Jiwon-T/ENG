@@ -35,9 +35,9 @@ self.addEventListener('fetch', event => {
       const cached = await cache.match(event.request);
       if (cached) return cached;
       const response = await fetch(event.request);
-      if (response.ok && response.type === 'basic') await cache.put(event.request, response.clone());
+      if (response.ok && response.type === 'basic') await cache.put(event.request, response.clone()).catch(() => {});
       return response;
-    }));
+    }).catch(() => fetch(event.request)));
     return;
   }
   // Use Network First strategy for all requests to ensure updates are reflected

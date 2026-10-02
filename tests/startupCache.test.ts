@@ -6,7 +6,8 @@ test('service worker caches immutable assets, bypasses authenticated APIs and re
   const listeners: Record<string, any> = {};
   const cached = new Map();
   let fetches = 0;
-  const cache = { match: async (r: any) => cached.get(r.url), put: async (r: any, response: any) => { cached.set(r.url, response); } };
+  let failCacheWrite = false;
+  const cache = { match: async (r: any) => cached.get(r.url), put: async (r: any, response: any) => { if (failCacheWrite) throw new Error('QuotaExceededError'); cached.set(r.url, response); } };
   const response: any = { ok: true, type: 'basic', clone: () => response };
   vm.runInNewContext(fs.readFileSync('public/sw.js', 'utf8'), {
     URL, self: { location: { origin: 'https://www.jiwont.kr' }, addEventListener: (name: string, listener: any) => { listeners[name] = listener; } },
@@ -24,4 +25,7 @@ test('service worker caches immutable assets, bypasses authenticated APIs and re
   assert.equal(await request('/api/teacher/students', 'POST'), undefined);
   assert.equal(fetches, 1);
   await request('/'); await request('/'); assert.equal(fetches, 3);
+  failCacheWrite = true;
+  assert.equal(await request('/assets/next-12345678.js'), response);
+  assert.equal(fetches, 4);
 });
