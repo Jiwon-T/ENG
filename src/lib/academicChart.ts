@@ -1,5 +1,5 @@
 import type { AcademicData } from '../types/academic';
-export const SCORE_VIEWS = ['학교 내신', '모의고사', '학원 단어', '학원 내신 대비'] as const;
+export const SCORE_VIEWS = ['학원 단어', '학원 내신 대비', '학교 내신', '모의고사'] as const;
 export type ScoreView = typeof SCORE_VIEWS[number];
 export function scoreRows(data: AcademicData, view: ScoreView) {
   if (view === '학교 내신' || view === '모의고사') return data.records.filter(r => r.examType === view).map(r => ({

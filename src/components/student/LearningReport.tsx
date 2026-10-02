@@ -539,14 +539,14 @@ export default function LearningReport() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12">
+    <div className="max-w-5xl mx-auto px-4 md:px-6 py-5 md:py-6">
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => { setSubjectFilter(''); setLessonPage(1); setSchedulePage(1); setAssignmentPage(1); }} className={`px-3 py-2 rounded-xl text-sm font-bold ${!subjectFilter ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>전체 과목</button>
         {[...new Set((showHistory ? enrollments : enrollments.filter(e => e.status === '등록')).map(e => e.subject))].map(subject => <button type="button" key={subject} onClick={() => { setSubjectFilter(subject); setLessonPage(1); setSchedulePage(1); setAssignmentPage(1); }} className={`px-3 py-2 rounded-xl text-sm font-bold ${subjectFilter === subject ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>{subject}</button>)}
         <label className="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" checked={showHistory} onChange={e => { setShowHistory(e.target.checked); setSubjectFilter(''); }}/>지난 수강 기록</label>
       </div>
-      <header className="mb-8 md:mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+      <header className="mb-5 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-black text-slate-900 mb-2 tracking-tight flex items-center gap-3">
             나만의 학습 리포트
@@ -558,18 +558,21 @@ export default function LearningReport() {
           </h1>
           <p className="text-slate-500 font-medium">나의 학습 성장 과정을 한눈에 확인하세요.</p>
         </div>
+        <button type="button" onClick={() => setShowAcademic(v => !v)} aria-expanded={showAcademic} aria-controls="student-academic-panel" className="shrink-0 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 text-sm font-bold">{showAcademic ? '성적 닫기' : '성적 변화 보기'}</button>
       </header>
 
+      {showAcademic && <div id="student-academic-panel" className="mb-5"><AcademicPanel load={loadAcademic} subject={subjectFilter} /></div>}
+
       {/* Assignments Section */}
-      <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-12">
-        <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+      <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-5">
+        <h3 className="text-lg md:text-xl font-black text-slate-900 mb-3 flex items-center gap-2">
           <ClipboardList className="text-blue-500" size={20} />
           과제
         </h3>
         
         <div className="space-y-4">
           {paginatedAssignments.map((item) => (
-            <div key={item.id} className={`p-5 md:p-6 rounded-2xl md:rounded-3xl border transition-all ${item.isNew ? 'bg-blue-50 border-blue-100 shadow-md shadow-blue-50' : item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+            <div key={item.id} className={`p-3 md:p-4 rounded-xl border transition-all ${item.isNew ? 'bg-blue-50 border-blue-100 shadow-md shadow-blue-50' : item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${item.isNew ? 'bg-blue-500 animate-pulse' : item.isDone ? 'bg-emerald-500' : 'bg-slate-300'}`} />
@@ -595,9 +598,9 @@ export default function LearningReport() {
           ))}
 
           {combinedAssignments.length === 0 && (
-            <div className="py-12 text-center">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ClipboardList className="text-slate-200" size={32} />
+            <div className="py-4 text-center">
+              <div className="w-9 h-9 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-2">
+                <ClipboardList className="text-slate-200" size={20} />
               </div>
               <p className="text-slate-400 font-medium">아직 등록된 과제가 없습니다.</p>
             </div>
@@ -616,8 +619,8 @@ export default function LearningReport() {
       </div>
 
       {/* 일정은 학생이 가장 자주 확인하는 과제 바로 아래에 배치 */}
-      <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-12">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-5">
+        <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
             <CalendarDays className="text-violet-600" size={20} />
             일정
@@ -648,7 +651,7 @@ export default function LearningReport() {
             ))}
           </div>
         ) : (
-          <div className="py-10 text-center text-sm font-medium text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <div className="py-4 text-center text-sm font-medium text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
             등록된 일정이 없습니다.
           </div>
         )}
@@ -663,7 +666,7 @@ export default function LearningReport() {
         )}
       </div>
 
-      <div className="space-y-3"><button type="button" onClick={() => setShowAcademic(v => !v)} aria-expanded={showAcademic} className="px-4 py-3 rounded-xl bg-indigo-50 text-indigo-700 font-bold">{showAcademic ? '성적 닫기' : '성적 변화 보기'}</button>{showAcademic && <AcademicPanel load={loadAcademic} subject={subjectFilter} />}</div>
+
 
       {/* Offline lesson records: the server DTO excludes attitude, test evaluation and feedback. */}
       {studentLessonReports.length > 0 && (
@@ -745,7 +748,7 @@ export default function LearningReport() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-16">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
         <StatCard 
           icon={<BookOpen className="text-blue-500" />} 
           label="학습한 단어" 
@@ -767,13 +770,13 @@ export default function LearningReport() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mb-8">
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+        <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm">
+          <h3 className="text-lg md:text-xl font-black text-slate-900 mb-3 flex items-center gap-2">
             <BarChart3 className="text-pastel-pink-500" size={20} />
             주간 학습 추이
           </h3>
-          <div className="h-40 flex items-end justify-between gap-1.5 md:gap-2 px-1 md:px-4">
+          <div className="h-24 flex items-end justify-between gap-1.5 md:gap-2 px-1 md:px-4">
             {stats.weeklyTrend.map((val, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
                 <div className="text-[9px] md:text-[10px] font-bold text-slate-400 mb-0.5">{val > 0 ? `${val}개` : ''}</div>
@@ -790,12 +793,12 @@ export default function LearningReport() {
           </div>
         </div>
 
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+        <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm">
+          <h3 className="text-lg md:text-xl font-black text-slate-900 mb-3 flex items-center gap-2">
             <Calendar className="text-emerald-500" size={20} />
             주간 출석 현황
           </h3>
-          <div className="h-40 flex items-end justify-between gap-1.5 md:gap-2 px-1 md:px-4">
+          <div className="h-24 flex items-end justify-between gap-1.5 md:gap-2 px-1 md:px-4">
             {stats.weeklyAttendanceTrend.map((val, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
                 <div className="text-[9px] md:text-[10px] font-bold text-slate-400 mb-0.5">{val === 1 ? '출석' : ''}</div>
@@ -1232,13 +1235,13 @@ export default function LearningReport() {
 
 function StatCard({ icon, label, value, color, isEvaluation }: { icon: React.ReactNode; label: string; value: string; color: string; isEvaluation?: boolean }) {
   return (
-    <div className={`p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] ${color} border border-white/50 shadow-sm flex md:flex-col items-center md:items-start gap-4 ${isEvaluation ? 'md:col-span-1' : ''}`}>
-      <div className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl md:rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+    <div className={`p-3 md:p-4 rounded-2xl ${color} border border-white/50 shadow-sm flex items-center gap-3 ${isEvaluation ? 'md:col-span-1' : ''}`}>
+      <div className="w-9 h-9 bg-white rounded-xl md:rounded-2xl flex items-center justify-center shadow-sm shrink-0">
         {React.cloneElement(icon as React.ReactElement, { size: 20 })}
       </div>
       <div>
         <div className="text-[10px] md:text-sm font-bold text-slate-500 mb-0.5 md:mb-1">{label}</div>
-        <div className={`${isEvaluation ? 'text-sm md:text-base' : 'text-xl md:text-3xl'} font-black text-slate-900 leading-tight`}>{value}</div>
+        <div className={`${isEvaluation ? 'text-sm md:text-base' : 'text-xl md:text-2xl'} font-black text-slate-900 leading-tight`}>{value}</div>
       </div>
     </div>
   );
