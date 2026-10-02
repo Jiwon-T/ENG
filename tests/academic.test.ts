@@ -118,3 +118,17 @@ test('source reassignment archives previous-ZIP copy in same transaction', async
   assert.equal(docs.get(`examResults/${pageId}`).archived, true);
   assert.equal(docs.get(`academicRecords/${pageId}`).internalStudentId, 'new-student');
 });
+
+ test('academic assessment accepts both Notion names and keeps historical records visible', () => {
+  for (const name of ['모의고사', '학력평가']) {
+    const source = page();
+    source.properties['시험 종류'] = { select: { name } };
+    assert.equal(parseAcademicPage(source).data.examType, '모의고사');
+  }
+  const data: any = { records: [
+    { recordId: 'old', examType: '모의고사' },
+    { recordId: 'new', examType: '학력평가' },
+    { recordId: 'school', examType: '학교 내신' },
+  ], academyScores: [] };
+  assert.deepEqual(scoreRows(data, '모의고사').map(r => r.id), ['old', 'new']);
+ });
