@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { parseJsonBody, sendJson, setCookie } from '../_lib/http.js';
-import { VerifyPinSchema, type StoredReportSlug } from '../_lib/reportSchemas.js';
-import { hashPin, timingSafeCompare } from '../_lib/security.js';
-import { loadParentReportPage } from '../_lib/parentReportPage.js';
-import { createParentSession } from '../_lib/session.js';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
+import { parseJsonBody, sendJson, setCookie } from '../http.js';
+import { VerifyPinSchema, type StoredReportSlug } from '../reportSchemas.js';
+import { hashPin, timingSafeCompare } from '../security.js';
+import { loadParentReportPage } from '../parentReportPage.js';
+import { createParentSession } from '../session.js';
+import { getFirebaseAdmin } from '../firebaseAdmin.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   const startedAt = performance.now();

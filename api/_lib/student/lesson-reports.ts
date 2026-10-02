@@ -1,14 +1,15 @@
+import { loadSubjectEnrollments } from '../academic.js';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { parseJsonBody, sendJson } from '../_lib/http.js';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
-import type { StudentLessonReportDTO, StoredLessonReport } from '../_lib/reportSchemas.js';
-import { readStudentMapping } from '../_lib/studentIdentity.js';
+import { sendJson } from '../http.js';
+import { getFirebaseAdmin } from '../firebaseAdmin.js';
+import type { StudentLessonReportDTO, StoredLessonReport } from '../reportSchemas.js';
+import { readStudentMapping } from '../studentIdentity.js';
 import crypto from 'crypto';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
-    if (req.method !== 'PATCH') {
-      res.setHeader('Allow', 'PATCH');
+    if (req.method !== 'GET') {
+      res.setHeader('Allow', 'GET');
       return sendJson(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
     }
 
@@ -104,26 +105,32 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const completionCollection = db.collection('users').doc(studentUid).collection('assignmentCompletions');
     const reportIdFor = (report: StoredLessonReport) => crypto.createHash('sha256').update(report.notionPageId).digest('hex').slice(0, 16);
     const assignmentHashFor = (report: StoredLessonReport) => crypto.createHash('sha256').update(report.derivedAssignment || '').digest('hex');
-    if (req.method === 'PATCH') {
-      const body = await parseJsonBody(req);
-      if (typeof body?.reportId !== 'string' || !/^[a-f0-9]{16}$/.test(body.reportId)) {
-        return sendJson(res, 400, { ok: false, error: 'INVALID_REPORT_ID' });
-      }
-      const target = storedReports.find(report => reportIdFor(report) === body.reportId);
-      if (!target || !target.derivedAssignment?.trim()) {
-        return sendJson(res, 404, { ok: false, error: 'ASSIGNMENT_NOT_FOUND' });
-      }
-      if (body.assignmentContent !== target.derivedAssignment) {
-        return sendJson(res, 409, { ok: false, error: 'ASSIGNMENT_CHANGED', message: '과제 내용이 변경되었습니다. 새로고침 후 다시 확인해 주세요.' });
-      }
-      await completionCollection.doc(body.reportId).set({
-        contentHash: assignmentHashFor(target),
-        completedAt: new Date().toISOString(),
-      });
-      return sendJson(res, 200, { ok: true });
-    }
-    return sendJson(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
-  } catch {
+    const completionSnapshot = await completionCollection.get();
+    const completionHashes = new Map(completionSnapshot.docs.map(doc => [doc.id, doc.data().contentHash]));
+
+    // 학생용 제한 DTO:
+    // - 공개 필드: reportId, lessonDate, category, attendance, homework, vocabularyScore, schoolExamScore, assignmentContent
+    // - 비공개 필드 (원천 배제): attitude, test, feedback, selfStudyTime, notionPageId, internalStudentId, studentKey
+    const studentDTOs: StudentLessonReportDTO[] = storedReports.map(r => ({
+      reportId: crypto.createHash('sha256').update(r.notionPageId).digest('hex').slice(0, 16),
+      lessonDate: r.lessonDateStart,
+      subject: r.subject || '영어',
+      category: r.category,
+      attendance: r.attendance || '',
+      homework: r.homework || '',
+      vocabularyScore: r.vocabularyScore,
+      schoolExamScore: r.schoolExamScore,
+      assignmentContent: r.derivedAssignment || null,
+      assignmentCompleted: completionHashes.get(reportIdFor(r)) === assignmentHashFor(r),
+    }));
+
+    const subjects = await loadSubjectEnrollments(db, internalStudentId);
+    return sendJson(res, 200, {
+      ok: true,
+      reports: studentDTOs,
+      subjects,
+    });
+  } catch (err: any) {
     return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });
   }
 }

@@ -22,10 +22,16 @@ describe('Vercel Routing and Top-Level Slug Configuration', () => {
     const vercelConfig = JSON.parse(raw);
 
     assert.ok(Array.isArray(vercelConfig.rewrites), 'rewrites array must exist');
-    assert.equal(vercelConfig.rewrites[0].source, '/api/(.*)');
-    assert.equal(vercelConfig.rewrites[0].destination, '/api/$1');
-    assert.equal(vercelConfig.rewrites[1].source, '/(.*)');
-    assert.equal(vercelConfig.rewrites[1].destination, '/index.html');
+    const generic = vercelConfig.rewrites.findIndex((r: any) => r.source === '/api/(.*)');
+    const catchAll = vercelConfig.rewrites.findIndex((r: any) => r.source === '/(.*)');
+    assert.ok(generic >= 0 && catchAll > generic);
+    assert.equal(vercelConfig.rewrites[generic].destination, '/api/$1');
+    assert.equal(vercelConfig.rewrites[catchAll].destination, '/index.html');
+    for (const audience of ['parent', 'student']) {
+      const index = vercelConfig.rewrites.findIndex((r: any) => r.source === `/api/${audience}/:endpoint`);
+      assert.ok(index >= 0 && index < generic);
+      assert.equal(vercelConfig.rewrites[index].destination, `/api/${audience}?__endpoint=:endpoint`);
+    }
   });
 
   it('Comprehensive static inspection: No real phone numbers, real PINs, Notion tokens, or secrets across entire codebase', () => {

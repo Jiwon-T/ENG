@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { sendJson } from '../_lib/http.js';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
-import type { StudentScheduleDTO, StoredStudentSchedule } from '../_lib/reportSchemas.js';
-import { readStudentMapping } from '../_lib/studentIdentity.js';
+import { sendJson } from '../http.js';
+import { getFirebaseAdmin } from '../firebaseAdmin.js';
+import type { StudentScheduleDTO, StoredStudentSchedule } from '../reportSchemas.js';
+import { readStudentMapping } from '../studentIdentity.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {

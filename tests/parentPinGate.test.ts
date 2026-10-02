@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import lessonReports from '../api/parent/lesson-reports.ts';
-import schedules from '../api/parent/schedules.ts';
+import lessonReports from '../api/_lib/parent/lesson-reports.ts';
+import schedules from '../api/_lib/parent/schedules.ts';
 
 for (const [name, handler] of [['reports', lessonReports], ['schedules', schedules]] as const) {
   for (const headers of [{}, { cookie: 'parent_session=previous-valid-session' }, { 'x-parent-session': ['a', 'b'] }]) {

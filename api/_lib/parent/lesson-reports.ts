@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { sendJson } from '../_lib/http.js';
-import { getVerifiedParentSession } from '../_lib/session.js';
-import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
-import { loadParentReportPage } from '../_lib/parentReportPage.js';
+import { sendJson } from '../http.js';
+import { getVerifiedParentSession } from '../session.js';
+import { getFirebaseAdmin } from '../firebaseAdmin.js';
+import { loadParentReportPage } from '../parentReportPage.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   const startedAt = performance.now();
