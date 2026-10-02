@@ -44,7 +44,8 @@ export function parseAcademicPage(page: any) {
     return { id, studentPageId, collection: 'studentEnrollments', data: { sourceUpdatedAt, removed, subjects } };
   }
   const subject = choice(props['과목']);
-  const examType = choice(props['시험 종류']);
+  const sourceExamType = choice(props['시험 종류']);
+  const examType = sourceExamType === '학력평가' ? '모의고사' : sourceExamType;
   if (!removed && (!SUBJECTS.includes(subject) || !['학교 내신', '모의고사'].includes(examType))) throw new Error('INVALID_EXAM_SUBJECT_OR_TYPE');
   const score = number(props['원점수']), maxScore = number(props['만점']);
   if (score !== null && score < 0 || maxScore !== null && maxScore <= 0 || score !== null && maxScore !== null && score > maxScore) throw new Error('INVALID_SCORE');
