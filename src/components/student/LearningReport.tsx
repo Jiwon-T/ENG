@@ -301,11 +301,11 @@ export default function LearningReport() {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   };
 
-  const formatKoreanDateTime = (value: string) => {
+  const formatKoreanDateTime = (value: string, timeOnly = false) => {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '일정 시간 확인 필요';
     return new Intl.DateTimeFormat('ko-KR', {
-      timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short',
+      timeZone: 'Asia/Seoul', ...(timeOnly ? {} : { month: 'long' as const, day: 'numeric' as const, weekday: 'short' as const }),
       hour: 'numeric', minute: '2-digit',
     }).format(date);
   };
@@ -553,7 +553,7 @@ export default function LearningReport() {
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => { setSubjectFilter(''); setLessonPage(1); setSchedulePage(1); setAssignmentPage(1); }} className={`px-3 py-2 rounded-xl text-sm font-bold ${!subjectFilter ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>전체 과목</button>
         {[...new Set((showHistory ? enrollments : enrollments.filter(e => e.status === '등록')).map(e => e.subject))].map(subject => <button type="button" key={subject} onClick={() => { setSubjectFilter(subject); setLessonPage(1); setSchedulePage(1); setAssignmentPage(1); }} className={`px-3 py-2 rounded-xl text-sm font-bold ${subjectFilter === subject ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>{subject}</button>)}
-        <label className="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" checked={showHistory} onChange={e => { setShowHistory(e.target.checked); setSubjectFilter(''); }}/>지난 수강 기록</label>
+        <label className="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" checked={showHistory} onChange={e => { setShowHistory(e.target.checked); setSubjectFilter(''); }}/>중단 과목 표시</label>
       </div>
       <header className="mb-5 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
@@ -567,10 +567,8 @@ export default function LearningReport() {
           </h1>
           <p className="text-slate-500 font-medium">나의 학습 성장 과정을 한눈에 확인하세요.</p>
         </div>
-        <button type="button" onClick={() => setShowAcademic(v => !v)} aria-expanded={showAcademic} aria-controls="student-academic-panel" className="shrink-0 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 text-sm font-bold">{showAcademic ? '성적 닫기' : '성적 변화 보기'}</button>
       </header>
 
-      {showAcademic && <div id="student-academic-panel" className="mb-5"><AcademicPanel load={loadAcademic} subject={subjectFilter} /></div>}
 
       {/* Assignments Section */}
       <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-5">
@@ -607,12 +605,7 @@ export default function LearningReport() {
           ))}
 
           {combinedAssignments.length === 0 && (
-            <div className="py-4 text-center">
-              <div className="w-9 h-9 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-2">
-                <ClipboardList className="text-slate-200" size={20} />
-              </div>
-              <p className="text-slate-400 font-medium">아직 등록된 과제가 없습니다.</p>
-            </div>
+            <p className="text-sm text-slate-400">등록된 과제가 없습니다.</p>
           )}
 
           {totalAssignmentPages > 1 && (
@@ -647,7 +640,7 @@ export default function LearningReport() {
                     <p className="font-black text-slate-900 break-words">{schedule.title}</p>
                     <p className="mt-1 text-sm font-semibold text-slate-600">
                       {formatKoreanDateTime(schedule.startAt)}
-                      {schedule.endAt ? ` ~ ${formatKoreanDateTime(schedule.endAt)}` : ''}
+                      {schedule.endAt ? ` ~ ${formatKoreanDateTime(schedule.endAt, new Date(schedule.startAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }) === new Date(schedule.endAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }))}` : ''}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -677,6 +670,12 @@ export default function LearningReport() {
 
 
 
+      <nav aria-label="리포트 보기" className="flex gap-2 mb-5">
+        <button type="button" aria-pressed={!showAcademic} onClick={() => setShowAcademic(false)} className={`min-h-[44px] flex-1 rounded-xl text-sm font-bold ${!showAcademic ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}><span aria-hidden="true">✒️</span> 학습</button>
+        <button type="button" aria-pressed={showAcademic} onClick={() => setShowAcademic(true)} className={`min-h-[44px] flex-1 rounded-xl text-sm font-bold ${showAcademic ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}><span aria-hidden="true">📈</span> 성적</button>
+      </nav>
+      {showAcademic && <div id="student-academic-panel" className="mb-5"><AcademicPanel load={loadAcademic} subject={subjectFilter} /></div>}
+      <div hidden={showAcademic}>
       {/* Offline lesson records: the server DTO excludes attitude, test evaluation and feedback. */}
       {studentLessonReports.length > 0 && (
         <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
@@ -998,6 +997,8 @@ export default function LearningReport() {
           </nav>
           )}
         </div>
+      </div>
+
       </div>
 
       {/* Review Quiz Modal/Overlay */}
