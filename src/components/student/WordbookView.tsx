@@ -9,6 +9,8 @@ import { COMPLEMENT_QUIZ_DATA, GrammarWord } from '../../lib/grammarSets';
 import { MODAL_QUIZ_POOL, BASIC_MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
 import { VERB_FORM_QUIZ_POOL } from '../../lib/verbFormQuizPool';
 
+import { saveRecentLearning, type RecentLearning } from '../../lib/recentLearning';
+
 interface Wordbook {
   id: string;
   title: string;
@@ -55,7 +57,7 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-export default function WordbookView({ isMobile, category = 'word', onNavigate }: { isMobile?: boolean; category?: 'word' | 'grammar' | 'exam'; onNavigate?: (view: any) => void }) {
+export default function WordbookView({ isMobile, category = 'word', onNavigate, resumeTarget, onResumeHandled }: { isMobile?: boolean; category?: 'word' | 'grammar' | 'exam'; onNavigate?: (view: any) => void; resumeTarget?: RecentLearning | null; onResumeHandled?: () => void }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [selectedWordbook, setSelectedWordbook] = useState<Wordbook | null>(null);
   const [words, setWords] = useState<Word[]>([]);
@@ -356,6 +358,10 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
   }
 
   useEffect(() => {
+    if (words.length > 0 && currentChunk >= Math.max(1, totalChunks)) setCurrentChunk(Math.max(0, totalChunks - 1));
+  }, [words.length, totalChunks, currentChunk]);
+
+  useEffect(() => {
     const q = query(collection(db, 'wordbooks'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedWordbooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wordbook));
@@ -374,6 +380,20 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate }
     });
     return () => unsubscribe();
   }, [category]);
+
+  useEffect(() => {
+    if (!resumeTarget || resumeTarget.category !== category || loading) return;
+    const found = wordbooks.find(w => w.id === resumeTarget.wordbookId);
+    if (found) {
+      setSelectedWordbook(found);
+      setCurrentChunk(resumeTarget.chunk);
+      setSessionUnitSize(resumeTarget.unitSize);
+    }
+    onResumeHandled?.();
+  }, [resumeTarget, category, loading, wordbooks, onResumeHandled]);
+  useEffect(() => {
+    if (selectedWordbook && auth.currentUser) saveRecentLearning(auth.currentUser.uid, { wordbookId: selectedWordbook.id, title: selectedWordbook.title, category, chunk: currentChunk, unitSize: sessionUnitSize });
+  }, [selectedWordbook, category, currentChunk, sessionUnitSize]);
 
   useEffect(() => {
     if (!auth.currentUser) return;

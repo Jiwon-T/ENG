@@ -6,6 +6,7 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, collection, query, where, setDoc } from 'firebase/firestore';
 import { Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, ArrowRight, AlertTriangle, RefreshCw, Menu, History, BarChart3, Users, Download, Share, Smartphone, X as CloseIcon, Info, Plus, Dog } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import type { RecentLearning } from './lib/recentLearning';
 import type { AnalysisResult, QuestionType } from './lib/gemini';
 
 function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
@@ -146,6 +147,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [generateQuestions, setGenerateQuestions] = useState(false);
   const [selectedQuestionTypes, setSelectedQuestionTypes] = useState<QuestionType[]>([]);
+  const [resumeTarget, setResumeTarget] = useState<RecentLearning | null>(null);
+  const [pendingAssignmentCount, setPendingAssignmentCount] = useState<number | null>(null);
   const [hasNewAssignment, setHasNewAssignment] = useState(false);
   const [showNameEditModal, setShowNameEditModal] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
@@ -259,6 +262,7 @@ export default function App() {
 
   // Listener for new assignments (student only)
   useEffect(() => {
+    setPendingAssignmentCount(null);
     if (!user) {
       setHasNewAssignment(false);
       return;
@@ -266,12 +270,12 @@ export default function App() {
 
     const q = query(
       collection(db, 'assignments'),
-      where('studentUid', '==', user.uid),
-      where('isNew', '==', true)
+      where('studentUid', '==', user.uid)
     );
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setHasNewAssignment(!snapshot.empty);
+      setHasNewAssignment(snapshot.docs.some(d => d.data().isNew));
+      setPendingAssignmentCount(snapshot.docs.filter(d => !d.data().isDone).length);
     });
 
     return () => unsubscribe();
@@ -608,6 +612,9 @@ export default function App() {
                 userRole={profile?.role} 
                 userEmail={profile?.email}
                 hasNewAssignment={hasNewAssignment}
+                userUid={user.uid}
+                pendingAssignmentCount={pendingAssignmentCount}
+                onResume={target => { setResumeTarget(target); setCurrentView(target.category === 'word' ? 'vocab' : target.category); }}
               />
             </motion.div>
           ) : currentView === 'pet' ? (
@@ -850,7 +857,9 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
             >
               <WordbookView 
-                isMobile={isMobile} 
+                isMobile={isMobile}
+                resumeTarget={resumeTarget}
+                onResumeHandled={() => setResumeTarget(null)}
                 category={currentView === 'grammar' ? 'grammar' : currentView === 'exam' ? 'exam' : 'word'} 
                 onNavigate={setCurrentView}
               />
