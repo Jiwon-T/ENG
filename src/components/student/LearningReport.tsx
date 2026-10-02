@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import AcademicPanel from '../reports/AcademicPanel';
+import type { AcademicData, SubjectEnrollment } from '../../types/academic';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart3, TrendingUp, BookOpen, CheckCircle2, Clock, Calendar, ClipboardList, ChevronLeft, ChevronRight, Gamepad2, XCircle, Play, RotateCcw, X, Trophy, ArrowRight, Trash2, Check, Sparkles, CalendarDays } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType, markIncorrectAnswerReviewed } from '../../lib/firebase';
@@ -8,7 +10,23 @@ import { visibleStudentSchedules } from '../../lib/studentReportLists';
 import { safeFetchJson } from '../../lib/safeFetchJson';
 import type { StudentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 
+function activityDate(value: any) {
+  const date = value?.toDate ? value.toDate() : value?.toMillis ? new Date(value.toMillis()) : new Date(value);
+  if (!value || !Number.isFinite(date.getTime())) return '날짜 미상';
+  return date.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
 export default function LearningReport() {
+  const [subjectFilter, setSubjectFilter] = useState('');
+  const [enrollments, setEnrollments] = useState<SubjectEnrollment[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showAcademic, setShowAcademic] = useState(false);
+  const loadAcademic = useCallback(async (): Promise<AcademicData> => {
+    if (!auth.currentUser) throw new Error('UNAUTHORIZED');
+    const token = await auth.currentUser.getIdToken();
+    const result = await safeFetchJson<AcademicData>('/api/student/academic', { headers: { Authorization: `Bearer ${token}` } });
+    if (!result.ok || !result.data) throw new Error('QUERY_FAILED');
+    return result.data;
+  }, []);
   const [stats, setStats] = useState({
     totalWords: 0,
     learnedWords: 0,
@@ -56,9 +74,10 @@ export default function LearningReport() {
 
   const [lessonPage, setLessonPage] = useState(1);
   const LESSONS_PER_PAGE = 3;
-  const totalLessonPages = Math.ceil(studentLessonReports.length / LESSONS_PER_PAGE);
+  const filteredLessonReports = studentLessonReports.filter(r => !subjectFilter || (r.subject || '영어') === subjectFilter);
+  const totalLessonPages = Math.ceil(filteredLessonReports.length / LESSONS_PER_PAGE);
   const currentLessonPage = Math.min(lessonPage, Math.max(1, totalLessonPages));
-  const paginatedLessonReports = studentLessonReports.slice(
+  const paginatedLessonReports = filteredLessonReports.slice(
     (currentLessonPage - 1) * LESSONS_PER_PAGE, currentLessonPage * LESSONS_PER_PAGE
   );
 
@@ -70,7 +89,7 @@ export default function LearningReport() {
     const timer = window.setInterval(() => setScheduleNow(Date.now()), 60000);
     return () => window.clearInterval(timer);
   }, []);
-  const visibleSchedules = visibleStudentSchedules(studentSchedules, scheduleNow);
+  const visibleSchedules = visibleStudentSchedules(studentSchedules.filter(r => !subjectFilter || (r.subject || '영어') === subjectFilter), scheduleNow);
   const totalSchedulePages = Math.ceil(visibleSchedules.length / 2);
   const currentSchedulePage = Math.min(schedulePage, Math.max(1, totalSchedulePages));
   const paginatedSchedules = visibleSchedules.slice((currentSchedulePage - 1) * 2, currentSchedulePage * 2);
@@ -207,11 +226,12 @@ export default function LearningReport() {
     auth.currentUser.getIdToken().then(idToken => {
       const headers = { Authorization: `Bearer ${idToken}` };
       Promise.all([
-        safeFetchJson<{ ok: boolean; error?: string; message?: string; reports: StudentLessonReportDTO[] }>('/api/student/lesson-reports', { headers }),
+        safeFetchJson<{ ok: boolean; error?: string; message?: string; reports: StudentLessonReportDTO[]; subjects?: SubjectEnrollment[] }>('/api/student/lesson-reports', { headers }),
         safeFetchJson<{ ok: boolean; error?: string; message?: string; schedules: StudentScheduleDTO[] }>('/api/student/schedules', { headers }),
       ]).then(([reportsRes, schedulesRes]) => {
         if (reportsRes.ok && Array.isArray(reportsRes.data?.reports)) {
           setStudentLessonReports(reportsRes.data.reports);
+          setEnrollments(reportsRes.data.subjects || []);
         }
         if (schedulesRes.ok && Array.isArray(schedulesRes.data?.schedules)) {
           setStudentSchedules(schedulesRes.data.schedules);
@@ -281,11 +301,11 @@ export default function LearningReport() {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   };
 
-  const formatKoreanDateTime = (value: string) => {
+  const formatKoreanDateTime = (value: string, timeOnly = false) => {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '일정 시간 확인 필요';
     return new Intl.DateTimeFormat('ko-KR', {
-      timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'short',
+      timeZone: 'Asia/Seoul', ...(timeOnly ? {} : { month: 'long' as const, day: 'numeric' as const, weekday: 'short' as const }),
       hour: 'numeric', minute: '2-digit',
     }).format(date);
   };
@@ -294,7 +314,7 @@ export default function LearningReport() {
 
   // 앱에서 등록한 과제와 수업일지의 마지막 `과제:` 구간을 하나의 목록으로 합친다.
   // 화면에는 출처를 노출하지 않지만 내부 키는 충돌하지 않도록 분리한다.
-  const lessonAssignments = studentLessonReports
+  const lessonAssignments = filteredLessonReports
     .filter(report => Boolean(report.assignmentContent?.trim()) && !report.assignmentCompleted)
     .map(report => ({
       id: `lesson-${report.reportId}`,
@@ -302,9 +322,10 @@ export default function LearningReport() {
       createdAt: report.lessonDate,
       isNew: false,
       isDone: false,
+      subject: report.subject || '영어',
       isLessonAssignment: true,
     }));
-  const combinedAssignments = [...stats.assignments, ...lessonAssignments].filter(item => !item.isDone).sort((a: any, b: any) => {
+  const combinedAssignments = [...stats.assignments, ...lessonAssignments].filter(item => !item.isDone && (!subjectFilter || (item.subject || '영어') === subjectFilter)).sort((a: any, b: any) => {
     const aTime = parseDisplayDate(a.createdAt)?.getTime() || 0;
     const bTime = parseDisplayDate(b.createdAt)?.getTime() || 0;
     return bTime - aTime;
@@ -358,7 +379,9 @@ export default function LearningReport() {
   };
 
   const totalSessionPages = Math.ceil(stats.sessionHistory.length / SESSIONS_PER_PAGE);
-  const paginatedSessions = stats.sessionHistory.slice((sessionPage - 1) * SESSIONS_PER_PAGE, sessionPage * SESSIONS_PER_PAGE);
+  const currentSessionPage = Math.min(sessionPage, Math.max(1, totalSessionPages));
+  if (sessionPage !== currentSessionPage) setSessionPage(currentSessionPage);
+  const paginatedSessions = stats.sessionHistory.slice((currentSessionPage - 1) * SESSIONS_PER_PAGE, currentSessionPage * SESSIONS_PER_PAGE);
 
   const allIncorrectAnswers = stats.sessionHistory.flatMap(session => 
     (session.incorrectAnswers || []).map((ans: any) => ({
@@ -400,7 +423,9 @@ export default function LearningReport() {
   };
   const activeIncorrectAnswers = allIncorrectAnswers.filter(ans => !ans.isReviewed);
   const totalWrongPages = Math.ceil(activeIncorrectAnswers.length / WRONG_PER_PAGE);
-  const paginatedWrongAnswers = activeIncorrectAnswers.slice((wrongPage - 1) * WRONG_PER_PAGE, wrongPage * WRONG_PER_PAGE);
+  const currentWrongPage = Math.min(wrongPage, Math.max(1, totalWrongPages));
+  if (wrongPage !== currentWrongPage) setWrongPage(currentWrongPage);
+  const paginatedWrongAnswers = activeIncorrectAnswers.slice((currentWrongPage - 1) * WRONG_PER_PAGE, currentWrongPage * WRONG_PER_PAGE);
 
   const startReviewQuiz = () => {
     // Get unique incorrect answers (by word) - only non-reviewed ones
@@ -523,8 +548,14 @@ export default function LearningReport() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12">
-      <header className="mb-8 md:mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+    <div className="max-w-5xl mx-auto px-4 md:px-6 py-5 md:py-6">
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => { setSubjectFilter(''); setLessonPage(1); setSchedulePage(1); setAssignmentPage(1); }} className={`px-3 py-2 rounded-xl text-sm font-bold ${!subjectFilter ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>전체 과목</button>
+        {[...new Set((showHistory ? enrollments : enrollments.filter(e => e.status === '등록')).map(e => e.subject))].map(subject => <button type="button" key={subject} onClick={() => { setSubjectFilter(subject); setLessonPage(1); setSchedulePage(1); setAssignmentPage(1); }} className={`px-3 py-2 rounded-xl text-sm font-bold ${subjectFilter === subject ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>{subject}</button>)}
+        <label className="text-xs text-slate-500 flex items-center gap-1"><input type="checkbox" checked={showHistory} onChange={e => { setShowHistory(e.target.checked); setSubjectFilter(''); }}/>중단 과목 표시</label>
+      </div>
+      <header className="mb-5 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-black text-slate-900 mb-2 tracking-tight flex items-center gap-3">
             나만의 학습 리포트
@@ -538,16 +569,17 @@ export default function LearningReport() {
         </div>
       </header>
 
+
       {/* Assignments Section */}
-      <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-12">
-        <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+      <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-5">
+        <h3 className="text-lg md:text-xl font-black text-slate-900 mb-3 flex items-center gap-2">
           <ClipboardList className="text-blue-500" size={20} />
           과제
         </h3>
         
         <div className="space-y-4">
           {paginatedAssignments.map((item) => (
-            <div key={item.id} className={`p-5 md:p-6 rounded-2xl md:rounded-3xl border transition-all ${item.isNew ? 'bg-blue-50 border-blue-100 shadow-md shadow-blue-50' : item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+            <div key={item.id} className={`p-3 md:p-4 rounded-xl border transition-all ${item.isNew ? 'bg-blue-50 border-blue-100 shadow-md shadow-blue-50' : item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${item.isNew ? 'bg-blue-500 animate-pulse' : item.isDone ? 'bg-emerald-500' : 'bg-slate-300'}`} />
@@ -573,12 +605,7 @@ export default function LearningReport() {
           ))}
 
           {combinedAssignments.length === 0 && (
-            <div className="py-12 text-center">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ClipboardList className="text-slate-200" size={32} />
-              </div>
-              <p className="text-slate-400 font-medium">아직 등록된 과제가 없습니다.</p>
-            </div>
+            <p className="text-sm text-slate-400">등록된 과제가 없습니다.</p>
           )}
 
           {totalAssignmentPages > 1 && (
@@ -594,8 +621,8 @@ export default function LearningReport() {
       </div>
 
       {/* 일정은 학생이 가장 자주 확인하는 과제 바로 아래에 배치 */}
-      <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-12">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-5">
+        <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
             <CalendarDays className="text-violet-600" size={20} />
             일정
@@ -613,11 +640,11 @@ export default function LearningReport() {
                     <p className="font-black text-slate-900 break-words">{schedule.title}</p>
                     <p className="mt-1 text-sm font-semibold text-slate-600">
                       {formatKoreanDateTime(schedule.startAt)}
-                      {schedule.endAt ? ` ~ ${formatKoreanDateTime(schedule.endAt)}` : ''}
+                      {schedule.endAt ? ` ~ ${formatKoreanDateTime(schedule.endAt, new Date(schedule.startAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }) === new Date(schedule.endAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }))}` : ''}
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-white border border-slate-200 text-slate-600">{schedule.scheduleType}</span>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-white border border-slate-200 text-slate-600">{schedule.subject || '영어'} · {schedule.scheduleType}</span>
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${schedule.status === '취소' ? 'bg-rose-100 text-rose-700' : schedule.status === '완료' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}>{schedule.status}</span>
                   </div>
                 </div>
@@ -626,7 +653,7 @@ export default function LearningReport() {
             ))}
           </div>
         ) : (
-          <div className="py-10 text-center text-sm font-medium text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <div className="py-4 text-center text-sm font-medium text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
             등록된 일정이 없습니다.
           </div>
         )}
@@ -641,6 +668,14 @@ export default function LearningReport() {
         )}
       </div>
 
+
+
+      <nav aria-label="리포트 보기" className="flex gap-2 mb-5">
+        <button type="button" aria-pressed={!showAcademic} onClick={() => setShowAcademic(false)} className={`min-h-[44px] flex-1 rounded-xl text-sm font-bold ${!showAcademic ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}><span aria-hidden="true">✒️</span> 학습</button>
+        <button type="button" aria-pressed={showAcademic} onClick={() => setShowAcademic(true)} className={`min-h-[44px] flex-1 rounded-xl text-sm font-bold ${showAcademic ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}><span aria-hidden="true">📈</span> 성적</button>
+      </nav>
+      {showAcademic && <div id="student-academic-panel" className="mb-5"><AcademicPanel load={loadAcademic} subject={subjectFilter} /></div>}
+      <div hidden={showAcademic}>
       {/* Offline lesson records: the server DTO excludes attitude, test evaluation and feedback. */}
       {studentLessonReports.length > 0 && (
         <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
@@ -668,7 +703,7 @@ export default function LearningReport() {
                     })}
                   </span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
-                    {report.category}
+                    {report.subject || '영어'} · {report.category}
                   </span>
                 </div>
 
@@ -721,7 +756,7 @@ export default function LearningReport() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-16">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
         <StatCard 
           icon={<BookOpen className="text-blue-500" />} 
           label="학습한 단어" 
@@ -743,13 +778,13 @@ export default function LearningReport() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mb-8">
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+        <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm">
+          <h3 className="text-lg md:text-xl font-black text-slate-900 mb-3 flex items-center gap-2">
             <BarChart3 className="text-pastel-pink-500" size={20} />
             주간 학습 추이
           </h3>
-          <div className="h-40 flex items-end justify-between gap-1.5 md:gap-2 px-1 md:px-4">
+          <div className="h-24 flex items-end justify-between gap-1.5 md:gap-2 px-1 md:px-4">
             {stats.weeklyTrend.map((val, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
                 <div className="text-[9px] md:text-[10px] font-bold text-slate-400 mb-0.5">{val > 0 ? `${val}개` : ''}</div>
@@ -766,12 +801,12 @@ export default function LearningReport() {
           </div>
         </div>
 
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+        <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm">
+          <h3 className="text-lg md:text-xl font-black text-slate-900 mb-3 flex items-center gap-2">
             <Calendar className="text-emerald-500" size={20} />
             주간 출석 현황
           </h3>
-          <div className="h-40 flex items-end justify-between gap-1.5 md:gap-2 px-1 md:px-4">
+          <div className="h-24 flex items-end justify-between gap-1.5 md:gap-2 px-1 md:px-4">
             {stats.weeklyAttendanceTrend.map((val, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
                 <div className="text-[9px] md:text-[10px] font-bold text-slate-400 mb-0.5">{val === 1 ? '출석' : ''}</div>
@@ -790,24 +825,24 @@ export default function LearningReport() {
       </div>
 
       {/* Activity Log Section */}
-      <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
-        <h3 className="text-lg md:text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+      <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-5">
+        <h3 className="text-base md:text-lg font-black text-slate-900 mb-3 flex items-center gap-2">
           <TrendingUp className="text-pastel-pink-500" size={20} />
           학습 활동 로그
         </h3>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {paginatedSessions.length > 0 ? (
             paginatedSessions.map((session, idx) => (
-              <div key={idx} className="bg-slate-50 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 hover:bg-slate-100 transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm shrink-0">
+              <div key={idx} className="bg-slate-50 px-3 py-2 rounded-xl flex flex-row justify-between items-center gap-2 hover:bg-slate-100 transition-all">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-slate-400 shadow-sm shrink-0">
                     {session.type === 'quiz' && <CheckCircle2 size={18} />}
                     {session.type === 'flashcard' && <BookOpen size={18} />}
                     {session.type === 'match' && <Gamepad2 size={18} />}
                     {session.type === 'conjugation' && <TrendingUp size={18} />}
                     {session.type === 'test' && <Trophy size={18} className="text-pastel-pink-500" />}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-slate-900 text-sm line-clamp-1">{session.wordbookTitle}</span>
                       {session.dayStart !== undefined && (
@@ -830,76 +865,43 @@ export default function LearningReport() {
                       </span>
                       <span>•</span>
                       <span>{session.category === 'grammar' ? '문법' : session.category === 'exam' ? '시험대비' : '단어'}</span>
-                      {session.dayStart !== undefined && (
-                        <>
-                          <span>•</span>
-                          <span className="font-bold text-rose-600 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-100">
-                            {getDayRangeLabel(session)} {formatDayRange(session.dayStart, session.dayEnd, session.category, session.wordbookType, session.wordbookTitle, session.wordbookId)}
-                          </span>
-                        </>
-                      )}
+
                     </div>
                   </div>
                 </div>
-                <div className="w-full sm:w-auto flex sm:flex-col justify-between sm:items-end">
+                <div className="shrink-0 flex flex-col items-end">
                   <div className="font-black text-pastel-pink-500 text-[11px] sm:text-sm">{session.duration}초</div>
                   {session.score !== undefined ? (
                     <div className="text-[10px] font-bold text-emerald-500 whitespace-nowrap">
                       정답: {session.score}/{session.totalItems ?? '-'}
                     </div>
-                  ) : (
-                    <div className="text-[10px] text-slate-400 font-medium sm:hidden">
-                      {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleDateString() : (session.createdAt ? new Date(session.createdAt).toLocaleDateString() : '방금 전')}
-                    </div>
-                  )}
-                  <div className="hidden sm:block text-[9px] text-slate-400 font-medium mt-0.5">
-                    {session.createdAt?.toMillis ? new Date(session.createdAt.toMillis()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (session.createdAt ? new Date(session.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '방금 전')}
+                  ) : null}
+                  <div className="text-[10px] text-slate-500 font-medium mt-0.5 text-right max-w-[105px] sm:max-w-none">
+                    {activityDate(session.createdAt)}
                   </div>
                 </div>
               </div>
             ))
           ) : (
-            <div className="py-12 text-center text-slate-300 italic text-sm bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            <div className="py-4 text-center text-slate-300 italic text-sm bg-slate-50 rounded-2xl border border-dashed border-slate-200">
               기록된 학습 활동이 아직 없습니다.
             </div>
           )}
         </div>
 
         {totalSessionPages > 1 && (
-          <div className="flex justify-center items-center gap-4 pt-6">
-            <button
-              onClick={() => setSessionPage(prev => Math.max(1, prev - 1))}
-              disabled={sessionPage === 1}
-              className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-all"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <div className="flex gap-2">
-              {Array.from({ length: totalSessionPages }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSessionPage(i + 1)}
-                  className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${sessionPage === i + 1 ? 'bg-pastel-pink-500 text-white shadow-lg shadow-pastel-pink-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setSessionPage(prev => Math.min(totalSessionPages, prev + 1))}
-              disabled={sessionPage === totalSessionPages}
-              className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-all"
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
+          <nav aria-label="활동 로그 페이지" className="flex justify-center items-center gap-3 pt-3 text-sm">
+            <button type="button" disabled={currentSessionPage === 1} onClick={() => setSessionPage(currentSessionPage - 1)} className="min-h-[44px] px-3 rounded-lg border border-slate-200 disabled:opacity-30">이전</button>
+            <span aria-live="polite" aria-atomic="true" className="text-slate-600">{currentSessionPage} / {totalSessionPages}</span>
+            <button type="button" disabled={currentSessionPage === totalSessionPages} onClick={() => setSessionPage(currentSessionPage + 1)} className="min-h-[44px] px-3 rounded-lg border border-slate-200 disabled:opacity-30">다음</button>
+          </nav>
         )}
       </div>
 
       {/* Incorrect Answers Section */}
-      <div id="incorrect-answers-section" className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
+      <div id="incorrect-answers-section" className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-5">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
+          <h3 className="text-base md:text-lg font-black text-slate-900 flex items-center gap-2">
             <XCircle className="text-rose-500" size={20} />
             오답 노트
             {activeIncorrectAnswers.length > 0 && (
@@ -911,7 +913,7 @@ export default function LearningReport() {
           {activeIncorrectAnswers.length > 0 && (
             <button
               onClick={startReviewQuiz}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 md:px-4 md:py-2 bg-rose-500 text-white rounded-xl text-xs font-black hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all"
+              className="flex items-center justify-center gap-2 px-3 py-2 min-h-[44px] bg-rose-500 text-white rounded-xl text-xs font-black hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all"
             >
               <RotateCcw size={14} />
               오답 다시 풀기
@@ -919,10 +921,10 @@ export default function LearningReport() {
           )}
         </div>
         
-        <div className="space-y-4">
+        <div className="space-y-2">
           {paginatedWrongAnswers.length > 0 ? (
             paginatedWrongAnswers.map((ans, idx) => (
-              <div key={idx} className="p-4 md:p-5 bg-rose-50/30 rounded-2xl md:rounded-3xl border border-rose-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div key={idx} className="px-3 py-2 bg-rose-50/30 rounded-xl border border-rose-100 flex flex-col md:flex-row md:items-center justify-between gap-2">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-[9px] md:text-[10px] font-black text-rose-400 bg-white px-2 py-0.5 rounded-md border border-rose-100 uppercase tracking-tighter line-clamp-1">
@@ -937,8 +939,8 @@ export default function LearningReport() {
                       {ans.createdAt?.toMillis ? new Date(ans.createdAt.toMillis()).toLocaleDateString() : '방금 전'}
                     </span>
                   </div>
-                  <div className="flex items-baseline flex-wrap gap-2 md:gap-3">
-                    <span className="text-base md:text-lg font-black text-slate-900 leading-tight">
+                  <div className="flex items-baseline flex-wrap gap-2">
+                    <span className="text-sm md:text-base font-black text-slate-900 leading-tight">
                       {ans.quizSentence ? (
                         <span className="italic block md:inline">"{ans.quizSentence}"</span>
                       ) : (
@@ -948,21 +950,21 @@ export default function LearningReport() {
                     {!ans.quizSentence && <span className="text-xs md:text-sm font-bold text-slate-500">{ans.meaning}</span>}
                   </div>
                 </div>
-                <div className="flex items-center justify-between md:justify-end gap-3 md:gap-4 mt-1 md:mt-0">
-                  <div className="flex items-center gap-2 md:gap-4 bg-white/50 p-2 md:p-3 rounded-xl md:rounded-2xl border border-rose-50 flex-1 md:flex-none">
-                    <div className="text-center px-2 md:px-4 border-r border-rose-100 flex-1 md:flex-none">
+                <div className="flex items-center justify-between md:justify-end gap-2 mt-1 md:mt-0">
+                  <div className="flex items-center gap-2 bg-white/50 p-2 rounded-lg border border-rose-50 flex-1 md:flex-none min-w-0">
+                    <div className="text-center px-2 border-r border-rose-100 flex-1 md:flex-none min-w-0">
                       <div className="text-[9px] md:text-[10px] font-black text-rose-400 uppercase mb-0.5">선택</div>
-                      <div className="text-xs md:text-sm font-bold text-rose-600 line-clamp-1">{ans.userChoice}</div>
+                      <div className="text-xs md:text-sm font-bold text-rose-600 break-words">{ans.userChoice}</div>
                     </div>
-                    <div className="text-center px-2 md:px-4 flex-1 md:flex-none">
+                    <div className="text-center px-2 flex-1 md:flex-none min-w-0">
                       <div className="text-[9px] md:text-[10px] font-black text-emerald-400 uppercase mb-0.5">정답</div>
-                      <div className="text-xs md:text-sm font-bold text-emerald-600 line-clamp-1">{ans.correctAnswer}</div>
+                      <div className="text-xs md:text-sm font-bold text-emerald-600 break-words">{ans.correctAnswer}</div>
                     </div>
                   </div>
                   <button
                     onClick={() => handleRemoveIncorrect(ans)}
                     disabled={processingId === `${ans.sessionId}-${ans.word}`}
-                    className={`p-3 md:p-3.5 rounded-xl md:rounded-2xl border transition-all shadow-sm group shrink-0 ${
+                    className={`p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg border transition-all shadow-sm group shrink-0 ${
                       processingId === `${ans.sessionId}-${ans.word}`
                         ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-wait'
                         : 'bg-white text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 hover:border-emerald-100 cursor-pointer'
@@ -979,44 +981,24 @@ export default function LearningReport() {
               </div>
             ))
           ) : (
-            <div className="py-12 text-center">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <XCircle className="text-slate-200" size={32} />
+            <div className="py-4 text-center">
+              <div className="w-9 h-9 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <XCircle className="text-slate-200" size={20} />
               </div>
               <p className="text-slate-400 font-medium">아직 기록된 오답이 없습니다. 잘하고 있어요! 👍</p>
             </div>
           )}
 
           {totalWrongPages > 1 && (
-            <div className="flex justify-center items-center gap-4 pt-6">
-              <button
-                onClick={() => setWrongPage(prev => Math.max(1, prev - 1))}
-                disabled={wrongPage === 1}
-                className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-all"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <div className="flex gap-2">
-                {Array.from({ length: totalWrongPages }).map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setWrongPage(i + 1)}
-                    className={`w-8 h-8 rounded-lg text-xs font-black transition-all ${wrongPage === i + 1 ? 'bg-rose-500 text-white shadow-lg shadow-rose-200' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => setWrongPage(prev => Math.min(totalWrongPages, prev + 1))}
-                disabled={wrongPage === totalWrongPages}
-                className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-30 transition-all"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
+          <nav aria-label="오답 노트 페이지" className="flex justify-center items-center gap-3 pt-3 text-sm">
+            <button type="button" disabled={currentWrongPage === 1} onClick={() => setWrongPage(currentWrongPage - 1)} className="min-h-[44px] px-3 rounded-lg border border-slate-200 disabled:opacity-30">이전</button>
+            <span aria-live="polite" aria-atomic="true" className="text-slate-600">{currentWrongPage} / {totalWrongPages}</span>
+            <button type="button" disabled={currentWrongPage === totalWrongPages} onClick={() => setWrongPage(currentWrongPage + 1)} className="min-h-[44px] px-3 rounded-lg border border-slate-200 disabled:opacity-30">다음</button>
+          </nav>
           )}
         </div>
+      </div>
+
       </div>
 
       {/* Review Quiz Modal/Overlay */}
@@ -1208,13 +1190,13 @@ export default function LearningReport() {
 
 function StatCard({ icon, label, value, color, isEvaluation }: { icon: React.ReactNode; label: string; value: string; color: string; isEvaluation?: boolean }) {
   return (
-    <div className={`p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] ${color} border border-white/50 shadow-sm flex md:flex-col items-center md:items-start gap-4 ${isEvaluation ? 'md:col-span-1' : ''}`}>
-      <div className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl md:rounded-2xl flex items-center justify-center shadow-sm shrink-0">
+    <div className={`p-3 md:p-4 rounded-2xl ${color} border border-white/50 shadow-sm flex items-center gap-3 ${isEvaluation ? 'md:col-span-1' : ''}`}>
+      <div className="w-9 h-9 bg-white rounded-xl md:rounded-2xl flex items-center justify-center shadow-sm shrink-0">
         {React.cloneElement(icon as React.ReactElement, { size: 20 })}
       </div>
       <div>
         <div className="text-[10px] md:text-sm font-bold text-slate-500 mb-0.5 md:mb-1">{label}</div>
-        <div className={`${isEvaluation ? 'text-sm md:text-base' : 'text-xl md:text-3xl'} font-black text-slate-900 leading-tight`}>{value}</div>
+        <div className={`${isEvaluation ? 'text-sm md:text-base' : 'text-xl md:text-2xl'} font-black text-slate-900 leading-tight`}>{value}</div>
       </div>
     </div>
   );

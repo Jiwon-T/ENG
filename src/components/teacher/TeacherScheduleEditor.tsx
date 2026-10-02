@@ -1,0 +1,39 @@
+import { useEffect, useState } from 'react';
+const subjects = ['영어', '수학', '국어', '과학', '한국사'];
+const labels: Record<string, string> = { draft: '저장됨', published: '반영 완료', processing: '반영 중', publishing: '반영 준비 중', notion_saved: 'Notion 저장됨', failed: '반영 실패' };
+const initial = () => ({ title: '', subject: '영어', students: [] as string[], date: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date()), start: '14:00', end: '15:30', kind: '보강', status: '예정', place: '학원', note: '' });
+interface Props {
+    selection?: {
+        date: string;
+        record?: any;
+        nonce: number;
+    };
+    onDirty?: (dirty: boolean) => void;
+    onClose?: () => void;
+    data: any;
+    busy: boolean;
+    request: (action?: string, body?: any) => Promise<any>;
+    refresh: () => Promise<void>;
+    act: (callback: () => Promise<any>) => Promise<void>;
+}
+export default function TeacherScheduleEditor({ data, busy, request, refresh, act, selection, onDirty, onClose }: Props) {
+    const [form, setForm] = useState(initial), [id, setId] = useState<string | null>(null), [revision, setRevision] = useState<number>(), [notice, setNotice] = useState('');
+    const [baseline, setBaseline] = useState(() => JSON.stringify(initial()));
+    useEffect(() => { if (!selection)
+        return; const selected = selection.record; const value = selected ? selected.data : { ...initial(), date: selection.date, subject: data.scopes?.[0]?.subject || '영어' }; setForm(value); setBaseline(JSON.stringify(value)); setId(selected?.id || crypto.randomUUID()); setRevision(selected?.revision); setNotice(''); }, [selection?.nonce]);
+    useEffect(() => { onDirty?.(JSON.stringify(form) !== baseline); }, [form, baseline, onDirty]);
+    const record = data.schedules?.find((r: any) => r.id === id);
+    const set = (key: string, value: any) => setForm(f => ({ ...f, [key]: value }));
+    const canPublish = Boolean(id) && !busy && !['published', 'processing', 'publishing', 'notion_saved'].includes(record?.stage) && JSON.stringify(form) === JSON.stringify(record?.data);
+    return <section className="panel mt-4"><div className="flex justify-between items-center mb-3"><h2 className="!mb-0">보강·휴강·시험 일정</h2>{onClose && <button className="small-button" disabled={busy} onClick={onClose}>닫기</button>}</div><fieldset disabled={busy}><div className="grid md:grid-cols-2 gap-5"><div>
+  <label>일정명<input value={form.title} onChange={e => set('title', e.target.value)} placeholder="예: 관계대명사 보강"/></label>
+  <div className="grid grid-cols-2 gap-3 mt-3"><label>날짜<input type="date" value={form.date} onChange={e => set('date', e.target.value)}/></label><label>과목<select value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value, students: [] }))}>{subjects.map(s => <option key={s}>{s}</option>)}</select></label>
+  <label>시작<input type="time" value={form.start} onChange={e => set('start', e.target.value)}/></label><label>종료<input type="time" value={form.end} onChange={e => set('end', e.target.value)}/></label>
+  {([['kind', '종류', ['정규 수업', '보강', '휴강', '시험', '기타']], ['status', '상태', ['예정', '변경', '완료', '취소']], ['place', '장소', ['학원', '온라인', '기타']]] as const).map(([key, label, options]) => <label key={key}>{label}<select value={form[key]} onChange={e => set(key, e.target.value)}>{options.map(x => <option key={x}>{x}</option>)}</select></label>)}</div>
+  <p className="text-xs font-semibold text-slate-500 mt-4 mb-2">대상 학생</p><div className="max-h-40 overflow-auto rounded-xl border border-pink-100 p-2">{data.students.filter((s: any) => data.admin || data.scopes.some((x: any) => x.studentKey === s.studentKey && x.subject === form.subject)).map((s: any) => <label key={s.studentKey} className="flex items-center gap-2 min-h-[36px]"><input type="checkbox" checked={form.students.includes(s.studentKey)} onChange={e => set('students', e.target.checked ? [...form.students, s.studentKey] : form.students.filter(x => x !== s.studentKey))}/>{s.studentDisplayName}</label>)}</div>
+  <label className="block mt-3">안내 내용<textarea rows={3} value={form.note} onChange={e => set('note', e.target.value)}/></label>
+  <div className="flex flex-wrap gap-2 mt-3"><button className="primary-button" disabled={busy} onClick={() => act(async () => { const r = await request('save-schedule', { id, revision, data: form }); setId(r.id); setRevision((revision || 0) + 1); setBaseline(JSON.stringify(form)); await refresh(); setNotice('일정을 저장했습니다. 반영하면 학생·학부모 리포트에 표시됩니다.'); })}>저장</button><button className="small-button" disabled={!canPublish} onClick={() => act(async () => { await request('publish-schedule', { id }); await refresh(); setNotice('반영을 요청했습니다.'); })}>반영</button><button className="small-button" disabled={busy} onClick={() => { if (JSON.stringify(form) !== baseline && !window.confirm('저장하지 않은 변경을 취소하고 새 일정을 만들까요?'))
+        return; setId(crypto.randomUUID()); setRevision(undefined); const value = { ...initial(), date: selection?.date || initial().date, subject: data.scopes?.[0]?.subject || '영어' }; setForm(value); setBaseline(JSON.stringify(value)); setNotice(''); }}>새 일정</button><button className="small-button" disabled={busy} onClick={() => act(refresh)}>새로고침</button></div>{notice && <p role="status" className="text-xs text-slate-500 mt-3">{notice}</p>}
+ </div><div><h2>저장한 일정</h2>{(data.schedules || []).slice().sort((a: any, b: any) => b.updatedAt - a.updatedAt).map((r: any) => <button key={r.id} className="w-full text-left py-3 min-h-[44px] border-b border-pink-100" onClick={() => { if (JSON.stringify(form) !== baseline && !window.confirm('저장하지 않은 변경을 취소하고 다른 일정을 열까요?'))
+        return; setId(r.id); setRevision(r.revision); setForm(r.data); setBaseline(JSON.stringify(r.data)); setNotice(''); }}><span className="font-bold text-sm">{r.data.title}</span><span className="block text-xs text-slate-500 mt-1">{r.data.date} · {r.data.start}–{r.data.end} · {r.data.subject} · {r.data.status}</span><span className="block text-xs text-pink-500 mt-1">{labels[r.stage] || r.stage}</span></button>)}{!data.schedules?.length && <p className="text-xs text-slate-500">저장한 일정이 없습니다.</p>}</div></div></fieldset></section>;
+}

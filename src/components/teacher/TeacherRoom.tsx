@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import TeacherWorkspace from './TeacherWorkspace';
+import AcademicImport from './AcademicImport';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Users, Calendar, ClipboardList, Plus, Search, MoreVertical, Phone, GraduationCap, Clock, MessageSquare, Trash2, Save, X, FileSpreadsheet, BookOpen, BarChart3, Sparkles, FileText, Languages, History, Link } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, Timestamp, getDocs, writeBatch } from 'firebase/firestore';
 
-import WordbookManager from './WordbookManager';
+const WordbookManager = lazy(() => import('./WordbookManager'));
 import StudentReportManager from './StudentReportManager';
 import { PetService } from '../../lib/petService';
 import { PetCharacter } from '../pet/PetCharacters';
@@ -42,6 +44,10 @@ interface TeacherRoomProps {
 }
 
 export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
+  const [legacy, setLegacy] = useState(false);
+  return legacy ? <><button type="button" onClick={() => setLegacy(false)} className="mx-4 mt-4 px-4 min-h-[44px] rounded-xl bg-pastel-pink-50 text-pastel-pink-600 text-sm font-bold">← 나의 선생님방</button><LegacyTeacherRoom onNavigate={onNavigate}/></> : <TeacherWorkspace onNavigate={onNavigate} onAccounts={() => setLegacy(true)}/>;
+}
+function LegacyTeacherRoom({ onNavigate }: TeacherRoomProps) {
   const [activeTab, setActiveTab] = useState<'students' | 'wordbook' | 'grammar' | 'exam' | 'reports'>('students');
   const [students, setStudents] = useState<StudentUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -375,7 +381,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
                 <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-5 md:p-6 mb-6">
                   <div className="flex items-center justify-between gap-3 mb-4">
                     <div>
-                      <h3 className="font-black text-slate-900">Notion 학생 · 학부모 리포트</h3>
+                      <h3 className="font-black text-slate-900">Notion 학생 · 학부모 리포트</h3><AcademicImport />
                       <p className="text-xs text-slate-500 mt-1">앱 계정이 없는 학생도 학부모 링크를 발급할 수 있습니다.</p>
                     </div>
                     <button onClick={loadNotionStudents} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold">새로고침</button>
@@ -822,7 +828,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
             >
-              <WordbookManager category="word" />
+              <Suspense fallback={<p className="text-sm text-slate-500">세트를 불러오는 중…</p>}><WordbookManager category="word" /></Suspense>
             </motion.div>
           )}
 
@@ -833,7 +839,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
             >
-              <WordbookManager category="grammar" />
+              <Suspense fallback={<p className="text-sm text-slate-500">세트를 불러오는 중…</p>}><WordbookManager category="grammar" /></Suspense>
             </motion.div>
           )}
 
@@ -844,7 +850,7 @@ export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
             >
-              <WordbookManager category="exam" />
+              <Suspense fallback={<p className="text-sm text-slate-500">세트를 불러오는 중…</p>}><WordbookManager category="exam" /></Suspense>
             </motion.div>
           )}
 

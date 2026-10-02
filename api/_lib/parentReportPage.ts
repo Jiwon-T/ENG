@@ -1,3 +1,4 @@
+import { parentLessonDTO } from './reportAudienceDTO.js';
 import crypto from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
 import { FieldPath } from 'firebase-admin/firestore';
@@ -30,13 +31,7 @@ export async function loadParentReportPage(db: Firestore, student: string, curso
   const docs = snapshot.docs.slice(0, 10);
   const reports = docs.map(doc => {
     const r = doc.data() as StoredLessonReport;
-    return {
-      reportId: crypto.createHash('sha256').update(r.notionPageId).digest('hex').slice(0, 16),
-      lessonDateStart: r.lessonDateStart, lessonDateEnd: r.lessonDateEnd,
-      lessonTime: r.lessonTime, selfStudyTime: r.selfStudyTime, category: r.category,
-      attendance: r.attendance, attitude: r.attitude, homework: r.homework, test: r.test,
-      vocabularyScore: r.vocabularyScore, schoolExamScore: r.schoolExamScore, feedback: r.feedback,
-    };
+    return parentLessonDTO(r);
   });
   const last = docs.at(-1);
   return { reports, nextCursor: snapshot.docs.length > 10 && last

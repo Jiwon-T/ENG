@@ -213,35 +213,27 @@ service cloud.firestore {
       allow read, write: if isAuthenticated() && (isTeacher() || isAdmin());
     }
 
+    function canManageLearningSet(data) {
+      return (isTeacher() && data.get('createdBy', '') == request.auth.uid) ||
+        (isAdmin() && data.get('createdBy', '') in ['', 'system']);
+    }
+
     match /wordbooks/{wordbookId} {
       allow read: if isAuthenticated();
-      allow create: if isTeacher() || isAdmin();
-      allow update: if isAuthenticated() && (
-        resource.data.createdBy == request.auth.uid || 
-        (isTeacher() && resource.data.createdBy == 'system') || 
-        isAdmin()
-      );
-      allow delete: if isAuthenticated() && (
-        resource.data.createdBy == request.auth.uid || 
-        (isTeacher() && resource.data.createdBy == 'system') || 
-        isAdmin()
-      );
+      allow create: if (isTeacher() || isAdmin()) && request.resource.data.createdBy == request.auth.uid;
+      allow update: if canManageLearningSet(resource.data) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdBy']) ||
+          (isAdmin() && resource.data.get('createdBy', '') in ['', 'system'] &&
+            request.resource.data.createdBy == request.auth.uid));
+      allow delete: if canManageLearningSet(resource.data);
 
       match /words/{wordId} {
         allow read: if isAuthenticated();
-        allow write: if isAuthenticated() && (
-          get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data.createdBy == request.auth.uid || 
-          (isTeacher() && get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data.createdBy == 'system') || 
-          isAdmin()
-        );
+        allow write: if canManageLearningSet(get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data);
 
         match /examples/{exampleId} {
           allow read: if isAuthenticated();
-          allow write: if isAuthenticated() && (
-            get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data.createdBy == request.auth.uid || 
-            (isTeacher() && get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data.createdBy == 'system') || 
-            isAdmin()
-          );
+          allow write: if canManageLearningSet(get(/databases/$(database)/documents/wordbooks/$(wordbookId)).data);
         }
       }
     }
@@ -327,6 +319,9 @@ service cloud.firestore {
     // 학생/학부모는 클라이언트에서 직접 전체 문서를 읽지 못하며,
     // 반드시 서버 API(/api/student/*, /api/parent/*)를 통해 DTO로만 조회됩니다.
     // ----------------------------------------------------
+    match /academicRecords/{recordId} { allow read, write: if false; }
+    match /studentEnrollments/{recordId} { allow read, write: if false; }
+
     match /lessonReports/{reportId} {
       // 오직 선생님/관리자만 클라이언트에서 조회 가능, 생성/수정은 서버(Firebase Admin SDK) 전용
       allow read: if isAuthenticated() && (isTeacher() || isAdmin());
@@ -370,5 +365,11 @@ service cloud.firestore {
       // 학부모 세션은 서버 전용
       allow read, write: if false;
     }
+    match /teacherCurricula/{id} { allow read, write: if false; }
+    match /teacherLessonDrafts/{id} { allow read, write: if false; }
+    match /teacherSchedules/{id} { allow read, write: if false; }
+    match /teacherClasses/{id} { allow read, write: if false; }
+    match /teacherWorkspaceAccess/{id} { allow read, write: if false; }
+    match /teacherWorkspaceConfig/{id} { allow read, write: if false; }
   }
 }

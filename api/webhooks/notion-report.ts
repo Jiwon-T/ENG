@@ -74,6 +74,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       lessonDateEnd: data.lessonDateEnd || null,
       lessonTime: data.lessonTime || '',
       selfStudyTime: data.selfStudyTime || '',
+      subject: data.subject || '영어',
       category: data.category,
       attendance: data.attendance || '',
       attitude: data.attitude || '',
@@ -104,7 +105,7 @@ export function decodeMakeBase64Payload(payload: Record<string, unknown>): Recor
   const stringFields = [
     'notionPageId', 'notionStudentPageId', 'studentKey', 'lessonDateStart',
     'lessonDateEnd', 'lessonTime', 'selfStudyTime', 'category', 'attendance',
-    'attitude', 'homework', 'test', 'feedback', 'sourceUpdatedAt',
+    'subject', 'attitude', 'homework', 'test', 'feedback', 'sourceUpdatedAt',
   ];
   const decoded: Record<string, unknown> = { schemaVersion: Number(payload.schemaVersion || 1) };
 

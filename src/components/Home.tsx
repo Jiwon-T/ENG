@@ -1,4 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { auth } from '../lib/firebase';
+import { safeFetchJson } from '../lib/safeFetchJson';
+import { readRecentLearning, type RecentLearning } from '../lib/recentLearning';
+import type { StudentLessonReportDTO, StudentScheduleDTO } from '../types/lessonReport';
 import { motion, AnimatePresence } from 'motion/react';
 import { GraduationCap, Languages, BookOpen, History, BarChart3, FileText, Users, ArrowRight, X, Sparkles, Dog } from 'lucide-react';
 
@@ -7,16 +11,48 @@ interface HomeProps {
   userRole?: 'teacher' | 'student' | 'admin';
   userEmail?: string;
   hasNewAssignment?: boolean;
+  userUid?: string;
+  pendingAssignmentCount?: number | null;
+  onResume?: (target: RecentLearning) => void;
 }
 
-export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment }: HomeProps) {
+export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment, userUid, pendingAssignmentCount, onResume }: HomeProps) {
+  const recent = userUid ? readRecentLearning(userUid) : null;
+  const [nextSchedule, setNextSchedule] = useState<{ uid: string; schedule: StudentScheduleDTO | null } | null>(null);
+  const [lessonPending, setLessonPending] = useState<{ uid: string; count: number } | null>(null);
+  useEffect(() => {
+    let live = true;
+    const controller = new AbortController();
+    if (!userUid) return;
+    // Home renders first; this summary never blocks navigation.
+    const timer = window.setTimeout(async () => {
+      try {
+        if (auth.currentUser?.uid !== userUid) return;
+        const token = await auth.currentUser.getIdToken();
+        const options = { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal };
+        const [reportsResult, schedulesResult] = await Promise.allSettled([
+          safeFetchJson<{ reports: StudentLessonReportDTO[] }>('/api/student/lesson-reports', options),
+          safeFetchJson<{ schedules: StudentScheduleDTO[] }>('/api/student/schedules', options),
+        ]);
+        if (live && schedulesResult.status === 'fulfilled' && schedulesResult.value.ok && Array.isArray(schedulesResult.value.data?.schedules)) {
+          const upcoming = schedulesResult.value.data.schedules.filter(s => s.status === '예정' && Number.isFinite(new Date(s.startAt).getTime()) && new Date(s.endAt || s.startAt).getTime() >= Date.now()).sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+          setNextSchedule({ uid: userUid, schedule: upcoming[0] || null });
+        }
+        if (reportsResult.status !== 'fulfilled') return;
+        const res = reportsResult.value;
+        if (live && res.ok && Array.isArray(res.data?.reports)) setLessonPending({ uid: userUid, count: res.data.reports.filter(r => r.assignmentContent?.trim() && !r.assignmentCompleted).length });
+      } catch { /* Keep the count unknown rather than show zero. */ }
+    }, 500);
+    return () => { live = false; clearTimeout(timer); controller.abort(); };
+  }, [userUid]);
+  const pending = typeof pendingAssignmentCount === 'number' && lessonPending?.uid === userUid ? pendingAssignmentCount + lessonPending.count : null;
   const isSuperAdmin = userEmail === 'lizzieshere1@gmail.com';
 
   const menuItems = [
     {
       id: 'vocab',
       title: '단어 세트',
-      description: '객관식, 플래시카드, 매치게임으로 단어장을 학습합니다.',
+      description: '단어 암기와 퀴즈',
       icon: <BookOpen className="text-pastel-pink-500 w-4 h-4 md:w-8 md:h-8" />,
       color: 'bg-pastel-pink-50',
       borderColor: 'border-pastel-pink-100',
@@ -24,19 +60,9 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
       show: true
     },
     {
-      id: 'exam',
-      title: '시험기간',
-      description: '각 학교별 시험기간 대비 단어장을 학습합니다.',
-      icon: <FileText className="text-amber-500 w-4 h-4 md:w-8 md:h-8" />,
-      color: 'bg-amber-50',
-      borderColor: 'border-amber-100',
-      textColor: 'text-amber-600',
-      show: true
-    },
-    {
       id: 'grammar',
       title: '문법 세트',
-      description: '주요 문법 포인트를 학습합니다.',
+      description: '핵심 문법 연습',
       icon: <GraduationCap className="text-purple-500 w-4 h-4 md:w-8 md:h-8" />,
       color: 'bg-purple-50',
       borderColor: 'border-purple-100',
@@ -44,9 +70,29 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
       show: true
     },
     {
+      id: 'exam',
+      title: '시험기간',
+      description: '학교별 내신 대비',
+      icon: <FileText className="text-amber-500 w-4 h-4 md:w-8 md:h-8" />,
+      color: 'bg-amber-50',
+      borderColor: 'border-amber-100',
+      textColor: 'text-amber-600',
+      show: true
+    },
+    {
+      id: 'report',
+      title: '학습 리포트',
+      description: '과제 · 일정 · 성적',
+      icon: <BarChart3 className="text-indigo-500 w-4 h-4 md:w-8 md:h-8" />,
+      color: 'bg-indigo-50',
+      borderColor: 'border-indigo-100',
+      textColor: 'text-indigo-600',
+      show: true
+    },
+    {
       id: 'analyzer',
       title: '지문 분석기',
-      description: '영어 지문을 분석해 보세요.',
+      description: '영어 지문 분석',
       icon: <Languages className="text-blue-500 w-4 h-4 md:w-8 md:h-8" />,
       color: 'bg-blue-50',
       borderColor: 'border-blue-100',
@@ -56,7 +102,7 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
     {
       id: 'generator',
       title: '문제 생성기',
-      description: '다양한 유형의 변형 문제를 생성합니다.',
+      description: '변형 문제 만들기',
       icon: <Sparkles className="text-amber-500 w-4 h-4 md:w-8 md:h-8" />,
       color: 'bg-amber-50',
       borderColor: 'border-amber-100',
@@ -76,12 +122,12 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
   ];
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12">
-      <header className="text-center mb-16">
+    <div className="max-w-5xl mx-auto px-4 py-5 md:px-6 md:py-12">
+      <header className="text-center mb-5 md:mb-16">
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm mb-6 border border-pastel-pink-100"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-sm mb-0 md:mb-6 border border-pastel-pink-100"
         >
           <span className="text-sm">🏫</span>
           <span className="text-sm font-bold text-pastel-pink-500 uppercase tracking-wider">
@@ -90,28 +136,39 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
         </motion.div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {menuItems.filter(item => item.show).map((item, index) => (
+      <section aria-label="오늘 할 일" className="mb-4 rounded-2xl border border-slate-100 bg-white p-4">
+        <h2 className="text-sm font-bold text-slate-800 mb-2">오늘 할 일</h2>
+        <button type="button" onClick={() => onNavigate('report')} className="min-h-[44px] w-full text-left flex justify-between items-center gap-2 text-sm">
+          <span className="text-slate-600">{pending !== null ? (pending > 0 ? `미완료 과제 ${pending}개` : '미완료 과제 없음') : '과제·일정 확인하기'}</span><ArrowRight size={16} className="text-slate-400" />
+        </button>
+        {nextSchedule?.uid === userUid && nextSchedule.schedule && <button type="button" onClick={() => onNavigate('report')} className="min-h-[44px] w-full text-left text-xs text-violet-700 leading-relaxed">다음 일정 · {nextSchedule.schedule.title}<span className="block text-slate-500">{new Intl.DateTimeFormat('ko-KR', {timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', weekday: 'short', hour: 'numeric', minute: '2-digit'}).format(new Date(nextSchedule.schedule.startAt))}</span></button>}
+        {recent && onResume && <button type="button" onClick={() => onResume(recent)} className="min-h-[44px] w-full pt-2 border-t border-slate-100 text-left flex justify-between items-center gap-3">
+          <span className="min-w-0"><span className="block text-sm font-bold text-pastel-pink-600">최근 학습 이어하기</span><span className="block text-xs text-slate-500 truncate">{recent.title} · 범위 {recent.chunk + 1}</span></span><ArrowRight size={16} className="shrink-0 text-pastel-pink-500" />
+        </button>}
+      </section>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
+        {menuItems.filter(item => item.show && item.id !== 'pet').map((item, index) => (
           <motion.button
             key={item.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
             onClick={() => onNavigate(item.id as any)}
-            className={`group p-6 md:p-8 rounded-[2.5rem] border-2 ${item.borderColor} ${item.color} hover:shadow-2xl hover:shadow-pastel-pink-200/30 transition-all duration-300 text-left flex flex-col h-full active:scale-[0.98]`}
+            className={`group min-w-0 p-4 md:p-6 rounded-2xl border ${item.borderColor} ${item.color} hover:shadow-2xl hover:shadow-pastel-pink-200/30 transition-all duration-300 text-left flex flex-col h-full active:scale-[0.98]`}
           >
-            <div className="mb-4 md:mb-6 p-2 md:p-4 bg-white rounded-2xl shadow-sm flex items-center gap-2 md:gap-4 group-hover:scale-105 transition-transform duration-300">
+            <div className="mb-2 md:mb-3 flex items-center gap-2 md:gap-3">
               <div className="flex-shrink-0">
                 {item.icon}
               </div>
-              <h3 className={`text-base md:text-xl font-black ${item.textColor} flex items-center gap-2`}>
+              <h3 className={`text-sm md:text-xl font-black ${item.textColor} flex items-center gap-2`}>
                 {item.title}
               </h3>
             </div>
-            <p className="text-sm md:text-base text-slate-600 font-medium leading-relaxed">
+            <p className="text-xs md:text-sm text-slate-500 font-medium leading-relaxed">
               {item.description}
+              {item.id === 'report' && pending !== null && pending > 0 && <span className="block mt-2 text-xs font-bold text-indigo-700">미완료 과제 {pending}개</span>}
             </p>
-            <div className="mt-auto pt-6 flex items-center gap-2 text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <div className="mt-auto pt-3 hidden md:flex items-center gap-2 text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-300">
               <span>바로가기</span>
               <div className="w-5 h-5 rounded-full bg-white flex items-center justify-center">
                 <ArrowRight size={12} className={item.textColor} />
@@ -121,12 +178,13 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
         ))}
       </div>
 
-      <footer className="mt-24 text-center border-t border-slate-100 pt-12">
-        <p className="text-slate-400 text-sm font-medium">
+      <button type="button" onClick={() => onNavigate('pet')} className="mt-4 min-h-[44px] px-4 py-2 rounded-xl border border-emerald-100 bg-emerald-50 flex items-center gap-2 text-sm font-semibold text-emerald-700"><Dog size={18} /> 나만의 펫 <span className="text-[10px] font-normal">Beta</span></button>
+      <footer className="mt-6 md:mt-12 text-center border-t border-slate-100 pt-3 md:pt-4">
+        <p className="text-slate-400 text-[10px] md:text-xs font-normal">
           © 2026 지원T English. All rights reserved.
         </p>
-        <p className="text-slate-400 text-sm font-medium mt-2">
-          ✉️ lizywon@naver.com
+        <p className="text-slate-400 text-[10px] md:text-xs font-normal mt-2">
+          <a href="mailto:lizywon@naver.com" className="hover:text-slate-600 transition-colors">문의 · lizywon@naver.com</a>
         </p>
       </footer>
     </div>

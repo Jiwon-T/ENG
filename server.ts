@@ -46,32 +46,33 @@ async function startServer() {
   });
 
   app.post("/api/parent/verify-pin", async (req, res) => {
-    const handler = (await import("./api/parent/verify-pin.ts")).default;
+    const handler = (await import("./api/_lib/parent/verify-pin.ts")).default;
     await handler(req as any, res as any);
   });
 
   app.get("/api/parent/lesson-reports", async (req, res) => {
-    const handler = (await import("./api/parent/lesson-reports.ts")).default;
+    const handler = (await import("./api/_lib/parent/lesson-reports.ts")).default;
     await handler(req as any, res as any);
   });
 
   app.get("/api/parent/schedules", async (req, res) => {
-    const handler = (await import("./api/parent/schedules.ts")).default;
+    const handler = (await import("./api/_lib/parent/schedules.ts")).default;
     await handler(req as any, res as any);
   });
 
   app.get("/api/parent/report-status", async (req, res) => {
-    const handler = (await import("./api/parent/report-status.ts")).default;
+    const handler = (await import("./api/_lib/parent/report-status.ts")).default;
     await handler(req as any, res as any);
   });
 
+  app.all('/api/teacher/workspace', async (req, res) => { const { default: handler } = await import('./api/teacher/workspace'); await handler(req, res); });
   app.get("/api/student/lesson-reports", async (req, res) => {
-    const handler = (await import("./api/student/lesson-reports.ts")).default;
+    const handler = (await import("./api/_lib/student/lesson-reports.ts")).default;
     await handler(req as any, res as any);
   });
 
   app.get("/api/student/schedules", async (req, res) => {
-    const handler = (await import("./api/student/schedules.ts")).default;
+    const handler = (await import("./api/_lib/student/schedules.ts")).default;
     await handler(req as any, res as any);
   });
 
@@ -86,7 +87,27 @@ async function startServer() {
   });
 
   app.patch("/api/student/assignment-completion", async (req, res) => {
-    const handler = (await import("./api/student/assignment-completion.ts")).default;
+    const handler = (await import("./api/_lib/student/assignment-completion.ts")).default;
+    await handler(req as any, res as any);
+  });
+
+  app.post("/api/webhooks/notion-academic", async (req, res) => {
+    const handler = (await import("./api/webhooks/notion-academic.ts")).default;
+    await handler(req as any, res as any);
+  });
+
+  app.post("/api/teacher/import-academic", async (req, res) => {
+    const handler = (await import("./api/teacher/import-academic.ts")).default;
+    await handler(req as any, res as any);
+  });
+
+  app.get("/api/student/academic", async (req, res) => {
+    const handler = (await import("./api/_lib/student/academic.ts")).default;
+    await handler(req as any, res as any);
+  });
+
+  app.get("/api/parent/academic", async (req, res) => {
+    const handler = (await import("./api/_lib/parent/academic.ts")).default;
     await handler(req as any, res as any);
   });
 

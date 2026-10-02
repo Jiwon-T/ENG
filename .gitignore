@@ -9,3 +9,5 @@ coverage/
 jiwont-production-v*.zip
 jiwont-full-production.zip
 jiwont-vercel-report-changes.tar.gz
+
+.work-checkpoints/

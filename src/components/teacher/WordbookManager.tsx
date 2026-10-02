@@ -250,12 +250,14 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
   useEffect(() => {
     if (!auth.currentUser) return;
-    const q = query(
-      collection(db, 'wordbooks'), 
-      where('createdBy', 'in', [auth.currentUser.uid, 'system'])
-    );
+    const q = auth.currentUser.email === 'lizzieshere1@gmail.com'
+      ? query(collection(db, 'wordbooks'))
+      : query(collection(db, 'wordbooks'), where('createdBy', '==', auth.currentUser.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedWordbooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wordbook));
+      const fetchedWordbooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wordbook)).filter(wb =>
+        wb.createdBy === auth.currentUser?.uid ||
+        (auth.currentUser?.email === 'lizzieshere1@gmail.com' && (!wb.createdBy || wb.createdBy === 'system'))
+      );
       setAllWordbooks(fetchedWordbooks);
 
       // Filter by category

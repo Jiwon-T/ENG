@@ -1,3 +1,6 @@
+import TeacherReportReview from './TeacherReportReview';
+import { isCurrentStudent } from '../../lib/teacherLessonGrid';
+import { safeFetchJson } from '../../lib/safeFetchJson';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart3, TrendingUp, BookOpen, Calendar, Search, User, Save, X, CheckCircle2, Trash2, MessageSquare, ClipboardList, Gamepad2, Clock, ChevronLeft, ChevronRight, Pencil, XCircle, Trophy } from 'lucide-react';
@@ -39,6 +42,15 @@ interface StudentReportManagerProps {
 }
 
 export default function StudentReportManager({ initialStudentUid }: StudentReportManagerProps) {
+  const [studentGroup,setStudentGroup]=useState<'current'|'other'>('current');
+  const [directory,setDirectory]=useState<any[]>([]);
+  const [directoryLoading,setDirectoryLoading]=useState(true),[directoryError,setDirectoryError]=useState('');
+  useEffect(()=>{
+    let live=true;
+    (async()=>{const token=await auth.currentUser?.getIdToken();const result=await safeFetchJson<any>('/api/teacher/workspace',{headers:{Authorization:`Bearer ${token}`}});if(!result.ok||!result.data?.ok)throw new Error('수강 상태를 확인하지 못했습니다. 화면을 다시 열어 주세요.');if(live)setDirectory(result.data.students);})().catch(error=>{if(live)setDirectoryError(error.message);}).finally(()=>{if(live)setDirectoryLoading(false);});
+    return()=>{live=false;};
+  },[]);
+  useEffect(()=>{if(initialStudentUid&&directory.length)setStudentGroup(isCurrentStudent(directory.find(d=>d.linkedFirebaseUid===initialStudentUid)||{})?'current':'other');},[directory,initialStudentUid]);
   const [students, setStudents] = useState<StudentUser[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentUser | null>(null);
   const [evaluation, setEvaluation] = useState('');
@@ -356,15 +368,16 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
   const totalWrongPages = Math.ceil(allIncorrectAnswers.length / WRONG_PER_PAGE);
   const paginatedWrongAnswers = allIncorrectAnswers.slice((wrongPage - 1) * WRONG_PER_PAGE, wrongPage * WRONG_PER_PAGE);
 
-  const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    s.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredStudents = directoryLoading||directoryError?[]:students.filter(s => {
+    const enrolled=isCurrentStudent(directory.find(d=>d.linkedFirebaseUid===s.uid)||{});
+    return enrolled===(studentGroup==='current') && `${s.alias||s.name} ${s.email}`.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+  const selectedDirectory=directory.find(d=>d.linkedFirebaseUid===selectedStudent?.uid);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* Student List */}
-      <div className="lg:col-span-1 space-y-6">
+      <div className="lg:col-span-1 space-y-4">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
@@ -376,19 +389,19 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
           />
         </div>
 
-        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-slate-50 bg-slate-50/50">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="p-3 border-b border-slate-50 bg-slate-50/50">
             <h3 className="font-black text-slate-900 flex items-center gap-2">
               <User size={18} className="text-pastel-pink-500" />
               연결된 학생 목록
-            </h3>
+            </h3><div className="flex gap-2 mt-2" role="group" aria-label="학생 수강 상태">{([ ['current','재원생'],['other','이외'] ] as const).map(([value,label])=><button key={value} aria-pressed={studentGroup===value} onClick={()=>setStudentGroup(value)} className={`px-3 min-h-[36px] rounded-lg text-xs font-bold ${studentGroup===value?'bg-pastel-pink-500 text-white':'bg-white border border-slate-200 text-slate-500'}`}>{label}</button>)}</div>
           </div>
-          <div className="max-h-[600px] overflow-y-auto">
+          <div className="max-h-[480px] overflow-y-auto">{directoryLoading&&<p className="p-3 text-xs text-slate-400">수강 상태를 확인하는 중…</p>}{directoryError&&<p role="alert" className="p-3 text-xs text-rose-600">{directoryError}</p>}
             {filteredStudents.map((student) => (
               <button
                 key={student.uid}
                 onClick={() => setSelectedStudent(student)}
-                className={`w-full p-4 flex items-center gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 ${
+                className={`w-full p-3 flex items-center gap-3 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 ${
                   selectedStudent?.uid === student.uid ? 'bg-pastel-pink-50' : ''
                 }`}
               >
@@ -408,8 +421,8 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                 </div>
               </button>
             ))}
-            {filteredStudents.length === 0 && !loading && (
-              <div className="p-10 text-center text-slate-400 font-medium">
+            {filteredStudents.length === 0 && !loading && !directoryLoading && !directoryError && (
+              <div className="p-4 text-center text-slate-400 font-medium">
                 검색 결과가 없습니다.
               </div>
             )}
@@ -426,12 +439,12 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="space-y-8"
+              className="space-y-4"
             >
-              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                <div className="flex justify-between items-start mb-8">
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 bg-pastel-pink-100 rounded-2xl flex items-center justify-center text-2xl font-black text-pastel-pink-600 overflow-hidden">
+                    <div className="w-10 h-10 bg-pastel-pink-100 rounded-2xl flex items-center justify-center text-lg font-black text-pastel-pink-600 overflow-hidden">
                       {selectedStudent.photoURL && selectedStudent.photoURL.startsWith('http') ? (
                         <img src={selectedStudent.photoURL} alt={selectedStudent.alias || selectedStudent.name} className="w-full h-full rounded-2xl object-cover" referrerPolicy="no-referrer" />
                       ) : (
@@ -439,7 +452,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                       )}
                     </div>
                     <div>
-                      <h2 className="text-2xl font-black text-slate-900">{selectedStudent.alias || selectedStudent.name} {selectedStudent.role === 'teacher' ? '선생님' : '학생'}의 리포트</h2>
+                      <h2 className="text-lg font-black text-slate-900">{selectedStudent.alias || selectedStudent.name} {selectedStudent.role === 'teacher' ? '선생님' : '학생'}의 리포트</h2>
                       <p className="text-slate-500 font-medium">{selectedStudent.email}</p>
                     </div>
                   </div>
@@ -451,9 +464,10 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                   </button>
                 </div>
 
+                {selectedDirectory&&<details className="mb-4 rounded-xl border border-pink-100 p-3"><summary className="text-sm font-bold text-pink-600 cursor-pointer">학부모·학생 리포트 확인</summary><div className="teacher-workspace mt-3"><TeacherReportReview students={[selectedDirectory]} initialStudentKey={selectedDirectory.studentKey}/></div></details>}
                 {/* 1. 과제 및 공지 메모 남기기 */}
-                <div className="pt-6 border-t border-slate-100">
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 mb-4">
+                <div className="pt-3 border-t border-slate-100">
+                  <h3 className="text-sm font-black text-slate-900 flex items-center gap-2 mb-4">
                     <ClipboardList className="text-blue-500" size={20} />
                     과제 및 공지 메모 남기기
                   </h3>
@@ -462,13 +476,13 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                       value={assignment}
                       onChange={(e) => setAssignment(e.target.value)}
                       placeholder="학생에게 남길 과제나 공지사항을 입력해주세요. (최대 10개까지 보관되며, 학생 리포트에 알림이 표시됩니다.)"
-                      className="w-full h-32 p-6 bg-blue-50/30 border-2 border-blue-100 rounded-3xl focus:ring-4 focus:ring-blue-100 focus:border-blue-300 outline-none transition-all resize-none font-medium text-slate-700"
+                      className="w-full h-20 p-3 bg-blue-50/30 border-2 border-blue-100 rounded-3xl focus:ring-4 focus:ring-blue-100 focus:border-blue-300 outline-none transition-all resize-none font-medium text-slate-700"
                     />
                     <div className="flex justify-end">
                       <button
                         onClick={handleSaveAssignment}
                         disabled={savingAssignment || !assignment.trim()}
-                        className="flex items-center gap-2 px-8 py-4 bg-blue-500 text-white rounded-2xl font-bold hover:bg-blue-600 shadow-lg shadow-blue-200 transition-all disabled:opacity-50"
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-2xl font-bold hover:bg-blue-600 shadow-lg shadow-blue-200 transition-all disabled:opacity-50"
                       >
                         <Save size={18} />
                         {savingAssignment ? '저장 중...' : '과제 메모 저장'}
@@ -478,15 +492,15 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                 </div>
 
                 {/* 2. 과제 수행 현황 */}
-                <div className="pt-8 border-t border-slate-100">
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 mb-6">
+                <div className="pt-4 border-t border-slate-100">
+                  <h3 className="text-sm font-black text-slate-900 flex items-center gap-2 mb-3">
                     <ClipboardList className="text-emerald-500" size={20} />
                     과제 수행 현황
                   </h3>
                   
-                  <div className="space-y-4 mb-8">
+                  <div className="space-y-4 mb-4">
                     {paginatedAssignments.map((item) => (
-                      <div key={item.id} className={`p-5 rounded-3xl border transition-all ${item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+                      <div key={item.id} className={`p-3 rounded-3xl border transition-all ${item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
                         <div className="flex justify-between items-start mb-2">
                           <div className="flex items-center gap-2">
                             <div className={`w-2 h-2 rounded-full ${item.isDone ? 'bg-emerald-500' : 'bg-slate-300'}`} />
@@ -569,7 +583,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                     ))}
 
                     {studentAssignments.length === 0 && (
-                      <div className="py-10 text-center text-slate-300 italic text-sm bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                      <div className="py-4 text-center text-slate-300 italic text-sm bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                         등록된 과제가 없습니다.
                       </div>
                     )}
@@ -597,8 +611,8 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                 </div>
 
                 {/* 3. 학습 성취도 평가 */}
-                <div className="pt-8 border-t border-slate-100 space-y-4">
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <div className="pt-4 border-t border-slate-100 space-y-4">
+                  <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
                     <TrendingUp className="text-pastel-pink-500" size={20} />
                     학습 성취도 평가
                   </h3>
@@ -606,7 +620,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                     value={evaluation}
                     onChange={(e) => setEvaluation(e.target.value)}
                     placeholder="학생의 학습 성취도에 대한 평가를 입력해주세요. (예: 매우 우수함, 단어 복습이 필요함 등)"
-                    className="w-full h-40 p-6 bg-slate-50 border-2 border-slate-100 rounded-3xl focus:ring-4 focus:ring-pastel-pink-100 focus:border-pastel-pink-300 outline-none transition-all resize-none font-medium text-slate-700"
+                    className="w-full h-24 p-3 bg-slate-50 border-2 border-slate-100 rounded-3xl focus:ring-4 focus:ring-pastel-pink-100 focus:border-pastel-pink-300 outline-none transition-all resize-none font-medium text-slate-700"
                   />
                   <div className="flex justify-between items-center">
                     {isConfirmingWithdraw ? (
@@ -639,7 +653,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                     <button
                       onClick={handleSaveEvaluation}
                       disabled={saving}
-                      className="flex items-center gap-2 px-8 py-4 bg-pastel-pink-500 text-white rounded-2xl font-bold hover:bg-pastel-pink-600 shadow-lg shadow-pastel-pink-200 transition-all disabled:opacity-50"
+                      className="flex items-center gap-2 px-4 py-2 bg-pastel-pink-500 text-white rounded-2xl font-bold hover:bg-pastel-pink-600 shadow-lg shadow-pastel-pink-200 transition-all disabled:opacity-50"
                     >
                       <Save size={18} />
                       {saving ? '저장 중...' : '평가 저장하기'}
@@ -648,32 +662,32 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                 </div>
 
                 {/* 4. 학습 리포트 부분 (통계) */}
-                <div className="pt-8 border-t border-slate-100">
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 mb-6">
+                <div className="pt-4 border-t border-slate-100">
+                  <h3 className="text-sm font-black text-slate-900 flex items-center gap-2 mb-3">
                     <BarChart3 className="text-amber-500" size={20} />
                     학습 리포트 상세
                   </h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                    <div className="p-5 bg-blue-50 rounded-3xl border border-blue-100 flex items-center gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                    <div className="p-3 bg-blue-50 rounded-3xl border border-blue-100 flex items-center gap-4">
                       <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
                         <BookOpen className="text-blue-500" />
                       </div>
                       <div>
                         <div className="text-xs font-bold text-blue-600 mb-1">학습한 단어</div>
-                        <div className="text-2xl font-black text-slate-900">{stats.learnedWords}개</div>
+                        <div className="text-lg font-black text-slate-900">{stats.learnedWords}개</div>
                       </div>
                     </div>
-                    <div className="p-5 bg-emerald-50 rounded-3xl border border-emerald-100 flex items-center gap-4">
+                    <div className="p-3 bg-emerald-50 rounded-3xl border border-emerald-100 flex items-center gap-4">
                       <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
                         <Calendar className="text-emerald-500" />
                       </div>
                       <div>
                         <div className="text-xs font-bold text-emerald-600 mb-1">출석률</div>
-                        <div className="text-2xl font-black text-slate-900">{stats.attendanceRate}%</div>
+                        <div className="text-lg font-black text-slate-900">{stats.attendanceRate}%</div>
                       </div>
                     </div>
-                    <div className="p-5 bg-amber-50 rounded-3xl border border-amber-100 flex items-center gap-4">
+                    <div className="p-3 bg-amber-50 rounded-3xl border border-amber-100 flex items-center gap-4">
                       <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
                         <Clock className="text-amber-500" />
                       </div>
@@ -684,13 +698,13 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                         </div>
                       </div>
                     </div>
-                    <div className="p-5 bg-rose-50 rounded-3xl border border-rose-100 flex items-center gap-4">
+                    <div className="p-3 bg-rose-50 rounded-3xl border border-rose-100 flex items-center gap-4">
                       <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm shrink-0">
                         <Trophy className="text-rose-500" />
                       </div>
                       <div>
                         <div className="text-xs font-bold text-rose-600 mb-1">단어 테스트</div>
-                        <div className="text-2xl font-black text-slate-900">{testSessions.length}회</div>
+                        <div className="text-lg font-black text-slate-900">{testSessions.length}회</div>
                         {testSessions[0] && (
                           <div className="text-[10px] font-bold text-rose-400 mt-0.5">
                             최근: {formatDayRange(testSessions[0].dayStart, testSessions[0].dayEnd, testSessions[0].category, testSessions[0].wordbookType, testSessions[0].wordbookTitle, testSessions[0].wordbookId) || '완료'}
@@ -702,7 +716,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
 
                   {/* 단어 테스트 성적표 & 학습자 설정 DAY */}
                   {testSessions.length > 0 && (
-                    <div className="p-6 bg-linear-to-br from-rose-50/70 via-pink-50/40 to-indigo-50/40 rounded-[2rem] border border-rose-100/80 mb-8 shadow-2xs">
+                    <div className="p-3 bg-linear-to-br from-rose-50/70 via-pink-50/40 to-indigo-50/40 rounded-[2rem] border border-rose-100/80 mb-4 shadow-2xs">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center shadow-xs">
@@ -768,7 +782,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                     </div>
                   )}
 
-                  <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 mb-8">
+                  <div className="p-3 bg-slate-50 rounded-[2rem] border border-slate-100 mb-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                       <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <TrendingUp size={16} className="text-pastel-pink-500" />
@@ -887,7 +901,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                     </div>
 
                     {totalSessionPages > 1 && (
-                      <div className="flex justify-center items-center gap-4 pt-6">
+                      <div className="flex justify-center items-center gap-4 pt-3">
                         <button
                           onClick={() => setSessionPage(prev => Math.max(1, prev - 1))}
                           disabled={sessionPage === 1}
@@ -908,7 +922,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                   </div>
 
                   {/* 5. 오답 노트 섹션 */}
-                  <div className="p-6 bg-rose-50/30 rounded-[2rem] border border-rose-100">
+                  <div className="p-3 bg-rose-50/30 rounded-[2rem] border border-rose-100">
                     <h3 className="text-xs font-black text-rose-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                       <XCircle size={16} className="text-rose-500" />
                       수강생 오답 노트
@@ -973,7 +987,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
                     </div>
 
                     {totalWrongPages > 1 && (
-                      <div className="flex justify-center items-center gap-4 pt-6">
+                      <div className="flex justify-center items-center gap-4 pt-3">
                         <button
                           onClick={() => setWrongPage(prev => Math.max(1, prev - 1))}
                           disabled={wrongPage === 1}
@@ -996,8 +1010,8 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
               </div>
             </motion.div>
           ) : (
-            <div className="h-full min-h-[400px] flex flex-col items-center justify-center bg-white rounded-[2.5rem] border border-slate-100 border-dashed p-10 text-center">
-              <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+            <div className="h-full min-h-[180px] flex flex-col items-center justify-center bg-white rounded-2xl border border-slate-100 border-dashed p-4 text-center">
+              <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-3">
                 <BarChart3 className="text-slate-200" size={40} />
               </div>
               <h3 className="text-xl font-black text-slate-900 mb-2">학습 리포트 관리</h3>

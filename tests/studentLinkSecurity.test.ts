@@ -108,19 +108,19 @@ describe('Student Account Linking and Ownership Protection Tests', () => {
 
   // 4. 학생 API가 firebaseUid를 자동 기록(자가 소유권 주장)하지 않음 (정적 코드 검사)
   it('4. Student API source code contains NO auto-binding or firebaseUid mutation', () => {
-    const code = fs.readFileSync('api/student/lesson-reports.ts', 'utf8');
+    const code = fs.readFileSync('api/_lib/student/lesson-reports.ts', 'utf8');
     // Firestore 컬렉션 쓰기/수정 메서드(.set, .add, .delete)가 일체 없어야 함
     assert.equal(
       code.includes('.set(') || code.includes('.add(') || code.includes('.delete('),
       false,
-      'api/student/lesson-reports.ts must never perform write operations (.set, .add, .delete)'
+      'api/_lib/student/lesson-reports.ts must never perform write operations (.set, .add, .delete)'
     );
     // Firestore doc().update() 호출이 일체 없어야 함 (오직 crypto hash 및 get/read만 수행)
     const hasDocUpdate = /doc\([^)]+\)\.update\(/g.test(code);
     assert.equal(
       hasDocUpdate,
       false,
-      'api/student/lesson-reports.ts must not call .update on any Firestore document'
+      'api/_lib/student/lesson-reports.ts must not call .update on any Firestore document'
     );
     assert.equal(
       code.includes('firebaseUid: studentUid'),

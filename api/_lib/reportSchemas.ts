@@ -54,6 +54,7 @@ export const NotionReportWebhookSchema = z.object({
   lessonDateEnd: z.string().nullable().optional(),
   lessonTime: z.string().optional().default(''),
   selfStudyTime: z.string().optional().default(''),
+  subject: z.string().optional().default('영어'),
   category: z.enum(['수업', '테스트']).catch('수업'),
   attendance: z.string().optional().default(''),
   attitude: z.string().optional().default(''),
@@ -117,6 +118,7 @@ export const UnlinkStudentAccountSchema = z.object({
  * internalStudentId: SHA-256(Notion 학생 페이지 ID)
  */
 export interface StoredLessonReport {
+  subject?: string;
   notionPageId: string;
   studentKey: string;
   internalStudentId: string;
@@ -189,6 +191,7 @@ export interface StudentReportMapping {
  * - 비공개 필드 (원천 배제): attitude, test, feedback, selfStudyTime, notionPageId, internalStudentId, studentKey
  */
 export interface StudentLessonReportDTO {
+  subject?: string;
   reportId: string;
   lessonDate: string;
   category: '수업' | '테스트';
@@ -204,6 +207,7 @@ export interface StudentLessonReportDTO {
  * 학부모 리포트 DTO (내부 notionPageId 대신 해시 ID 반환, 전체 feedback 유지)
  */
 export interface ParentLessonReportDTO {
+  subject?: string;
   reportId: string;
   lessonDateStart: string;
   lessonDateEnd: string | null;
@@ -234,6 +238,7 @@ export const NotionScheduleWebhookSchema = z.object({
   title: z.string().min(1, 'title is required'),
   startAt: z.string().min(1, 'startAt is required'),
   endAt: z.string().nullable().optional(),
+  subject: z.string().optional().default('영어'),
   scheduleType: z.string().optional().default('정규 수업'),
   status: z.enum(['예정', '완료', '취소']).catch('예정'),
   notice: z.string().nullable().optional(),
@@ -247,6 +252,7 @@ export type NotionScheduleWebhookPayload = z.infer<typeof NotionScheduleWebhookS
  * 문서 ID: hash(notionScheduleId + ':' + internalStudentId)
  */
 export interface StoredStudentSchedule {
+  subject?: string;
   scheduleDocId: string;
   notionScheduleId: string;
   internalStudentId: string;
@@ -268,6 +274,7 @@ export interface StoredStudentSchedule {
  * 내부 식별자(notionScheduleId, internalStudentId, studentKey) 원천 배제
  */
 export interface StudentScheduleDTO {
+  subject?: string;
   scheduleId: string; // scheduleDocId
   title: string;
   startAt: string;
