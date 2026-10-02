@@ -666,7 +666,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
               <span>일정</span>
 
             </button>
-            <button type="button" onClick={() => setActiveTab('academic')} className={`px-4 py-2.5 rounded-xl text-sm font-bold ${activeTab === 'academic' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>성적</button>
+            <button type="button" onClick={() => setActiveTab('academic')} className={`px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 min-h-[44px] ${activeTab === 'academic' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}><span aria-hidden="true">📈</span><span>성적</span></button>
           </div>
 
           {activeTab === 'academic' ? <AcademicPanel load={loadAcademic} subject={subjectFilter} /> : activeTab === 'schedules' ? (
