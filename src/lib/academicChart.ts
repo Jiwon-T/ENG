@@ -15,3 +15,17 @@ export function chartValue(row: ReturnType<typeof scoreRows>[number], metric: 's
   const value = metric === 'percentile' ? row.percentile : row.score;
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
+
+export type ScorePeriod = 'all' | '3' | '6';
+export function inScorePeriod(date: string | null, period: ScorePeriod, now = new Date()) {
+  if (period === 'all') return true;
+  if (!date || !Number.isFinite(Date.parse(date))) return false;
+  const today = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const [year, month, day] = today.split('-').map(Number);
+  const target = new Date(Date.UTC(year, month - 1 - Number(period), 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(day, lastDay));
+  const start = target.toISOString().slice(0, 10);
+  const recordDate = date.slice(0, 10);
+  return recordDate >= start && recordDate <= today;
+}
