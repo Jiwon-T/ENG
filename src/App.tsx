@@ -1,3 +1,4 @@
+import { studentReportCache } from './lib/studentReportCache';
 import React, { useState, useEffect, Suspense, lazy, Component } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
@@ -201,6 +202,7 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      studentReportCache.invalidate();
       setAuthLoading(true);
       setUser(firebaseUser);
       

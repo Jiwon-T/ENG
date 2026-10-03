@@ -1,3 +1,5 @@
+import { lessonSource } from './teacherNotionWorkspace.js';
+import { teacherTestProperties } from './teacherTestProperties.js';
 import { extractAssignmentFromFeedback } from './assignmentExtractor.js';
 import { lookupStudentByPageId } from './notion.js';
 import type { Firestore } from 'firebase-admin/firestore';
@@ -15,10 +17,13 @@ async function notion(path: string, method = 'GET', body?: any) {
 const rich = (value: string) => ({ rich_text: value.match(/[\s\S]{1,1900}/g)?.map(content => ({ type: 'text', text: { content } })) || [] });
 export async function publishTeacherDraft(db: Firestore, draftId: string, draft: any) {
     const config = (await db.collection('teacherWorkspaceConfig').doc('notion').get()).data();
-    const databaseId = config?.lessonDatabaseId || LESSON_DATABASE;
-    if (!(config?.supportedSubjects || ['영어']).includes(draft.data.subject))
+    const source=await lessonSource(db,draft.ownerUid,draft.data.subject);
+    const databaseId = source?.lessonDatabaseId || config?.lessonDatabaseId || LESSON_DATABASE;
+    if ((!source||source.shared) && !(config?.supportedSubjects || ['영어']).includes(draft.data.subject))
         throw new Error('MAKE_SUBJECT_NOT_CONFIGURED');
     const schema = await notion(`databases/${databaseId}`);
+    if(draft.notionPageId && !draft.notionEditedAt)throw new Error('NOTION_EDIT_CONFLICT');
+    if(draft.notionPageId){const page=await notion(`pages/${draft.notionPageId}`);if(page.parent?.database_id?.replace(/-/g,'')!==databaseId.replace(/-/g,''))throw new Error('NOTION_SOURCE_MISMATCH');if(draft.notionEditedAt&&page.last_edited_time!==draft.notionEditedAt)throw new Error('NOTION_EDIT_CONFLICT');}
     if (!schema.properties?.['앱 기록 ID'] || !schema.properties?.['과목'])
         throw new Error('NOTION_SCHEMA_SETUP_REQUIRED');
     let pageId = draft.notionPageId;
@@ -36,13 +41,15 @@ export async function publishTeacherDraft(db: Firestore, draftId: string, draft:
         '구분': { select: { name: student.studentDisplayName } },
         '출결': { checkbox: d.attendance === '출석' || d.attendance === '보강 출석' },
         [titleProperty]: { title: d.classSession === '없음' ? [] : [{ text: { content: `${d.start} ~ ${d.end}` } }] },
+        ...(schema.properties['학원'] ? {'학원':rich(draft.academyId)} : {}),
+        ...(schema.properties['작성자 선생님'] && source?.teacherPageId ? {'작성자 선생님':{relation:[{id:source.teacherPageId}]}} : {}),
         '앱 기록 ID': rich(draftId), '과목': { select: { name: d.subject } },
         '학생': { relation: [{ id: d.studentKey }] },
         [dateProperty]: { date: { start: `${d.date}T${d.classSession === '없음' ? d.selfStudyStart : d.start}:00+09:00`, end: `${d.date}T${d.classSession === '없음' ? d.selfStudyEnd : d.end}:00+09:00` } },
         '수업 내용': rich(lessonFeedback(d)), '메모': rich(d.nextPlan),
         '출석': { select: d.attendance === '미확인' ? null : { name: d.attendance } },
         '태도': { status: { name: d.attitude } }, '숙제': { status: { name: d.homework } }, '테스트': { status: { name: d.test } },
-        '단어': { number: d.total }, '틀린 단어': { number: d.total === null ? null : d.total - d.correct }, '회차': { number: d.round },
+        ...teacherTestProperties(d), '회차': { number: d.round },
         '자습': { checkbox: d.selfStudy === '있음' }, '자습시간': rich(d.selfStudy === '있음' ? `${d.selfStudyStart} ~ ${d.selfStudyEnd}` : ''), [schema.properties['자습회차'] ? '자습회차' : '자습 회차']: { number: d.selfStudyRound },
         '앱 출결 메모': rich(d.attendanceNote || ''), '앱 특이사항': rich(d.specialNote || ''),
         '범주': { select: { name: '수업' } }, '전송 완료': { select: { name: '미완' } },
@@ -53,7 +60,7 @@ export async function publishTeacherDraft(db: Firestore, draftId: string, draft:
             throw new Error('NOTION_SCHEMA_SETUP_REQUIRED');
     const page = pageId ? await notion(`pages/${pageId}`, 'PATCH', { properties }) : await notion('pages', 'POST', { parent: { database_id: databaseId }, properties });
     const ref = db.collection('teacherLessonDrafts').doc(draftId);
-    await ref.update({ notionPageId: page.id, stage: 'notion_saved', updatedAt: Date.now() });
+    await ref.update({ notionPageId: page.id, notionEditedAt:page.last_edited_time, stage: 'notion_saved', updatedAt: Date.now() });
     // Use the trusted source's existing on-demand button URL; never accept a client URL.
     const fresh = await notion(`pages/${page.id}`);
     const formula = fresh.properties?.['전송하기']?.formula?.string || '';
@@ -121,7 +128,7 @@ export async function publishTeacherSchedule(db: Firestore, id: string, record: 
     };
     const page = pageId ? await notion(`pages/${pageId}`, 'PATCH', { properties }) : await notion('pages', 'POST', { parent: { database_id: SCHEDULE_DATABASE }, properties });
     const ref = db.collection('teacherSchedules').doc(id);
-    await ref.update({ notionPageId: page.id, stage: 'notion_saved', updatedAt: Date.now() });
+    await ref.update({ notionPageId: page.id, notionEditedAt:page.last_edited_time, stage: 'notion_saved', updatedAt: Date.now() });
     const fresh = await notion(`pages/${page.id}`);
     const url = fresh.properties?.['반영 요청']?.formula?.string?.match(/https:\/\/hook\.eu1\.make\.com\/[a-zA-Z0-9]+(?:\?[^\s"<>]*)?/)?.[0];
     if (!url)

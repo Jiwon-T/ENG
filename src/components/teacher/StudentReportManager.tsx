@@ -324,7 +324,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
       return numStart === numEnd ? `${numStart}세트` : `${numStart}~${numEnd}세트`;
     }
     // Wordbooks (단어장) always use DAY
-    return numStart === numEnd ? `DAY ${numStart}` : `DAY ${numStart}~${numEnd}`;
+    return numStart === numEnd ? `Day ${numStart}` : `Day ${numStart}~Day ${numEnd}`;
   };
 
   const getDayRangeLabel = (session: any) => {
@@ -335,7 +335,7 @@ export default function StudentReportManager({ initialStudentUid }: StudentRepor
     const isGrammar = session.category === 'grammar' || (effectiveType ? ['irregular', 'relative-grammar', 'modal-grammar', 'basic-modal-grammar', 'verb-form-grammar', 'grammar-cramming', 'complement-grammar', 'to-ing-grammar', 'conversion-grammar', 'comparative-grammar'].includes(effectiveType) : false);
     if (isSentenceOrder) return '지문:';
     if (isGrammar) return '설정 세트:';
-    return session.type === 'test' ? '학습자 설정 DAY:' : '범위:';
+    return '';
   };
 
   const testSessions = sessionHistory.filter(s => s.type === 'test');

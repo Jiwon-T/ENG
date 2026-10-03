@@ -1,3 +1,4 @@
+import {notionTeachingScopes} from './teacherNotionWorkspace.js';
 import type { IncomingMessage } from 'http';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
 import { subjects } from './teacherWorkspacePolicy.js';
@@ -25,10 +26,11 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     // A client-side role alone never grants access to an academy.
     if (!admin && user?.role === 'principal' && !principal) throw new Error('TEACHER_NOT_CONFIGURED');
     const academyId = profile?.academyId || (admin ? 'main' : null);
-    let scopes = profile?.scopes || [];
+    const teachingScopes = profile?.notionTeacherPageId ? await notionTeachingScopes(db,profile) : profile?.scopes || [];
+    let scopes = teachingScopes;
     if (principal) {
         const members = await db.collection('academyStudentMemberships').where('academyId', '==', academyId).get();
         scopes = members.docs.filter(d => !d.data().disabled).flatMap(d => subjects.map(subject => ({studentKey: d.id, subject})));
     }
-    return { uid, admin, principal, academyId, scopes, teachingScopes: profile?.scopes || [], db };
+    return { uid, admin, principal, academyId, scopes, teachingScopes, db };
 }

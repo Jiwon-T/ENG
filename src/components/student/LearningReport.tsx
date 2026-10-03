@@ -1,3 +1,4 @@
+import { loadStudentResource, studentReportCache } from '../../lib/studentReportCache';
 import AcademicPanel from '../reports/AcademicPanel';
 import type { AcademicData, SubjectEnrollment } from '../../types/academic';
 import React, { useState, useEffect, useCallback } from 'react';
@@ -40,6 +41,9 @@ export default function LearningReport() {
     sessionHistory: [] as any[]
   });
   const [studentLessonReports, setStudentLessonReports] = useState<StudentLessonReportDTO[]>([]);
+  const [reportLoad, setReportLoad] = useState('loading');
+  const [scheduleLoad, setScheduleLoad] = useState('loading');
+  const [reloadLists, setReloadLists] = useState(0);
   const [studentSchedules, setStudentSchedules] = useState<StudentScheduleDTO[]>([]);
   const [userRole, setUserRole] = useState<string>('student');
   const [assignmentPage, setAssignmentPage] = useState(1);
@@ -222,24 +226,6 @@ export default function LearningReport() {
       handleFirestoreError(error, OperationType.LIST, 'studySessions');
     });
 
-    // Fetch server-owned offline lesson reports and schedules with one verified ID token.
-    auth.currentUser.getIdToken().then(idToken => {
-      const headers = { Authorization: `Bearer ${idToken}` };
-      Promise.all([
-        safeFetchJson<{ ok: boolean; error?: string; message?: string; reports: StudentLessonReportDTO[]; subjects?: SubjectEnrollment[] }>('/api/student/lesson-reports', { headers }),
-        safeFetchJson<{ ok: boolean; error?: string; message?: string; schedules: StudentScheduleDTO[] }>('/api/student/schedules', { headers }),
-      ]).then(([reportsRes, schedulesRes]) => {
-        if (reportsRes.ok && Array.isArray(reportsRes.data?.reports)) {
-          setStudentLessonReports(reportsRes.data.reports);
-          setEnrollments(reportsRes.data.subjects || []);
-        }
-        if (schedulesRes.ok && Array.isArray(schedulesRes.data?.schedules)) {
-          setStudentSchedules(schedulesRes.data.schedules);
-        }
-      });
-    }).catch(() => {
-      // safe fallback on token failure
-    });
 
     return () => {
       unsubWords();
@@ -249,6 +235,22 @@ export default function LearningReport() {
       unsubSessions();
     };
   }, []);
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+    let live = true;
+    setReportLoad('loading'); setScheduleLoad('loading');
+    const token = () => user.getIdToken();
+    loadStudentResource<{reports: StudentLessonReportDTO[]; subjects?: SubjectEnrollment[]}>(user.uid, 'lesson-reports', token).then(result => {
+      if (live && auth.currentUser?.uid === user.uid) { setStudentLessonReports(result.reports); setEnrollments(result.subjects || []); setReportLoad('ready'); }
+    }).catch(() => { if (live) setReportLoad('failed'); });
+    loadStudentResource<{schedules: StudentScheduleDTO[]}>(user.uid, 'schedules', token).then(result => {
+      if (live && auth.currentUser?.uid === user.uid) { setStudentSchedules(result.schedules); setScheduleLoad('ready'); }
+    }).catch(() => { if (live) setScheduleLoad('failed'); });
+    return () => { live = false; };
+  }, [reloadLists]);
+  function retryLists() { if (auth.currentUser) studentReportCache.invalidate(auth.currentUser.uid); setReloadLists(x => x + 1); }
 
   const markAssignmentsAsRead = async () => {
     if (!auth.currentUser || !stats.hasNewAssignment) return;
@@ -364,7 +366,7 @@ export default function LearningReport() {
       return numStart === numEnd ? `${numStart}세트` : `${numStart}~${numEnd}세트`;
     }
     // Wordbooks (단어장) - standard, exam prep (내신/수능), or general - always use DAY
-    return numStart === numEnd ? `DAY ${numStart}` : `DAY ${numStart}~${numEnd}`;
+    return numStart === numEnd ? `Day ${numStart}` : `Day ${numStart}~Day ${numEnd}`;
   };
 
   const getDayRangeLabel = (session: any) => {
@@ -375,7 +377,7 @@ export default function LearningReport() {
     const isGrammar = session.category === 'grammar' || (effectiveType ? ['irregular', 'relative-grammar', 'modal-grammar', 'basic-modal-grammar', 'verb-form-grammar', 'grammar-cramming', 'complement-grammar', 'to-ing-grammar', 'conversion-grammar', 'comparative-grammar'].includes(effectiveType) : false);
     if (isSentenceOrder) return '지문:';
     if (isGrammar) return '설정 세트:';
-    return session.type === 'test' ? '학습자 설정 DAY:' : '범위:';
+    return '';
   };
 
   const totalSessionPages = Math.ceil(stats.sessionHistory.length / SESSIONS_PER_PAGE);
@@ -539,6 +541,7 @@ export default function LearningReport() {
       } else {
         await updateDoc(doc(db, 'assignments', item.id), { isDone: true });
       }
+      if (auth.currentUser) studentReportCache.invalidate(auth.currentUser.uid);
       setAssignmentPage(1);
     } catch (error) {
       alert(error instanceof Error ? error.message : '완료 상태를 저장하지 못했습니다. 다시 시도해 주세요.');
@@ -550,6 +553,7 @@ export default function LearningReport() {
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 py-5 md:py-6">
 
+      {(reportLoad !== 'ready' || scheduleLoad !== 'ready') && <p role="status" className="text-sm text-slate-500 mb-3">{reportLoad === 'failed' || scheduleLoad === 'failed' ? <>일부 기록을 불러오지 못했습니다. <button className="underline" onClick={retryLists}>다시 불러오기</button></> : '과제·일정을 불러오는 중…'}</p>}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => { setSubjectFilter(''); setLessonPage(1); setSchedulePage(1); setAssignmentPage(1); }} className={`px-3 py-2 rounded-xl text-sm font-bold ${!subjectFilter ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>전체 과목</button>
         {[...new Set((showHistory ? enrollments : enrollments.filter(e => e.status === '등록')).map(e => e.subject))].map(subject => <button type="button" key={subject} onClick={() => { setSubjectFilter(subject); setLessonPage(1); setSchedulePage(1); setAssignmentPage(1); }} className={`px-3 py-2 rounded-xl text-sm font-bold ${subjectFilter === subject ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>{subject}</button>)}
@@ -605,7 +609,7 @@ export default function LearningReport() {
           ))}
 
           {combinedAssignments.length === 0 && (
-            <p className="text-sm text-slate-400">등록된 과제가 없습니다.</p>
+            <p className="text-sm text-slate-400">{reportLoad === 'ready' ? '등록된 과제가 없습니다.' : reportLoad === 'failed' ? '과제를 불러오지 못했습니다.' : '과제를 불러오는 중…'}</p>
           )}
 
           {totalAssignmentPages > 1 && (
@@ -625,10 +629,10 @@ export default function LearningReport() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
             <CalendarDays className="text-violet-600" size={20} />
-            일정
+            학습 일정
           </h3>
           <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700">
-            예정 {pendingScheduleCount}개
+            {scheduleLoad === 'ready' ? `예정 ${pendingScheduleCount}개` : '불러오는 중'}
           </span>
         </div>
         {visibleSchedules.length > 0 ? (
@@ -654,7 +658,7 @@ export default function LearningReport() {
           </div>
         ) : (
           <div className="py-4 text-center text-sm font-medium text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-            등록된 일정이 없습니다.
+            {scheduleLoad === 'ready' ? '등록된 일정이 없습니다.' : scheduleLoad === 'failed' ? '일정을 불러오지 못했습니다.' : '일정을 불러오는 중…'}
           </div>
         )}
         {totalSchedulePages > 1 && (

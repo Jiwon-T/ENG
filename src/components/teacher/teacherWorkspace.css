@@ -111,3 +111,31 @@
 .teacher-workspace .wordbook-card select {width:auto;min-height:28px;margin:0;padding:2px 4px;font-size:11px;border-radius:6px;}
 .teacher-workspace .wordbook-card button {opacity:1;}
 .teacher-workspace .wordbook-card > div:last-child > div {padding:2px 5px;gap:3px;border-radius:6px;}
+
+.teacher-workspace .panel, .teacher-workspace fieldset { min-width:0; }
+.lesson-tests { display:grid; gap:10px; margin-top:12px; }
+.lesson-test { border:1px solid #fce7ef; border-radius:12px; padding:10px; }
+.lesson-test legend { font-size:12px; font-weight:700; padding:0 4px; }
+.regular-calendar .weekly-board { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:5px; }
+.regular-calendar .weekly-event { min-width:0; overflow-wrap:anywhere; font-size:11px; padding:8px 5px; }
+.regular-calendar .weekly-day { min-width:0; }
+/* Each student gets a card: no page-wide horizontal overflow. */
+.lesson-grid-scroll { overflow:visible; border:0; max-height:none; }
+.lesson-grid table { display:block; min-width:0; width:100%; }
+.lesson-grid thead { display:none; }
+.lesson-grid tbody { display:grid; gap:16px; }
+.lesson-grid tr { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border:1px solid #fce7ef; border-radius:14px; overflow:hidden; }
+.lesson-grid td { display:block; min-width:0; border:0; }
+.lesson-grid td:first-child { position:static; width:auto; grid-column:1/-1; box-shadow:none; background:#fff5f8; display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.lesson-grid td:first-child input[type=date] { width:150px; margin:0; }
+.lesson-grid td[data-label]::before { content:attr(data-label); display:block; font-weight:700; color:#8f5065; font-size:12px; margin-bottom:8px; }
+.lesson-grid .lesson-time-row { grid-template-columns:1fr 1fr; gap:8px; }
+.lesson-grid td:last-child { grid-column:1/-1; border-top:1px solid #fce7ef; }
+.lesson-grid td:last-child > div { flex-direction:row; flex-wrap:wrap; align-items:center; }
+@media(max-width:700px) {
+ .lesson-grid tr { grid-template-columns:1fr; }
+ .lesson-grid td:first-child,.lesson-grid td:last-child { grid-column:1; }
+ .regular-calendar .weekly-board { gap:2px; }
+ .regular-calendar .weekly-event { font-size:10px; padding:6px 2px; }
+ .regular-calendar .weekly-day header { padding:7px 0; justify-content:center; }
+}

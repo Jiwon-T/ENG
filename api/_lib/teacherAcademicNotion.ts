@@ -5,8 +5,13 @@ import { academicDraftSchema } from './teacherAcademicPolicy.js';
 export async function gradeNotion(path:string, method='GET', body?:unknown) {
  const token=process.env.NOTION_INTEGRATION_TOKEN;
  if(!token) throw new Error('CONFIG_ERROR');
- const response=await fetch(`https://api.notion.com/v1/${path}`, {method,headers:{Authorization:`Bearer ${token}`,'Notion-Version':'2022-06-28','Content-Type':'application/json'},...(body ? {body:JSON.stringify(body)} : {}),signal:AbortSignal.timeout(15000)});
- if(!response.ok) throw new Error(`NOTION_${response.status}`);
+ let response:Response;
+ for(let attempt=0;attempt<4;attempt++){
+  response=await fetch(`https://api.notion.com/v1/${path}`, {method,headers:{Authorization:`Bearer ${token}`,'Notion-Version':'2022-06-28','Content-Type':'application/json'},...(body ? {body:JSON.stringify(body)} : {}),signal:AbortSignal.timeout(15000)});
+  if(response.status!==429||attempt===3)break;
+  const delay=Math.min(10000,Math.max(1000,Number(response.headers?.get('retry-after')||1)*1000));await new Promise(resolve=>setTimeout(resolve,delay));
+ }
+ if(!response!.ok) throw new Error(`NOTION_${response!.status}`);
  return response.json();
 }
 const rich=(text:string)=>({rich_text:text.match(/[\s\S]{1,1900}/g)?.map(content=>({text:{content}}))||[]});
@@ -28,7 +33,7 @@ export async function listTeacherNotionGrades(db:Firestore,actor:any) {
  const filter=!actor.admin && !actor.principal ? {property:'담당 선생님',relation:{contains:profile!.notionTeacherPageId}} : undefined;
  const records:any[]=[];let cursor:string|undefined;
  do {const result=await gradeNotion(`databases/${GRADE_DATABASE}/query`,'POST',{page_size:100,...(filter?{filter}:{}),...(cursor?{start_cursor:cursor}:{}),sorts:[{property:'시험일',direction:'descending'}]});
-  for(const page of result.results) if(canReadNotionGrade(actor,profile,page)) records.push({id:page.id,notionPageId:page.id,data:gradeFromPage(page),stage:'published',source:'notion',readOnly:actor.principal});
+  for(const page of result.results) if(canReadNotionGrade(actor,profile,page)){const saved=(await db.collection('academicRecords').doc(normalizeNotionPageId(page.id)).get()).data();if(saved?.sourceUpdatedAt!==page.last_edited_time)await syncAcademicPage(db,page);records.push({id:page.id,notionPageId:page.id,notionEditedAt:page.last_edited_time,data:gradeFromPage(page),stage:'published',source:'notion',readOnly:actor.principal});}
   cursor=result.has_more ? result.next_cursor : undefined;
  }while(cursor);
  return records;

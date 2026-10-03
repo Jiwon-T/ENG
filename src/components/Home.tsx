@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { auth } from '../lib/firebase';
-import { safeFetchJson } from '../lib/safeFetchJson';
+import { loadStudentResource } from '../lib/studentReportCache';
 import { readRecentLearning, type RecentLearning } from '../lib/recentLearning';
 import type { StudentLessonReportDTO, StudentScheduleDTO } from '../types/lessonReport';
 import { motion, AnimatePresence } from 'motion/react';
@@ -23,28 +23,17 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
   const [lessonPending, setLessonPending] = useState<{ uid: string; count: number } | null>(null);
   useEffect(() => {
     let live = true;
-    const controller = new AbortController();
-    if (!userUid || isEducator) return;
-    // Home renders first; this summary never blocks navigation.
-    const timer = window.setTimeout(async () => {
-      try {
-        if (auth.currentUser?.uid !== userUid) return;
-        const token = await auth.currentUser.getIdToken();
-        const options = { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal };
-        const [reportsResult, schedulesResult] = await Promise.allSettled([
-          safeFetchJson<{ reports: StudentLessonReportDTO[] }>('/api/student/lesson-reports', options),
-          safeFetchJson<{ schedules: StudentScheduleDTO[] }>('/api/student/schedules', options),
-        ]);
-        if (live && schedulesResult.status === 'fulfilled' && schedulesResult.value.ok && Array.isArray(schedulesResult.value.data?.schedules)) {
-          const upcoming = schedulesResult.value.data.schedules.filter(s => s.status === '예정' && Number.isFinite(new Date(s.startAt).getTime()) && new Date(s.endAt || s.startAt).getTime() >= Date.now()).sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
-          setNextSchedule({ uid: userUid, schedule: upcoming[0] || null });
-        }
-        if (reportsResult.status !== 'fulfilled') return;
-        const res = reportsResult.value;
-        if (live && res.ok && Array.isArray(res.data?.reports)) setLessonPending({ uid: userUid, count: res.data.reports.filter(r => r.assignmentContent?.trim() && !r.assignmentCompleted).length });
-      } catch { /* Keep the count unknown rather than show zero. */ }
-    }, 500);
-    return () => { live = false; clearTimeout(timer); controller.abort(); };
+    if (!userUid || isEducator || auth.currentUser?.uid !== userUid) return;
+    const user = auth.currentUser, token = () => user.getIdToken();
+    loadStudentResource<{reports: StudentLessonReportDTO[]}>(userUid, 'lesson-reports', token).then(result => {
+      if (live && auth.currentUser?.uid === userUid) setLessonPending({uid: userUid, count: result.reports.filter(r => r.assignmentContent?.trim() && !r.assignmentCompleted).length});
+    }).catch(() => {});
+    loadStudentResource<{schedules: StudentScheduleDTO[]}>(userUid, 'schedules', token).then(result => {
+      if (!live || auth.currentUser?.uid !== userUid) return;
+      const upcoming = result.schedules.filter(s => s.status === '예정' && new Date(s.endAt || s.startAt).getTime() >= Date.now()).sort((a,b) => Date.parse(a.startAt)-Date.parse(b.startAt));
+      setNextSchedule({uid: userUid, schedule: upcoming[0] || null});
+    }).catch(() => {});
+    return () => { live = false; };
   }, [userUid, isEducator]);
   const pending = typeof pendingAssignmentCount === 'number' && lessonPending?.uid === userUid ? pendingAssignmentCount + lessonPending.count : null;
   const isSuperAdmin = userEmail === 'lizzieshere1@gmail.com';
@@ -149,7 +138,7 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
         </button>}
       </section>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
-        {menuItems.filter(item => item.show && item.id !== 'pet').map((item, index) => (
+        {menuItems.filter(item => item.show && item.id !== 'pet' && item.id !== 'teacher-room').map((item, index) => (
           <motion.button
             key={item.id}
             initial={{ opacity: 0, y: 20 }}
@@ -180,7 +169,10 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
         ))}
       </div>
 
-      <button type="button" onClick={() => onNavigate('pet')} className="mt-4 min-h-[44px] px-4 py-2 rounded-xl border border-emerald-100 bg-emerald-50 flex items-center gap-2 text-sm font-semibold text-emerald-700"><Dog size={18} /> 나만의 펫 <span className="text-[10px] font-normal">Beta</span></button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" onClick={() => onNavigate('pet')} className="min-h-[44px] px-4 py-2 rounded-xl border border-emerald-100 bg-emerald-50 flex items-center gap-2 text-sm font-semibold text-emerald-700"><Dog size={18}/> 나만의 펫 <span className="text-[10px] font-normal">Beta</span></button>
+        {isEducator && <button type="button" onClick={() => onNavigate('teacher-room')} className="min-h-[44px] px-4 py-2 rounded-xl border border-pink-100 bg-white flex items-center gap-2 text-sm font-semibold text-pink-600"><Users size={18}/> 선생님방</button>}
+      </div>
       <footer className="mt-6 md:mt-12 text-center border-t border-slate-100 pt-3 md:pt-4">
         <p className="text-slate-400 text-[10px] md:text-xs font-normal">
           © 2026 지원T English. All rights reserved.
