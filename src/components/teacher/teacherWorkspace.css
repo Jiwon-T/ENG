@@ -100,3 +100,14 @@
 .lesson-grid th:nth-child(6) { width:130px; }
 .lesson-grid table { min-width:1400px; }
 @media(max-width:480px) { .lesson-time-row { grid-template-columns:1fr 1fr; gap:7px; } .lesson-time-row label:first-of-type { grid-column:1; grid-row:1; } .lesson-time-row label:last-of-type { grid-column:2; grid-row:1; } }
+
+/* Compact teacher-only library controls; student study views keep their layout. */
+.teacher-workspace .wordbook-tools > button {min-height:38px; padding:8px 12px; border-radius:10px; flex:initial; flex-direction:row; gap:8px; font-size:12px;}
+.teacher-workspace .wordbook-tools > button > div {width:24px;height:24px;border-radius:6px;}
+.teacher-workspace .wordbook-tools > button > div svg {width:16px;height:16px;}
+.teacher-workspace .wordbook-card {height:auto;min-height:132px;padding:14px;border-radius:14px;box-shadow:none;}
+.teacher-workspace .wordbook-card h3 {font-size:15px;}
+.teacher-workspace .wordbook-card > div:first-child {margin-bottom:8px;}
+.teacher-workspace .wordbook-card select {width:auto;min-height:28px;margin:0;padding:2px 4px;font-size:11px;border-radius:6px;}
+.teacher-workspace .wordbook-card button {opacity:1;}
+.teacher-workspace .wordbook-card > div:last-child > div {padding:2px 5px;gap:3px;border-radius:6px;}

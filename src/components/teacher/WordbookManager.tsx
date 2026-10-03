@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { WordbookCache } from '../../lib/wordbookCache';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, Plus, Search, Trash2, Edit3, FileSpreadsheet, X, CheckCircle2, Circle, GripVertical, FileText, Download, Layers, ArrowUp, ArrowDown, Calendar, CheckSquare, Square, Sliders, Check } from 'lucide-react';
 import { saveAs } from 'file-saver';
@@ -273,27 +274,29 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     return () => unsubscribe();
   }, [category]);
 
+  const wordCache = useRef(new WordbookCache<Word>());
+  const prefetching = useRef(new Set<string>());
+  const [loadedBookId,setLoadedBookId]=useState(''),[wordLoadError,setWordLoadError]=useState('');
+  const wordsLoading=Boolean(selectedWordbook && loadedBookId!==selectedWordbook.id);
+  async function prefetchWords(id:string){
+    if(prefetching.current.has(id)||wordCache.current.get(id))return;
+    prefetching.current.add(id);const startedAt=Date.now();
+    try{const snapshot=await getDocs(query(collection(db,`wordbooks/${id}/words`),orderBy('order','asc')));wordCache.current.put(id,snapshot.docs.map(d=>({id:d.id,...d.data()} as Word)),Date.now(),startedAt);}catch{/* The opened book displays connection errors. */}finally{prefetching.current.delete(id);}
+  }
   useEffect(() => {
-    setActiveDayFilter('all');
-    setSelectedWordIds([]);
-    if (!selectedWordbook) {
-      setWords([]);
-      return;
-    }
-    const q = query(
-      collection(db, `wordbooks/${selectedWordbook.id}/words`),
-      orderBy('order', 'asc')
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedWords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Word));
-      // Sort in-memory to ensure correct order
-      fetchedWords.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-      setWords(fetchedWords);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, `wordbooks/${selectedWordbook.id}/words`);
-    });
-    return () => unsubscribe();
-  }, [selectedWordbook]);
+    setActiveDayFilter('all');setSelectedWordIds([]);setWordLoadError('');
+    const id=selectedWordbook?.id;
+    if(!id){setWords([]);setLoadedBookId('');return;}
+    const cached=wordCache.current.get(id);
+    if(cached){setWords(cached);setLoadedBookId(id);}else{setWords([]);setLoadedBookId('');}
+    const q=query(collection(db,`wordbooks/${id}/words`),orderBy('order','asc'));
+    const unsubscribe=onSnapshot(q,{includeMetadataChanges:true},snapshot=>{
+      if(snapshot.metadata.fromCache&&snapshot.empty)return;
+      const fetched=snapshot.docs.map(d=>({id:d.id,...d.data()} as Word));
+      fetched.sort((a,b)=>(a.order??0)-(b.order??0));wordCache.current.put(id,fetched);setWords(fetched);setLoadedBookId(id);setWordLoadError('');
+    },()=>{setLoadedBookId(id);setWordLoadError('단어를 불러오지 못했습니다. 목록으로 돌아가 다시 열어 주세요.');});
+    return unsubscribe;
+  },[selectedWordbook?.id]);
 
   useEffect(() => {
     if (isExampleModalOpen && currentWordForExamples && selectedWordbook) {
@@ -1553,7 +1556,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   };
 
   return (
-    <div className="space-y-6">
+    <div className="wordbook-manager space-y-6">
       {moveToastMessage && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -1577,8 +1580,8 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="flex flex-col gap-4">
+          <div className="wordbook-catalog grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="wordbook-tools flex flex-col gap-2">
               <button
                 onClick={() => {
                   setNewWbCategory(category);
@@ -1684,6 +1687,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   <SortableWordbookCard 
                     key={wb.id} 
                     wb={wb} 
+                    onPrefetch={()=>prefetchWords(wb.id)} 
                     onClick={() => setSelectedWordbook(wb)}
                     onDelete={() => setDeleteTarget({ id: wb.id, title: wb.title, type: 'wordbook' })}
                     onEdit={() => {
@@ -1714,7 +1718,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
             <div className="flex gap-2 flex-wrap items-center">
               {selectedWordbook.type === 'sentence-order' ? (
                 <>
-                  <button 
+                  <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => {
                       const nextDay = typeof activeDayFilter === 'number'
                         ? activeDayFilter
@@ -1727,7 +1731,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     <FileText size={16} />
                     🧩 지문 일괄 등록
                   </button>
-                  <button 
+                  <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => setIsIndividualAddOpen(true)} 
                     className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-all border border-indigo-200"
                   >
@@ -1737,7 +1741,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 </>
               ) : (
                 <>
-                  <button 
+                  <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => {
                       setTestPaperConfig({
                         ...testPaperConfig,
@@ -1751,7 +1755,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     <FileText size={16} />
                     시험지 만들기
                   </button>
-                  <button 
+                  <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => {
                       if (selectedWordbook) {
                         setPrintConfig({
@@ -1766,18 +1770,18 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     <Download size={16} />
                     단어장 출력하기
                   </button>
-                  <button onClick={() => setIsBulkAddOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-all">
+                  <button disabled={wordsLoading || Boolean(wordLoadError)} onClick={() => setIsBulkAddOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-all">
                     <FileSpreadsheet size={16} />
                     엑셀로 단어 추가
                   </button>
-                  <button 
+                  <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => setIsDayManagementOpen(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-all border border-indigo-100"
                   >
                     <Calendar size={16} />
                     DAY 일괄 설정
                   </button>
-                  <button 
+                  <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => setIsIndividualAddOpen(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-pastel-pink-500 text-white rounded-xl font-bold text-sm hover:bg-pastel-pink-600 transition-all"
                   >
@@ -1797,7 +1801,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     selectedWordbook.category === 'exam' ? 'text-amber-500' : selectedWordbook.category === 'grammar' ? 'text-purple-600' : 'text-pastel-pink-500'
                   } />
                   {selectedWordbook.title}
-                  <button 
+                  <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => {
                       setEditingWordbook(selectedWordbook);
                       setEditWbTitleValue(selectedWordbook.title);
@@ -1831,7 +1835,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   </select>
                 </div>
               </div>
-              <button
+              <button disabled={wordsLoading || Boolean(wordLoadError)}
                 onClick={() => setDeleteTarget({ id: selectedWordbook.id, title: selectedWordbook.title, type: 'wordbook' })}
                 className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl text-sm font-bold flex items-center gap-2 transition-all"
               >
@@ -1847,7 +1851,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   <span className="text-xs font-black text-slate-400 mr-1 flex items-center gap-1">
                     {selectedWordbook.type === 'sentence-order' ? '🧩 지문 선택:' : <><Calendar size={14} /> DAY 선택:</>}
                   </span>
-                  <button
+                  <button disabled={wordsLoading || Boolean(wordLoadError)}
                     onClick={() => setActiveDayFilter('all')}
                     className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
                       activeDayFilter === 'all'
@@ -1855,12 +1859,12 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                     }`}
                   >
-                    전체 ({words.length})
+                    {wordsLoading ? '불러오는 중…' : `전체 (${words.length})`}
                   </button>
                   {currentDays.map(d => {
                     const count = words.filter((w, i) => getWordDay(w, i) === d).length;
                     return (
-                      <button
+                      <button disabled={wordsLoading || Boolean(wordLoadError)}
                         key={d}
                         onClick={() => setActiveDayFilter(d)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
@@ -1877,7 +1881,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
                 <div className="flex items-center gap-2">
                   {selectedWordbook.type === 'sentence-order' && typeof activeDayFilter === 'number' && (
-                    <button
+                    <button disabled={wordsLoading || Boolean(wordLoadError)}
                       onClick={() => handleDeletePassage(activeDayFilter)}
                       className="text-xs font-bold text-red-500 hover:text-red-700 px-2.5 py-1.5 rounded-lg border border-red-200 hover:bg-red-50 transition-all flex items-center gap-1"
                     >
@@ -1885,7 +1889,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                       지문 {activeDayFilter} 전체 삭제
                     </button>
                   )}
-                  <button
+                  <button disabled={wordsLoading || Boolean(wordLoadError)}
                     onClick={() => {
                       if (selectedWordIds.length === displayedWords.length) {
                         setSelectedWordIds([]);
@@ -1927,7 +1931,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                           : `+ 신규 DAY ${(Math.max(...currentDays, 0)) + 1}로 이동`}
                       </option>
                     </select>
-                    <button
+                    <button disabled={wordsLoading || Boolean(wordLoadError)}
                       onClick={() => {
                         const selectEl = document.getElementById('batchDayTargetSelect') as HTMLSelectElement | null;
                         const targetDay = parseInt(selectEl?.value || '1');
@@ -1937,7 +1941,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     >
                       이동 적용
                     </button>
-                    <button
+                    <button disabled={wordsLoading || Boolean(wordLoadError)}
                       onClick={() => setSelectedWordIds([])}
                       className="px-2 py-1 text-slate-400 hover:text-slate-600 text-xs font-bold"
                     >
@@ -1958,7 +1962,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 strategy={rectSortingStrategy}
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {displayedWords.map((word, index) => (
+                  {!wordsLoading && !wordLoadError && displayedWords.map((word, index) => (
                     <SortableWordCard
                       key={word.id}
                       word={word}
@@ -2001,7 +2005,9 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                       onDelete={() => setDeleteTarget({ id: word.id, title: word.word, type: 'word' })}
                     />
                   ))}
-                  {displayedWords.length === 0 && (
+                  {wordsLoading && <p role="status" className="col-span-full py-8 text-center text-slate-500">단어를 불러오는 중… 잠시만 기다려 주세요.</p>}
+                  {wordLoadError && <p role="alert" className="col-span-full py-8 text-center text-rose-600">{wordLoadError}</p>}
+                  {!wordsLoading && !wordLoadError && displayedWords.length === 0 && (
                     <div className="col-span-2 py-20 text-center text-slate-400 font-medium">
                       {selectedWordbook.type === 'sentence-order'
                         ? (activeDayFilter === 'all' ? '등록된 지문 문장이 없습니다. [🧩 지문 일괄 등록] 버튼을 눌러 지문을 추가해보세요.' : `지문 ${activeDayFilter}에 등록된 문장이 없습니다.`)
@@ -3858,9 +3864,11 @@ function SortableWordbookCard({
   onClick, 
   onDelete, 
   onEdit,
-  onMoveCategory
+  onMoveCategory,
+  onPrefetch
 }: { 
   wb: Wordbook; 
+  onPrefetch?:()=>void;
   onClick: () => void; 
   onDelete: () => void; 
   onEdit: () => void; 
@@ -3892,7 +3900,8 @@ function SortableWordbookCard({
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       onClick={onClick}
-      className="h-48 p-8 rounded-[2.5rem] bg-white border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-pastel-pink-200/20 transition-all text-left flex flex-col group cursor-pointer active:scale-[0.98] relative"
+      onPointerEnter={onPrefetch}
+      className="wordbook-card h-48 p-8 rounded-[2.5rem] bg-white border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-pastel-pink-200/20 transition-all text-left flex flex-col group cursor-pointer active:scale-[0.98] relative"
     >
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-2">
