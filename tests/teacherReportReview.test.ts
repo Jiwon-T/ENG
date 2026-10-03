@@ -46,3 +46,15 @@ test('both admin audiences load without a separately deployed reportSlugs compou
    if (audience === 'student') assert.equal('feedback' in result.reports[0], false);
  }
 });
+
+test('legacy reports missing source ID use their stable document ID for both audiences', async()=>{
+ const {notionPageId,...legacy}=english;
+ const query:any={where:()=>query,get:async()=>({docs:[{id:'stable-document',data:()=>legacy}]})};
+ const empty:any={where:()=>empty,get:async()=>({docs:[]})};
+ const db:any={collection:(name:string)=>name==='lessonReports'?query:empty};
+ const deps:any={readStudentMapping:async()=>({internalStudentId:'secret'}),loadAcademicData:async()=>({records:[],subjects:[],academyScores:[]})};
+ const parent=await loadTeacherReportReview(db,{admin:true,scopes:[]},studentKey,'parent',deps);
+ const student=await loadTeacherReportReview(db,{admin:true,scopes:[]},studentKey,'student',deps);
+ assert.equal(parent.reports[0].reportId,student.reports[0].reportId);
+ assert.equal(student.reports[0].reportId.length,16);
+});

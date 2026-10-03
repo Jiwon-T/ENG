@@ -1,6 +1,10 @@
 export default function LessonAcademyFields({ value, onChange }: { value: any; onChange: (key: string, value: any) => void }) {
   const changeSession = (kind: 'classSession' | 'selfStudy', choice: string) => {
     onChange(kind, choice);
+    if (kind==='selfStudy' && choice==='있음' && value.end && !value.selfStudyStart && !value.selfStudyEnd) {
+      const [hour,minute]=value.end.split(':').map(Number);
+      if(hour<23){onChange('selfStudyStart',value.end);onChange('selfStudyEnd',`${String(hour+1).padStart(2,'0')}:${String(minute).padStart(2,'0')}`);}
+    }
     if (choice !== '있음') {
       for (const key of kind === 'classSession' ? ['start', 'end', 'round'] : ['selfStudyStart', 'selfStudyEnd', 'selfStudyRound'])
         onChange(key, key.endsWith('Round') || key === 'round' ? null : '');

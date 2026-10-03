@@ -30,9 +30,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 const source = await listTeacherNotionGrades(db,actor);
                 return sendJson(res,200,{ok:true,records:mergeNotionRows(appRecords,source)});
             }
-            if (action === 'academy-lessons') {
+            if (action === 'academy-lessons' || action === 'academy-lessons-fast') {
                 const records = actor.admin ? await db.collection('teacherLessonDrafts').get() : actor.principal ? await db.collection('teacherLessonDrafts').where('academyId','==',actor.academyId).get() : await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).get();
-                const rows=mergeNotionRows(records.docs.map(d=>({id:d.id,...d.data()})),await readSourceLessons(db,actor)).filter((r:any)=>canViewAcademyRecord(actor,r));
+                const rows=mergeNotionRows(records.docs.map(d=>({id:d.id,...d.data()})),action==='academy-lessons-fast'?[]:await readSourceLessons(db,actor)).filter((r:any)=>canViewAcademyRecord(actor,r));
                 const names=new Map<string,string>();
                 await Promise.all([...new Set(rows.map((r:any)=>r.ownerUid))].map(async uid=>{if(!uid)return;const user=(await db.collection('users').doc(uid as string).get()).data();names.set(uid as string,user?.alias||user?.name||'선생님');}));
                 return sendJson(res,200,{ok:true,records:rows.map((r:any)=>({...r,teacherName:names.get(r.ownerUid)||'선생님'}))});
@@ -44,27 +44,28 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 const audience = z.enum(['parent', 'student']).parse(url.searchParams.get('audience'));
                 return sendJson(res, 200, { ok: true, ...await loadTeacherReportReview(db, actor, studentKey, audience) });
             }
-            if (action === 'bootstrap') {
+            if (action === 'bootstrap' || action === 'bootstrap-fast') {
+                const fast = action === 'bootstrap-fast';
                 const [notion, mappings, enrollments, curricula, drafts, classes, schedules, reflected, sourceWorkspace, sourceEnrollments, sourceSchedules] = await Promise.all([
                     listNotionStudents(), readStudentDirectoryMappings(db), db.collection('studentEnrollments').get(),
                     actor.admin ? db.collection('teacherCurricula').get() : actor.principal ? db.collection('teacherCurricula').where('academyId','==',actor.academyId).get() : db.collection('teacherCurricula').where('ownerUid', '==', actor.uid).get(),
                     actor.admin ? db.collection('teacherLessonDrafts').get() : db.collection('teacherLessonDrafts').where('ownerUid', '==', actor.uid).get(),
                     actor.admin ? db.collection('teacherClasses').get() : actor.principal ? db.collection('teacherClasses').where('academyId','==',actor.academyId).get() : db.collection('teacherClasses').where('ownerUid', '==', actor.uid).get(),
                     actor.admin ? db.collection('teacherSchedules').get() : actor.principal ? db.collection('teacherSchedules').where('academyId','==',actor.academyId).get() : db.collection('teacherSchedules').where('ownerUid', '==', actor.uid).get(),
-                    db.collection('studentSchedules').get(),readNotionWorkspace(db,actor),readSourceEnrollments(db,actor),readSourceSchedules(db,actor),
+                    db.collection('studentSchedules').get(),fast?Promise.resolve({classes:[],curricula:[],issues:[],sources:[]}):readNotionWorkspace(db,actor),fast?Promise.resolve(new Map()):readSourceEnrollments(db,actor),fast?Promise.resolve([]):readSourceSchedules(db,actor),
                 ]);
                 const mergedClasses=mergeNotionRows(classes.docs.map(d=>({id:d.id,...d.data()})),sourceWorkspace.classes);
                 const mergedCurricula=mergeNotionRows(curricula.docs.map(d=>({id:d.id,...d.data()})),sourceWorkspace.curricula).map((r:any)=>({...r,classId:mergedClasses.find((c:any)=>c.notionPageId===r.classId)?.id||r.classId}));
                 const students = notion.filter(s => actor.admin || actor.scopes.some((scope: any) => scope.studentKey === s.studentKey)).map(s => {
                     const mapping = mappings.get(s.studentKey);
                     const cachedSubjects = enrollments.docs.filter(d => !d.data().removed && d.data().internalStudentId === mapping?.internalStudentId).flatMap(d => d.data().subjects || []).filter(subject => actor.admin || actor.scopes.some((scope: any) => scope.studentKey === s.studentKey && scope.subject === subject.subject));
-                    const subjects=(sourceEnrollments.get(s.studentKey)||[]).filter((entry:any)=>actor.admin||actor.scopes.some((scope:any)=>scope.studentKey===s.studentKey&&scope.subject===entry.subject));
+                    const subjects=(sourceEnrollments.get(s.studentKey)||cachedSubjects).filter((entry:any)=>actor.admin||actor.scopes.some((scope:any)=>scope.studentKey===s.studentKey&&scope.subject===entry.subject));
                     return { ...s, linkedFirebaseUid: mapping?.firebaseUid || null, subjects };
                 });
                 const records = drafts.docs.map(d => ({ id: d.id, ...d.data() }));
                 // Show only confirmed downstream reflection as published.
                 await Promise.all(records.map(async (r: any) => {
-                    if (r.stage === 'processing' && r.notionPageId) {
+                    if (!fast && r.stage === 'processing' && r.notionPageId) {
                         const reflected = await db.collection('lessonReports').doc(r.notionPageId.replace(/-/g, '')).get();
                         const fallback = reflected.exists ? reflected : await db.collection('lessonReports').doc(r.notionPageId).get();
                         if (fallback.exists && fallback.data()?.serverUpdatedAt && Date.parse(fallback.data()!.serverUpdatedAt) >= r.publishStartedAt && await confirmTeacherReflection(r.notionPageId, 'lesson').catch(() => false)) {
@@ -75,7 +76,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 }));
                 const scheduleRecords = schedules.docs.map(d => ({ id: d.id, ...d.data() }));
                 await Promise.all(scheduleRecords.map(async (r: any) => {
-                    if (r.stage === 'processing' && r.notionPageId && await confirmTeacherReflection(r.notionPageId, 'schedule').catch(() => false)) {
+                    if (!fast && r.stage === 'processing' && r.notionPageId && await confirmTeacherReflection(r.notionPageId, 'schedule').catch(() => false)) {
                         r.stage = 'published';
                         await db.collection('teacherSchedules').doc(r.id).update({ stage: 'published', ...(r.deleteRequested?{archived:true}:{}) });
                         if(r.deleteRequested)r.archived=true;
@@ -119,7 +120,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             if (!actor.admin && !actor.principal)
                 throw new Error('FORBIDDEN');
             const dbId=z.preprocess(v=>typeof v==='string'&&/^[a-f0-9-]{32,36}$/i.test(v)?normalizeNotionPageId(v):v,z.string().uuid());
-            const value = z.object({ uid: z.string().min(1), notionTeacherPageId: z.preprocess(v=>typeof v==='string'&&/^[a-f0-9]{32}$/i.test(v)?v.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5'):v,z.string().uuid().nullable().optional()), academyId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/), workspaceRole: z.enum(['teacher','principal']).default('teacher'), academyStudents: z.array(z.string().uuid()).max(400).default([]), notionSources:z.array(z.object({subject:z.enum(['영어','수학','국어','과학','한국사']),classDatabaseId:dbId,curriculumDatabaseId:dbId,timetableDatabaseId:dbId,lessonDatabaseId:z.preprocess(v=>v===''?undefined:typeof v==='string'&&/^[a-f0-9-]{32,36}$/i.test(v)?normalizeNotionPageId(v):v,z.string().uuid().optional())})).max(5).optional(), scopes: z.array(z.object({ studentKey: z.string().uuid(), subject: z.enum(['영어', '수학', '국어', '과학', '한국사']) })).max(1000) }).parse(body);
+            const value = z.object({ uid: z.string().min(1), workspaceLabel:z.string().trim().max(100).optional(), notionTeacherPageId: z.preprocess(v=>typeof v==='string'&&/^[a-f0-9]{32}$/i.test(v)?v.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5'):v,z.string().uuid().nullable().optional()), academyId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/), workspaceRole: z.enum(['teacher','principal']).default('teacher'), academyStudents: z.array(z.string().uuid()).max(400).default([]), notionSources:z.array(z.object({subject:z.enum(['영어','수학','국어','과학','한국사']),classDatabaseId:dbId,curriculumDatabaseId:dbId,timetableDatabaseId:dbId,lessonDatabaseId:z.preprocess(v=>v===''?undefined:typeof v==='string'&&/^[a-f0-9-]{32,36}$/i.test(v)?normalizeNotionPageId(v):v,z.string().uuid().optional())})).max(5).optional(), scopes: z.array(z.object({ studentKey: z.string().uuid(), subject: z.enum(['영어', '수학', '국어', '과학', '한국사']) })).max(1000) }).parse(body);
             if(value.notionSources&&new Set(value.notionSources.map(s=>s.subject)).size!==value.notionSources.length)throw new Error('NOTION_DUPLICATE_SOURCE');
             let previousProfile:any;
             await db.runTransaction(async t=>{
@@ -136,7 +137,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 // Changing an existing academy requires a separate migration of historical records.
                 if(target?.academyId&&target.academyId!==value.academyId)throw new Error('ACADEMY_MIGRATION_REQUIRED');
                 if(memberships.some(m=>m?.academyId&&m.academyId!==value.academyId))throw new Error('ACADEMY_MEMBERSHIP_CONFLICT');
-                t.set(targetRef,{...target,scopes:value.scopes,academyId:value.academyId,workspaceRole:value.workspaceRole,disabled:false,notionTeacherPageId:value.notionTeacherPageId||null,...(actor.admin&&value.notionSources?{notionSources:value.notionSources}:{}),notionAssignmentStage:'pending',previousNotionAssignment:{scopes:target?.scopes||[],notionTeacherPageId:target?.notionTeacherPageId||null}});
+                t.set(targetRef,{...target,scopes:value.scopes,workspaceLabel:value.workspaceLabel||target?.workspaceLabel||'',academyId:value.academyId,workspaceRole:value.workspaceRole,disabled:false,notionTeacherPageId:value.notionTeacherPageId||null,...(actor.admin&&value.notionSources?{notionSources:value.notionSources}:{}),notionAssignmentStage:'pending',previousNotionAssignment:{scopes:target?.scopes||[],notionTeacherPageId:target?.notionTeacherPageId||null}});
                 if(actor.admin)t.update(userRef,{role:value.workspaceRole==='principal'?'principal':'teacher'});
                 for(const ref of membershipRefs)t.set(ref,{academyId:value.academyId,disabled:false});
             });

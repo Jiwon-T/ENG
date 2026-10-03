@@ -29,11 +29,12 @@ export function canReadNotionGrade(actor:any, profile:any, page:any) {
 }
 export async function listTeacherNotionGrades(db:Firestore,actor:any) {
  const profile=(await db.collection('teacherWorkspaceAccess').doc(actor.uid).get()).data();
+ const profiles=(actor.admin||actor.principal)?(await (actor.admin?db.collection('teacherWorkspaceAccess'):db.collection('teacherWorkspaceAccess').where('academyId','==',actor.academyId)).get()).docs.map(d=>({uid:d.id,...d.data()})): [{uid:actor.uid,...profile}];
  if(!actor.admin && !actor.principal && !profile?.notionTeacherPageId) return [];
  const filter=!actor.admin && !actor.principal ? {property:'담당 선생님',relation:{contains:profile!.notionTeacherPageId}} : undefined;
  const records:any[]=[];let cursor:string|undefined;
  do {const result=await gradeNotion(`databases/${GRADE_DATABASE}/query`,'POST',{page_size:100,...(filter?{filter}:{}),...(cursor?{start_cursor:cursor}:{}),sorts:[{property:'시험일',direction:'descending'}]});
-  for(const page of result.results) if(canReadNotionGrade(actor,profile,page)){const saved=(await db.collection('academicRecords').doc(normalizeNotionPageId(page.id)).get()).data();if(saved?.sourceUpdatedAt!==page.last_edited_time)await syncAcademicPage(db,page);records.push({id:page.id,notionPageId:page.id,notionEditedAt:page.last_edited_time,data:gradeFromPage(page),stage:'published',source:'notion',readOnly:actor.principal});}
+  for(const page of result.results) if(canReadNotionGrade(actor,profile,page)){const saved=(await db.collection('academicRecords').doc(normalizeNotionPageId(page.id)).get()).data();if(saved?.sourceUpdatedAt!==page.last_edited_time)await syncAcademicPage(db,page);const teachers=(page.properties['담당 선생님']?.relation||[]).map((r:any)=>normalizeNotionPageId(r.id));const owners=profiles.filter((p:any)=>p.notionTeacherPageId&&teachers.includes(normalizeNotionPageId(p.notionTeacherPageId))).map((p:any)=>p.uid);records.push({ownerUid:owners.length===1?owners[0]:null,teacherUids:owners,id:page.id,notionPageId:page.id,notionEditedAt:page.last_edited_time,data:gradeFromPage(page),stage:'published',source:'notion',readOnly:actor.principal});}
   cursor=result.has_more ? result.next_cursor : undefined;
  }while(cursor);
  return records;

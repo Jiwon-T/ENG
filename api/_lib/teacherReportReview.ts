@@ -36,12 +36,12 @@ export async function loadTeacherReportReview(db: Firestore, actor: any, student
         subject?: string;
     }) => !allowed || allowed.has(r.subject || '영어');
     const completionHashes = new Map<string, string>((completion?.docs || []).map(d => [d.id, d.data().contentHash]));
-    const raw = lessons.docs.map(d => d.data() as StoredLessonReport).filter(visible).sort((a, b) => Date.parse(b.lessonDateStart) - Date.parse(a.lessonDateStart));
+    const raw = lessons.docs.map(d => ({ ...d.data(), notionPageId:d.data().notionPageId || d.id }) as StoredLessonReport).filter(visible).sort((a, b) => Date.parse(b.lessonDateStart) - Date.parse(a.lessonDateStart));
     const activeSlug = slugs?.docs.find(d => d.data().active === true)?.data().reportSlug;
     const parentUrl = actor.admin && activeSlug ? `/${encodeURIComponent(activeSlug)}` : null;
     return { linked: true, studentLinked: Boolean(mapping.firebaseUid), parentUrl,
         reports: raw.map(r => audience === 'parent' ? parentLessonDTO(r) : studentLessonDTO(r, completionHashes)),
-        schedules: schedules.docs.map(d => d.data() as StoredStudentSchedule).filter(visible).map(reportScheduleDTO),
+        schedules: schedules.docs.map(d => ({ ...d.data(), scheduleDocId:d.data().scheduleDocId || d.id }) as StoredStudentSchedule).filter(visible).map(reportScheduleDTO),
         academic: { records: academic.records.filter(visible), subjects: academic.subjects.filter(visible), academyScores: academic.academyScores.filter(visible) },
     };
 }

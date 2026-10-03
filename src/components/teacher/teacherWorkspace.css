@@ -139,3 +139,12 @@
  .regular-calendar .weekly-event { font-size:10px; padding:6px 2px; }
  .regular-calendar .weekly-day header { padding:7px 0; justify-content:center; }
 }
+.workspace-dialog { width:min(1100px,95vw); max-height:90dvh; border:1px solid #fbcfe8; border-radius:20px; padding:20px; overflow:auto; }
+.workspace-dialog::backdrop {background:rgb(15 23 42 / .4);}
+.workspace-dialog-header {display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;top:-20px;background:white;padding:12px 0;z-index:2;}
+.teacher-workspace button:not(:disabled) {cursor:pointer; transition:background-color .15s,box-shadow .15s;}
+.teacher-workspace button:not(:disabled):hover {background-color:#fce7f3;box-shadow:0 0 0 2px #f9a8d4;}
+.teacher-workspace button:focus-visible {outline:2px solid #db2777;outline-offset:3px;}
+.lesson-grid td[data-label="수업 내용"],.lesson-grid td[data-label="특이 사항·과제"] {grid-column:1 / -1;}
+
+.lesson-grid .workspace-dialog td[data-label="수업·자습"],.lesson-grid .workspace-dialog td[data-label="출결·평가"] {grid-column:span 1;}
