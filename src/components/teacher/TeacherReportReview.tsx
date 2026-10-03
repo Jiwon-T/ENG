@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isCurrentStudent } from '../../lib/teacherLessonGrid';
 import { auth } from '../../lib/firebase';
-import { safeFetchJson } from '../../lib/safeFetchJson';
+import { teacherAuthenticatedRequest, reportReviewError, isReportReviewResponse } from '../../lib/teacherAuthenticatedRequest';
 import AcademicPanel from '../reports/AcademicPanel';
 import { formatScheduleDateTime } from '../../lib/reportDateUtils';
 import { visibleStudentSchedules, sortParentSchedules } from '../../lib/studentReportLists';
@@ -32,8 +32,12 @@ export default function TeacherReportReview({ students, initialStudentKey }: Pro
             return;
         }
         setLoading(true);
-        (async () => { const token = await auth.currentUser?.getIdToken(); const result = await safeFetchJson<any>(`/api/teacher/workspace?action=report-review&studentKey=${encodeURIComponent(studentKey)}&audience=${audience}`, { headers: { Authorization: `Bearer ${token}` } }); if (!result.ok || !result.data?.ok)
-            throw new Error(result.data?.error === 'FORBIDDEN' ? '담당 학생의 리포트만 확인할 수 있습니다.' : '리포트를 불러오지 못했습니다. 다시 시도해 주세요.'); if (live)
+        (async () => { const result = await teacherAuthenticatedRequest<any>(auth, '/api/teacher/workspace', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'report-review', studentKey, audience }),
+        }); if (!result.ok || !result.data?.ok)
+            throw new Error(reportReviewError(result));
+        if (!isReportReviewResponse(result.data)) throw new Error('리포트 응답 형식이 올바르지 않습니다. 화면을 새로고침해 주세요.'); if (live)
             setData(result.data); })().catch(e => { if (live)
             setError(e.message); }).finally(() => { if (live)
             setLoading(false); });

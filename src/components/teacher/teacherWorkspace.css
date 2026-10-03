@@ -87,3 +87,16 @@
 .academy-log-table th {text-align:left;background:#f8fafc;color:#475569;padding:10px;font-size:11px;}
 .academy-log-table td {vertical-align:top;white-space:pre-wrap;padding:10px;border-bottom:1px solid #e2e8f0;}
 .academy-log-table th:nth-child(4) {width:32%;}
+
+.lesson-time-block { margin:14px 0; display:grid; gap:8px; }
+.lesson-time-row { display:grid; grid-template-columns:minmax(76px,.8fr) minmax(110px,1fr) minmax(110px,1fr) minmax(74px,.7fr); gap:10px; padding:10px; border:1px solid #e2e8f0; border-radius:12px; background:#fff; }
+.lesson-time-row label { min-width:0; }
+.teacher-workspace .lesson-time-row input:disabled { background:#f8fafc; color:#94a3b8; }
+.lesson-grid .lesson-time-row { gap:5px; padding:7px; grid-template-columns:65px 95px 95px 65px; }
+.lesson-grid th:nth-child(2) { width:365px; }
+.lesson-grid th:nth-child(3) { width:130px; }
+.lesson-grid th:nth-child(4) { width:220px; }
+.lesson-grid th:nth-child(5) { width:190px; }
+.lesson-grid th:nth-child(6) { width:130px; }
+.lesson-grid table { min-width:1400px; }
+@media(max-width:480px) { .lesson-time-row { grid-template-columns:1fr 1fr; gap:7px; } .lesson-time-row label:first-of-type { grid-column:1; grid-row:1; } .lesson-time-row label:last-of-type { grid-column:2; grid-row:1; } }

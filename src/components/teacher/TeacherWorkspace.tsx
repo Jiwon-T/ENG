@@ -1,3 +1,5 @@
+import { compactLessonInput } from '../../lib/lessonInput';
+import { teacherAuthenticatedRequest } from '../../lib/teacherAuthenticatedRequest';
 import LessonAcademyFields from './LessonAcademyFields';
 import TeacherWeeklyCalendar from './TeacherWeeklyCalendar';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
@@ -40,17 +42,12 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     const [workspaceRole,setWorkspaceRole] = useState('teacher'), [academyId,setAcademyId] = useState('main');
     const [staffUid, setStaffUid] = useState(''), [scopes, setScopes] = useState<any[]>([]);
     async function request(action?: string, body: any = {}) {
-        await auth.authStateReady();
-        if (!auth.currentUser) throw new Error(errors.UNAUTHORIZED);
         const reading = action?.startsWith('read:');
         const posting = Boolean(action && !reading);
         const endpoint = '/api/teacher/workspace' + (reading ? `?action=${encodeURIComponent(action!.slice(5))}` : '');
-        let token = await auth.currentUser.getIdToken();
-        let result = await safeFetchJson<any>(endpoint, { headers: { Authorization: `Bearer ${token}`, ...(posting ? { 'Content-Type': 'application/json' } : {}) }, ...(posting ? { method: 'POST', body: JSON.stringify({ action, ...body }) } : {}) });
-        if (result.status === 401 && result.data?.error === 'UNAUTHORIZED') {
-            token = await auth.currentUser.getIdToken(true);
-            result = await safeFetchJson<any>(endpoint, {headers: {Authorization: `Bearer ${token}`, ...(posting ? {'Content-Type': 'application/json'} : {})}, ...(posting ? {method:'POST',body:JSON.stringify({action,...body})} : {})});
-        }
+        const result = await teacherAuthenticatedRequest<any>(auth, endpoint, posting ? {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }),
+        } : {});
         if (!result.ok || !result.data?.ok)
             throw new Error(`${errors[result.data?.error] || result.data?.message || result.userMessage || '처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'}${result.data?.diagnosticId ? ` (오류 ID: ${result.data.diagnosticId})` : ''}`);
         return result.data;
@@ -81,7 +78,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
         }
     }
     function setField(key: string, value: any) { setLesson((d: any) => ({ ...d, [key]: value })); }
-    function openDraft(d: any) { setLesson(d.data); setDraftId(d.id); setRevision(d.revision); setTab('lesson'); }
+    function openDraft(d: any) { setLesson(compactLessonInput({ ...emptyLesson(), ...d.data })); setDraftId(d.id); setRevision(d.revision); setTab('lesson'); }
     const students = data?.students || [];
     const filtered = students.filter((s: any) => {
         const active = s.subjects?.length ? s.subjects.some((x: any) => (!status || x.status === status) && (!subjectFilter || x.subject === subjectFilter)) : s.enrollmentStatus === status && !subjectFilter;
@@ -107,15 +104,15 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
    <section className="panel"><h2>수업 일지</h2><div className="grid sm:grid-cols-2 gap-3">
     <label>학생<select value={lesson.studentKey} onChange={e => { setField('studentKey', e.target.value); }}><option value="">학생 선택</option>{students.map((s: any) => <option key={s.studentKey} value={s.studentKey}>{s.studentDisplayName}</option>)}</select></label>
     <label>과목<select value={lesson.subject} onChange={e => setField('subject', e.target.value)}>{subjects.map(s => <option key={s}>{s}</option>)}</select></label>
-    <label>시작<input type="time" disabled={lesson.classSession === '없음'} value={lesson.start} onChange={e => setField('start', e.target.value)}/></label><label>종료<input type="time" disabled={lesson.classSession === '없음'} value={lesson.end} onChange={e => setField('end', e.target.value)}/></label>
    </div>
-   <div className="flex flex-wrap gap-2 my-3"><button disabled={busy || !lesson.studentKey} className="small-button" onClick={() => act(async () => { const previous = await request('previous-lesson', { studentKey: lesson.studentKey, subject: lesson.subject }); setLesson((d: any) => ({ ...d, ...previous.data })); })}>지난 수업 이어가기</button><button className="small-button" onClick={() => setLesson((d: any) => ({ ...d, attendance: '출석', attitude: '상', homework: '상' }))}>출석 · 태도 상 · 숙제 상</button></div>
-   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{[['attendance', '출결', ['미확인', '출석', '결석', '지각', '보강 출석', '보강 결석', '보강 지각']], ['attitude', '태도', ['미확인', '미참여', '하', '중하', '중', '중상', '상', '최상']], ['homework', '숙제', ['없는 날', '미확인', '미제출', '최하', '하', '중하', '중', '중상', '상', '최상']], ['test', '테스트', ['없는 날', '미확인', '미제출', '최하', '하', '중하', '중', '중상', '상', '최상']]].map(([key, label, options]: any) => <label key={key}>{label}<select value={lesson[key]} onChange={e => setField(key, e.target.value)}>{options.map((x: string) => <option key={x}>{x}</option>)}</select></label>)}</div>
-   <div className="grid grid-cols-3 gap-3 mt-3">{[['correct', '정답 수'], ['total', '만점'], ['round', '수업 회차 · 필수']].map(([key, label]) => <label key={key}>{label}<input type="number" step={key === 'round' ? 'any' : 1} disabled={key === 'round' && lesson.classSession === '없음'} required={key === 'round' && lesson.classSession !== '없음'} min={0} value={lesson[key] ?? ''} onChange={e => setField(key, e.target.value === '' ? null : Number(e.target.value))}/></label>)}</div>
    <LessonAcademyFields value={lesson} onChange={setField}/>
+   <div className="flex flex-wrap gap-2 my-3"><button disabled={busy || !lesson.studentKey} className="small-button" onClick={() => act(async () => { const previous = await request('previous-lesson', { studentKey: lesson.studentKey, subject: lesson.subject }); setLesson((d: any) => ({ ...d, ...previous.data })); })}>지난 수업 이어가기</button><button className="small-button" onClick={() => setLesson((d: any) => ({ ...d, attendance: '출석', attitude: '상', homework: '상' }))}>출석 · 태도 상 · 숙제 상</button></div>
+   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{[['attendance', '출결', ['미확인', '출석', '결석', '지각', '보강 출석', '보강 결석', '보강 지각']], ['attitude', '태도', ['미확인', '미참여', '하', '중하', '중', '중상', '상', '최상']], ['homework', '숙제', ['없는 날', '미확인', '미제출', '최하', '하', '중하', '중', '중상', '상', '최상']], ['test', '테스트', ['없는 날', '미확인', '미제출', '최하', '하', '중하', '중', '중상', '상', '최상']]].map(([key, label, options]: any) => <label key={key}>{label}<select value={lesson[key] || ''} onChange={e => setField(key, e.target.value)}>{options.map((x: string) => <option key={x}>{x}</option>)}</select></label>)}</div>
+   <div className="grid grid-cols-2 gap-3 mt-3">{[['correct', '정답 수'], ['total', '만점']].map(([key, label]) => <label key={key}>{label}<input type="number" step={key === 'round' ? 'any' : 1} disabled={key === 'round' && lesson.classSession === '없음'} required={key === 'round' && lesson.classSession !== '없음'} min={0} value={lesson[key] ?? ''} onChange={e => setField(key, e.target.value === '' ? null : Number(e.target.value))}/></label>)}</div>
    {lesson.total > 0 && lesson.correct !== null && <p className="text-sm text-pastel-pink-600 mt-2">환산 점수 {Math.round(lesson.correct / lesson.total * 10000) / 100} / 100</p>}
-   {[['content', '수업 내용'], ['assignment', '과제 · 반영 시 학생 리포트에 표시'], ['note', '개인 피드백'], ['nextPlan', '다음 수업 메모']].map(([key, label]) => <label key={key} className="block mt-3">{label}<textarea rows={key === 'content' ? 4 : 2} value={lesson[key]} onChange={e => setField(key, e.target.value)}/></label>)}
-   <div className="flex flex-wrap gap-2 mt-4"><button disabled={busy} className="primary-button" onClick={() => act(async () => { const result = await request('save-draft', { id: draftId, revision, data: lesson }); setDraftId(result.id); const fresh = await request(); setData(fresh); const savedDraft = fresh.drafts.find((d: any) => d.id === result.id); setRevision(savedDraft?.revision); if(savedDraft) setLesson(savedDraft.data); setMessage('초안을 저장했습니다.'); })}>저장</button><button disabled={busy || !draftId || ['publishing', 'processing', 'published'].includes(currentDraft?.stage) || JSON.stringify(currentDraft?.data) !== JSON.stringify(lesson)} className="small-button" onClick={() => act(async () => {
+   {[['content', '수업 내용'], ['specialNote', '특이 사항'], ['assignment', '과제']].map(([key, label]) => <label key={key} className="block mt-3">{label}<textarea rows={key === 'content' ? 4 : 2} value={lesson[key] || ''} onChange={e => setField(key, e.target.value)}/></label>)}
+   {(lesson.note || lesson.nextPlan) && <details className="mt-3 text-xs text-slate-500"><summary>기존 기록 메모</summary>{lesson.note && <p className="whitespace-pre-wrap mt-2">기존 개인 피드백: {lesson.note}</p>}{lesson.nextPlan && <p className="whitespace-pre-wrap mt-2">기존 다음 수업 메모: {lesson.nextPlan}</p>}</details>}
+   <div className="flex flex-wrap gap-2 mt-4"><button disabled={busy} className="primary-button" onClick={() => act(async () => { const result = await request('save-draft', { id: draftId, revision, data: lesson }); setDraftId(result.id); const fresh = await request(); setData(fresh); const savedDraft = fresh.drafts.find((d: any) => d.id === result.id); setRevision(savedDraft?.revision); if(savedDraft) setLesson(compactLessonInput(savedDraft.data)); setMessage('초안을 저장했습니다.'); })}>저장</button><button disabled={busy || !draftId || ['publishing', 'processing', 'published'].includes(currentDraft?.stage) || JSON.stringify(currentDraft?.data) !== JSON.stringify(lesson)} className="small-button" onClick={() => act(async () => {
                     if (!window.confirm('저장된 내용을 Notion과 리포트에 반영할까요?'))
                         return;
                     await request('publish', { id: draftId });

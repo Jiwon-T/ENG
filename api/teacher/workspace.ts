@@ -36,6 +36,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 return sendJson(res,200,{ok:true,records:rows.map((r:any)=>({...r,teacherName:names.get(r.ownerUid)||'선생님'}))});
             }
             if (action === 'report-review') {
+                failureStage = 'report-review';
                 const url = new URL(req.url || '', 'http://localhost');
                 const studentKey = z.string().uuid().parse(url.searchParams.get('studentKey'));
                 const audience = z.enum(['parent', 'student']).parse(url.searchParams.get('audience'));
@@ -83,6 +84,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         if (req.method !== 'POST')
             return sendJson(res, 405, { ok: false });
         const body = await parseJsonBody(req);
+        // Body dispatch also works when a deployment rewrite drops URL parameters.
+        if (body.action === 'report-review') {
+            failureStage = 'report-review';
+            const studentKey = z.string().uuid().parse(body.studentKey);
+            const audience = z.enum(['parent', 'student']).parse(body.audience);
+            return sendJson(res, 200, { ok: true, ...await loadTeacherReportReview(db, actor, studentKey, audience) });
+        }
         if (body.action === 'grant') {
             if (!actor.admin)
                 throw new Error('FORBIDDEN');

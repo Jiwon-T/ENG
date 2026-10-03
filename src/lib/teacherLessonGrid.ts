@@ -2,7 +2,8 @@ export const newGridLesson = (studentKey: string, subject: string, date: string,
 export function applyCommonLesson<T extends ReturnType<typeof newGridLesson>>(lesson: T, common: {
     content: string;
     assignment: string;
-    nextPlan: string;
+    nextPlan?: string;
+    specialNote?: string;
 }) { return { ...lesson, ...common }; }
 export function gridScore(correct: number | null, total: number | null) { return correct === null || total === null || total <= 0 || correct < 0 || correct > total ? null : Math.round(correct / total * 10000) / 100; }
 export function gridCanPublish(row: {

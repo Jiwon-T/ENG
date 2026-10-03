@@ -27,3 +27,22 @@ test('teacher review applies subject scope to lessons, schedules, and every acad
  assert.equal(JSON.stringify(result).includes('다른 선생님 피드백'),false);
  assert.equal(result.studentLinked,false);
 });
+
+test('both admin audiences load without a separately deployed reportSlugs compound index', async () => {
+ const db = { collection: (name: string) => {
+   let constraints = 0;
+   const query: any = { where: () => { constraints++; return query; }, get: async () => {
+     if (name === 'reportSlugs' && constraints > 1) throw new Error('FAILED_PRECONDITION: The query requires an index');
+     const rows = name === 'lessonReports' ? [english] : name === 'reportSlugs' ? [{active:false,reportSlug:'inactive'}, {active:true,reportSlug:'active'}] : [];
+     return { docs: rows.map((row, i) => ({ id: String(i), data: () => row })) };
+   } };
+   return query;
+ } } as any;
+ const deps: any = { readStudentMapping: async () => ({internalStudentId:'secret',firebaseUid:null}), loadAcademicData: async () => ({records:[],subjects:[],academyScores:[]}) };
+ for (const audience of ['parent','student'] as const) {
+   const result = await loadTeacherReportReview(db, {admin:true,scopes:[]}, studentKey, audience, deps);
+   assert.equal(result.reports.length, 1);
+   assert.equal(result.parentUrl, '/active');
+   if (audience === 'student') assert.equal('feedback' in result.reports[0], false);
+ }
+});

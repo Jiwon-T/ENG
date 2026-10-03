@@ -28,14 +28,17 @@ export async function loadTeacherReportReview(db: Firestore, actor: any, student
         db.collection('studentSchedules').where('internalStudentId', '==', internalStudentId).get(),
         deps.loadAcademicData(db, internalStudentId),
         mapping.firebaseUid ? db.collection('users').doc(mapping.firebaseUid).collection('assignmentCompletions').get() : Promise.resolve(null),
-        db.collection('reportSlugs').where('internalStudentId', '==', internalStudentId).where('active', '==', true).get(),
+        // One equality query uses Firestore's automatic index. Filtering active
+        // aliases here avoids requiring a separately deployed composite index.
+        actor.admin ? db.collection('reportSlugs').where('internalStudentId', '==', internalStudentId).get() : Promise.resolve(null),
     ]);
     const visible = (r: {
         subject?: string;
     }) => !allowed || allowed.has(r.subject || '영어');
     const completionHashes = new Map<string, string>((completion?.docs || []).map(d => [d.id, d.data().contentHash]));
     const raw = lessons.docs.map(d => d.data() as StoredLessonReport).filter(visible).sort((a, b) => Date.parse(b.lessonDateStart) - Date.parse(a.lessonDateStart));
-    const parentUrl = actor.admin && slugs.docs[0]?.data().reportSlug ? `/${encodeURIComponent(slugs.docs[0].data().reportSlug)}` : null;
+    const activeSlug = slugs?.docs.find(d => d.data().active === true)?.data().reportSlug;
+    const parentUrl = actor.admin && activeSlug ? `/${encodeURIComponent(activeSlug)}` : null;
     return { linked: true, studentLinked: Boolean(mapping.firebaseUid), parentUrl,
         reports: raw.map(r => audience === 'parent' ? parentLessonDTO(r) : studentLessonDTO(r, completionHashes)),
         schedules: schedules.docs.map(d => d.data() as StoredStudentSchedule).filter(visible).map(reportScheduleDTO),
