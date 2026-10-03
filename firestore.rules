@@ -117,7 +117,7 @@ service cloud.firestore {
              ]) &&
              data.uid is string && data.uid.size() <= 128 &&
              data.email is string && isValidEmail(data.email) &&
-             data.role in ['teacher', 'student', 'admin'] &&
+             data.role in ['teacher', 'student', 'admin', 'principal'] &&
              (!('name' in data) || data.name == null || (data.name is string && data.name.size() <= 100)) &&
              (!('alias' in data) || data.alias == null || (data.alias is string && data.alias.size() <= 100)) &&
              (!('photoURL' in data) || data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 2000)) &&
@@ -203,7 +203,7 @@ service cloud.firestore {
         )) ||
         // 3) 학생 본인: 프로필 관련 지정된 화이트리스트 필드만 수정 가능
         // role, uid, email, teacherNote, notionStudentKey, firebaseUid, admin 수정 전면 차단
-        (isOwner(uid) && resource.data.role == 'student' && 
+        (isOwner(uid) && resource.data.role in ['student', 'principal'] && 
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'alias', 'photoURL', 'isNameSet', 'petStats', 'updatedAt']))
       );
       allow delete: if isAdmin();
@@ -369,6 +369,8 @@ service cloud.firestore {
     match /teacherLessonDrafts/{id} { allow read, write: if false; }
     match /teacherSchedules/{id} { allow read, write: if false; }
     match /teacherClasses/{id} { allow read, write: if false; }
+    match /teacherAcademicDrafts/{id} { allow read, write: if false; }
+    match /academyStudentMemberships/{id} { allow read, write: if false; }
     match /teacherWorkspaceAccess/{id} { allow read, write: if false; }
     match /teacherWorkspaceConfig/{id} { allow read, write: if false; }
   }

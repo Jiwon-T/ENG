@@ -1,4 +1,4 @@
-export const newGridLesson = (studentKey: string, subject: string, date: string, start: string, end: string) => ({ studentKey, subject, date, start, end, attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', content: '', assignment: '', note: '', nextPlan: '', correct: null as number | null, total: null as number | null, round: null as number | null });
+export const newGridLesson = (studentKey: string, subject: string, date: string, start: string, end: string) => ({ studentKey, subject, date, start, end, attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', content: '', assignment: '', note: '', nextPlan: '', correct: null as number | null, total: null as number | null, round: null as number | null, classSession: '있음', selfStudy: '미확인', selfStudyStart: '', selfStudyEnd: '', selfStudyRound: null as number | null, attendanceNote: '', specialNote: '' });
 export function applyCommonLesson<T extends ReturnType<typeof newGridLesson>>(lesson: T, common: {
     content: string;
     assignment: string;

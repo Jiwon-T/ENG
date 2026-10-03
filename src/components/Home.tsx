@@ -8,7 +8,7 @@ import { GraduationCap, Languages, BookOpen, History, BarChart3, FileText, Users
 
 interface HomeProps {
   onNavigate: (view: 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'exam' | 'vocab-mobile' | 'tutor' | 'report' | 'archive' | 'teacher-room' | 'pet') => void;
-  userRole?: 'teacher' | 'student' | 'admin';
+  userRole?: 'teacher' | 'student' | 'admin' | 'principal';
   userEmail?: string;
   hasNewAssignment?: boolean;
   userUid?: string;
@@ -17,13 +17,14 @@ interface HomeProps {
 }
 
 export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment, userUid, pendingAssignmentCount, onResume }: HomeProps) {
+  const isEducator = userRole === 'teacher' || userRole === 'principal' || userRole === 'admin';
   const recent = userUid ? readRecentLearning(userUid) : null;
   const [nextSchedule, setNextSchedule] = useState<{ uid: string; schedule: StudentScheduleDTO | null } | null>(null);
   const [lessonPending, setLessonPending] = useState<{ uid: string; count: number } | null>(null);
   useEffect(() => {
     let live = true;
     const controller = new AbortController();
-    if (!userUid) return;
+    if (!userUid || isEducator) return;
     // Home renders first; this summary never blocks navigation.
     const timer = window.setTimeout(async () => {
       try {
@@ -44,7 +45,7 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
       } catch { /* Keep the count unknown rather than show zero. */ }
     }, 500);
     return () => { live = false; clearTimeout(timer); controller.abort(); };
-  }, [userUid]);
+  }, [userUid, isEducator]);
   const pending = typeof pendingAssignmentCount === 'number' && lessonPending?.uid === userUid ? pendingAssignmentCount + lessonPending.count : null;
   const isSuperAdmin = userEmail === 'lizzieshere1@gmail.com';
 
@@ -89,6 +90,7 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
       textColor: 'text-indigo-600',
       show: true
     },
+    {id: 'teacher-room', title: '선생님방', description: '수업 일지 · 일정 · 성적 관리', icon: <Users className="text-pastel-pink-500 w-4 h-4 md:w-8 md:h-8"/>, color: 'bg-white', borderColor: 'border-pastel-pink-100', textColor: 'text-pastel-pink-600', show: userRole === 'teacher' || userRole === 'admin' || userRole === 'principal'},
     {
       id: 'analyzer',
       title: '지문 분석기',
@@ -138,8 +140,8 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
 
       <section aria-label="오늘 할 일" className="mb-4 rounded-2xl border border-slate-100 bg-white p-4">
         <h2 className="text-sm font-bold text-slate-800 mb-2">오늘 할 일</h2>
-        <button type="button" onClick={() => onNavigate('report')} className="min-h-[44px] w-full text-left flex justify-between items-center gap-2 text-sm">
-          <span className="text-slate-600">{pending !== null ? (pending > 0 ? `미완료 과제 ${pending}개` : '미완료 과제 없음') : '과제·일정 확인하기'}</span><ArrowRight size={16} className="text-slate-400" />
+        <button type="button" onClick={() => onNavigate(isEducator ? 'teacher-room' : 'report')} className="min-h-[44px] w-full text-left flex justify-between items-center gap-2 text-sm">
+          <span className="text-slate-600">{isEducator ? '수업 일지·일정 관리하기' : pending !== null ? (pending > 0 ? `미완료 과제 ${pending}개` : '미완료 과제 없음') : '과제·일정 확인하기'}</span><ArrowRight size={16} className="text-slate-400" />
         </button>
         {nextSchedule?.uid === userUid && nextSchedule.schedule && <button type="button" onClick={() => onNavigate('report')} className="min-h-[44px] w-full text-left text-xs text-violet-700 leading-relaxed">다음 일정 · {nextSchedule.schedule.title}<span className="block text-slate-500">{new Intl.DateTimeFormat('ko-KR', {timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', weekday: 'short', hour: 'numeric', minute: '2-digit'}).format(new Date(nextSchedule.schedule.startAt))}</span></button>}
         {recent && onResume && <button type="button" onClick={() => onResume(recent)} className="min-h-[44px] w-full pt-2 border-t border-slate-100 text-left flex justify-between items-center gap-3">

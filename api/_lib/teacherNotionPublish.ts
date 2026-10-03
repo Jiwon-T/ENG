@@ -2,7 +2,7 @@ import { extractAssignmentFromFeedback } from './assignmentExtractor.js';
 import { lookupStudentByPageId } from './notion.js';
 import type { Firestore } from 'firebase-admin/firestore';
 import { LESSON_DATABASE } from './academyBackfill.js';
-import { lessonFeedback } from './teacherWorkspacePolicy.js';
+import { assertLessonComplete, lessonFeedback } from './teacherWorkspacePolicy.js';
 async function notion(path: string, method = 'GET', body?: any) {
     const token = process.env.NOTION_INTEGRATION_TOKEN;
     if (!token)
@@ -28,19 +28,23 @@ export async function publishTeacherDraft(db: Firestore, draftId: string, draft:
             throw new Error('DUPLICATE_NOTION_RECORD');
         pageId = matches.results[0]?.id;
     }
-    const d = draft.data;
+    const d = assertLessonComplete(draft.data);
+    const dateProperty = schema.properties['타임 슬롯'] ? '타임 슬롯' : '수업 날짜';
+    const titleProperty = schema.properties['배정 시간'] ? '배정 시간' : '수업';
     const student = await lookupStudentByPageId(d.studentKey, '', false);
     const properties: any = {
         '구분': { select: { name: student.studentDisplayName } },
         '출결': { checkbox: d.attendance === '출석' || d.attendance === '보강 출석' },
-        '수업': { title: [{ text: { content: `${d.start} ~ ${d.end}` } }] },
+        [titleProperty]: { title: d.classSession === '없음' ? [] : [{ text: { content: `${d.start} ~ ${d.end}` } }] },
         '앱 기록 ID': rich(draftId), '과목': { select: { name: d.subject } },
         '학생': { relation: [{ id: d.studentKey }] },
-        '수업 날짜': { date: { start: `${d.date}T${d.start}:00+09:00`, end: `${d.date}T${d.end}:00+09:00` } },
+        [dateProperty]: { date: { start: `${d.date}T${d.classSession === '없음' ? d.selfStudyStart : d.start}:00+09:00`, end: `${d.date}T${d.classSession === '없음' ? d.selfStudyEnd : d.end}:00+09:00` } },
         '수업 내용': rich(lessonFeedback(d)), '메모': rich(d.nextPlan),
         '출석': { select: d.attendance === '미확인' ? null : { name: d.attendance } },
         '태도': { status: { name: d.attitude } }, '숙제': { status: { name: d.homework } }, '테스트': { status: { name: d.test } },
         '단어': { number: d.total }, '틀린 단어': { number: d.total === null ? null : d.total - d.correct }, '회차': { number: d.round },
+        '자습': { checkbox: d.selfStudy === '있음' }, '자습시간': rich(d.selfStudy === '있음' ? `${d.selfStudyStart} ~ ${d.selfStudyEnd}` : ''), [schema.properties['자습회차'] ? '자습회차' : '자습 회차']: { number: d.selfStudyRound },
+        '앱 출결 메모': rich(d.attendanceNote || ''), '앱 특이사항': rich(d.specialNote || ''),
         '범주': { select: { name: '수업' } }, '전송 완료': { select: { name: '미완' } },
     };
     // Validate the existing source layout before writing any record.
@@ -67,12 +71,16 @@ export async function prepareNotionWorkspace(db: Firestore) {
     const databaseId = config?.lessonDatabaseId || LESSON_DATABASE;
     const schema = await notion(`databases/${databaseId}`);
     await notion(`databases/${databaseId}`, 'PATCH', { properties: {
+            ...(!schema.properties?.['앱 출결 메모'] ? { '앱 출결 메모': { rich_text: {} } } : {}),
+            ...(!schema.properties?.['앱 특이사항'] ? { '앱 특이사항': { rich_text: {} } } : {}),
             ...(!schema.properties?.['앱 기록 ID'] ? { '앱 기록 ID': { rich_text: {} } } : {}),
             ...(!schema.properties?.['과목'] ? { '과목': { select: { options: ['영어', '수학', '국어', '과학', '한국사'].map(name => ({ name })) } } } : {}),
         } });
     const schedule = await notion(`databases/${SCHEDULE_DATABASE}`);
     if (!schedule.properties?.['앱 기록 ID'])
         await notion(`databases/${SCHEDULE_DATABASE}`, 'PATCH', { properties: { '앱 기록 ID': { rich_text: {} } } });
+    const grades = await notion('databases/fa6ce5a8-9572-4f4d-80d9-4d1485d44e6f');
+    if (!grades.properties?.['앱 기록 ID']) await notion('databases/fa6ce5a8-9572-4f4d-80d9-4d1485d44e6f', 'PATCH', {properties:{'앱 기록 ID':{rich_text:{}}}});
     return { ready: true };
 }
 export async function previousNotionLesson(studentKey: string) {

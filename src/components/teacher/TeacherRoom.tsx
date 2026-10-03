@@ -45,7 +45,7 @@ interface TeacherRoomProps {
 
 export default function TeacherRoom({ onNavigate }: TeacherRoomProps) {
   const [legacy, setLegacy] = useState(false);
-  return legacy ? <><button type="button" onClick={() => setLegacy(false)} className="mx-4 mt-4 px-4 min-h-[44px] rounded-xl bg-pastel-pink-50 text-pastel-pink-600 text-sm font-bold">← 나의 선생님방</button><LegacyTeacherRoom onNavigate={onNavigate}/></> : <TeacherWorkspace onNavigate={onNavigate} onAccounts={() => setLegacy(true)}/>;
+  return legacy && auth.currentUser?.email === 'lizzieshere1@gmail.com' ? <><button type="button" onClick={() => setLegacy(false)} className="mx-4 mt-4 px-4 min-h-[44px] rounded-xl bg-pastel-pink-50 text-pastel-pink-600 text-sm font-bold">← 나의 선생님방</button><LegacyTeacherRoom onNavigate={onNavigate}/></> : <TeacherWorkspace onNavigate={onNavigate} onAccounts={() => setLegacy(true)}/>;
 }
 function LegacyTeacherRoom({ onNavigate }: TeacherRoomProps) {
   const [activeTab, setActiveTab] = useState<'students' | 'wordbook' | 'grammar' | 'exam' | 'reports'>('students');

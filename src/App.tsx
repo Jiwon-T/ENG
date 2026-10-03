@@ -107,7 +107,7 @@ interface UserProfile {
   email: string;
   name: string;
   alias?: string; // Add alias field
-  role: 'teacher' | 'student' | 'admin';
+  role: 'teacher' | 'student' | 'admin' | 'principal';
   photoURL?: string;
   isNameSet?: boolean; // Track if user has explicitly set their name
 }
@@ -222,7 +222,7 @@ export default function App() {
             
             setProfile(data);
             
-            if (data.role === 'teacher' || data.role === 'admin') {
+            if (firebaseUser.email === 'lizzieshere1@gmail.com') {
               setTimeout(runTeacherSeeding, 1000); // Defer seeding
             }
             
@@ -486,7 +486,7 @@ export default function App() {
                       {profile?.alias || profile?.name}님
                     </div>
                     <div className="text-[11px] text-pastel-pink-500 font-black uppercase tracking-widest mt-1">
-                      {profile?.role === 'teacher' ? '관리자 선생님' : '수강생'}
+                      {profile?.email === 'lizzieshere1@gmail.com' ? '관리자 선생님' : profile?.role === 'principal' ? '원장 선생님' : profile?.role === 'teacher' || profile?.role === 'admin' ? '선생님' : '수강생'}
                     </div>
                   </div>
                 </div>
@@ -514,7 +514,7 @@ export default function App() {
                   active={currentView === 'report'}
                   badge={hasNewAssignment ? 'NEW' : null}
                 />
-                {(profile?.role === 'teacher' || profile?.role === 'admin') && (
+                {(profile?.role === 'teacher' || profile?.role === 'admin' || profile?.role === 'principal') && (
                   <MenuNavItem 
                     icon={<Users size={18} />} 
                     label="선생님방" 

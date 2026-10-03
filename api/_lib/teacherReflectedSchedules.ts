@@ -7,7 +7,7 @@ export function teacherReflectedSchedules(records: any[], mappings: Map<string, 
     const grouped = new Map<string, any>();
     for (const r of records) {
         const studentKey = students.get(r.internalStudentId), subject = r.subject || '영어';
-        if (!studentKey || !canTeach(actor, studentKey, subject) || !r.notionScheduleId || !Number.isFinite(Date.parse(r.startAt)))
+        if (!studentKey || !(actor.principal ? actor.scopes.some((s:any)=>s.studentKey===studentKey && s.subject===subject) : canTeach(actor, studentKey, subject)) || !r.notionScheduleId || !Number.isFinite(Date.parse(r.startAt)))
             continue;
         const start = new Date(r.startAt), end = r.endAt && Number.isFinite(Date.parse(r.endAt)) ? new Date(r.endAt) : null;
         const time = (d: Date) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
