@@ -231,9 +231,22 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             return sendJson(res,200,{ok:true,id,revision:(body.revision||0)+1,...(syncError?{syncError}:{})});
         }
         if (body.action === 'save-class') {
-            const value = z.object({ name: z.string().min(1).max(200), subject: z.enum(['영어', '수학', '국어', '과학', '한국사']), students: z.array(z.string().uuid()).max(100), slots: z.array(timetableSlotSchema.and(z.object({id:z.string().uuid().optional(),notionEditedAt:z.string().optional()}))).max(14), books: z.array(z.object({id:z.string().uuid().optional(),progress:z.string().max(100).optional(),notionEditedAt:z.string().optional(),title:z.string().trim().min(1).max(300),status:z.enum(['past','current','planned'])})).max(100).optional() }).parse(body.data);
+            const value = z.object({ name: z.string().min(1).max(200), subject: z.enum(['영어', '수학', '국어', '과학', '한국사']), students: z.array(z.string().uuid()).max(100), slots: z.array(timetableSlotSchema.and(z.object({id:z.string().uuid().optional(),notionEditedAt:z.string().optional()}))).max(14), books: z.array(z.object({id:z.string().uuid().optional(),linkedPlanId:z.string().uuid().optional(),progress:z.string().max(100).optional(),notionEditedAt:z.string().optional(),title:z.string().trim().min(1).max(300),status:z.enum(['past','current','planned'])})).max(100).optional() }).parse(body.data);
             value.slots=value.slots.map(slot=>({...slot,id:slot.id||randomUUID()}));
             value.books=(value.books||[]).map(book=>({...book,id:book.id||randomUUID()}));
+            if(value.books.some(book=>book.linkedPlanId)) {
+                const sourcePlans=(await readNotionWorkspace(db,actor)).curricula;
+                for(const book of value.books) if(book.linkedPlanId){
+                    const local=(await db.collection('teacherCurricula').doc(book.linkedPlanId).get()).data();
+                    const linked=local?{id:book.linkedPlanId,...local}:sourcePlans.find((c:any)=>c.id===book.linkedPlanId);
+                    if(!linked||linked.archived||(!linked.isCommon&&linked.classId)||linked.subject!==value.subject||(!actor.admin&&linked.academyId!==actor.academyId))throw new Error('FORBIDDEN');
+                    if(!actor.admin&&!sourcePlans.some((c:any)=>c.id===book.linkedPlanId||c.notionPageId===linked.notionPageId))throw new Error('FORBIDDEN');
+                    if(!linked.notionPageId)throw new Error('COMMON_PLAN_NOT_SYNCED');
+                    book.id=linked.notionPageId;book.title=linked.title;book.notionEditedAt=linked.notionEditedAt;
+                }
+            }
+
+            if(new Set(value.books.map(book=>book.id)).size!==value.books.length)throw new Error('INVALID_INPUT');
             if (value.students.some(key => !canTeach(actor, key, value.subject)))
                 throw new Error('FORBIDDEN');
             const id = body.id ? z.string().uuid().parse(body.id) : randomUUID();
@@ -277,6 +290,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         }
         if (body.action === 'save-schedule') {
             const value = teacherScheduleSchema.parse(body.data);
+            if(new Set(value.books.map(book=>book.id)).size!==value.books.length)throw new Error('INVALID_INPUT');
             if (value.students.some(key => !canTeach(actor, key, value.subject)))
                 throw new Error('FORBIDDEN');
             const id = body.id ? z.string().uuid().parse(body.id) : randomUUID();

@@ -88,3 +88,29 @@ test('lost Notion creation response is recovered by stable app ID without creati
     assert.equal(created,1);assert.equal(record.notionPageId,pageId);assert.equal(record.notionSyncStage,'synced');
   }finally{globalThis.fetch=fetcher;if(priorAdmin===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=priorAdmin;if(priorToken===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=priorToken;}
 });
+
+test('common curriculum attaches the existing page without duplicating it or removing other classes',async()=>{
+ const {syncManagedRecord,DEFAULT_SOURCE}=await import('../api/_lib/teacherNotionWorkspace.ts');
+ const oldAdmin=process.env.ADMIN_UID,oldToken=process.env.NOTION_INTEGRATION_TOKEN,oldFetch=globalThis.fetch;
+ process.env.ADMIN_UID='owner';process.env.NOTION_INTEGRATION_TOKEN='test';
+ const id='44444444-4444-4444-8444-444444444444',classId='55555555-5555-4555-8555-555555555555',bookId='66666666-6666-4666-8666-666666666666',otherClass='77777777-7777-4777-8777-777777777777';
+ const teacher='3ec0d0f1-c79a-8108-b714-c1d6fc390ba2';
+ const record:any={ownerUid:'owner',academyId:'main',subject:'영어',name:'새 반',students:[],slots:[],books:[{id:bookId,linkedPlanId:bookId,title:'공통 교재',status:'planned',notionEditedAt:'old'}],revision:1};
+ const profile={academyId:'main',notionSources:[DEFAULT_SOURCE]};
+ const classPage:any={id:classId,parent:{database_id:DEFAULT_SOURCE.classDatabaseId},properties:{},last_edited_time:'new'};
+ const bookPage:any={id:bookId,parent:{database_id:DEFAULT_SOURCE.curriculumDatabaseId},properties:{'교재명':{title:[{plain_text:'공통 교재'}]},'과목':{select:{name:'영어'}},'학원':{rich_text:[{plain_text:'main'}]},'담당 선생님':{relation:[{id:teacher}]},'반 관리':{relation:[{id:otherClass}]},'공통 계획':{checkbox:true},'진행도':{status:{name:'시작 전'}}},last_edited_time:'old'};
+ const ref={get:async()=>({data:()=>record}),update:async(patch:any)=>Object.assign(record,patch)};
+ const db:any={collection:(name:string)=>({doc:()=>name==='teacherClasses'?ref:{get:async()=>({data:()=>name==='teacherWorkspaceAccess'?profile:undefined})},get:async()=>({docs:[{id:'owner',exists:true,data:()=>profile}]})}),runTransaction:async(fn:any)=>fn({get:(r:any)=>r.get(),update:(r:any,p:any)=>r.update(p)})};
+ let bookCreates=0;
+ globalThis.fetch=(async(url:any,options:any={})=>{
+  const path=String(url).split('/v1/')[1],body=options.body?JSON.parse(options.body):{};
+  if(path?.endsWith('/query'))return Response.json({results:[],has_more:false});
+  if(path?.startsWith('databases/'))return Response.json({properties:{'앱 기록 ID':{rich_text:{}},'공통 계획':{checkbox:{}}}});
+  if(path==='pages'){if(body.parent.database_id===DEFAULT_SOURCE.curriculumDatabaseId)bookCreates++;Object.assign(classPage.properties,body.properties);return Response.json(classPage);}
+  const page=path===`pages/${classId}`?classPage:path===`pages/${bookId}`?bookPage:null;
+  if(page){if(options.method==='PATCH'){Object.assign(page.properties,body.properties);page.last_edited_time='new';}return Response.json(page);}
+  throw Error('Unexpected mocked route '+path);
+ }) as any;
+ try{await syncManagedRecord(db,'teacherClasses',id);assert.equal(bookCreates,0);assert.equal(record.books[0].id,bookId);assert.equal(bookPage.properties['공통 계획'].checkbox,true);assert.deepEqual(bookPage.properties['반 관리'].relation.map((r:any)=>r.id),[otherClass,classId]);assert.equal(classPage.properties['커리큘럼'].relation[0].id,bookId);await syncManagedRecord(db,'teacherClasses',id);assert.equal(bookCreates,0);}
+ finally{globalThis.fetch=oldFetch;if(oldAdmin===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=oldAdmin;if(oldToken===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=oldToken;}
+});

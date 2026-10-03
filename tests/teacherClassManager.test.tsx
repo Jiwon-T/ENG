@@ -13,6 +13,6 @@ test('regular timetable has Monday–Sunday columns and its own repeat schedule 
 });
 test('curriculum screen shares class records and provides editable curriculum and textbook states',()=>{
  const html=renderToStaticMarkup(<TeacherClassManager {...props} mode="curriculum"/>);
- assert.ok(html.includes('월요반'));assert.ok(html.includes('교재 1권'));assert.ok(html.includes('커리큘럼 등록'));assert.ok(html.includes('진도·수업 계획'));assert.ok(html.includes('+ 교재'));
- assert.equal(html.includes('weekly-board'),false);
+ assert.ok(html.includes('월요반'));assert.ok(html.includes('교재 1권'));assert.ok(html.includes('커리큘럼 등록'));assert.ok(html.includes('진도·수업 계획'));assert.ok(html.includes('+ 새 교재'));
+ assert.equal(html.includes('weekly-board'),false);assert.ok(html.includes('curriculum-management-board'));assert.ok(html.includes('커리큘럼 관리'));assert.ok(html.includes('공통 계획에서 교재 선택'));assert.equal((html.match(/<dialog/g)||[]).length,2);
 });
