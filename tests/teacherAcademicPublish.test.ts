@@ -20,6 +20,7 @@ test('grade retry reuses source ID, persists identity before projection, and pre
  global.fetch=async(url,init)=>{
   const path=String(url).split('/v1/')[1],body=init?.body?JSON.parse(String(init.body)):null;calls.push({path,method:init?.method,body});
   if(path.startsWith('databases/')&&init?.method==='GET')return reply({properties:{'앱 기록 ID':{}}});
+  if(path.startsWith('databases/')&&init?.method==='PATCH')return reply({});
   if(path.endsWith('/query'))return reply({results:[{id:pageId}]});
   if(path===`pages/${pageId}`&&init?.method==='PATCH')return reply({id:pageId});
   if(path===`pages/${pageId}`)return reply({id:pageId,archived:false,last_edited_time:'2026-10-03T00:00:00.000Z',parent:{database_id:'fa6ce5a8-9572-4f4d-80d9-4d1485d44e6f'},properties:{'학생':{relation:[{id:studentKey}]},'원점수':{number:0},'만점':{number:100},'과목':{select:{name:'영어'}},'시험 종류':{select:{name:'학력평가'}}}});
