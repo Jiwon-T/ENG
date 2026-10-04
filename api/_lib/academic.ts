@@ -1,3 +1,4 @@
+import {detailMetadata} from '../../src/lib/academicExamPeriod.js';
 import crypto from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
 import { normalizeNotionPageId } from './notionPageId.js';
@@ -53,7 +54,7 @@ export function parseAcademicPage(page: any) {
   const percentile = props['백분위']?.type === 'number' ? number(props['백분위']) : null;
   if (percentile !== null && (percentile < 0 || percentile > 100)) throw new Error('INVALID_PERCENTILE');
   return { id, studentPageId, collection: 'academicRecords', data: {
-    examYear:number(props['시험 연도']),semester:Number(choice(props['학기'])[0])||null,examPeriod:choice(props['고사 구분'])||null,sourceUpdatedAt, removed, subject, examType, title: text(props['시험명']), examDate: date(props['시험일']),
+    examDetail:choice(props['세부 종류']),examYear:number(props['시험 연도']),semester:detailMetadata(choice(props['세부 종류'])).semester??(Number(choice(props['학기'])[0])||null),examPeriod:detailMetadata(choice(props['세부 종류'])).examPeriod||choice(props['고사 구분'])||null,sourceUpdatedAt, removed, subject, examType, title: text(props['시험명']), examDate: date(props['시험일']),
     deadline: date(props['제출 기한']), score, maxScore, percentile,
     grade: text(props['예상 등급']), submissionStatus: choice(props['제출 상태']),
   } };
@@ -96,7 +97,7 @@ export async function syncAcademicPage(db: Firestore, page: any, resolveStudent 
 }
 
 export function academicDTO(id: string, r: any) {
-  return { recordId: publicId(id), title: r.title, subject: r.subject, examType: r.examType, examDate: r.examDate,
+  return { examDetail:r.examDetail||'',examYear:r.examYear??null,semester:r.semester??null,examPeriod:r.examPeriod??null,recordId: publicId(id), title: r.title, subject: r.subject, examType: r.examType, examDate: r.examDate,
     score: r.score, maxScore: r.maxScore, percentile: r.percentile, grade: r.grade, submissionStatus: r.submissionStatus };
 }
 export async function loadSubjectEnrollments(db: Firestore, studentId: string) {
