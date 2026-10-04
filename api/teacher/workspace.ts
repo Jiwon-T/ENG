@@ -231,7 +231,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             return sendJson(res,200,{ok:true,id,revision:(body.revision||0)+1,...(syncError?{syncError}:{})});
         }
         if (body.action === 'save-class') {
-            const value = z.object({ name: z.string().min(1).max(200), subject: z.enum(['영어', '수학', '국어', '과학', '한국사']), students: z.array(z.string().uuid()).max(100), slots: z.array(timetableSlotSchema.and(z.object({id:z.string().uuid().optional(),notionEditedAt:z.string().optional()}))).max(14), books: z.array(z.object({id:z.string().uuid().optional(),linkedPlanId:z.string().uuid().optional(),progress:z.string().max(100).optional(),notionEditedAt:z.string().optional(),title:z.string().trim().min(1).max(300),status:z.enum(['past','current','planned'])})).max(100).optional() }).parse(body.data);
+            const value = z.object({ name: z.string().min(1).max(200), status: z.enum(['대기','진행 중','중단']).optional(), subject: z.enum(['영어', '수학', '국어', '과학', '한국사']), students: z.array(z.string().uuid()).max(100), slots: z.array(timetableSlotSchema.and(z.object({id:z.string().uuid().optional(),notionEditedAt:z.string().optional(),status:z.enum(['대기','진행 중','중단']).optional()}))).max(14), books: z.array(z.object({id:z.string().uuid().optional(),linkedPlanId:z.string().uuid().optional(),progress:z.string().max(100).optional(),notionEditedAt:z.string().optional(),title:z.string().trim().min(1).max(300),status:z.enum(['past','current','planned'])})).max(100).optional() }).parse(body.data);
             value.slots=value.slots.map(slot=>({...slot,id:slot.id||randomUUID()}));
             value.books=(value.books||[]).map(book=>({...book,id:book.id||randomUUID()}));
             if(value.books.some(book=>book.linkedPlanId)) {
@@ -262,7 +262,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                     throw new Error('FORBIDDEN');
                 if(old?.notionPageId && old.subject!==value.subject)throw new Error('SOURCE_IDENTITY_LOCKED');
                 if(old && (body.revision??0)!==(old.revision??0))throw new Error('DRAFT_CONFLICT');
-                t.set(ref, { ...old, ...value, revision:(old?.revision||0)+1, ownerUid: old?.ownerUid || actor.uid, academyId: old?.academyId || actor.academyId, notionSyncStage:'pending', ...(body.notionEditedAt?{notionEditedAt:body.notionEditedAt}:{}), updatedAt: Date.now() });
+                const status=value.status||old?.status||'진행 중';
+                const slots=value.slots.map(slot=>({...slot,status:status==='중단'?'중단':slot.status||old?.slots?.find((s:any)=>s.id===slot.id)?.status||'진행 중'}));
+                t.set(ref, { ...old, ...value, status, slots, revision:(old?.revision||0)+1, ownerUid: old?.ownerUid || actor.uid, academyId: old?.academyId || actor.academyId, notionSyncStage:'pending', ...(body.notionEditedAt?{notionEditedAt:body.notionEditedAt}:{}), updatedAt: Date.now() });
             });
             let syncError:string|undefined;try{await syncManagedRecord(db,'teacherClasses',id);}catch(e:any){syncError=e.message;await db.collection('teacherClasses').doc(id).update({notionSyncStage:'failed',notionSyncError:syncError});}
             return sendJson(res,200,{ok:true,id,revision:(body.revision||0)+1,...(syncError?{syncError}:{})});
@@ -290,7 +292,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         }
         if (body.action === 'save-schedule') {
             const value = teacherScheduleSchema.parse(body.data);
-            if(new Set(value.books.map(book=>book.id)).size!==value.books.length)throw new Error('INVALID_INPUT');
             if (value.students.some(key => !canTeach(actor, key, value.subject)))
                 throw new Error('FORBIDDEN');
             const id = body.id ? z.string().uuid().parse(body.id) : randomUUID();

@@ -114,3 +114,35 @@ test('common curriculum attaches the existing page without duplicating it or rem
  try{await syncManagedRecord(db,'teacherClasses',id);assert.equal(bookCreates,0);assert.equal(record.books[0].id,bookId);assert.equal(bookPage.properties['공통 계획'].checkbox,true);assert.deepEqual(bookPage.properties['반 관리'].relation.map((r:any)=>r.id),[otherClass,classId]);assert.equal(classPage.properties['커리큘럼'].relation[0].id,bookId);await syncManagedRecord(db,'teacherClasses',id);assert.equal(bookCreates,0);}
  finally{globalThis.fetch=oldFetch;if(oldAdmin===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=oldAdmin;if(oldToken===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=oldToken;}
 });
+
+test('class stop cascades to all timetable statuses, while stopping one slot preserves the class',async()=>{
+  const {syncManagedRecord,DEFAULT_SOURCE}=await import('../api/_lib/teacherNotionWorkspace.ts');
+  const priorAdmin=process.env.ADMIN_UID,priorToken=process.env.NOTION_INTEGRATION_TOKEN,fetcher=globalThis.fetch;
+  process.env.ADMIN_UID='owner';process.env.NOTION_INTEGRATION_TOKEN='test-token';
+  const id='44444444-4444-4444-8444-444444444444',pageId='55555555-5555-4555-8555-555555555555';
+  const record:any={ownerUid:'owner',academyId:'main',subject:'영어',name:'예시반',status:'중단',students:[],slots:[{weekday:1,start:'14:00',end:'15:30',status:'진행 중'},{weekday:4,start:'15:00',end:'16:30',status:'대기'}],books:[],revision:1};
+  const profile={academyId:'main',notionSources:[DEFAULT_SOURCE]};let created=0,page:any;const times:any[]=[];
+  const ref={get:async()=>({data:()=>record}),update:async(patch:any)=>Object.assign(record,patch)};
+  const db:any={collection:(name:string)=>({doc:()=>name==='teacherClasses'?ref:{get:async()=>({data:()=>name==='teacherWorkspaceAccess'?profile:undefined})},get:async()=>({docs:[{id:'owner',exists:true,data:()=>profile}]})}),runTransaction:async(fn:any)=>fn({get:(r:any)=>r.get(),update:(r:any,p:any)=>r.update(p)})};
+  globalThis.fetch=(async(url:any,options:any={})=>{
+    const path=String(url).split('/v1/')[1],body=options.body?JSON.parse(options.body):{};
+    if(path?.startsWith('databases/')&&path.endsWith('/query'))return Response.json({results:path.includes(DEFAULT_SOURCE.classDatabaseId)&&page?[page]:path.includes(DEFAULT_SOURCE.timetableDatabaseId)?times.filter(r=>!body.filter?.rich_text||r.properties['앱 기록 ID']?.rich_text?.some((t:any)=>t.text.content===body.filter.rich_text.equals)):[],has_more:false});
+    if(path?.startsWith('databases/'))return Response.json({properties:{'앱 기록 ID':{rich_text:{}},'수업 계획':{rich_text:{}}}});
+    if(path==='pages'&&options.method==='POST'){
+      if(body.parent.database_id===DEFAULT_SOURCE.timetableDatabaseId){const row={id:created++?'77777777-7777-4777-8777-777777777777':'66666666-6666-4666-8666-666666666666',parent:body.parent,properties:body.properties,last_edited_time:'old'};times.push(row);return Response.json(row);}
+      page={id:pageId,parent:{database_id:DEFAULT_SOURCE.classDatabaseId},properties:body.properties,last_edited_time:'old'};return Response.json(page);
+    }
+    const row=path===`pages/${pageId}`?page:times.find(r=>path===`pages/${r.id}`);
+    if(row){if(options.method==='PATCH')Object.assign(row.properties,body.properties);return Response.json(row);}
+    throw Error(`Unexpected mock path ${path}`);
+  }) as any;
+  try{
+    await syncManagedRecord(db,'teacherClasses',id);
+    assert.equal(page.properties['상태'].status.name,'중단');
+    assert.deepEqual(times.map(r=>r.properties['상태'].status.name),['중단','중단']);
+    record.status='진행 중';record.slots=record.slots.map((r:any,i:number)=>({...r,status:i?'진행 중':'중단'}));
+    await syncManagedRecord(db,'teacherClasses',id);
+    assert.equal(page.properties['상태'].status.name,'진행 중');
+    assert.deepEqual(times.map(r=>r.properties['상태'].status.name),['중단','진행 중']);
+  }finally{globalThis.fetch=fetcher;if(priorAdmin===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=priorAdmin;if(priorToken===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=priorToken;}
+});
