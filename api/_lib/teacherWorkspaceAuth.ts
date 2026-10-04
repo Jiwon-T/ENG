@@ -32,5 +32,5 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
         const members = await db.collection('academyStudentMemberships').where('academyId', '==', academyId).get();
         scopes = members.docs.filter(d => !d.data().disabled).flatMap(d => subjects.map(subject => ({studentKey: d.id, subject})));
     }
-    return { uid, admin, principal, academyId, scopes, teachingScopes, db };
+    return { uid, admin, principal, academyId, scopes, teachingScopes, db, readAccessKey:JSON.stringify([profile?.notionTeacherPageId,profile?.notionSources,profile?.workspaceRole]) };
 }

@@ -1,0 +1,56 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {handleWorkspace as handler} from '../api/teacher/workspace.ts';
+import {teacherReadCache} from '../api/_lib/teacherReadCache.ts';
+const uid='teacher';
+async function run(url:string,db:any,patch:any={}) {
+ let body:any;const headers:any={};const res:any={setHeader:(k:string,v:string)=>headers[k]=v,end:(s:string)=>body=JSON.parse(s)};
+ await handler({method:'GET',url} as any,res,async()=>({uid,admin:true,principal:false,academyId:'main',scopes:[],teachingScopes:[],db,...patch}) as any);
+ return {body,status:res.statusCode,headers};
+}
+test('draft pages project only summary fields and fetch exactly the requested ten bodies',async()=>{
+ teacherReadCache.clear();let summaryReads=0;const requested:string[][]=[];
+ const values=Array.from({length:25},(_,i)=>({id:`draft-${i}`,updatedAt:25-i,ownerUid:uid,data:{content:'large content'}}));
+ const query:any={where:(key:string,_op:string,value:string)=>{assert.equal(key,'ownerUid');assert.equal(value,uid);return query;},select:(...fields:string[])=>{assert.deepEqual(fields,['updatedAt']);return query;},get:async()=>{summaryReads++;return {docs:values.map(v=>({id:v.id,data:()=>({updatedAt:v.updatedAt})}))};},doc:(id:string)=>({id})};
+ const db={collection:(name:string)=>{assert.equal(name,'teacherLessonDrafts');return query;},getAll:async(...refs:any[])=>{requested.push(refs.map(r=>r.id));return refs.map(r=>({id:r.id,exists:true,data:()=>values.find(v=>v.id===r.id)}));}};
+ const first=await run('/api/teacher/workspace?action=drafts-page&page=1',db);
+ const second=await run('/api/teacher/workspace?action=drafts-page&page=2',db);
+ assert.equal(first.status,200);assert.equal(second.body.records.length,10);assert.equal(second.body.records[0].id,'draft-10');assert.equal(second.body.total,25);assert.equal(summaryReads,1);assert.deepEqual(requested.map(r=>r.length),[10,10]);assert.match(first.headers['Cache-Control'],/private, no-store/);teacherReadCache.clear();
+});
+test('lesson bootstrap omits schedules, settings, all draft bodies and curriculum queries',async()=>{
+ teacherReadCache.clear();const previous=globalThis.fetch,token=process.env.NOTION_INTEGRATION_TOKEN,database=process.env.NOTION_STUDENT_DATABASE_ID;
+ process.env.NOTION_INTEGRATION_TOKEN='test';process.env.NOTION_STUDENT_DATABASE_ID='test';
+ globalThis.fetch=async()=>new Response(JSON.stringify({results:[],has_more:false}),{status:200});
+ const reads:string[]=[];const db:any={collection:(name:string)=>{reads.push(name);const q:any={where:()=>q,get:async()=>({docs:[]})};return q;}};
+ try{const {body,status}=await run('/api/teacher/workspace?action=bootstrap-fast&section=lesson',db);assert.equal(status,200);assert.deepEqual(body.classes,[]);
+  for(const name of ['teacherSchedules','studentSchedules','teacherLessonDrafts','teacherCurricula','teacherWorkspaceAccess','users'])assert.equal(reads.includes(name),false,name);
+  for(const key of ['drafts','schedules','reflectedSchedules','access','staff','curricula'])assert.equal(key in body,false,key);
+ }finally{globalThis.fetch=previous; if(token===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=token;if(database===undefined)delete process.env.NOTION_STUDENT_DATABASE_ID;else process.env.NOTION_STUDENT_DATABASE_ID=database;teacherReadCache.clear();}
+});
+test('record lookup rechecks ownership even for an authenticated teacher',async()=>{
+ const db:any={collection:()=>({doc:()=>({get:async()=>({exists:true,id:'x',data:()=>({ownerUid:'other',data:{content:'private'}})})})})};
+ const {status,body}=await run('/api/teacher/workspace?action=managed-record&kind=lesson&id=11111111-1111-4111-8111-111111111111',db,{admin:false});
+ assert.equal(status,403);assert.equal(JSON.stringify(body).includes('private'),false);
+});
+
+test('academic filters apply before server paging and page changes reuse private source snapshots',async()=>{
+ const {teacherReadKey}=await import('../api/_lib/teacherReadCache.ts');teacherReadCache.clear();
+ const actor={uid,admin:true,principal:false,academyId:'main',scopes:[],teachingScopes:[]};
+ await teacherReadCache.get(teacherReadKey(actor,'academic-source'),async()=>[]);
+ await teacherReadCache.get(teacherReadKey(actor,'students'),async()=>[{studentKey:'student',studentDisplayName:'김연우'}]);
+ let reads=0;
+ const values=Array.from({length:30},(_,i)=>({ownerUid:uid,data:{studentKey:'student',examType:'학교 내신',subject:i<25?'영어':'수학',title:'평여중2-1중간',examDate:'2026-04-29',examDetail:'1학기 중간고사'},revision:1,stage:'draft'}));
+ const db:any={collection:(name:string)=>{assert.equal(name,'teacherAcademicDrafts');return {get:async()=>{reads++;return {docs:values.map((value,i)=>({id:String(i),data:()=>value}))};}};}};
+ const first=await run('/api/teacher/workspace?action=academic-records&page=1&subject=영어&search=김연우',db);
+ const second=await run('/api/teacher/workspace?action=academic-records&page=2&subject=영어&search=김연우',db);
+ assert.equal(first.status,200);assert.equal(first.body.total,25);assert.equal(first.body.records.length,12);assert.equal(second.body.records.length,12);assert.equal(second.body.pages,3);assert.equal(reads,1);assert.equal(second.body.periods.length,1);teacherReadCache.clear();
+});
+
+test('class and curriculum refresh skips student directory, schedules and settings',async()=>{
+ const {teacherReadKey}=await import('../api/_lib/teacherReadCache.ts');teacherReadCache.clear();
+ const actor={uid,admin:true,principal:false,academyId:'main',scopes:[],teachingScopes:[]};
+ await teacherReadCache.get(teacherReadKey(actor,'workspace-curriculum'),async()=>({classes:[],curricula:[],issues:[],sources:[]}));
+ const reads:string[]=[];const db:any={collection:(name:string)=>{reads.push(name);return {get:async()=>({docs:[]})};}};
+ const {body,status}=await run('/api/teacher/workspace?action=bootstrap&section=curriculum&resourcesOnly=1',db);
+ assert.equal(status,200);assert.deepEqual(reads.sort(),['teacherClasses','teacherCurricula']);assert.equal('students' in body,false);assert.equal('staff' in body,false);assert.equal('schedules' in body,false);teacherReadCache.clear();
+});

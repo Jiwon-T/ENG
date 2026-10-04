@@ -1,3 +1,4 @@
+import {teacherCachedRead,teacherCacheRead,teacherReadGeneration,invalidateTeacherReads} from '../../lib/teacherReadCache';
 import OptionalMark from './OptionalMark';
 import WorkspaceDialog from './WorkspaceDialog';
 import WorkspaceSyncPanel from './WorkspaceSyncPanel';
@@ -27,10 +28,15 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     onAccounts?: () => void;
 }) {
     const [lessonDay,setLessonDay]=useState(today);
-    const [draftPage,setDraftPage]=useState(1);
+    const [draftPage,setDraftPage]=useState(1),[draftList,setDraftList]=useState<any>({records:[],page:1,pages:1,total:0}),[draftLoading,setDraftLoading]=useState(false);
+    const [sectionLoading,setSectionLoading]=useState(false);
+    const dirtyResource=useRef('');
+    const loadVersion=useRef(0),draftVersion=useRef(0);
+    const activeTab=useRef('lesson');
     const [lessonDialogOpen,setLessonDialogOpen]=useState(false);
     const [lessonMode, setLessonMode] = useState<'single' | 'grid'>('single'), [reviewStudentKey, setReviewStudentKey] = useState('');
     const [data, setData] = useState<any>(null), [tab, setTab] = useState('lesson'), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
+    activeTab.current=tab;
     const [lesson, setLesson] = useState<any>(emptyLesson), [draftId, setDraftId] = useState<string | null>(null), [revision, setRevision] = useState<number | undefined>();
     const [search, setSearch] = useState(''), [status, setStatus] = useState('등록'), [page, setPage] = useState(1), [subjectFilter, setSubjectFilter] = useState('');
     const [scheduleSelection, setScheduleSelection] = useState<{
@@ -50,26 +56,60 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     async function request(action?: string, body: any = {}) {
         const reading = action?.startsWith('read:');
         const posting = Boolean(action && !reading);
-        const endpoint = '/api/teacher/workspace' + (reading ? `?action=${encodeURIComponent(action!.slice(5))}` : '');
+        const query=new URLSearchParams(reading?{action:action!.slice(5)}:{action:'bootstrap',section:workspaceSection(activeTab.current)});
+        if(reading)for(const [key,value] of Object.entries(body)){if(value!==undefined&&value!==null)query.set(key,String(value));}
+        const endpoint='/api/teacher/workspace'+(!posting?'?'+query.toString():'');
         const result = await teacherAuthenticatedRequest<any>(auth, endpoint, posting ? {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }),
         } : {});
         if (!result.ok || !result.data?.ok)
             throw new Error(`${errors[result.data?.error] || result.data?.message || result.userMessage || '처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'}${result.data?.diagnosticId ? ` (오류 ID: ${result.data.diagnosticId})` : ''}`);
+        if(posting&&action!=='previous-lesson'&&action!=='report-review') {
+            loadVersion.current++;draftVersion.current++;invalidateTeacherReads(action!);
+            dirtyResource.current=action!;
+            const kind=action==='save-draft'||action==='publish'?'lesson':action==='save-academic'||action==='publish-academic'?'academic':action==='save-schedule'||action==='publish-schedule'?'schedule':null;
+            const id=result.data.id||body.id;
+            if(kind&&id){try{
+                const saved=await request('read:managed-record',{kind,id});result.data.record=saved.record;
+                if(kind==='lesson')setData((old:any)=>old?{...old,drafts:[saved.record,...old.drafts.filter((r:any)=>r.id!==id)]}:old);
+                if(kind==='schedule')setData((old:any)=>old?{...old,schedules:[saved.record,...old.schedules.filter((r:any)=>r.id!==id&&(!saved.record.notionPageId||r.notionPageId!==saved.record.notionPageId))]}:old);
+            }catch{throw new Error('저장은 처리됐지만 최신 기록을 불러오지 못했습니다. 새로고침해 주세요.');}}
+        }
         return result.data;
     }
-    async function refresh() { setData(await request()); }
+    function workspaceSection(value:string){return ['lesson','students','schedule','curriculum','settings'].includes(value)?value:'base';}
+    function mergeData(fresh:any){setData((old:any)=>({...{classes:[],curricula:[],drafts:[],schedules:[],reflectedSchedules:[],staff:[],access:[],notionSources:[],notionIssues:[]},...old,...fresh,students:fresh.students?.map((s:any)=>({...old?.students?.find((student:any)=>student.studentKey===s.studentKey),...s}))||old?.students||[]}));}
+    async function loadDrafts(force=false){
+        const version=++draftVersion.current;setDraftLoading(true);await auth.authStateReady();
+        const key='drafts-page:'+draftPage,uid=auth.currentUser?.uid||'';
+        const cached=teacherCachedRead(uid,key),generation=teacherReadGeneration();if(cached)setDraftList(cached);
+        try{const r=await request('read:drafts-page',{page:draftPage,force:force?'1':undefined});if(version!==draftVersion.current)return;setDraftList(r);teacherCacheRead(uid,key,r,generation);setData((old:any)=>old?{...old,drafts:[...r.records,...old.drafts.filter((d:any)=>!r.records.some((row:any)=>row.id===d.id))]}:old);}finally{if(version===draftVersion.current)setDraftLoading(false);}
+    }
+    async function refresh() {
+        const changed=dirtyResource.current;dirtyResource.current='';
+        if(changed==='save-draft'||changed==='publish'){await loadDrafts(true);return;}
+        if(changed==='save-schedule')return;
+        if(changed==='publish-schedule'||changed==='archive-schedule'){mergeData(await request('read:schedule-records',{force:'1'}));return;}
+        if(['save-class','save-curriculum','archive-class','archive-curriculum','sync-notion-record','migrate-notion-records'].includes(changed)){
+            mergeData(await request('read:bootstrap',{section:'curriculum',resourcesOnly:'1',force:'1'}));return;
+        }
+        const fresh=await request('read:bootstrap',{section:workspaceSection(activeTab.current),force:'1'});mergeData(fresh);
+        teacherCacheRead(auth.currentUser?.uid||'','workspace:'+workspaceSection(activeTab.current),fresh);
+        if(activeTab.current==='lesson')await loadDrafts(true);
+    }
     useEffect(() => {
-        let live = true;
-        request('read:bootstrap-fast').then(async d => {
-            if (!live)return;setData(d);
-            try {const fresh=await request();if(live)setData(fresh);}catch(e){if(live)setMessage('노션 새 자료를 가져오지 못했습니다. 앱 저장 자료를 표시합니다. '+(e instanceof Error?e.message:''));}
-        }).catch(e => {
-            if (live)
-                setMessage(e.message);
-        });
-        return () => { live = false; };
-    }, []);
+        const version=++loadVersion.current;let live=true;
+        const section=workspaceSection(tab);setSectionLoading(true);
+        (async()=>{
+            await auth.authStateReady();const uid=auth.currentUser?.uid||'';if(!uid)throw new Error('로그인 인증이 만료되었습니다.');
+            const cached=teacherCachedRead(uid,'workspace:'+section),generation=teacherReadGeneration();
+            if(cached&&live&&version===loadVersion.current){mergeData(cached);setSectionLoading(false);}
+            if(!cached){const fast=await request('read:bootstrap-fast',{section});if(!live||version!==loadVersion.current)return;mergeData(fast);setSectionLoading(false);}
+            const fresh=await request('read:bootstrap',{section});if(!live||version!==loadVersion.current)return;mergeData(fresh);teacherCacheRead(uid,'workspace:'+section,fresh,generation);
+        })().catch(e=>{if(live&&version===loadVersion.current)setMessage(e.message);}).finally(()=>{if(live&&version===loadVersion.current)setSectionLoading(false);});
+        return()=>{live=false;};
+    },[tab]);
+    useEffect(()=>{if(tab==='lesson')void loadDrafts().catch(e=>setMessage(e.message));return()=>{draftVersion.current++;};},[tab,draftPage]);
     async function act(callback: () => Promise<any>) {
         setBusy(true);
         setMessage('');
@@ -84,15 +124,15 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
         }
     }
     function setField(key: string, value: any) { setLesson((d: any) => ({ ...d, [key]: value })); }
-    function openDraft(d: any) { setLesson(compactLessonInput({ ...emptyLesson(), ...d.data })); setDraftId(d.id); setRevision(d.revision); setLessonMode('single'); setLessonDialogOpen(true); }
+    function openDraft(d: any) { setData((old:any)=>({...old,drafts:[d,...old.drafts.filter((r:any)=>r.id!==d.id)]}));setLesson(compactLessonInput({ ...emptyLesson(), ...d.data })); setDraftId(d.id); setRevision(d.revision); setLessonMode('single'); setLessonDialogOpen(true); }
     const students = data?.students || [];
     const filtered = students.filter((s: any) => {
         const active = s.subjects?.length ? s.subjects.some((x: any) => (!status || x.status === status) && (!subjectFilter || x.subject === subjectFilter)) : s.enrollmentStatus === status && !subjectFilter;
         return ((!status && !subjectFilter) || active) && `${s.studentDisplayName}`.toLowerCase().includes(search.trim().toLowerCase());
     });
     const pages = Math.max(1, Math.ceil(filtered.length / 20)), currentPage = Math.min(page, pages);
-    const savedDrafts=(data?.drafts||[]).filter((d:any)=>d.ownerUid===data.uid).slice().sort((a:any,b:any)=>b.updatedAt-a.updatedAt);
-    const draftPages=Math.max(1,Math.ceil(savedDrafts.length/10)),currentDraftPage=Math.min(draftPage,draftPages);
+    const savedDrafts=draftList.records;
+    const draftPages=draftList.pages,currentDraftPage=draftList.page;
     const myClasses = data?.classes || [];
     const dateWeekday = new Date(`${lessonDay}T12:00:00+09:00`).getUTCDay();
     const currentDraft = data?.drafts?.find((d: any) => d.id === draftId);
@@ -101,13 +141,13 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
   <nav aria-label="선생님방 메뉴" className="flex flex-wrap gap-2 mb-5">
    {[['lesson', '수업 일지 작성', ClipboardList], ['schedule', '시간표·일정', CalendarDays], ['students', '학생 관리', Users], ['academic', '성적 관리', BookOpen], ['academy', '일지 조회', ClipboardList], ['curriculum', '커리큘럼', BookOpen], ['word', '학습 세트', BookOpen], ...(data?.admin || data?.principal ? [['settings', '관리자 설정', Settings]] : [])].map(([id, label, Icon]: any) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)} className={`flex items-center gap-2 min-h-[44px] px-3 rounded-xl text-sm font-bold ${tab === id ? 'bg-pastel-pink-500 text-white' : 'bg-white border border-pastel-pink-100 text-slate-600'}`}><Icon size={16}/>{label}</button>)}
   </nav>
-  {message && <p role="status" className="p-3 mb-4 rounded-xl bg-rose-50 text-sm text-rose-700">{message}</p>}
+  {sectionLoading&&data&&<p role="status" className="text-sm text-slate-500 mb-3">자료를 불러오는 중…</p>}{message && <p role="status" className="p-3 mb-4 rounded-xl bg-rose-50 text-sm text-rose-700">{message}</p>}
   {!data ? <div className="panel text-sm text-slate-500">{message ? <><p>위 안내를 확인한 뒤 다시 시도해 주세요.</p><button className="small-button mt-3" disabled={busy} onClick={() => act(refresh)}>다시 불러오기</button>{auth.currentUser?.email === 'lizzieshere1@gmail.com' && <button className="small-button mt-3 ml-2" onClick={onAccounts}>기존 계정·리포트 관리</button>}</> : '선생님방을 불러오는 중…'}</div> : <>
   <div hidden={tab !== 'lesson'}><div className="flex gap-2 mb-3">{([['single', '한 학생 작성'], ['grid', '여러 학생 작성']] as const).map(([value, label]) => <button key={value} aria-pressed={lessonMode === value} className={lessonMode === value ? 'primary-button' : 'small-button'} onClick={() => setLessonMode(value)}>{label}</button>)}</div><div hidden={lessonMode !== 'grid'}><TeacherLessonGrid active={tab==='lesson'&&lessonMode==='grid'} data={data} busy={busy} request={request} refresh={refresh} act={act}/></div></div>
   
   {((tab === 'lesson' && lessonMode === 'single') || lessonDialogOpen) && <div className="grid lg:grid-cols-[240px_1fr] gap-4">
    <aside hidden={lessonDialogOpen} className="space-y-3"><section className="panel"><div className="flex justify-between gap-2"><h2>{lessonDay===today()?'오늘 수업':'선택한 날짜의 수업'}</h2><button className="small-button" onClick={()=>setLessonDay(today())}>오늘</button></div><input aria-label="수업 목록 날짜" type="date" value={lessonDay} onChange={e=>{if(e.target.value)setLessonDay(e.target.value);}}/>{myClasses.filter((c: any) => c.status !== '중단' && c.ownerUid === data.uid && c.slots.some((s: any) => s.status !== '중단' && s.weekday === dateWeekday)).sort((a:any,b:any)=>a.slots.filter((s:any)=>s.status!=='중단'&&s.weekday===dateWeekday).map((s:any)=>s.start).sort()[0].localeCompare(b.slots.filter((s:any)=>s.status!=='중단'&&s.weekday===dateWeekday).map((s:any)=>s.start).sort()[0])).map((c: any) => <div key={c.id} className="mt-3"><p className="font-bold text-sm">{c.name}</p>{c.students.map((key: string) => <button key={key} className="w-full text-left text-sm min-h-[44px]" onClick={() => { const slot = c.slots.filter((s:any)=>s.status!=='중단'&&s.weekday===dateWeekday).slice().sort((a:any,b:any)=>a.start.localeCompare(b.start))[0]; setLesson({ ...emptyLesson(), date: lessonDay, studentKey: key, subject: c.subject, start: slot.start, end: slot.end }); setDraftId(null); setRevision(undefined); }}>{students.find((s: any) => s.studentKey === key)?.studentDisplayName || '학생'} <ArrowRight size={12} className="inline"/></button>)}</div>)}{!myClasses.length && <p className="text-xs text-slate-500 mt-2">시간표를 등록하면 오늘 수업이 표시됩니다.</p>}</section>
-    <section className="panel"><h2>저장한 기록</h2><button onClick={() => { setLesson(emptyLesson()); setDraftId(null); setRevision(undefined); }} className="small-button">+ 새 수업</button>{savedDrafts.slice((currentDraftPage-1)*10,currentDraftPage*10).map((d: any) => <button key={d.id} className="block w-full text-left min-h-[44px] border-b border-pastel-pink-50 py-2 text-xs" onClick={() => openDraft(d)}>{students.find((s: any) => s.studentKey === d.data.studentKey)?.studentDisplayName} · {d.data.date}<span className="block text-pastel-pink-500">{stageLabel[d.stage]}</span></button>)}<div className="review-pagination"><button disabled={currentDraftPage===1} onClick={()=>setDraftPage(currentDraftPage-1)}>이전</button><span>{currentDraftPage} / {draftPages}</span><button disabled={currentDraftPage===draftPages} onClick={()=>setDraftPage(currentDraftPage+1)}>다음</button></div></section>
+    <section className="panel"><h2>저장한 기록</h2><button onClick={() => { setLesson(emptyLesson()); setDraftId(null); setRevision(undefined); }} className="small-button">+ 새 수업</button>{draftLoading&&<p role="status" className="text-xs text-slate-500">저장한 기록을 불러오는 중…</p>}{savedDrafts.map((d: any) => <button key={d.id} className="block w-full text-left min-h-[44px] border-b border-pastel-pink-50 py-2 text-xs" onClick={() => openDraft(d)}>{students.find((s: any) => s.studentKey === d.data.studentKey)?.studentDisplayName} · {d.data.date}<span className="block text-pastel-pink-500">{stageLabel[d.stage]}</span></button>)}<div className="review-pagination"><button disabled={draftLoading||currentDraftPage===1} onClick={()=>setDraftPage(currentDraftPage-1)}>이전</button><span>{currentDraftPage} / {draftPages}</span><button disabled={draftLoading||currentDraftPage===draftPages} onClick={()=>setDraftPage(currentDraftPage+1)}>다음</button></div></section>
    </aside>
    <LessonEditorContainer modal={lessonDialogOpen} busy={busy} onClose={()=>setLessonDialogOpen(false)}><section className="panel"><h2>수업 일지</h2><label>날짜<input type="date" value={lesson.date} onChange={e=>setField('date',e.target.value)}/></label><div className="grid sm:grid-cols-2 gap-3">
     <label>학생<select value={lesson.studentKey} onChange={e => { setField('studentKey', e.target.value); }}><option value="">학생 선택</option>{students.map((s: any) => <option key={s.studentKey} value={s.studentKey}>{s.studentDisplayName}</option>)}</select></label>
@@ -119,7 +159,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
    <LessonTests value={lesson} onChange={setField}/>
    {[['content', '수업 내용'], ['specialNote', '특이 사항'], ['assignment', '과제']].map(([key, label]) => <label key={key} className="block mt-3">{label}<OptionalMark/><textarea rows={key === 'content' ? 4 : 2} value={lesson[key] || ''} onChange={e => setField(key, e.target.value)}/></label>)}
    {(lesson.note || lesson.nextPlan) && <details className="mt-3 text-xs text-slate-500"><summary>기존 기록 메모</summary>{lesson.note && <p className="whitespace-pre-wrap mt-2">기존 개인 피드백: {lesson.note}</p>}{lesson.nextPlan && <p className="whitespace-pre-wrap mt-2">기존 다음 수업 메모: {lesson.nextPlan}</p>}</details>}
-   <div className="flex flex-wrap gap-2 mt-4"><button disabled={busy} className="primary-button" onClick={() => act(async () => { const result = await request('save-draft', { id: draftId, revision, data: lesson }); setDraftId(result.id); const fresh = await request(); setData(fresh); const savedDraft = fresh.drafts.find((d: any) => d.id === result.id); setRevision(savedDraft?.revision); if(savedDraft) setLesson(compactLessonInput(savedDraft.data)); setMessage('초안을 저장했습니다.'); })}>저장</button><button disabled={busy || !draftId || ['publishing', 'processing', 'published'].includes(currentDraft?.stage) || JSON.stringify(currentDraft?.data) !== JSON.stringify(lesson)} className="small-button" onClick={() => act(async () => {
+   <div className="flex flex-wrap gap-2 mt-4"><button disabled={busy} className="primary-button" onClick={() => act(async () => { const result = await request('save-draft', { id: draftId, revision, data: lesson }); setDraftId(result.id); const savedDraft=result.record;await refresh(); setRevision(savedDraft?.revision); if(savedDraft) setLesson(compactLessonInput(savedDraft.data)); setMessage('초안을 저장했습니다.'); })}>저장</button><button disabled={busy || !draftId || ['publishing', 'processing', 'published'].includes(currentDraft?.stage) || JSON.stringify(currentDraft?.data) !== JSON.stringify(lesson)} className="small-button" onClick={() => act(async () => {
                     if (!window.confirm('저장된 내용을 Notion과 리포트에 반영할까요?'))
                         return;
                     await request('publish', { id: draftId });

@@ -65,11 +65,11 @@ export async function enableSharedWorkspace(db:any,actor:any) {
  await db.collection('academyNotionConfig').doc(academyId).set({...DEFAULT_SOURCE,mode:'shared',enabledAt:Date.now(),enabledBy:actor.uid});
  return {mode:'shared',academyId};
 }
-export async function readNotionWorkspace(db:any,actor:any){
+export async function readNotionWorkspace(db:any,actor:any,section:'classes'|'all'='all'){
  const classes:any[]=[],curricula:any[]=[],issues:string[]=[];const sources=await sourcesFor(db,actor);
  if(!sources.length)issues.push('이 선생님의 노션 반·커리큘럼 DB 연결이 필요합니다. 관리자 설정에서 과목별 DB를 연결해 주세요.');
  for(const source of sources){try{
-  const [classPages,bookPages,timePages]=await Promise.all([allPages(source.classDatabaseId),allPages(source.curriculumDatabaseId),allPages(source.timetableDatabaseId)]);
+  const [classPages,bookPages,timePages]=await Promise.all([allPages(source.classDatabaseId),section==='all'?allPages(source.curriculumDatabaseId):Promise.resolve([]),allPages(source.timetableDatabaseId)]);
   const knownClasses=new Map(classPages.map(p=>[uuid(p.id),p]));
   const times=await Promise.all(timePages.map(async page=>({...sourceSlots(page),classIds:await ids(page,'반'),source:page})));
   for(const page of classPages){const row=await rowSource(page,source,actor);if(!row)continue;const studentIds=await ids(page,'대상 학생');const id=uuid(page.id);const bookIds=await ids(page,'커리큘럼');const books=bookPages.filter(p=>bookIds.includes(uuid(p.id))).map(p=>({id:uuid(p.id),title:text(p.properties['교재명']),...(p.properties['공통 계획']?.checkbox?{linkedPlanId:uuid(p.id)}:{}),status:bookStatus(choice(p.properties['진행도'])),progress:choice(p.properties['진행도']),notionEditedAt:p.last_edited_time}));classes.push({id,status:choice(page.properties['상태'])||'진행 중',name:text(page.properties['수업명']),subject:row.subject,students:studentIds,slots:times.filter(t=>t.id&&t.classIds.includes(id)).map(({id,weekday,start,end,source})=>({id,weekday,start,end,status:choice(page.properties['상태'])==='중단'?'중단':choice(source.properties['상태'])||'진행 중',notionEditedAt:source.last_edited_time})),books,ownerUid:row.ownerUid,assignedUids:row.assignedUids||[],academyId:source.academyId,notionPageId:id,notionEditedAt:page.last_edited_time,source:'notion',revision:0});}
