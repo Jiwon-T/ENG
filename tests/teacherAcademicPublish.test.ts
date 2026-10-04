@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {publishTeacherGrade} from '../api/_lib/teacherAcademicNotion.ts';
 import {syncAcademicPage} from '../api/_lib/academic.ts';
 const studentKey='11111111-1111-4111-8111-111111111111', id='22222222-2222-4222-8222-222222222222', pageId='33333333-3333-4333-8333-333333333333';
-const d={studentKey,subject:'영어',examType:'학력평가',title:'10월 학력평가',examDate:'2026-10-03',deadline:null,score:0,maxScore:100,grade:'B',submissionStatus:'제출 완료',note:'확인'};
+const d={examDetail:'9월',studentKey,subject:'영어',examType:'학력평가',title:'10월 학력평가',examDate:'2026-10-03',deadline:null,score:0,maxScore:100,grade:'B',submissionStatus:'제출 완료',note:'확인'};
 const profile={notionTeacherPageId:'44444444-4444-4444-8444-444444444444'};
 const env=()=>{const token=process.env.NOTION_INTEGRATION_TOKEN;process.env.NOTION_INTEGRATION_TOKEN='fake-test-only';return()=>{if(token===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=token;};};
 const reply=(data:any,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
@@ -31,6 +31,7 @@ test('grade retry reuses source ID, persists identity before projection, and pre
   assert.equal(calls.some(c=>c.path==='pages'&&c.method==='POST'),false);
   const source=calls.find(c=>c.path===`pages/${pageId}`&&c.body?.properties?.['원점수']);
   assert.equal(source.body.properties['원점수'].number,0);
+  assert.equal(source.body.properties['세부 종류'].select.name,'9월');
   assert.equal(updates[0].notionPageId,pageId);assert.equal(updates[0].stage,'notion_saved');
   assert.equal(updates.at(-1).stage,'published');assert.equal(projected,true);
  }finally{global.fetch=original;restore();}

@@ -180,3 +180,13 @@
 .academic-cards {display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;}
 .teacher-workspace .academic-card {display:flex;flex-direction:column;gap:9px;text-align:left;border:1px solid #fce7ef;border-radius:14px;padding:16px;background:white;min-width:0;overflow-wrap:anywhere;}
 @media(max-width:850px){.lesson-grid tr {grid-template-columns:1fr;}.lesson-grid td[data-label="수업 내용"] {grid-column:1;}}
+
+.teacher-workspace .optional-mark {margin-left:4px;font-size:10px;font-weight:400;color:#94a3b8;white-space:nowrap;}
+.student-management-cards,.academic-cards {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
+.student-management-cards>div {min-width:0;padding:12px;}
+.student-management-cards>div>p:first-child,.academic-card-student {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.teacher-workspace .academic-card {gap:6px;overflow-wrap:normal;}
+.academic-card-title {font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.academic-card-details {display:flex;flex-wrap:wrap;gap:3px 8px;font-size:11px;color:#64748b;}
+@media(max-width:900px){.student-management-cards,.academic-cards{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:520px){.student-management-cards,.academic-cards{grid-template-columns:1fr;}}
