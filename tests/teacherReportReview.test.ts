@@ -58,3 +58,20 @@ test('legacy reports missing source ID use their stable document ID for both aud
  assert.equal(parent.reports[0].reportId,student.reports[0].reportId);
  assert.equal(student.reports[0].reportId.length,16);
 });
+
+test('section loading skips unrelated report collections and pages each audience by five',async()=>{
+ const queried:string[]=[];let academics=0;
+ const rows=Array.from({length:13},(_,i)=>({...english,notionPageId:'lesson-'+i,lessonDateStart:`2026-10-${String(1+i).padStart(2,'0')}T14:00:00+09:00`}));
+ const db:any={collection:(name:string)=>{queried.push(name);const query:any={where:()=>query,get:async()=>({docs:rows.map((value,i)=>({id:String(i),data:()=>value}))})};return query;}};
+ const deps:any={readStudentMapping:async()=>({internalStudentId:'secret',firebaseUid:null}),loadAcademicData:async()=>{academics++;return {records:[],subjects:[],academyScores:[]};}};
+ for(const audience of ['parent','student'] as const){
+  queried.length=0;
+  const result=await loadTeacherReportReview(db,{admin:false,scopes:[{studentKey,subject:'영어'}]},studentKey,audience,deps,{section:'lessons',page:2,subject:'영어'});
+  assert.equal(result.reports.length,5);assert.ok('reportTotal' in result&&'reportPages' in result&&'reportPage' in result);assert.equal(result.reportTotal,13);assert.equal(result.reportPages,3);assert.equal(result.reportPage,2);
+  assert.deepEqual(queried,['lessonReports']);assert.equal(academics,0);assert.deepEqual(result.schedules,[]);
+  if(audience==='student')assert.equal('feedback' in result.reports[0],false);
+ }
+ queried.length=0;
+ await loadTeacherReportReview(db,{admin:false,scopes:[{studentKey,subject:'영어'}]},studentKey,'parent',deps,{section:'grades',page:1,subject:''});
+ assert.deepEqual(queried,[]);assert.equal(academics,1);
+});
