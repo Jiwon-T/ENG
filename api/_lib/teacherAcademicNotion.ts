@@ -18,7 +18,7 @@ const rich=(text:string)=>({rich_text:text.match(/[\s\S]{1,1900}/g)?.map(content
 const text=(p:any)=>(p?.title||p?.rich_text||[]).map((v:any)=>v.plain_text||v.text?.content||'').join('');
 export function gradeFromPage(page:any) {
  const p=page.properties;
- return {studentKey:normalizeNotionPageId(p['학생']?.relation?.[0]?.id||''),subject:p['과목']?.select?.name,examType:p['시험 종류']?.select?.name==='모의고사'?'학력평가':p['시험 종류']?.select?.name,title:text(p['시험명']),examDate:p['시험일']?.date?.start?.slice(0,10)||'',deadline:p['제출 기한']?.date?.start?.slice(0,10)||null,score:p['원점수']?.number??null,maxScore:p['만점']?.number??null,grade:text(p['예상 등급']),submissionStatus:p['제출 상태']?.select?.name||'미제출',note:text(p['비고'])};
+ return {examYear:p['시험 연도']?.number??null,semester:Number(p['학기']?.select?.name?.[0])||null,examPeriod:p['고사 구분']?.select?.name||null,studentKey:normalizeNotionPageId(p['학생']?.relation?.[0]?.id||''),subject:p['과목']?.select?.name,examType:p['시험 종류']?.select?.name==='모의고사'?'학력평가':p['시험 종류']?.select?.name,title:text(p['시험명']),examDate:p['시험일']?.date?.start?.slice(0,10)||'',deadline:p['제출 기한']?.date?.start?.slice(0,10)||null,score:p['원점수']?.number??null,maxScore:p['만점']?.number??null,grade:text(p['예상 등급']),submissionStatus:p['제출 상태']?.select?.name||'미제출',note:text(p['비고'])};
 }
 export function canReadNotionGrade(actor:any, profile:any, page:any) {
  if(normalizeNotionPageId(page.parent?.database_id||'') !== GRADE_DATABASE || page.archived || page.in_trash || page.properties?.['학생']?.relation?.length !== 1) return false;
@@ -46,9 +46,11 @@ export async function publishTeacherGrade(db:Firestore,id:string,record:any, dep
  if(!teacherPage) throw new Error('TEACHER_NOTION_LINK_REQUIRED');
  const schema=await gradeNotion(`databases/${GRADE_DATABASE}`);
  if(!schema.properties['앱 기록 ID']) throw new Error('NOTION_SCHEMA_SETUP_REQUIRED');
+ const extra:any={}; for(const [name,type] of [['시험 연도','number'],['학기','select'],['고사 구분','select']])if(!schema.properties[name])extra[name]={[type]:{}};if(Object.keys(extra).length)await gradeNotion(`databases/${GRADE_DATABASE}`,'PATCH',{properties:extra});
  let pageId=record.notionPageId;
  if(!pageId){const matches=await gradeNotion(`databases/${GRADE_DATABASE}/query`,'POST',{filter:{property:'앱 기록 ID',rich_text:{equals:id}},page_size:2});if(matches.results.length>1)throw new Error('DUPLICATE_NOTION_RECORD');pageId=matches.results[0]?.id;}
  const properties:any={'시험명':{title:[{text:{content:d.title}}]},'학생':{relation:[{id:d.studentKey}]},'담당 선생님':{relation:[{id:teacherPage}]},'과목':{select:{name:d.subject}},'시험 종류':{select:{name:d.examType}},'시험일':{date:{start:d.examDate}},'제출 기한':{date:d.deadline?{start:d.deadline}:null},'원점수':{number:d.score},'만점':{number:d.maxScore},'예상 등급':rich(d.grade),'제출 상태':{select:{name:d.submissionStatus}},'비고':rich(d.note),'앱 기록 ID':rich(id)};
+ Object.assign(properties,{'시험 연도':{number:d.examYear??null},'학기':{select:d.semester?{name:`${d.semester}학기`}:null},'고사 구분':{select:d.examPeriod?{name:d.examPeriod}:null}});
  const page=pageId ? await gradeNotion(`pages/${pageId}`,'PATCH',{properties}) : await gradeNotion('pages','POST',{parent:{database_id:GRADE_DATABASE},properties});
  await db.collection('teacherAcademicDrafts').doc(id).update({notionPageId:page.id,stage:'notion_saved'});
  // Reuse the existing authoritative Notion->report projection. No client score payload enters reports directly.

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { subjects } from './teacherWorkspacePolicy.js';
 export const academicDraftSchema = z.object({
  studentKey:z.string().uuid(), subject:z.enum(subjects), examType:z.enum(['학교 내신','학력평가']),
+ examYear:z.number().int().min(1900).max(2200).nullable().optional(), semester:z.union([z.literal(1),z.literal(2)]).nullable().optional(), examPeriod:z.enum(['중간고사','기말고사']).nullable().optional(),
  title:z.string().trim().min(1).max(200), examDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
  deadline:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
  score:z.number().nonnegative().nullable(), maxScore:z.number().positive().nullable(),

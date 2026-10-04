@@ -16,3 +16,9 @@ test('curriculum screen shares class records and provides editable curriculum an
  assert.ok(html.includes('월요반'));assert.ok(html.includes('교재 1권'));assert.ok(html.includes('커리큘럼 등록'));assert.ok(html.includes('진도·수업 계획'));assert.ok(html.includes('+ 새 교재'));
  assert.equal(html.includes('weekly-board'),false);assert.ok(html.includes('curriculum-management-board'));assert.ok(html.includes('커리큘럼 관리'));assert.ok(html.includes('공통 계획에서 교재 선택'));assert.equal((html.match(/<dialog/g)||[]).length,2);
 });
+test('regular timetable sorts times and hides stopped classes and individual slots',()=>{
+ const mk=(name:string,start:string,status?:string,slotStatus?:string)=>({...data.classes[0],id:name,name,status,slots:[{weekday:1,start,end:'22:00',status:slotStatus}]});
+ const html=renderToStaticMarkup(<TeacherClassManager {...props} data={{...data,classes:[mk('늦은반','20:00'),mk('중단반','13:00','중단'),mk('대기반','16:00','대기'),mk('시간중단','14:00',undefined,'중단')]}} mode="schedule"/>);
+ const board=html.split('weekly-board')[2]?.split('</section>')[0]||html;
+ assert.ok(board.indexOf('대기반')<board.indexOf('늦은반'));assert.equal(board.includes('중단반'),false);assert.equal(board.includes('시간중단'),false);
+});

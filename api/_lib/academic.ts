@@ -53,7 +53,7 @@ export function parseAcademicPage(page: any) {
   const percentile = props['백분위']?.type === 'number' ? number(props['백분위']) : null;
   if (percentile !== null && (percentile < 0 || percentile > 100)) throw new Error('INVALID_PERCENTILE');
   return { id, studentPageId, collection: 'academicRecords', data: {
-    sourceUpdatedAt, removed, subject, examType, title: text(props['시험명']), examDate: date(props['시험일']),
+    examYear:number(props['시험 연도']),semester:Number(choice(props['학기'])[0])||null,examPeriod:choice(props['고사 구분'])||null,sourceUpdatedAt, removed, subject, examType, title: text(props['시험명']), examDate: date(props['시험일']),
     deadline: date(props['제출 기한']), score, maxScore, percentile,
     grade: text(props['예상 등급']), submissionStatus: choice(props['제출 상태']),
   } };
