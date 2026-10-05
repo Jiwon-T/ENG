@@ -36,6 +36,7 @@ export async function writeTeacherNotionRecord(db: any, collection: string, id: 
     const ref = db.collection(collection).doc(id), lease = randomUUID();
     const intent = await db.runTransaction(async (tx: any) => {
         const saved = (await tx.get(ref)).data();
+        if (saved?.archived||collection==='teacherLessonDrafts'&&saved?.deleteRequested)throw Error('FORBIDDEN');
         if (!saved || saved.revision !== record.revision)
             throw Error('DRAFT_CONFLICT');
         const old = saved.notionWrite;
@@ -52,7 +53,7 @@ export async function writeTeacherNotionRecord(db: any, collection: string, id: 
         return next;
     });
     let state = intent;
-    async function checkpoint(patch: any) { state = await db.runTransaction(async (tx: any) => { const current = (await tx.get(ref)).data(); if (current?.revision !== record.revision || current.notionWrite?.lease !== lease)
+    async function checkpoint(patch: any) { state = await db.runTransaction(async (tx: any) => { const current = (await tx.get(ref)).data(); if(current?.archived||collection==='teacherLessonDrafts'&&current?.deleteRequested)throw Error('FORBIDDEN'); if (current?.revision !== record.revision || current.notionWrite?.lease !== lease)
         throw Error('PUBLISH_IN_PROGRESS'); const next = { ...current.notionWrite, ...patch, leaseUntil: patch.lease === null ? 0 : Date.now() + 180000 }; tx.update(ref, { notionWrite: next, ...(patch.done ? { notionPageId: next.pageId, notionEditedAt: next.remoteEditedAt, stage: 'notion_saved', notionSavedRevision: record.revision, updatedAt: Date.now() } : {}) }); return next; }); }
     try {
         let page: any;

@@ -11,7 +11,7 @@ async function run(url:string,db:any,patch:any={}) {
 test('draft pages project only summary fields and fetch exactly the requested ten bodies',async()=>{
  teacherReadCache.clear();let summaryReads=0;const requested:string[][]=[];
  const values=Array.from({length:25},(_,i)=>({id:`draft-${i}`,updatedAt:25-i,ownerUid:uid,data:{content:'large content'}}));
- const query:any={where:(key:string,_op:string,value:string)=>{assert.equal(key,'ownerUid');assert.equal(value,uid);return query;},select:(...fields:string[])=>{assert.deepEqual(fields,['updatedAt']);return query;},get:async()=>{summaryReads++;return {docs:values.map(v=>({id:v.id,data:()=>({updatedAt:v.updatedAt})}))};},doc:(id:string)=>({id})};
+ const query:any={where:(key:string,_op:string,value:string)=>{assert.equal(key,'ownerUid');assert.equal(value,uid);return query;},select:(...fields:string[])=>{assert.deepEqual(fields,['updatedAt','archived']);return query;},get:async()=>{summaryReads++;return {docs:values.map(v=>({id:v.id,data:()=>({updatedAt:v.updatedAt})}))};},doc:(id:string)=>({id})};
  const db={collection:(name:string)=>{assert.equal(name,'teacherLessonDrafts');return query;},getAll:async(...refs:any[])=>{requested.push(refs.map(r=>r.id));return refs.map(r=>({id:r.id,exists:true,data:()=>values.find(v=>v.id===r.id)}));}};
  const first=await run('/api/teacher/workspace?action=drafts-page&page=1',db);
  const second=await run('/api/teacher/workspace?action=drafts-page&page=2',db);

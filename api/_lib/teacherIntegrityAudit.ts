@@ -1,3 +1,4 @@
+import {auditPendingDetails} from './teacherAuditDetails.js';
 import {assertRegistrationAccess} from './teacherStudentRegistration.js';
 import {registrationNotion,REGISTRATION_STUDENT_DATABASE,type RegistrationNotion} from './teacherStudentRegistrationNotion.js';
 import {isNotionPageId,normalizeNotionPageId as uuid} from './notionPageId.js';
@@ -30,8 +31,8 @@ export async function readIntegrityAudit(db:any,actor:any,notion:RegistrationNot
  const statuses=remote.map((r,i)=>({source:['학생','수강','반','선생님','수업 일지'][i],ok:r.status==='fulfilled'}));
  const [students,enrollments,classes,teachers,lessons]=remote.map(r=>r.status==='fulfilled'?r.value:[]);
  if(actor.admin)for(const p of students){const k=key(p.id);if(k)keys.add(k);}
- const issues:{code:string;severity:'error'|'warning';studentKey:string|null;recordId:string|null;message:string}[]=[];
- const add=(code:string,message:string,k:string|null=null,id:string|null=null,severity:'error'|'warning'='error')=>issues.push({code,message,studentKey:k,recordId:id,severity});
+ const issues:any[]=[];
+ const add=(code:string,message:string,k:string|null=null,id:string|null=null,severity:'error'|'warning'='error',extra:any={})=>issues.push({code,message,studentKey:k,recordId:id,severity,...extra});
  const groups=new Map<string,any[]>();
  for(const m of rows.notionStudentMappings){const k=key(m.notionStudentPageId);if(k&&keys.has(k))groups.set(k,[...(groups.get(k)||[]),m]);}
  const internal=new Map<string,string>();const effective=new Map<string,any>();
@@ -49,7 +50,7 @@ export async function readIntegrityAudit(db:any,actor:any,notion:RegistrationNot
  for(const e of es){if(relations(e.properties?.['학생']).length!==1)add('ENROLLMENT_MULTI_STUDENT','수강 행에 여러 학생이 연결돼 있습니다.',k,e.id);
  for(const subject of ['국어','영어','수학','과학','한국사']){const p=e.properties||{};if(statuses[3].ok&&relations(p[subject+' 담당']).some((t:string)=>!teacherIds.has(t)))add('TEACHER_MISSING','수강 담당 선생님 원본을 찾을 수 없습니다.',k,e.id);const start=p[subject+' 시작일']?.date?.start,end=p[subject+' 중단일']?.date?.start;if(start&&end&&end<start)add('ENROLLMENT_DATES','수강 중단일이 시작일보다 빠릅니다.',k,e.id);}}
  const s=students.find((p:any)=>key(p.id)===k);if(s&&statuses[2].ok&&relations(s.properties?.['소속반']).some((id:string)=>!classIds.has(id)))add('CLASS_MISSING','소속반 원본을 찾을 수 없습니다.',k);
- if(s&&statuses[1].ok&&statuses[2].ok&&statuses[3].ok&&es.length===1)for(const id of relations(s.properties?.['소속반'])){const c=classes.find((p:any)=>key(p.id)===id);if(!c)continue;const subject=c.properties?.['과목']?.select?.name,p=es[0].properties||{},status=p[subject]?.status?.name;if(status!=='등록'||!relations(c.properties?.['담당 선생님']).some((t:string)=>relations(p[subject+' 담당']).includes(t)))add('CLASS_ASSIGNMENT_MISMATCH','소속반의 과목·담당과 학생의 수강 연결이 일치하지 않습니다.',k,id);}
+ if(s&&statuses[1].ok&&statuses[2].ok&&statuses[3].ok&&es.length===1)for(const id of relations(s.properties?.['소속반'])){const c=classes.find((p:any)=>key(p.id)===id);if(!c)continue;const subject=c.properties?.['과목']?.select?.name,p=es[0].properties||{},status=p[subject]?.status?.name;if(status!=='등록'||!relations(c.properties?.['담당 선생님']).some((t:string)=>relations(p[subject+' 담당']).includes(t))){const name=(page:any)=>(Object.values(page?.properties||{}).find((v:any)=>Array.isArray(v?.title)) as any)?.title?.map((t:any)=>t.plain_text??t.text?.content??'').join('')||'이름 확인 필요';const teacherNames=(ids:string[])=>ids.length?ids.map(t=>name(teachers.find((p:any)=>key(p.id)===t))).join(', '):'미배정';add('CLASS_ASSIGNMENT_MISMATCH',`${name(c)} · ${subject||'과목 미설정'} 수강·담당 연결 불일치`,k,id,'error',{workType:'반 배정',subject:subject||null,details:[`학생 수강 상태: ${status||'미설정'} (반 배정에는 등록 필요)`,`반 담당: ${teacherNames(relations(c.properties?.['담당 선생님']))}`,`학생 ${subject||''} 담당: ${teacherNames(relations(p[subject+' 담당']))}`],nextAction:'학생 관리 → 수강·담당·반 변경에서 등록 상태와 담당을 확인하세요. 반 배정이 잘못됐다면 해당 반을 제외하세요.'});}}
  const m=effective.get(k);if(m){const slugs=rows.reportSlugs.filter((r:any)=>r.internalStudentId===m.internalStudentId&&r.active);if(slugs.length>1)add('ACTIVE_REPORT_DUPLICATE','활성 리포트 주소가 여러 개입니다.',k);if(slugs.some((r:any)=>key(r.studentKey)!==k))add('REPORT_STUDENT_MISMATCH','리포트 주소의 학생 식별자가 매핑과 다릅니다.',k);
  const cached=rows.studentEnrollments.filter((r:any)=>r.internalStudentId===m.internalStudentId&&!r.removed);if(cached.length>1)add('ENROLLMENT_MIRROR_DUPLICATE','앱 수강 연결이 여러 개입니다.',k,null,'warning');}
  }
@@ -58,12 +59,14 @@ export async function readIntegrityAudit(db:any,actor:any,notion:RegistrationNot
  const reportGroups=new Map<string,any[]>();for(const r of rows.lessonReports){const k=internal.get(r.internalStudentId);if(!k||!r.teacherDraftId)continue;const identity=k+'\0'+r.teacherDraftId+'\0'+r.teacherAppRevision;reportGroups.set(identity,[...(reportGroups.get(identity)||[]),r]);}
  for(const reports of reportGroups.values())if(reports.length>1)add('LESSON_REPORT_DUPLICATE','같은 초안·수정 차수의 리포트가 여러 개입니다.',internal.get(reports[0].internalStudentId)!,reports[0].teacherDraftId);
  for(const c of ['teacherLessonDrafts','teacherStudentRegistrations','teacherStudentEdits','teacherStudentEnrollmentEdits','teacherMessages'])for(const r of rows[c]){
- if(r.academyId!==actor.academyId)continue;const k=key(r.studentKey||r.data?.studentKey);if(k&&!keys.has(k))continue;
+ if(r.academyId!==actor.academyId)continue;const k=key(r.studentKey||r.data?.studentKey||r.notionStudentPageId);if(k&&!keys.has(k))continue;
  const state=r.syncStatus||r.stage||r.status;const pending=c==='teacherLessonDrafts'?['failed','report_published_notion_pending','reflection_pending','publishing','processing','notion_saved'].includes(state):c==='teacherMessages'?['prepared','sending','uncertain'].includes(state):!['synced','completed','discarded','draft'].includes(state);
- if(pending)add('PENDING_'+c,'미완료 작업이 있습니다. 원래 작업 화면에서 저장 결과를 확인하세요.',k,r.id,'warning');
+ if(pending&&!r.archived){const detail=auditPendingDetails(c,r);add('PENDING_'+c,detail.message,k,r.id,'warning',{...detail,studentName:c==='teacherStudentRegistrations'?r.data?.name||null:null});}
  }
  for(const r of rows.teacherWorkspaceAccess){if(r.academyId!==actor.academyId||r.disabled)continue;const u=rows.users.find((u:any)=>u.id===r.id);if(!u||!['teacher','principal','admin'].includes(u.role))add('WORKSPACE_ROLE','교직원 설정과 계정 역할이 일치하지 않습니다.',null,r.id);if(statuses[3].ok&&r.notionTeacherPageId&&!teacherIds.has(key(r.notionTeacherPageId)))add('WORKSPACE_TEACHER_MISSING','교직원 노션 선생님 연결을 찾을 수 없습니다.',null,r.id);}
  for(const s of statuses)if(!s.ok)add('SOURCE_UNAVAILABLE',s.source+' 원본을 읽지 못했습니다. 해당 검사는 완료되지 않았습니다.',null,null,'warning');
  let batiReady=false;try{const {batiConfig}=await import('./teacherMessages.js');batiConfig();batiReady=true;}catch{}
+ const pageName=(p:any)=>(Object.values(p?.properties||{}).find((v:any)=>Array.isArray(v?.title)) as any)?.title?.map((t:any)=>t.plain_text??t.text?.content??'').join('')||null;
+ for(const issue of issues){issue.studentName=issue.studentName||pageName(students.find((p:any)=>key(p.id)===issue.studentKey))||effective.get(issue.studentKey)?.studentDisplayName||null;if(!issue.nextAction)issue.nextAction=issue.code==='SOURCE_UNAVAILABLE'?'다시 점검하세요. 조회 실패가 계속되면 노션 연결 권한과 서버 설정을 확인하세요.':'노션 학생과 관련 연결을 확인하세요. 학생 계정·리포트 연결 문제는 기존 계정·리포트 관리에서 확인하세요.';}
  return {checkedAt:new Date().toISOString(),academyId:actor.academyId,studentCount:keys.size,sources:statuses,complete:statuses.every(s=>s.ok),batiConfigured:batiReady,batiContractVerified:false,issues};
 }

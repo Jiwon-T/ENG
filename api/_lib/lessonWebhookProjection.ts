@@ -6,6 +6,7 @@ export async function storeWebhookLessonReport(db: any, data: NotionReportWebhoo
     if (data.sourceUpdatedAt && !Number.isFinite(Date.parse(data.sourceUpdatedAt)))
         throw Error('INVALID_INPUT');
     return db.runTransaction(async (tx: any) => {
+        const deleted=await tx.get(db.collection('teacherLessonDrafts').where('notionPageId','==',id));if(deleted.docs.some((d:any)=>d.data().archived||d.data().deleteRequested))return {applied:false,reason:'APP_ARCHIVED',isNew:false};
         const [current, compact] = await Promise.all([tx.get(target), tx.get(legacy)]), records = [current, compact].filter(s => s.exists);
         if (records.some(s => s.data()?.teacherDraftId))
             return { applied: false, reason: 'APP_OWNED', isNew: false };

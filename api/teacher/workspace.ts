@@ -1,3 +1,4 @@
+import {archiveTeacherLesson} from '../_lib/teacherLessonArchive.js';
 import {readIntegrityAudit} from '../_lib/teacherIntegrityAudit.js';
 import {lessonSyncWarning} from '../_lib/teacherLessonDiagnostics.js';
 import {readTeacherMessages,prepareTeacherMessage,sendTeacherMessage} from '../_lib/teacherMessages.js';
@@ -122,8 +123,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             }
             if(action==='drafts-page') {
                 const summaries=await teacherReadCache.get(teacherReadKey(actor,'draft-summaries'),async()=>{
-                    const rows=await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).select('updatedAt').get();
-                    return rows.docs.map(d=>({id:d.id,updatedAt:d.data().updatedAt||0})).sort((a,b)=>b.updatedAt-a.updatedAt||a.id.localeCompare(b.id));
+                    const rows=await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).select('updatedAt','archived').get();
+                    return rows.docs.filter(d=>!d.data().archived).map(d=>({id:d.id,updatedAt:d.data().updatedAt||0})).sort((a,b)=>b.updatedAt-a.updatedAt||a.id.localeCompare(b.id));
                 },force);
                 const page=pageRows(summaries,pageNumber(params.get('page')),10);
                 const docs=page.records.length?await db.getAll(...page.records.map(r=>db.collection('teacherLessonDrafts').doc(r.id))):[];
@@ -192,7 +193,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const access = !needs('settings')?[]:actor.admin ? (await db.collection('teacherWorkspaceAccess').get()).docs.map(d=>({uid:d.id,...d.data()})) : actor.principal ? (await db.collection('teacherWorkspaceAccess').where('academyId','==',actor.academyId).get()).docs.filter(d=>!d.data().disabled).map(d=>({uid:d.id,...d.data()})) : [];
                 const staffAccess=!resourcesOnly&&actor.principal&&!needs('settings')&&needs('schedule','curriculum')?(await db.collection('teacherWorkspaceAccess').where('academyId','==',actor.academyId).select('disabled').get()).docs.filter(d=>!d.data().disabled).map(d=>({uid:d.id})):access;
                 const staff = resourcesOnly||!needs('settings','schedule','curriculum')?[]:actor.admin ? (await db.collection('users').where('role','in',['teacher','principal']).get()).docs.map(d=>({uid:d.id,name:d.data().alias||d.data().name||'선생님'})) : await Promise.all(staffAccess.map(async (a:any)=>{const u=(await db.collection('users').doc(a.uid).get()).data();return {uid:a.uid,name:u?.alias||u?.name||'선생님'};}));
-                const result:any = { ok: true, admin: actor.admin, principal: actor.principal, academyId: actor.academyId, teachingScopes: actor.teachingScopes, uid: actor.uid, scopes: actor.scopes, students, curricula: mergedCurricula.filter((r:any)=>!r.archived), drafts: records, schedules: (fast?scheduleRecords:mergeNotionRows(scheduleRecords,sourceSchedules)).filter((r:any)=>!r.archived), reflectedSchedules: teacherReflectedSchedules(reflected.map(d => d.data()), mappings, actor), classes: mergedClasses.filter((r:any)=>!r.archived), notionIssues:sourceWorkspace.issues, notionSources:sourceWorkspace.sources, staff, access };
+                const result:any = { ok: true, admin: actor.admin, principal: actor.principal, academyId: actor.academyId, teachingScopes: actor.teachingScopes, uid: actor.uid, scopes: actor.scopes, students, curricula: mergedCurricula.filter((r:any)=>!r.archived), drafts: records.filter((r:any)=>!r.archived), schedules: (fast?scheduleRecords:mergeNotionRows(scheduleRecords,sourceSchedules)).filter((r:any)=>!r.archived), reflectedSchedules: teacherReflectedSchedules(reflected.map(d => d.data()), mappings, actor), classes: mergedClasses.filter((r:any)=>!r.archived), notionIssues:sourceWorkspace.issues, notionSources:sourceWorkspace.sources, staff, access };
                 if(section!=='all') {
                     delete result.drafts;
                     if(!needs('lesson','schedule','curriculum','settings'))delete result.classes;
@@ -472,7 +473,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const id = z.string().uuid().parse(body.id), ref = db.collection('teacherSchedules').doc(id);
             const record = await db.runTransaction(async (t) => {
                 const old = (await t.get(ref)).data();
-                if (!old || old.archived || !canAccessOwned(actor, old.ownerUid) || old.data.students.some((key: string) => !canTeach(actor, key, old.data.subject)))
+                if (!old || (old.archived||old.deleteRequested) || !canAccessOwned(actor, old.ownerUid) || old.data.students.some((key: string) => !canTeach(actor, key, old.data.subject)))
                     throw new Error('FORBIDDEN');
                 if (publishDecision(old) === 'already-published')
                     return { ...old, alreadyPublished: true };
@@ -498,7 +499,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             await db.runTransaction(async (t) => {
                 const ref = db.collection('teacherLessonDrafts').doc(id);
                 const old = (await t.get(ref)).data();
-                if(old?.archived)throw new Error('FORBIDDEN');
+                if(old?.archived||old?.deleteRequested)throw new Error('FORBIDDEN');
                 if (old && !canAccessOwned(actor, old.ownerUid))
                     throw new Error('FORBIDDEN');
                 assertDraftEditable(old, body.revision, value);
@@ -506,13 +507,14 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             });
             return sendJson(res, 200, { ok: true, id });
         }
+        if(body.action==='archive-lesson'){failureStage='lesson-archive';return sendJson(res,200,{ok:true,...await archiveTeacherLesson(db,actor,body.id,body.revision)});}
         if (body.action === 'publish') {
             failureStage='lesson-reflection';
             const id = z.string().uuid().parse(body.id);
             const ref = db.collection('teacherLessonDrafts').doc(id);
             const draft = await db.runTransaction(async (t) => {
                 const old = (await t.get(ref)).data();
-                if (!old || old.archived || !canAccessOwned(actor, old.ownerUid) || !canTeach(actor, old.data.studentKey, old.data.subject))
+                if (!old || (old.archived||old.deleteRequested) || !canAccessOwned(actor, old.ownerUid) || !canTeach(actor, old.data.studentKey, old.data.subject))
                     throw new Error('FORBIDDEN');
                 if (publishDecision(old) === 'already-published')
                     return { ...old, alreadyPublished: true };
@@ -555,7 +557,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         if (body.action === 'continue') {
             const id = z.string().uuid().parse(body.id);
             const old = (await db.collection('teacherLessonDrafts').doc(id).get()).data();
-            if (!old || old.archived || !canAccessOwned(actor, old.ownerUid))
+            if (!old || (old.archived||old.deleteRequested) || !canAccessOwned(actor, old.ownerUid))
                 throw new Error('FORBIDDEN');
             return sendJson(res, 200, { ok: true, data: continuation(old.data) });
         }

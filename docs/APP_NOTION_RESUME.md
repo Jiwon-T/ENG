@@ -54,3 +54,9 @@ HOTFIX_LESSON_SYNC_2.md에 이현준 앱 ID 기반 중복 표시 수정, 선택 
 
 ## 체크포인트 9 긴급 수정 1
 배포된 선생님방 API의 ERR_MODULE_NOT_FOUND 원인을 수정했습니다. studentRegistration.ts → studentAdmission.js 공통 모듈 경로에 .js 확장자를 추가했습니다. 앞으로 npm run check:server-imports로 Node ESM import 검증도 실행합니다. 자세한 증거와 범위는 CHECKPOINT_9_HOTFIX_1.md에 있습니다.
+
+## 체크포인트 9 긴급 수정 2
+일지 조회 각 행에 일지 삭제를 추가했습니다. 선택된 초안만 보관 처리하고 연결 노션 일지를 휴지통으로 옮기며 해당 앱 리포트만 제거합니다. 미완료 요청도 저장 결과 확인 후 정리할 수 있습니다. 활성 반영과 원격 생성 결과 불명 상태는 별도로 검사합니다. 삭제 복구·지연 webhook 재생성 방지 포함. CHECKPOINT_9_HOTFIX_2.md 참조.
+
+## 체크포인트 9 긴급 수정 3
+연결 점검 결과에 학생 이름·작업 종류·일지 날짜/과목·저장 확인 상태·최근 오류 안내·다음 할 일을 추가했습니다. 반 담당과 학생 수강 담당도 비교 표시하며 조회 완료와 작업 완료를 구분합니다. 삭제된 초안은 경고에서 제외합니다. CHECKPOINT_9_HOTFIX_3.md 참조.
