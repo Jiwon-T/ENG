@@ -142,3 +142,9 @@ test('score period uses Korean calendar dates, clamps month ends and retains und
   assert.equal(inScorePeriod(null, '6', now), false);
   assert.equal(inScorePeriod('2026-02-28', '3', new Date('2026-05-31T00:00:00Z')), true);
 });
+
+test('detail type survives the Notion projection and public DTO',()=>{
+ const source=page();(source.properties as any)['세부 종류']={select:{name:'1학기 중간고사'}};
+ const value=parseAcademicPage(source).data as any;const dto=academicDTO(pageId,value);
+ assert.equal(value.examDetail,'1학기 중간고사');assert.equal(dto.examDetail,value.examDetail);assert.equal(dto.semester,1);assert.equal(dto.examPeriod,'중간고사');
+});

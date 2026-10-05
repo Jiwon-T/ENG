@@ -1,3 +1,5 @@
+import ExamMaterialCatalog from '../exam/ExamMaterialCatalog';
+import OptionalMark from './OptionalMark';
 import { WordbookCache } from '../../lib/wordbookCache';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -985,6 +987,11 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
     const { id } = deleteTarget;
     
     try {
+      const linkedPeriods = await getDocs(query(collection(db, 'examMaterialPeriods'), where('wordbookIds', 'array-contains', id)));
+      if (!linkedPeriods.empty) {
+        alert('시험기간에 보관된 자료입니다. 원본을 삭제하려면 먼저 해당 시험기간의 자료 연결을 해제해 주세요.');
+        return;
+      }
       // 1. Delete all words in the wordbook first
       const wordsQuery = query(collection(db, `wordbooks/${id}/words`));
       const wordsSnapshot = await getDocs(wordsQuery);
@@ -1574,7 +1581,9 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         </motion.div>
       )}
 
-      {!selectedWordbook ? (
+      {!selectedWordbook ? Boolean(category === 'exam') ? (
+        <ExamMaterialCatalog books={allWordbooks} manage onOpen={setSelectedWordbook} onCreate={() => {setNewWbCategory('exam');setIsAddModalOpen(true);}} />
+      ) : (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -2415,7 +2424,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">지문 제목 (선택)</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">지문 제목<OptionalMark/></label>
                   <input
                     type="text"
                     value={passageTitleInput}
@@ -2661,7 +2670,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 </div>
               )}
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">이미지 URL (선택)</label>
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">이미지 URL<OptionalMark/></label>
                 <input
                   type="text"
                   value={editImageUrlValue}
@@ -2804,7 +2813,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 </div>
               )}
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">이미지 URL (선택)</label>
+                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">이미지 URL<OptionalMark/></label>
                 <input
                   type="text"
                   value={newImageUrl}

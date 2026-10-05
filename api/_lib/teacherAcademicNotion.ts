@@ -1,3 +1,6 @@
+import {readMirroredPages} from './teacherNotionMirror.js';
+import {ids} from './teacherNotionWorkspace.js';
+import {detailMetadata,examDetail} from '../../src/lib/academicExamPeriod.js';
 import type { Firestore } from 'firebase-admin/firestore';
 import { GRADE_DATABASE, syncAcademicPage } from './academic.js';
 import { normalizeNotionPageId } from './notionPageId.js';
@@ -17,8 +20,8 @@ export async function gradeNotion(path:string, method='GET', body?:unknown) {
 const rich=(text:string)=>({rich_text:text.match(/[\s\S]{1,1900}/g)?.map(content=>({text:{content}}))||[]});
 const text=(p:any)=>(p?.title||p?.rich_text||[]).map((v:any)=>v.plain_text||v.text?.content||'').join('');
 export function gradeFromPage(page:any) {
- const p=page.properties;
- return {examYear:p['시험 연도']?.number??null,semester:Number(p['학기']?.select?.name?.[0])||null,examPeriod:p['고사 구분']?.select?.name||null,studentKey:normalizeNotionPageId(p['학생']?.relation?.[0]?.id||''),subject:p['과목']?.select?.name,examType:p['시험 종류']?.select?.name==='모의고사'?'학력평가':p['시험 종류']?.select?.name,title:text(p['시험명']),examDate:p['시험일']?.date?.start?.slice(0,10)||'',deadline:p['제출 기한']?.date?.start?.slice(0,10)||null,score:p['원점수']?.number??null,maxScore:p['만점']?.number??null,grade:text(p['예상 등급']),submissionStatus:p['제출 상태']?.select?.name||'미제출',note:text(p['비고'])};
+ const p=page.properties;const detail=p['세부 종류']?.select?.name||'';const metadata=detailMetadata(detail);
+ return {examDetail:detail,examYear:p['시험 연도']?.number??null,semester:metadata.semester??(Number(p['학기']?.select?.name?.[0])||null),examPeriod:metadata.examPeriod||p['고사 구분']?.select?.name||null,studentKey:normalizeNotionPageId(p['학생']?.relation?.[0]?.id||''),subject:p['과목']?.select?.name,examType:p['시험 종류']?.select?.name==='모의고사'?'학력평가':p['시험 종류']?.select?.name,title:text(p['시험명']),examDate:p['시험일']?.date?.start?.slice(0,10)||'',deadline:p['제출 기한']?.date?.start?.slice(0,10)||null,score:p['원점수']?.number??null,maxScore:p['만점']?.number??null,grade:text(p['예상 등급']),submissionStatus:p['제출 상태']?.select?.name||'미제출',note:text(p['비고'])};
 }
 export function canReadNotionGrade(actor:any, profile:any, page:any) {
  if(normalizeNotionPageId(page.parent?.database_id||'') !== GRADE_DATABASE || page.archived || page.in_trash || page.properties?.['학생']?.relation?.length !== 1) return false;
@@ -27,16 +30,21 @@ export function canReadNotionGrade(actor:any, profile:any, page:any) {
  if(actor.principal) return actor.scopes.some((s:any)=>s.studentKey===value.studentKey);
  return Boolean(profile?.notionTeacherPageId && page.properties['담당 선생님']?.relation?.some((r:any)=>normalizeNotionPageId(r.id)===normalizeNotionPageId(profile.notionTeacherPageId)));
 }
-export async function listTeacherNotionGrades(db:Firestore,actor:any) {
- const profile=(await db.collection('teacherWorkspaceAccess').doc(actor.uid).get()).data();
+export async function listTeacherNotionGrades(db:Firestore,actor:any,force=false) {
+ const profile=Object.hasOwn(actor,'workspaceProfile')?actor.workspaceProfile:(await db.collection('teacherWorkspaceAccess').doc(actor.uid).get()).data();
  const profiles=(actor.admin||actor.principal)?(await (actor.admin?db.collection('teacherWorkspaceAccess'):db.collection('teacherWorkspaceAccess').where('academyId','==',actor.academyId)).get()).docs.map(d=>({uid:d.id,...d.data()})): [{uid:actor.uid,...profile}];
  if(!actor.admin && !actor.principal && !profile?.notionTeacherPageId) return [];
  const filter=!actor.admin && !actor.principal ? {property:'담당 선생님',relation:{contains:profile!.notionTeacherPageId}} : undefined;
- const records:any[]=[];let cursor:string|undefined;
- do {const result=await gradeNotion(`databases/${GRADE_DATABASE}/query`,'POST',{page_size:100,...(filter?{filter}:{}),...(cursor?{start_cursor:cursor}:{}),sorts:[{property:'시험일',direction:'descending'}]});
-  for(const page of result.results) if(canReadNotionGrade(actor,profile,page)){const saved=(await db.collection('academicRecords').doc(normalizeNotionPageId(page.id)).get()).data();if(saved?.sourceUpdatedAt!==page.last_edited_time)await syncAcademicPage(db,page);const teachers=(page.properties['담당 선생님']?.relation||[]).map((r:any)=>normalizeNotionPageId(r.id));const owners=profiles.filter((p:any)=>p.notionTeacherPageId&&teachers.includes(normalizeNotionPageId(p.notionTeacherPageId))).map((p:any)=>p.uid);records.push({ownerUid:owners.length===1?owners[0]:null,teacherUids:owners,id:page.id,notionPageId:page.id,notionEditedAt:page.last_edited_time,data:gradeFromPage(page),stage:'published',source:'notion',readOnly:actor.principal});}
-  cursor=result.has_more ? result.next_cursor : undefined;
- }while(cursor);
+ const studentIds=[...new Set<string>((actor.scopes||[]).map((s:any)=>s.studentKey))];
+ const filters=actor.principal?Array.from({length:Math.ceil(studentIds.length/90)},(_,i)=>({or:studentIds.slice(i*90,i*90+90).map(id=>({property:'학생',relation:{contains:id}}))})):[filter];
+ const pages=(await Promise.all(filters.map(scope=>readMirroredPages(db,actor,GRADE_DATABASE,scope,async query=>{
+  const pages:any[]=[];let cursor:string|undefined;
+  do{const result=await gradeNotion(`databases/${GRADE_DATABASE}/query`,'POST',{page_size:100,...(query?{filter:query}:{}),...(cursor?{start_cursor:cursor}:{}),sorts:[{property:'시험일',direction:'descending'}]});pages.push(...result.results);cursor=result.has_more?result.next_cursor:undefined;}while(cursor);
+  for(const page of pages)for(const key of ['학생','담당 선생님'])if(page.properties?.[key]?.has_more)page.properties[key]={...page.properties[key],has_more:false,relation:(await ids(page,key)).map(id=>({id}))};
+  return pages;
+ },force)))).flat();
+ const records:any[]=[];
+  for(const page of pages) if(canReadNotionGrade(actor,profile,page)){const saved=(await db.collection('academicRecords').doc(normalizeNotionPageId(page.id)).get()).data();if(saved?.sourceUpdatedAt!==page.last_edited_time)await syncAcademicPage(db,page);const teachers=(page.properties['담당 선생님']?.relation||[]).map((r:any)=>normalizeNotionPageId(r.id));const owners=profiles.filter((p:any)=>p.notionTeacherPageId&&teachers.includes(normalizeNotionPageId(p.notionTeacherPageId))).map((p:any)=>p.uid);records.push({ownerUid:owners.length===1?owners[0]:null,teacherUids:owners,id:page.id,notionPageId:page.id,notionEditedAt:page.last_edited_time,data:gradeFromPage(page),stage:'published',source:'notion',readOnly:actor.principal});}
  return records;
 }
 export async function publishTeacherGrade(db:Firestore,id:string,record:any, deps = {syncAcademicPage}) {
@@ -46,11 +54,12 @@ export async function publishTeacherGrade(db:Firestore,id:string,record:any, dep
  if(!teacherPage) throw new Error('TEACHER_NOTION_LINK_REQUIRED');
  const schema=await gradeNotion(`databases/${GRADE_DATABASE}`);
  if(!schema.properties['앱 기록 ID']) throw new Error('NOTION_SCHEMA_SETUP_REQUIRED');
- const extra:any={}; for(const [name,type] of [['시험 연도','number'],['학기','select'],['고사 구분','select']])if(!schema.properties[name])extra[name]={[type]:{}};if(Object.keys(extra).length)await gradeNotion(`databases/${GRADE_DATABASE}`,'PATCH',{properties:extra});
+ const extra:any={}; for(const [name,type] of [['시험 연도','number'],['학기','select'],['고사 구분','select'],['세부 종류','select']])if(!schema.properties[name])extra[name]={[type]:{}};if(Object.keys(extra).length)await gradeNotion(`databases/${GRADE_DATABASE}`,'PATCH',{properties:extra});
  let pageId=record.notionPageId;
  if(!pageId){const matches=await gradeNotion(`databases/${GRADE_DATABASE}/query`,'POST',{filter:{property:'앱 기록 ID',rich_text:{equals:id}},page_size:2});if(matches.results.length>1)throw new Error('DUPLICATE_NOTION_RECORD');pageId=matches.results[0]?.id;}
+ const detail=examDetail(d),metadata=detailMetadata(detail);
  const properties:any={'시험명':{title:[{text:{content:d.title}}]},'학생':{relation:[{id:d.studentKey}]},'담당 선생님':{relation:[{id:teacherPage}]},'과목':{select:{name:d.subject}},'시험 종류':{select:{name:d.examType}},'시험일':{date:{start:d.examDate}},'제출 기한':{date:d.deadline?{start:d.deadline}:null},'원점수':{number:d.score},'만점':{number:d.maxScore},'예상 등급':rich(d.grade),'제출 상태':{select:{name:d.submissionStatus}},'비고':rich(d.note),'앱 기록 ID':rich(id)};
- Object.assign(properties,{'시험 연도':{number:d.examYear??null},'학기':{select:d.semester?{name:`${d.semester}학기`}:null},'고사 구분':{select:d.examPeriod?{name:d.examPeriod}:null}});
+ Object.assign(properties,{'세부 종류':{select:detail?{name:detail}:null},'시험 연도':{number:d.examYear??null},'학기':{select:(metadata.semester??d.semester)?{name:`${metadata.semester??d.semester}학기`}:null},'고사 구분':{select:(metadata.examPeriod||d.examPeriod)?{name:metadata.examPeriod||d.examPeriod}:null}});
  const page=pageId ? await gradeNotion(`pages/${pageId}`,'PATCH',{properties}) : await gradeNotion('pages','POST',{parent:{database_id:GRADE_DATABASE},properties});
  await db.collection('teacherAcademicDrafts').doc(id).update({notionPageId:page.id,stage:'notion_saved'});
  // Reuse the existing authoritative Notion->report projection. No client score payload enters reports directly.

@@ -90,14 +90,19 @@ export async function prepareNotionWorkspace(db: Firestore) {
     if (!grades.properties?.['앱 기록 ID']) await notion('databases/fa6ce5a8-9572-4f4d-80d9-4d1485d44e6f', 'PATCH', {properties:{'앱 기록 ID':{rich_text:{}}}});
     return { ready: true };
 }
-export async function previousNotionLesson(studentKey: string) {
-    const pages = await notion(`databases/${LESSON_DATABASE}/query`, 'POST', { filter: { property: '학생', relation: { contains: studentKey } }, sorts: [{ property: '수업 날짜', direction: 'descending' }], page_size: 1 });
+export async function previousNotionLesson(studentKey: string,options?:{db:any;actor:any;subject:string;date?:string}) {
+    const source=options?await lessonSource(options.db,options.actor.uid,options.subject):undefined;
+    if(options&&options.subject!=='영어'&&!source?.lessonDatabaseId)return {};
+    const filters:any[]=[{property:'학생',relation:{contains:studentKey}}];
+    if(options?.date)filters.push({property:'수업 날짜',date:{on_or_before:options.date}});
+    if(source?.shared)filters.push(options?.subject==='영어'?{or:[{property:'과목',select:{equals:'영어'}},{property:'과목',select:{is_empty:true}}]}:{property:'과목',select:{equals:options!.subject}});
+    const pages = await notion(`databases/${source?.lessonDatabaseId||LESSON_DATABASE}/query`, 'POST', { filter: filters.length===1?filters[0]:{and:filters}, sorts: [{ property: '수업 날짜', direction: 'descending' }], page_size: 1 });
     const properties = pages.results[0]?.properties;
     const text = (p: any) => (p?.rich_text || []).map((t: any) => t.plain_text || t.text?.content || '').join('');
     const feedback = properties ? text(properties['수업 내용']) : '';
     const markers = [...feedback.matchAll(/(?:^|\n)[ \t]*과제[ \t]*[:：][ \t]*/g)];
     const last = markers.at(-1);
-    return { content: last ? feedback.slice(0, last.index).trimEnd() : feedback, nextPlan: properties ? text(properties['메모']) : '', assignment: extractAssignmentFromFeedback(feedback) || '' };
+    return { round:properties?.['회차']?.number??null,selfStudyRound:properties?.['자습회차']?.number??properties?.['자습 회차']?.number??null,content: last ? feedback.slice(0, last.index).trimEnd() : feedback, nextPlan: properties ? text(properties['메모']) : '', assignment: extractAssignmentFromFeedback(feedback) || '' };
 }
 const SCHEDULE_DATABASE = '3430f1a4-9dde-4b4c-a5cf-0d11b913b38c';
 export async function publishTeacherSchedule(db: Firestore, id: string, record: any) {

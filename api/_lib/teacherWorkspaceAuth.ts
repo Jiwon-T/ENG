@@ -18,9 +18,10 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     }
     if (!process.env.ADMIN_UID) throw new Error('CONFIG_ERROR');
     const admin = uid === process.env.ADMIN_UID;
-    const user = (await db.collection('users').doc(uid).get()).data();
+    const [userDoc,profileDoc]=await Promise.all([db.collection('users').doc(uid).get(),db.collection('teacherWorkspaceAccess').doc(uid).get()]);
+    const user = userDoc.data();
     if (!admin && !['teacher', 'principal'].includes(user?.role)) throw new Error('FORBIDDEN');
-    const profile = (await db.collection('teacherWorkspaceAccess').doc(uid).get()).data();
+    const profile = profileDoc.data();
     if (!admin && (!profile || profile.disabled)) throw new Error('TEACHER_NOT_CONFIGURED');
     const principal = !admin && profile?.workspaceRole === 'principal' && Boolean(profile.academyId);
     // A client-side role alone never grants access to an academy.
@@ -32,5 +33,5 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
         const members = await db.collection('academyStudentMemberships').where('academyId', '==', academyId).get();
         scopes = members.docs.filter(d => !d.data().disabled).flatMap(d => subjects.map(subject => ({studentKey: d.id, subject})));
     }
-    return { uid, admin, principal, academyId, scopes, teachingScopes, db };
+    return { uid, admin, principal, academyId, scopes, teachingScopes, db, workspaceProfile:profile, readAccessKey:JSON.stringify([profile?.notionTeacherPageId,profile?.notionSources,profile?.workspaceRole]) };
 }

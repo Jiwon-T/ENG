@@ -1,3 +1,4 @@
+import ExamMaterialCatalog from '../exam/ExamMaterialCatalog';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import VocabularyTest from './VocabularyTest';
@@ -59,6 +60,7 @@ function shuffleArray<T>(array: T[]): T[] {
 
 export default function WordbookView({ isMobile, category = 'word', onNavigate, resumeTarget, onResumeHandled }: { isMobile?: boolean; category?: 'word' | 'grammar' | 'exam'; onNavigate?: (view: any) => void; resumeTarget?: RecentLearning | null; onResumeHandled?: () => void }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
+  const [examBooks,setExamBooks]=useState<Wordbook[]>([]);
   const [selectedWordbook, setSelectedWordbook] = useState<Wordbook | null>(null);
   const [words, setWords] = useState<Word[]>([]);
   const [progress, setProgress] = useState<Progress>({});
@@ -365,6 +367,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     const q = query(collection(db, 'wordbooks'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedWordbooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Wordbook));
+      setExamBooks(fetchedWordbooks);
       
       // Filter by category
       const filtered = fetchedWordbooks.filter(wb => {
@@ -2584,7 +2587,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
-        {!selectedWordbook ? (
+        {!selectedWordbook ? Boolean(category === 'exam') ? (
+          <ExamMaterialCatalog books={examBooks} onOpen={wb=>{setSelectedWordbook(wb);setCurrentChunk(0);setCurrentCardIndex(0);}} />
+        ) : (
           <motion.div
             key="list"
             initial={{ opacity: 0, y: 20 }}

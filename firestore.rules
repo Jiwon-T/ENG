@@ -218,6 +218,14 @@ service cloud.firestore {
         (isAdmin() && data.get('createdBy', '') in ['', 'system']);
     }
 
+    match /examMaterialPeriods/{periodId} {
+      allow read: if isAuthenticated();
+      allow create: if (isTeacher() || isAdmin()) && request.resource.data.createdBy == request.auth.uid;
+      allow update: if (isTeacher() || isAdmin()) && resource.data.createdBy == request.auth.uid && request.resource.data.createdBy == resource.data.createdBy;
+      // Past periods are preserved. Teachers can hide publication or unlink books.
+      allow delete: if false;
+    }
+
     match /wordbooks/{wordbookId} {
       allow read: if isAuthenticated();
       allow create: if (isTeacher() || isAdmin()) && request.resource.data.createdBy == request.auth.uid;
@@ -372,6 +380,8 @@ service cloud.firestore {
     match /teacherAcademicDrafts/{id} { allow read, write: if false; }
     match /academyStudentMemberships/{id} { allow read, write: if false; }
     match /teacherWorkspaceAccess/{id} { allow read, write: if false; }
+    match /teacherNotionMirrors/{id} { allow read, write: if false; match /pages/{pageId} { allow read, write: if false; } }
+    match /teacherStudentSnapshots/{id} { allow read, write: if false; }
     match /teacherWorkspaceConfig/{id} { allow read, write: if false; }
   }
 }

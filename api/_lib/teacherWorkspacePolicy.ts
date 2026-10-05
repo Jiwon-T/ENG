@@ -11,16 +11,19 @@ export const lessonDraftSchema = z.object({
     content: z.string().max(15000), assignment: z.string().max(5000), note: z.string().max(5000), nextPlan: z.string().max(5000),
     correct: z.number().int().nonnegative().nullable(), total: z.number().int().positive().nullable(),
     examCorrect: z.number().int().nonnegative().nullable().default(null), examTotal: z.number().int().positive().nullable().default(null),
+    wrong:z.number().int().nonnegative().nullable().optional(), examWrong:z.number().int().nonnegative().nullable().optional(),
     round: z.number().nonnegative().nullable(),
     selfStudy: z.enum(['미확인', '없음', '있음']).default('미확인'),
     selfStudyStart: z.string().default(''), selfStudyEnd: z.string().default(''),
     selfStudyRound: z.number().nonnegative().nullable().default(null),
     attendanceNote: z.string().max(5000).default(''), specialNote: z.string().max(5000).default(''),
-}).superRefine((d, ctx) => {
+}).transform(d=>({...d,correct:d.wrong!=null&&d.total!=null?d.total-d.wrong:d.correct,examCorrect:d.examWrong!=null&&d.examTotal!=null?d.examTotal-d.examWrong:d.examCorrect})).superRefine((d, ctx) => {
     if (d.classSession === '있음' && d.end <= d.start)
         ctx.addIssue({ code: 'custom', message: '종료 시간은 시작 시간 뒤여야 합니다.' });
+    if(d.wrong!=null&&d.total==null||d.examWrong!=null&&d.examTotal==null)ctx.addIssue({code:'custom',message:'오답 수와 문항 수를 함께 입력해 주세요.'});
+    if(d.wrong!=null&&d.total!=null&&d.wrong>d.total||d.examWrong!=null&&d.examTotal!=null&&d.examWrong>d.examTotal)ctx.addIssue({code:'custom',message:'오답 수는 문항 수를 넘을 수 없습니다.'});
     if ((d.correct === null) !== (d.total === null) || (d.correct !== null && d.correct > d.total!))
-        ctx.addIssue({ code: 'custom', message: '정답 수와 만점을 확인해 주세요.' });
+        ctx.addIssue({ code: 'custom', message: '오답 수와 문항 수를 확인해 주세요.' });
     if ((d.examCorrect === null) !== (d.examTotal === null) || (d.examCorrect !== null && d.examCorrect > d.examTotal!))
         ctx.addIssue({ code: 'custom', message: '내신 대비 테스트의 정답 수와 문항 수를 확인해 주세요.' });
     const date = new Date(`${d.date}T00:00:00Z`);
@@ -41,7 +44,7 @@ export function canTeach(actor: {
 }, studentKey: string, subject: string) { return actor.admin || (actor.principal ? actor.teachingScopes || [] : actor.scopes).some(s => s.studentKey === studentKey && s.subject === subject); }
 export function percentage(correct: number | null, total: number | null) { return correct === null || total === null || total <= 0 ? null : Math.round(correct / total * 10000) / 100; }
 export function lessonFeedback(d: z.infer<typeof lessonDraftSchema>) { return [d.content, d.note, d.assignment ? `과제: ${d.assignment}` : ''].filter(Boolean).join('\n\n'); }
-export function continuation(previous: any) { return { content: previous.content || '', assignment: previous.assignment || '', note: '', nextPlan: previous.nextPlan || '', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', correct: null, total: null, examCorrect: null, examTotal: null, round: null, selfStudy: '미확인', selfStudyRound: null, selfStudyStart: '', selfStudyEnd: '', attendanceNote: '', specialNote: '' }; }
+export function continuation(previous: any) { return { content: previous.content || '', assignment: previous.assignment || '', note: '', nextPlan: previous.nextPlan || '', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', correct: null, total: null, wrong:null,examWrong:null,examCorrect: null, examTotal: null, round: null, selfStudy: '미확인', selfStudyRound: null, selfStudyStart: '', selfStudyEnd: '', attendanceNote: '', specialNote: '' }; }
 export const timetableSlotSchema = z.object({
     weekday: z.number().int().min(0).max(6),
     start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
