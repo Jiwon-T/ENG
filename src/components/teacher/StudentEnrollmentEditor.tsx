@@ -51,6 +51,10 @@ export default function StudentEnrollmentEditor({ studentKey, onClose, onSaved }
     async function save() {
         if (writing.current || !record || !value)
             return;
+        const original = record.subjects.find(s => s.subject === value.subject);
+        const review = original?.classes.filter(c => c.withdrawalReview) || [];
+        if (!intent && value.status === '중단' && original?.status !== '중단' && review.length && !window.confirm(`${review.map(c => c.name).join(', ')}의 유일한 학생을 중단합니다. 반도 중단할 필요가 있는지 확인해 주세요.\n반을 진행 중으로 유지하고 학생만 중단하려면 확인을 누르세요. 반도 중단하려면 취소 후 반 관리에서 상태를 변경해 주세요.`))
+            return;
         const current = version.current, uid = auth.currentUser?.uid;
         const request = intent || { operationId: crypto.randomUUID(), studentEditedAt: record.studentEditedAt, enrollmentEditedAt: record.enrollmentEditedAt, data: structuredClone(value) };
         writing.current = true;
@@ -137,7 +141,7 @@ export default function StudentEnrollmentEditor({ studentKey, onClose, onSaved }
  <div className="grid grid-cols-2 gap-3"><label className="text-sm">시작일<input type="date" required className="block w-full" value={value.startDate} onChange={e => change({ startDate: e.target.value })}/></label>{value.status === '중단' ? <label className="text-sm">중단일<input type="date" required min={value.startDate} className="block w-full" value={value.endDate || ''} onChange={e => change({ endDate: e.target.value || null })}/></label> : null}</div>
  <div className="text-sm">현재 담당 선생님{row?.teachers.length ? row.teachers.map(t => <label key={t.id} className="block"><input type="checkbox" checked={value.removeTeacherIds.includes(t.id)} onChange={e => change({ removeTeacherIds: e.target.checked ? [...value.removeTeacherIds, t.id] : value.removeTeacherIds.filter(id => id !== t.id) })}/> {t.name} 담당 제외</label>) : <p className="text-xs text-slate-500">담당 없음</p>}<p className="text-xs text-slate-500">제외를 선택하지 않은 공동 담당은 유지됩니다.</p></div>
  <label className="block text-sm">담당 추가<select className="block w-full" value={value.addTeacherUid || ''} onChange={e => change({ addTeacherUid: e.target.value || null })}><option value="">추가하지 않음</option>{options.teachers.filter(t => t.subjects.includes(value.subject)).map(t => <option value={t.uid} key={t.uid}>{t.name}</option>)}</select></label>
- <div className="text-sm">소속반{classChoices.map(c => <label className="block" key={c.id}><input type="checkbox" checked={value.classIds.includes(c.id)} onChange={e => change({ classIds: e.target.checked ? [...value.classIds, c.id] : value.classIds.filter(id => id !== c.id) })}/> {c.name}</label>)}{!classChoices.length ? <p className="text-xs text-slate-500">선택 가능한 반이 없습니다.</p> : null}<p className="text-xs text-slate-500">중단·대기 상태로 바꾸려면 이 과목의 반 선택을 해제해 주세요. 다른 과목의 반은 유지됩니다.</p></div>
+ <div className="text-sm">소속반{classChoices.map(c => <label className="block" key={c.id}><input type="checkbox" disabled={value.status === '중단' && !row?.classes.some(existing => existing.id === c.id)} checked={value.classIds.includes(c.id)} onChange={e => change({ classIds: e.target.checked ? [...value.classIds, c.id] : value.classIds.filter(id => id !== c.id) })}/> {c.name}</label>)}{!classChoices.length ? <p className="text-xs text-slate-500">선택 가능한 반이 없습니다.</p> : null}<p className="text-xs text-slate-500">중단 시 기존 반 연결은 퇴원 이력으로 유지할 수 있습니다. 반은 자동으로 중단되지 않습니다. 대기 상태는 이 과목의 반 선택을 해제해 주세요. 다른 과목의 반은 유지됩니다.</p></div>
  </fieldset><button className="small-button" type="submit" disabled={busy}>{busy ? '반영 결과 확인 중…' : intent ? '저장 결과 확인·재시도' : '이 과목 변경 반영'}</button></form> : null}
  {record?.pending?.canDiscard ? <button className="small-button mt-3" disabled={busy} onClick={() => void discard()}>미반영 요청 취소</button> : null}
  </WorkspaceDialog>;

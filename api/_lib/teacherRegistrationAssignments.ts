@@ -10,7 +10,14 @@ function validPage(page:any,database:string) {
 }
 async function teacherProfiles(db:any,actor:RegistrationActor) {
     const profiles=(await db.collection('teacherWorkspaceAccess').where('academyId','==',actor.academyId).get()).docs.map((d:any)=>({uid:d.id,...d.data()}));
-    if(actor.academyId==='main' && process.env.ADMIN_UID && !profiles.some((p:any)=>p.uid===process.env.ADMIN_UID))profiles.push({uid:process.env.ADMIN_UID,academyId:'main',notionTeacherPageId:ADMIN_TEACHER});
+    if(actor.academyId==='main' && process.env.ADMIN_UID){
+        const linked=profiles.find((p:any)=>p.uid===process.env.ADMIN_UID);
+        if(linked && !linked.disabled && !linked.notionTeacherPageId)linked.notionTeacherPageId=ADMIN_TEACHER;
+        else if(!linked){
+            const existing=(await db.collection('teacherWorkspaceAccess').doc(process.env.ADMIN_UID).get()).data();
+            if(!existing || !existing.disabled && (!existing.academyId || existing.academyId==='main'))profiles.push({uid:process.env.ADMIN_UID,...existing,academyId:'main',notionTeacherPageId:existing?.notionTeacherPageId || ADMIN_TEACHER});
+        }
+    }
     const candidates=profiles.filter((p:any)=>!p.disabled && p.notionTeacherPageId);
     const active=(await Promise.all(candidates.map(async(p:any)=>{
         const user=(await db.collection('users').doc(p.uid).get()).data();

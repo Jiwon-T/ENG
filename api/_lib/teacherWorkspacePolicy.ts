@@ -79,7 +79,7 @@ export const teacherScheduleSchema = z.object({
     end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
     kind: z.enum(['정규 수업', '보강', '휴강', '시험', '기타']),
     status: z.enum(['예정', '변경', '완료', '취소']),
-    place: z.enum(['학원', '온라인', '기타']), note: z.string().max(5000),
+    place: z.string().max(100), note: z.string().max(5000),
 }).superRefine((value, ctx) => {
     const date = new Date(`${value.date}T00:00:00Z`);
     if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value.date || value.end <= value.start)

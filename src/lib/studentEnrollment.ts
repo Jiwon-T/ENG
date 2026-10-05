@@ -23,6 +23,7 @@ export interface EnrollmentRecord {
             name: string;
         }[];
         classes: {
+            withdrawalReview?: boolean;
             id: string;
             name: string;
         }[];

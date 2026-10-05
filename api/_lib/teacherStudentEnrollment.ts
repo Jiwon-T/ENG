@@ -17,8 +17,8 @@ export const enrollmentEditSchema = z.object({ subject: z.enum(registrationSubje
         c.addIssue({ code: 'custom', message: '중단 상태에는 중단일이 필요합니다.' });
     if (v.endDate && v.endDate < v.startDate)
         c.addIssue({ code: 'custom', message: '중단일을 확인해 주세요.' });
-    if (v.status !== '등록' && v.classIds.length)
-        c.addIssue({ code: 'custom', message: '중단·대기 상태에는 반 배정을 해제해 주세요.' });
+    if (v.status === '대기' && v.classIds.length)
+        c.addIssue({ code: 'custom', message: '대기 상태에는 반 배정을 해제해 주세요.' });
 });
 const refFor = (db: any, key: string) => db.collection('teacherStudentEnrollmentEdits').doc(hashStudentKey(key));
 const unfinished = (r: any) => r && !['synced', 'discarded'].includes(r.status);
@@ -60,7 +60,7 @@ export async function readStudentEnrollment(db: any, actor: RegistrationActor, i
     const subjects = await Promise.all(registrationSubjects.map(async (subject) => ({ subject, status: enrollment.properties[subject]?.status?.name || '', startDate: enrollment.properties[subject + ' 시작일']?.date?.start || null, endDate: enrollment.properties[subject + ' 중단일']?.date?.start || null,
         teachers: await Promise.all(relations(enrollment.properties[subject + ' 담당']).map(async (id) => { const p = await notion(`pages/${id}`); if (uuid(p.parent?.database_id || '') !== TEACHERS)
             throw Error('NOTION_SOURCE_MISMATCH'); return { id, name: title(p) }; })),
-        classes: classes.filter(p => p.properties['과목']?.select?.name === subject).map(p => ({ id: uuid(p.id), name: title(p) })) })));
+        classes: classes.filter(p => p.properties['과목']?.select?.name === subject).map(p => ({ id: uuid(p.id), name: title(p), withdrawalReview: (p.properties['상태']?.status?.name || p.properties['상태']?.select?.name) === '진행 중' && !p.properties['대상 학생']?.has_more && Array.isArray(p.properties['대상 학생']?.relation) && p.properties['대상 학생'].relation.length === 1 && uuid(p.properties['대상 학생'].relation[0].id) === key })) })));
     return { studentKey: key, enrollmentId: uuid(enrollment.id), studentEditedAt: student.last_edited_time, enrollmentEditedAt: enrollment.last_edited_time, subjects, pending: unfinished(r) ? { operationId: r.operationId, studentEditedAt: r.studentEditedAt, enrollmentEditedAt: r.enrollmentEditedAt, data: r.data, status: r.status, canDiscard: !r.steps.some((s: any) => s.attempted || s.done) && !(r.status === 'syncing' && r.leaseUntil > Date.now()) } : null };
 }
 function sameProperty(actual: any, desired: any) {
@@ -101,7 +101,7 @@ async function plan(db: any, actor: RegistrationActor, key: string, data: Enroll
         const p = classes.find(p => uuid(p.id) === id) || await notion(`pages/${id}`);
         valid(p, CLASSES, id);
         const academy = (p.properties['학원']?.rich_text || []).map((r: any) => r.plain_text ?? r.text?.content ?? '').join('');
-        if (academy !== actor.academyId || p.properties['과목']?.select?.name !== data.subject || p.properties['상태']?.status?.name !== '진행 중' || !relations(p.properties['담당 선생님']).some(t => teacherIds.includes(t)))
+        if (data.status === '중단' ? academy !== actor.academyId || p.properties['과목']?.select?.name !== data.subject || !classes.some(c => uuid(c.id) === id) : academy !== actor.academyId || p.properties['과목']?.select?.name !== data.subject || p.properties['상태']?.status?.name !== '진행 중' || !relations(p.properties['담당 선생님']).some(t => teacherIds.includes(t)))
             throw Error('NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');
     }
     const classIds = [...classes.filter(p => p.properties['과목']?.select?.name !== data.subject).map(p => uuid(p.id)), ...data.classIds];
@@ -189,7 +189,7 @@ export async function saveStudentEnrollment(db: any, actor: RegistrationActor, i
                     if (!record.steps[0].properties[data.subject + ' 담당'].relation.some((r: any) => uuid(r.id) === assigned.teachers[data.subject]))
                         throw Error('NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');
                 }
-                if (i === 1)
+                if (i === 1 && data.status !== '중단')
                     for (const id of data.classIds) {
                         const p = await notion(`pages/${id}`);
                         valid(p, CLASSES, id);

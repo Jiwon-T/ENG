@@ -135,10 +135,11 @@ export default function StudentRegistrationManager({onSynced}:{onSynced:()=>Prom
         {!loading && !listError && !list.total ? <p className="text-xs text-slate-400 py-3">저장한 신입생 등록 내용이 없습니다.</p> : null}
         {list.pages>1 ? <div className="review-pagination"><button disabled={loading || list.page===1} onClick={()=>setPage(list.page-1)}>이전</button><span>{list.page} / {list.pages}</span><button disabled={loading || list.page===list.pages} onClick={()=>setPage(list.page+1)}>다음</button></div> : null}
         {feedback && !open ? <p role="status" className="text-xs text-slate-600 py-2">{feedback}</p> : null}
-        <WorkspaceDialog open={open} title={revision===undefined?'신입생 등록':'등록 내용 수정'} onClose={close}>
+        <WorkspaceDialog open={open} title={revision===undefined?'입학·상담 원서 작성':'입학·상담 원서 조회·수정'} onClose={close}>
             {feedback ? <p role="status" className="text-sm text-slate-600 mb-3">{feedback}</p> : null}
             {retrying ? <p className="text-xs text-rose-600 mb-3">저장 결과가 불명확합니다. 입력을 유지한 채 같은 요청으로 다시 확인합니다.</p> : null}
             {optionsError ? <p role="status" className="text-xs text-rose-600 mb-3">{optionsError} <button type="button" className="small-button" onClick={()=>setOptionsReload(n=>n+1)}>담당·반 다시 불러오기</button></p> : !options ? <p role="status" className="text-xs mb-3">담당 선생님·반을 불러오는 중…</p> : null}
+            {options ? <button type="button" className="small-button mb-3" disabled={busy} onClick={()=>setOptionsReload(n=>n+1)}>담당·반 목록 새로고침</button> : null}
             <StudentRegistrationForm options={options} value={value} disabled={locked} busy={busy} retrying={retrying} onChange={next=>{setValue(next);setDirty(true);}} onSubmit={()=>void save()}/>
         </WorkspaceDialog>
     </section>;

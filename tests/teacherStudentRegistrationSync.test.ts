@@ -1,3 +1,4 @@
+import {admissionNotionSchema} from '../api/_lib/studentAdmission.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handleWorkspace} from '../api/teacher/workspace.js';
@@ -17,6 +18,7 @@ function remoteNotion() {
     const enrollmentTypes:any={'수강 내역':'title','학생':'relation','앱 등록 ID':'rich_text'};
     for(const subject of ['영어','수학','국어','과학','한국사'])Object.assign(enrollmentTypes,{[subject]:'status',[subject+' 시작일']:'date',[subject+' 중단일']:'date'});
     const schemas:any={[studentDB]:{properties:Object.fromEntries(Object.entries(studentTypes).map(([key,type])=>[key,{type}]))},[enrollmentDB]:{properties:Object.fromEntries(Object.entries(enrollmentTypes).map(([key,type])=>[key,{type,...(key==='학생'?{relation:{database_id:studentDB}}:{})}]))}};
+    Object.assign(schemas[studentDB].properties,Object.fromEntries(Object.entries(admissionNotionSchema).map(([name,definition])=>[name,{type:Object.keys(definition)[0],...definition}])));
     const pages=new Map<string,any>(),requests:any[]=[];let studentCreate=0,enrollmentCreate=0;
     let failStudent:'none'|'commit-timeout'|'no-commit-timeout'='none',failEnrollment=false,createGate:Promise<void>|undefined;
     const notion=async(path:string,method='GET',body?:any):Promise<any>=>{
@@ -225,4 +227,15 @@ test('입학 상담 본문을 학생 최초 생성에 함께 저장하고 응답
  remote.setStudentFailure('commit-timeout');await assert.rejects(syncStudentRegistration(db,actor,saved.id,1,deps));
  const creation=remote.requests.find(r=>r.path==='pages'&&r.body.parent.database_id===studentDB);assert.ok(creation.body.children.length);assert.match(JSON.stringify(creation.body.children),/테스트 주소/);assert.match(JSON.stringify(creation.body.children),/내신 점수: 0/);
  await syncStudentRegistration(db,actor,saved.id,1,deps);assert.deepEqual(remote.counts(),{studentCreate:1,enrollmentCreate:1});assert.equal(remote.requests.some(r=>r.method==='PATCH'),false);
+});
+
+test('상담 원서의 구조화 속성은 최초 학생 생성과 응답 유실 복구에 함께 보존됨',async()=>{
+ const f=await fixture();const {emptyAdmission}=await import('../src/lib/studentAdmission.js');const admission=emptyAdmission();admission.birthDate='2010-01-02';admission.notes='상담 기록';admission.availableDays=['월','목'];admission.levels[1].schoolScore=0;admission.consent='동의';admission.signedPaper=true;
+ const row=f.rows.get('teacherStudentRegistrations/'+f.saved.id);row.data.admission=admission;f.remote.setStudentFailure('commit-timeout');
+ await assert.rejects(syncStudentRegistration(f.db,actor,f.saved.id,1,f.deps),/TIMEOUT/);await syncStudentRegistration(f.db,actor,f.saved.id,1,f.deps);
+ const props=f.remote.pages.get(studentId).properties;assert.equal(props['생년월일'].date.start,admission.birthDate);assert.equal(props['영어 입학 내신 점수'].number,0);assert.equal(props['국어 입학 내신 점수'].number,null);assert.equal(props['상담 참고 사항'].rich_text[0].text.content,admission.notes);assert.equal(props['서명 원서 보관'].checkbox,true);assert.deepEqual(f.remote.counts(),{studentCreate:1,enrollmentCreate:1});assert.ok(!f.remote.requests.some(r=>r.method==='PATCH'));
+});
+test('상담 속성 형식이 잘못되면 학생 생성 전에 중단하며 자세한 실패 원인을 보존함',async()=>{
+ const f=await fixture();f.remote.schemas[studentDB].properties['생년월일'].type='rich_text';
+ await assert.rejects(syncStudentRegistration(f.db,actor,f.saved.id,1,f.deps),/NOTION_ADMISSION_SCHEMA_REQUIRED/);assert.deepEqual(f.remote.counts(),{studentCreate:0,enrollmentCreate:0});assert.equal(f.rows.get('teacherStudentRegistrations/'+f.saved.id).syncError,'NOTION_ADMISSION_SCHEMA_REQUIRED');
 });

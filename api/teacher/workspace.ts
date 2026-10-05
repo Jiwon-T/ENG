@@ -1,3 +1,7 @@
+import { readSchedulePlaceOptions } from '../_lib/teacherSchedulePlaces.js';
+import {assignmentNeedsRecovery} from '../../src/lib/teacherAssignmentStatus.js';
+import {assignmentCheckpoint,retryTeacherAssignment} from '../_lib/teacherAssignmentRetry.js';
+import {compareLessonReview,validLessonDay} from '../../src/lib/lessonReview.js';
 import {readLessonConflict,resolveLessonConflict} from '../_lib/teacherLessonConflict.js';
 import {archiveTeacherLesson} from '../_lib/teacherLessonArchive.js';
 import {readIntegrityAudit} from '../_lib/teacherIntegrityAudit.js';
@@ -63,6 +67,14 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const params = new URL(req.url || '', 'http://localhost').searchParams;
             const action = params.get('action') || 'bootstrap';
             const force = params.get('force') === '1';
+            if(action==='schedule-options'){failureStage='schedule-place-options';return sendJson(res,200,{ok:true,places:await readSchedulePlaceOptions()});}
+            if(action==='teacher-assignment'){
+                if(!actor.admin&&!actor.principal)throw Error('FORBIDDEN');
+                const uid=z.string().min(1).parse(params.get('uid')),profile=(await db.collection('teacherWorkspaceAccess').doc(uid).get()).data();
+                if(!profile||profile.disabled||!actor.admin&&profile.academyId!==actor.academyId)throw Error('FORBIDDEN');
+                const {notionTeachingScopes}=await import('../_lib/teacherNotionWorkspace.js');
+                return sendJson(res,200,{ok:true,scopes:await notionTeachingScopes(db,profile)});
+            }
             if(action==='lesson-conflict'){failureStage='lesson-conflict-review';return sendJson(res,200,{ok:true,...await readLessonConflict(db,actor,params.get('id'))});}
             if(action==='integrity-audit'){failureStage='integrity-audit';return sendJson(res,200,{ok:true,...await readIntegrityAudit(db,actor)});}
             if(action==='messages'){failureStage='message-read';return sendJson(res,200,{ok:true,...await readTeacherMessages(db,actor,params.get('studentKey'),params.get('subject'))});}
@@ -92,14 +104,26 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const filtered=records.filter((r:any)=>(!params.get('teacher')||r.ownerUid===params.get('teacher')||r.teacherUids?.includes(params.get('teacher')))&&(!params.get('student')||r.data.studentKey===params.get('student'))&&(!params.get('kind')||r.data.examType===params.get('kind'))&&(!params.get('subject')||r.data.subject===params.get('subject'))&&(!params.get('period')||examPeriod(r.data)?.key===params.get('period'))&&(!params.get('search')||[names.get(r.data.studentKey),r.data.title,r.data.subject,r.data.note].join(' ').toLowerCase().includes(params.get('search')!.toLowerCase()))).sort((a:any,b:any)=>b.data.examDate.localeCompare(a.data.examDate)||a.id.localeCompare(b.id));
                 return sendJson(res,200,{ok:true,...pageRows(filtered,pageNumber(params.get('page')),12),teachers:[...new Set(records.flatMap((r:any)=>r.teacherUids?.length?r.teacherUids:[r.ownerUid]).filter(Boolean))],periods:[...new Map(records.map((r:any)=>examPeriod(r.data)).filter(Boolean).map((p:any)=>[p.key,p])).values()]});
             }
-            if (action === 'academy-lessons' || action === 'academy-lessons-fast') {
+            if (action === 'academy-lessons' || action === 'academy-lessons-fast' || action === 'academy-lessons-export') {
+                const exporting=action==='academy-lessons-export';
+                const exportTeacher=params.get('teacher')||actor.uid;
+                if(exporting){
+                    if(!validLessonDay(params.get('day')||''))throw new Error('INVALID_INPUT');
+                    if(!actor.admin&&!actor.principal&&exportTeacher!==actor.uid)throw new Error('FORBIDDEN');
+                }
                 const records=await teacherReadCache.get(teacherReadKey(actor,'academy-local'),async()=>{const saved=actor.admin ? await db.collection('teacherLessonDrafts').get() : actor.principal ? await db.collection('teacherLessonDrafts').where('academyId','==',actor.academyId).get() : await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).get();return saved.docs.map(d=>({id:d.id,...d.data()}));},force);
                 const rows=mergeNotionRows(records,action==='academy-lessons-fast'?[]:await teacherReadCache.get(teacherReadKey(actor,'academy-source'),()=>readSourceLessons(db,actor,force),force)).filter((r:any)=>canViewAcademyRecord(actor,r));
                 const names=new Map<string,string>();
                 await Promise.all([...new Set(rows.map((r:any)=>r.ownerUid))].map(async uid=>{if(!uid)return;const name=await teacherReadCache.get(teacherReadKey(actor,'staff:'+uid),async()=>{const user=(await db.collection('users').doc(uid as string).get()).data();return user?.alias||user?.name||'선생님';},force);names.set(uid as string,name);}));
-                const named=rows.map((r:any)=>({...r,teacherName:names.get(r.ownerUid)||'선생님'}));
+                const named=rows.map((r:any)=>({...r,teacherName:names.get(r.ownerUid)||'선생님'})).sort(compareLessonReview);
+                if(exporting){
+                    const selected=named.filter((r:any)=>r.ownerUid===exportTeacher&&r.data.date===params.get('day')&&(!params.get('student')||r.data.studentKey===params.get('student')));
+                    const students=await teacherReadCache.get(teacherReadKey(actor,'students'),listNotionStudents,force);
+                    const studentNames=new Map(students.map(s=>[s.studentKey,s.studentDisplayName]));
+                    return sendJson(res,200,{ok:true,day:params.get('day'),teacherName:names.get(exportTeacher)||'선생님',records:selected.map((r:any)=>({...r,studentDisplayName:studentNames.get(r.data.studentKey)||'학생'}))});
+                }
                 if(!params.has('page'))return sendJson(res,200,{ok:true,records:named});
-                const filtered=named.filter((r:any)=>(!params.get('teacher')||r.ownerUid===params.get('teacher'))&&(!params.get('day')||r.data.date===params.get('day'))&&(!params.get('student')||r.data.studentKey===params.get('student'))).sort((a:any,b:any)=>b.data.date.localeCompare(a.data.date)||a.id.localeCompare(b.id));
+                const filtered=named.filter((r:any)=>(!params.get('teacher')||r.ownerUid===params.get('teacher'))&&(!params.get('day')||r.data.date===params.get('day'))&&(!params.get('student')||r.data.studentKey===params.get('student'))).sort(compareLessonReview);
                 return sendJson(res,200,{ok:true,...pageRows(filtered,pageNumber(params.get('page')),10),teachers:[...names].map(([uid,name])=>({uid,name}))});
             }
             if(action==='schedule-records') {
@@ -195,6 +219,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const access = !needs('settings')?[]:actor.admin ? (await db.collection('teacherWorkspaceAccess').get()).docs.map(d=>({uid:d.id,...d.data()})) : actor.principal ? (await db.collection('teacherWorkspaceAccess').where('academyId','==',actor.academyId).get()).docs.filter(d=>!d.data().disabled).map(d=>({uid:d.id,...d.data()})) : [];
                 const staffAccess=!resourcesOnly&&actor.principal&&!needs('settings')&&needs('schedule','curriculum')?(await db.collection('teacherWorkspaceAccess').where('academyId','==',actor.academyId).select('disabled').get()).docs.filter(d=>!d.data().disabled).map(d=>({uid:d.id})):access;
                 const staff = resourcesOnly||!needs('settings','schedule','curriculum')?[]:actor.admin ? (await db.collection('users').where('role','in',['teacher','principal']).get()).docs.map(d=>({uid:d.id,name:d.data().alias||d.data().name||'선생님'})) : await Promise.all(staffAccess.map(async (a:any)=>{const u=(await db.collection('users').doc(a.uid).get()).data();return {uid:a.uid,name:u?.alias||u?.name||'선생님'};}));
+                if(actor.admin&&needs('settings')&&process.env.ADMIN_UID&&!staff.some((s:any)=>s.uid===process.env.ADMIN_UID)){const adminUser=(await db.collection('users').doc(process.env.ADMIN_UID).get()).data();staff.push({uid:process.env.ADMIN_UID,name:adminUser?.alias||adminUser?.name||'관리자 선생님'});}
                 const result:any = { ok: true, admin: actor.admin, principal: actor.principal, academyId: actor.academyId, teachingScopes: actor.teachingScopes, uid: actor.uid, scopes: actor.scopes, students, curricula: mergedCurricula.filter((r:any)=>!r.archived), drafts: records.filter((r:any)=>!r.archived), schedules: (fast?scheduleRecords:mergeNotionRows(scheduleRecords,sourceSchedules)).filter((r:any)=>!r.archived), reflectedSchedules: teacherReflectedSchedules(reflected.map(d => d.data()), mappings, actor), classes: mergedClasses.filter((r:any)=>!r.archived), notionIssues:sourceWorkspace.issues, notionSources:sourceWorkspace.sources, staff, access };
                 if(section!=='all') {
                     delete result.drafts;
@@ -267,10 +292,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             return sendJson(res,200,{ok:true,migrated,failures});
         }
         if(body.action==='retry-teacher-assignment') {
-            const uid=z.string().min(1).parse(body.uid),ref=db.collection('teacherWorkspaceAccess').doc(uid),profile=(await ref.get()).data();
-            if(!profile||!actor.admin&&(!actor.principal||profile.disabled||profile.academyId!==actor.academyId))throw new Error('FORBIDDEN');
-            await syncTeacherAssignments(profile,profile.previousNotionAssignment||null);
-            await ref.update({notionAssignmentStage:'synced'});return sendJson(res,200,{ok:true});
+            return sendJson(res,200,await retryTeacherAssignment(db,actor,z.string().min(1).parse(body.uid)));
         }
         if (body.action === 'enable-shared-notion') return sendJson(res,200,{ok:true,...await enableSharedWorkspace(db,actor)});
         if (body.action === 'grant') {
@@ -279,32 +301,43 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const dbId=z.preprocess(v=>typeof v==='string'&&/^[a-f0-9-]{32,36}$/i.test(v)?normalizeNotionPageId(v):v,z.string().uuid());
             const value = z.object({ uid: z.string().min(1), workspaceLabel:z.string().trim().max(100).optional(), notionTeacherPageId: z.preprocess(v=>typeof v==='string'&&/^[a-f0-9]{32}$/i.test(v)?v.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5'):v,z.string().uuid().nullable().optional()), academyId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/), workspaceRole: z.enum(['teacher','principal']).default('teacher'), academyStudents: z.array(z.string().uuid()).max(400).default([]), notionSources:z.array(z.object({subject:z.enum(['영어','수학','국어','과학','한국사']),classDatabaseId:dbId,curriculumDatabaseId:dbId,timetableDatabaseId:dbId,lessonDatabaseId:z.preprocess(v=>v===''?undefined:typeof v==='string'&&/^[a-f0-9-]{32,36}$/i.test(v)?normalizeNotionPageId(v):v,z.string().uuid().optional())})).max(5).optional(), scopes: z.array(z.object({ studentKey: z.string().uuid(), subject: z.enum(['영어', '수학', '국어', '과학', '한국사']) })).max(1000) }).parse(body);
             if(value.notionSources&&new Set(value.notionSources.map(s=>s.subject)).size!==value.notionSources.length)throw new Error('NOTION_DUPLICATE_SOURCE');
-            let previousProfile:any;
+            let previousProfile:any;const assignmentLease=randomUUID();
             await db.runTransaction(async t=>{
                 const targetRef=db.collection('teacherWorkspaceAccess').doc(value.uid),userRef=db.collection('users').doc(value.uid);
                 const user=(await t.get(userRef)).data(),target=(await t.get(targetRef)).data();
-                if(!['teacher','principal'].includes(user?.role))throw new Error('INVALID_TEACHER');
-                const keys=[...new Set([...value.academyStudents,...value.scopes.map(s=>s.studentKey)])];
+                if(value.uid!==process.env.ADMIN_UID&&!['teacher','principal'].includes(user?.role))throw new Error('INVALID_TEACHER');
+                if(target?.notionAssignmentLeaseUntil>Date.now())throw new Error('PUBLISH_IN_PROGRESS');
+                if((body.assignmentRevision??0)!==(target?.assignmentRevision||0))throw new Error('DRAFT_CONFLICT');
+                const pending=['pending','failed'].includes(target?.notionAssignmentStage);
+                const identity=(v:any)=>JSON.stringify([v?.notionTeacherPageId||null,(v?.scopes||[]).map((x:any)=>x.studentKey+':'+x.subject).sort()]);
+                if(assignmentNeedsRecovery(target)&&identity(value)!==identity(target))throw new Error('ASSIGNMENT_RETRY_REQUIRED');
+                const baseline=pending?target.previousNotionAssignment||target:target;
+                const keys=[...new Set([...value.academyStudents,...value.scopes.map(s=>s.studentKey),...(baseline?.scopes||[]).map((s:any)=>s.studentKey)])];
                 z.array(z.string().uuid()).max(400).parse(keys);
                 const membershipRefs=keys.map(key=>db.collection('academyStudentMemberships').doc(key));
                 const memberships=await Promise.all(membershipRefs.map(async ref=>(await t.get(ref)).data()));
+                if(value.notionTeacherPageId){const linked=await t.get(db.collection('teacherWorkspaceAccess').where('notionTeacherPageId','==',value.notionTeacherPageId));if(linked.docs.some((d:any)=>d.id!==value.uid&&!d.data().disabled))throw Error('NOTION_TEACHER_ID_CONFLICT');}
                 assertTeacherSettingsAccess(actor,value,target,user,memberships);
-                previousProfile=target;
+                previousProfile=pending?target.previousNotionAssignment||target:target;
                 if(!actor.admin && value.notionSources && JSON.stringify(value.notionSources)!==JSON.stringify(target.notionSources||[]))throw new Error('FORBIDDEN');
                 // Changing an existing academy requires a separate migration of historical records.
                 if(target?.academyId&&target.academyId!==value.academyId)throw new Error('ACADEMY_MIGRATION_REQUIRED');
                 if(memberships.some(m=>m?.academyId&&m.academyId!==value.academyId))throw new Error('ACADEMY_MEMBERSHIP_CONFLICT');
-                t.set(targetRef,{...target,scopes:value.scopes,workspaceLabel:value.workspaceLabel||target?.workspaceLabel||'',academyId:value.academyId,workspaceRole:value.workspaceRole,disabled:false,notionTeacherPageId:value.notionTeacherPageId||null,...(actor.admin&&value.notionSources?{notionSources:value.notionSources}:{}),notionAssignmentStage:'pending',previousNotionAssignment:{scopes:target?.scopes||[],notionTeacherPageId:target?.notionTeacherPageId||null}});
-                if(actor.admin)t.update(userRef,{role:value.workspaceRole==='principal'?'principal':'teacher'});
-                for(const ref of membershipRefs)t.set(ref,{academyId:value.academyId,disabled:false});
+                t.set(targetRef,{...target,scopes:value.scopes,workspaceLabel:value.workspaceLabel||target?.workspaceLabel||'',academyId:value.academyId,workspaceRole:value.workspaceRole,disabled:false,notionTeacherPageId:value.notionTeacherPageId||null,...(actor.admin&&value.notionSources?{notionSources:value.notionSources}:{}),notionAssignmentStage:'pending',notionAssignmentError:null,assignmentRevision:(target?.assignmentRevision||0)+1,notionAssignmentLease:assignmentLease,notionAssignmentLeaseUntil:Date.now()+180000,notionAssignmentTouched:assignmentNeedsRecovery(target),previousNotionAssignment:{scopes:previousProfile?.scopes||[],notionTeacherPageId:previousProfile?.notionTeacherPageId||null}});
+                if(actor.admin&&value.uid!==process.env.ADMIN_UID)t.update(userRef,{role:value.workspaceRole==='principal'?'principal':'teacher'});
+                for(const ref of membershipRefs)if(value.academyStudents.includes(ref.id)||value.scopes.some(x=>x.studentKey===ref.id))t.set(ref,{academyId:value.academyId,disabled:false});
             });
-            for (const collection of ['teacherLessonDrafts','teacherAcademicDrafts','teacherSchedules','teacherClasses','teacherCurricula']) {
-                const historical = await db.collection(collection).where('ownerUid','==',value.uid).get();
-                for (const record of historical.docs) if(!record.data().academyId) await record.ref.update({academyId:value.academyId});
-            }
+            const profileRef=db.collection('teacherWorkspaceAccess').doc(value.uid);
             let syncError:string|undefined;
-            try{await syncTeacherAssignments(value,previousProfile);await db.collection('teacherWorkspaceAccess').doc(value.uid).update({notionAssignmentStage:'synced'});}catch(e:any){syncError=e.message;await db.collection('teacherWorkspaceAccess').doc(value.uid).update({notionAssignmentStage:'failed',notionAssignmentError:syncError});}
-            return sendJson(res,200,{ok:true,...(syncError?{syncError}:{})});
+            try{
+                for (const collection of ['teacherLessonDrafts','teacherAcademicDrafts','teacherSchedules','teacherClasses','teacherCurricula']) {
+                    const historical = await db.collection(collection).where('ownerUid','==',value.uid).get();
+                    for (const record of historical.docs) if(!record.data().academyId) await record.ref.update({academyId:value.academyId});
+                }
+                await syncTeacherAssignments(value,previousProfile,undefined,async()=>{await assignmentCheckpoint(db,value.uid,assignmentLease,{notionAssignmentTouched:true,notionAssignmentLeaseUntil:Date.now()+180000});});
+                await assignmentCheckpoint(db,value.uid,assignmentLease,{notionAssignmentStage:'synced',notionAssignmentError:null,previousNotionAssignment:null,notionAssignmentTouched:false,notionAssignmentLease:null,notionAssignmentLeaseUntil:0,notionAssignmentUpdatedAt:Date.now()});
+            }catch(e:any){syncError=e.message;await assignmentCheckpoint(db,value.uid,assignmentLease,{notionAssignmentStage:'failed',notionAssignmentError:syncError,notionAssignmentLease:null,notionAssignmentLeaseUntil:0,notionAssignmentUpdatedAt:Date.now()});}
+            return sendJson(res,200,{ok:true,...(syncError?{syncError}:{} )});
         }
         if(body.action==='import-source-record'){
             const id=z.string().uuid().parse(body.id),kind=z.enum(['lesson','schedule']).parse(body.kind),collection=kind==='lesson'?'teacherLessonDrafts':'teacherSchedules';
@@ -455,6 +488,10 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const id = body.id ? z.string().uuid().parse(body.id) : randomUUID();
             const saved=(await db.collection('teacherSchedules').doc(id).get()).data();
             const imported=!saved&&body.id?(await readSourceSchedules(db,actor)).find(r=>r.id===id):undefined;
+            const existing=saved||imported;
+            if(existing&&!canAccessOwned(actor,existing.ownerUid))throw Error('FORBIDDEN');
+            const places=await readSchedulePlaceOptions();
+            if(value.place!==''&&!places.includes(value.place))throw Error('NOTION_SCHEDULE_PLACE_REQUIRED');
             await db.runTransaction(async (t) => {
                 const ref = db.collection('teacherSchedules').doc(id);
                 const old = (await t.get(ref)).data()||imported;

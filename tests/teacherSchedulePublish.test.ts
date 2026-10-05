@@ -16,6 +16,7 @@ function fixture() {
     let page: any = null, mode = '', count = 0;
     const calls: any[] = [];
     const schema = { properties: Object.fromEntries(['앱 기록 ID', '일정명', '과목', '대상 학생', '담당 선생님', '날짜 및 시간', '일정 종류', '일정 상태', '장소', '안내 내용', '요일', '반영 상태'].map(k => [k, {}])) };
+    schema.properties['장소'] = { type: 'select', select: { options: ['학원', '이충', '용죽', '고덕', '온라인', '기타'].map(name => ({ name })) } } as any;
     const fetcher = async (url: any, init?: any) => {
         const path = String(url).replace('https://api.notion.com/v1/', '');
         assert.ok(String(url).startsWith('https://api.notion.com/v1/'), 'Never invoke Make URLs');
@@ -46,7 +47,7 @@ function fixture() {
         }
         throw Error('UNEXPECTED_CALL');
     };
-    return { ...f, record, calls, fetcher, fail: (s: string) => { mode = s; }, at: (internal: string) => f.rows.get('studentSchedules/' + generateScheduleDocId(pageId, internal)) };
+    return { ...f, record, calls, schema, fetcher, fail: (s: string) => { mode = s; }, at: (internal: string) => f.rows.get('studentSchedules/' + generateScheduleDocId(pageId, internal)) };
 }
 async function withFixture(run: (f: ReturnType<typeof fixture>) => Promise<void>) { const original = global.fetch, token = process.env.NOTION_INTEGRATION_TOKEN; process.env.NOTION_INTEGRATION_TOKEN = 'test-notion-token'; const f = fixture(); global.fetch = f.fetcher; try {
     await run(f);
@@ -77,3 +78,27 @@ test('full schedule publish works without Make formula and supports recipient re
 }));
 test('full schedule retry after lost creation response never creates a duplicate source', async () => withFixture(async (f) => { f.fail('lost'); await assert.rejects(publishTeacherSchedule(f.db as any, id, f.record), /TIMEOUT/); await publishTeacherSchedule(f.db as any, id, f.record); assert.equal(f.calls.filter(c => c.path === 'pages').length, 1); assert.equal(f.at('two').status, '예정'); }));
 test('full schedule projection failure preserves source for retry and keeps every student unchanged', async () => withFixture(async (f) => { f.fail('projection-failure'); await assert.rejects(publishTeacherSchedule(f.db as any, id, f.record), /FIRESTORE_UNAVAILABLE/); assert.equal(f.at('one'), undefined); assert.equal(f.at('two'), undefined); await publishTeacherSchedule(f.db as any, id, f.record); assert.equal(f.calls.filter(c => c.path === 'pages').length, 1); assert.equal(f.at('one').status, '예정'); assert.equal(f.rows.get('teacherSchedules/' + id).stage, 'published'); }));
+
+test('configured branch places publish and later edit the same source without duplicate schedules', async () => withFixture(async f => {
+ f.record.data.place='용죽';await publishTeacherSchedule(f.db as any,id,f.record);
+ assert.equal(f.calls.find(c=>c.path==='pages').body.properties['장소'].select.name,'용죽');
+ const next={...f.rows.get('teacherSchedules/'+id),revision:2,data:{...f.record.data,place:'고덕'}};f.rows.set('teacherSchedules/'+id,next);
+ await publishTeacherSchedule(f.db as any,id,next);
+ assert.ok(f.calls.some(c=>c.method==='PATCH'&&c.path===`pages/${pageId}`&&c.body.properties['장소']?.select?.name==='고덕'));
+ assert.equal(f.calls.filter(c=>c.path==='pages').length,1);assert.equal(f.rows.get('teacherSchedules/'+id).data.place,'고덕');assert.equal(f.at('one').status,'예정');
+}));
+test('place removed after draft saving is rejected before any Notion mutation', async () => withFixture(async f=>{
+ f.record.data.place='고덕';(f.schema.properties['장소'] as any).select.options=[{name:'온라인'}];
+ await assert.rejects(publishTeacherSchedule(f.db as any,id,f.record),/NOTION_SCHEDULE_PLACE_REQUIRED/);
+ assert.equal(f.calls.some(c=>c.method==='POST'||c.method==='PATCH'),false);assert.equal(f.at('one'),undefined);
+}));
+test('missing place selection is published as null without creating an artificial academy place', async () => withFixture(async f=>{
+ f.record.data.place='';await publishTeacherSchedule(f.db as any,id,f.record);
+ assert.equal(f.calls.find(c=>c.path==='pages').body.properties['장소'].select,null);
+}));
+test('lost response remains recoverable when place options change after the source committed', async () => withFixture(async f=>{
+ f.record.data.place='고덕';f.fail('lost');await assert.rejects(publishTeacherSchedule(f.db as any,id,f.record),/TIMEOUT/);
+ (f.schema.properties['장소'] as any).select.options=[{name:'온라인'}];
+ await publishTeacherSchedule(f.db as any,id,f.rows.get('teacherSchedules/'+id));
+ assert.equal(f.calls.filter(c=>c.path==='pages').length,1);assert.equal(f.rows.get('teacherSchedules/'+id).stage,'published');
+}));

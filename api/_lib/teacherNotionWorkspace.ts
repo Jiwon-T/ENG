@@ -208,15 +208,7 @@ export async function readSourceEnrollments(db?:any,actor?:any,force=false){
  const keys=[...new Set((actor?.scopes||[]).map((s:any)=>s.studentKey))];
  const pages=!db||!actor?await allPages(ENROLLMENT):actor.admin?await mirroredPages(db,actor,ENROLLMENT,undefined,force):(await Promise.all(Array.from({length:Math.ceil(keys.length/90)},(_,i)=>mirroredPages(db,actor,ENROLLMENT,{or:keys.slice(i*90,i*90+90).map(key=>({property:'학생',relation:{contains:key}}))},force)))).flat();const map=new Map<string,any[]>();for(const p of pages){const students=await ids(p,'학생');if(students.length!==1)continue;if(map.has(students[0]))throw new Error('NOTION_DUPLICATE_ENROLLMENT');if(db&&actor&&(actor.admin||actor.scopes.some((s:any)=>s.studentKey===students[0]))){const saved=(await db.collection('studentEnrollments').doc(uuid(p.id)).get()).data();if(saved?.sourceUpdatedAt!==p.last_edited_time)await syncAcademicPage(db,p);}
  map.set(students[0],subjects.filter(s=>choice(p.properties[s])).map(subject=>({subject,status:choice(p.properties[subject]),startDate:p.properties[`${subject} 시작일`]?.date?.start||null,endDate:p.properties[`${subject} 중단일`]?.date?.start||null})));}return map;}
-export async function syncTeacherAssignments(profile:any,previous:any){
- if(!profile.notionTeacherPageId)throw new Error('TEACHER_NOTION_LINK_REQUIRED');
- const teacher=await notion(`pages/${profile.notionTeacherPageId}`);if(uuid(teacher.parent.database_id)!==uuid(TEACHERS)||teacher.archived)throw new Error('NOTION_SOURCE_MISMATCH');
- const keys=[...new Set([...profile.scopes,...(previous?.scopes||[])].map((s:any)=>s.studentKey))];
- for(const key of keys){const rows=await allPages(ENROLLMENT,{property:'학생',relation:{contains:key}});if(rows.length!==1)throw new Error('NOTION_ENROLLMENT_REQUIRED');const page=rows[0],properties:any={};
- for(const subject of subjects){const existing=await ids(page,`${subject} 담당`);const wanted=profile.scopes.some((s:any)=>s.studentKey===key&&s.subject===subject);const remaining=existing.filter(id=>id!==uuid(profile.notionTeacherPageId)&&(!previous?.notionTeacherPageId||id!==uuid(previous.notionTeacherPageId)));properties[`${subject} 담당`]=relation([...remaining,...(wanted?[profile.notionTeacherPageId]:[])]);}
- await notion(`pages/${page.id}`,'PATCH',{properties});}
- await notion(`pages/${teacher.id}`,'PATCH',{properties:{'담당 과목':{multi_select:[...new Set(profile.scopes.map((s:any)=>s.subject))].map(name=>({name}))}}});
-}
+export {syncTeacherAssignments} from './teacherAssignmentSync.js';
 export async function lessonSource(db:any,ownerUid:string,subject:string){const list=await sourcesFor(db,{uid:ownerUid,admin:ownerUid===process.env.ADMIN_UID,principal:false,academyId:'main'});return list.find(s=>(s.shared||s.ownerUid===ownerUid&&s.subject===subject)&&s.lessonDatabaseId);}
 export async function readSourceLessons(db:any,actor:any,force=false){
  const out:any[]=[];const sourceList=await sourcesFor(db,actor);
@@ -246,7 +238,7 @@ export async function readSourceSchedules(db:any,actor:any,range?:ScheduleRange,
  const time=p['날짜 및 시간']?.date;if(!time?.start||!time.end)continue;
  const ktime=(s:string)=>new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(s));
  const date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date(time.start));
- out.push({id:uuid(page.id),data:{title:text(p['일정명']),subject,students,date,start:ktime(time.start),end:ktime(time.end),kind:choice(p['일정 종류'])||'기타',status:choice(p['일정 상태'])||'예정',place:choice(p['장소'])||'학원',note:text(p['안내 내용'])},ownerUid:row.ownerUid,academyId:source.academyId,notionPageId:uuid(page.id),notionEditedAt:page.last_edited_time,source:'notion',revision:0,stage:choice(p['반영 상태'])==='반영 완료'?'published':'draft',updatedAt:Date.parse(page.last_edited_time)});
+ out.push({id:uuid(page.id),data:{title:text(p['일정명']),subject,students,date,start:ktime(time.start),end:ktime(time.end),kind:choice(p['일정 종류'])||'기타',status:choice(p['일정 상태'])||'예정',place:choice(p['장소']),note:text(p['안내 내용'])},ownerUid:row.ownerUid,academyId:source.academyId,notionPageId:uuid(page.id),notionEditedAt:page.last_edited_time,source:'notion',revision:0,stage:choice(p['반영 상태'])==='반영 완료'?'published':'draft',updatedAt:Date.parse(page.last_edited_time)});
  }return out;
 }
 // In-flight only: completed requests never leave cached permissions behind.

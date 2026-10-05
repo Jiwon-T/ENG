@@ -35,3 +35,10 @@ test('담당 및 소속반 선택은 해당 과목·담당의 반만 표시',()=
  assert.ok(html.includes('영어 담당 선생님'));assert.ok(html.includes('영어 선생님'));assert.ok(html.includes('영어반'));
  assert.equal(html.includes('수학 선생님'),false);assert.equal(html.includes('다른 담당 반'),false);
 });
+
+test('unified application shows all paper sections without toggles and empty teacher list has actionable guidance',()=>{
+ const value=emptyRegistration();const html=renderToStaticMarkup(<StudentRegistrationForm value={value} options={{teachers:[],classes:[]}} onChange={()=>{}} onSubmit={()=>{}}/>);
+ assert.equal(html.includes('<details'),false);assert.equal(html.includes('<summary'),false);
+ for(const label of ['학생·보호자 정보','생년월일','주소','학습 수준·상담 내용','입학 당시 현재 수준','과목별 수강','수강료·납부 안내','원서 동의·서명 확인','재직 선생님 연결이 없습니다'])assert.ok(html.includes(label),label);
+ assert.ok(html.indexOf('생년월일')<html.indexOf('학습 수준·상담 내용'));assert.ok(html.indexOf('학습 수준·상담 내용')<html.indexOf('과목별 수강'));
+});

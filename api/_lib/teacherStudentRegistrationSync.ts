@@ -1,4 +1,4 @@
-import {admissionBlocks} from './studentAdmission.js';
+import {admissionBlocks,assertAdmissionNotionSchema} from './studentAdmission.js';
 import {resolveRegistrationAssignments, REGISTRATION_CLASS_DATABASE, REGISTRATION_TEACHER_DATABASE} from './teacherRegistrationAssignments.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -18,7 +18,7 @@ const defaults:Dependencies={notion:registrationNotion,mapStudent:migrateStudent
 function definiteCreationFailure(error:unknown) { return /^NOTION_4\d\d$/.test(error instanceof Error?error.message:''); }
 function failureCode(error:unknown) {
     const message=error instanceof Error?error.message:'';
-    return /^(NOTION_REGISTRATION_|NOTION_EDIT_CONFLICT$|ACADEMY_MEMBERSHIP_CONFLICT$)/.test(message)?message:'NOTION_REGISTRATION_SYNC_FAILED';
+    return /^(NOTION_REGISTRATION_|NOTION_ADMISSION_|NOTION_EDIT_CONFLICT$|ACADEMY_MEMBERSHIP_CONFLICT$)/.test(message)?message:'NOTION_REGISTRATION_SYNC_FAILED';
 }
 export async function syncStudentRegistration(db:any,actor:RegistrationActor,id:unknown,revision:unknown,deps:Dependencies=defaults) {
     assertRegistrationAccess(actor);
@@ -48,6 +48,7 @@ export async function syncStudentRegistration(db:any,actor:RegistrationActor,id:
         const value=studentRegistrationSchema.parse(record.data);
         const [studentSchema,enrollmentSchema]=await Promise.all([deps.notion(`databases/${REGISTRATION_STUDENT_DATABASE}`),deps.notion(`databases/${REGISTRATION_ENROLLMENT_DATABASE}`)]);
         assertRegistrationSchema(studentSchema,enrollmentSchema);
+        assertAdmissionNotionSchema(studentSchema);
         const assignments=await resolveRegistrationAssignments(db,actor,value,deps.notion);
         if(record.resolvedAssignments && JSON.stringify(record.resolvedAssignments)!==JSON.stringify(assignments))throw Error('NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');
         for(const subject of Object.keys(assignments.teachers)) {

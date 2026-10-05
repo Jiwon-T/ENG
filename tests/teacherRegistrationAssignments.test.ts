@@ -54,3 +54,15 @@ test('class selections require active enrollment and teacher, reject duplicates 
  for(const row of [{...base.enrollments[0],status:'대기'},{...base.enrollments[0],teacherUid:null},{...base.enrollments[0],classIds:[classId,classId.toUpperCase()]}])assert.equal(studentRegistrationSchema.safeParse({...base,enrollments:[row]}).success,false);
  assert.deepEqual(studentRegistrationSchema.parse({...base,enrollments:[{...base.enrollments[0],classIds:[classId.toUpperCase()]}]}).enrollments[0].classIds,[classId]);
 });
+
+test('existing main administrator without page ID exposes 지원T and resolves the same teacher for registration',async()=>{
+ const f=fixture(),old=process.env.ADMIN_UID;process.env.ADMIN_UID='admin';f.rows.set('teacherWorkspaceAccess/admin',{academyId:'main',workspaceRole:'principal'});
+ const notion=async(path:string,method?:string,body?:any)=>path==='pages/3ec0d0f1-c79a-8108-b714-c1d6fc390ba2'?{...structuredClone(f.teacher),id:'3ec0d0f1-c79a-8108-b714-c1d6fc390ba2',properties:{...f.teacher.properties,선생님:{title:[{plain_text:'영어 이지원T'}]}}}:f.notion(path,method,body);
+ try{const options=await registrationAssignmentOptions(f.db,actor,notion);assert.ok(options.teachers.some(t=>t.uid==='admin'&&t.name==='영어 이지원T'));assert.deepEqual(await resolveRegistrationAssignments(f.db,actor,studentRegistrationSchema.parse({name:'학생',enrollments:[{subject:'영어',status:'등록',startDate:'2026-10-05',teacherUid:'admin'}]}),notion),{teachers:{영어:'3ec0d0f1-c79a-8108-b714-c1d6fc390ba2'},classIds:[]});assert.equal(f.rows.get('teacherWorkspaceAccess/admin').notionTeacherPageId,undefined);}
+ finally{if(old===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=old;}
+});
+test('administrator fallback never enables a disabled or foreign-academy profile',async()=>{
+ const f=fixture(),old=process.env.ADMIN_UID;process.env.ADMIN_UID='admin';
+ try{for(const profile of [{academyId:'main',disabled:true},{academyId:'other'},{disabled:true}]){f.rows.set('teacherWorkspaceAccess/admin',profile);const options=await registrationAssignmentOptions(f.db,actor,f.notion);assert.equal(options.teachers.some(t=>t.uid==='admin'),false);}}
+ finally{if(old===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=old;}
+});

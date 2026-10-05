@@ -1,3 +1,4 @@
+import { SCHEDULE_DATABASE, assertSchedulePlace } from './teacherSchedulePlaces.js';
 import {lessonExamScopeProperties} from './lessonExamScope.js';
 import {assertLessonNotionFields} from './teacherLessonDiagnostics.js';
 import { notionPropertiesMatch, writeTeacherNotionRecord } from './teacherNotionWrite.js';
@@ -94,7 +95,6 @@ export async function previousNotionLesson(studentKey: string, options?: {
     const last = markers.at(-1);
     return { round: properties?.['회차']?.number ?? null, selfStudyRound: properties?.['자습회차']?.number ?? properties?.['자습 회차']?.number ?? null, content: last ? feedback.slice(0, last.index).trimEnd() : feedback, nextPlan: properties ? text(properties['메모']) : '', examScope:properties?text(properties['시험범위']):'', assignment: extractAssignmentFromFeedback(feedback) || '' };
 }
-const SCHEDULE_DATABASE = '3430f1a4-9dde-4b4c-a5cf-0d11b913b38c';
 export async function publishTeacherSchedule(db: Firestore, id: string, record: any) {
     const profile = (await db.collection('teacherWorkspaceAccess').doc(record.ownerUid).get()).data();
     const teacherId = profile?.notionTeacherPageId || (record.ownerUid === process.env.ADMIN_UID ? '3ec0d0f1-c79a-8108-b714-c1d6fc390ba2' : null);
@@ -104,13 +104,17 @@ export async function publishTeacherSchedule(db: Firestore, id: string, record: 
     if (!schema.properties?.['앱 기록 ID'])
         throw new Error('NOTION_SCHEMA_SETUP_REQUIRED');
     const d = record.data;
+    // Preserve recovery of an immutable write that may already have committed.
+    // The write journal verifies the same properties and never blindly replays an uncertain write.
+    if (!(record.notionWrite?.revision === record.revision && record.notionWrite?.attempted))
+        assertSchedulePlace(schema, d.place);
     const properties = {
         '앱 기록 ID': rich(id), '일정명': { title: [{ text: { content: d.title } }] },
         '과목': { select: { name: d.subject } }, '대상 학생': { relation: d.students.map((id: string) => ({ id })) },
         '담당 선생님': { relation: [{ id: teacherId }] },
         '날짜 및 시간': { date: { start: `${d.date}T${d.start}:00+09:00`, end: `${d.date}T${d.end}:00+09:00` } },
         '일정 종류': { select: { name: d.kind } }, '일정 상태': { select: { name: d.status } },
-        '장소': { select: { name: d.place } }, '안내 내용': rich(d.note),
+        '장소': { select: d.place ? { name: d.place } : null }, '안내 내용': rich(d.note),
         '요일': { multi_select: [{ name: ['일', '월', '화', '수', '목', '금', '토'][new Date(`${d.date}T12:00:00+09:00`).getUTCDay()] }] },
         '반영 상태': { select: { name: '반영 대기' } },
     };
