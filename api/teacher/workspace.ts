@@ -1,3 +1,4 @@
+import {readIntegrityAudit} from '../_lib/teacherIntegrityAudit.js';
 import {lessonSyncWarning} from '../_lib/teacherLessonDiagnostics.js';
 import {readTeacherMessages,prepareTeacherMessage,sendTeacherMessage} from '../_lib/teacherMessages.js';
 import {readStudentEnrollment,saveStudentEnrollment,discardStudentEnrollment} from '../_lib/teacherStudentEnrollment.js';
@@ -60,6 +61,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const params = new URL(req.url || '', 'http://localhost').searchParams;
             const action = params.get('action') || 'bootstrap';
             const force = params.get('force') === '1';
+            if(action==='integrity-audit'){failureStage='integrity-audit';return sendJson(res,200,{ok:true,...await readIntegrityAudit(db,actor)});}
             if(action==='messages'){failureStage='message-read';return sendJson(res,200,{ok:true,...await readTeacherMessages(db,actor,params.get('studentKey'),params.get('subject'))});}
             if(action==='student-enrollment'){failureStage='student-enrollment-read';return sendJson(res,200,{ok:true,record:await readStudentEnrollment(db,actor,params.get('studentKey'))});}
             if(action==='student-profile'){failureStage='student-profile-read';return sendJson(res,200,{ok:true,record:await readStudentProfile(db,actor,params.get('studentKey'))});}

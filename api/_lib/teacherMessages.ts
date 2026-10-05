@@ -7,12 +7,13 @@ import {hashStudentKey} from './security.js';
 import {assertContactEditAllowsIssuance} from './studentContactEdit.js';
 import {unresolvedMessage} from '../../src/lib/teacherMessage.js';
 const TEMPLATE_DB='ec10d0f1-c79a-8312-946b-811e86041ee2';
+function assertMember(actor:any,member:any){if(member?.disabled||member?.academyId&&member.academyId!==actor.academyId||!actor.admin&&(!member||member.academyId!==actor.academyId))throw Error('FORBIDDEN');}
 const digest=(s:string)=>createHash('sha256').update(s).digest('hex');
 function assertPage(page:any,key:string,db=REGISTRATION_STUDENT_DATABASE){if(page?.archived||page?.in_trash||uuid(page?.id)!==key||uuid(page.parent?.database_id)!==db)throw Error('NOTION_SOURCE_MISMATCH');}
 async function access(db:any,actor:any,key:string,subject:string){
  if(actor.academyId!=='main'||uuid(process.env.NOTION_STUDENT_DATABASE_ID||'')!==REGISTRATION_STUDENT_DATABASE)throw Error('NOTION_REGISTRATION_SOURCE_REQUIRED');
  const member=(await db.collection('academyStudentMemberships').doc(key).get()).data();
- if(member?.academyId&&member.academyId!==actor.academyId||!actor.admin&&(!member||member.disabled||member.academyId!==actor.academyId))throw Error('FORBIDDEN');
+ assertMember(actor,member);
  if(!actor.admin&&!actor.principal&&!(actor.scopes||[]).some((s:any)=>uuid(s.studentKey)===key&&s.subject===subject))throw Error('FORBIDDEN');
 }
 async function source(db:any,actor:any,key:string,subject:string,notion:RegistrationNotion){
@@ -37,7 +38,7 @@ export async function prepareTeacherMessage(db:any,actor:any,input:unknown,notio
  const recipient=profileFromPage(page).guardianPhone;if(!/^0\d{8,10}$/.test(recipient))throw Error('MESSAGE_CONTACT_REQUIRED');
  if(v.lessonId){const lesson=(await db.collection('teacherLessonDrafts').doc(v.lessonId).get()).data();if(!lesson||lesson.academyId!==actor.academyId||lesson.stage!=='published'||lesson.archived||uuid(lesson.data.studentKey)!==key||lesson.data.subject!==v.subject)throw Error('FORBIDDEN');}
  const ref=db.collection('teacherMessages').doc(v.id),fingerprint=digest(JSON.stringify([actor.uid,key,v.subject,v.templateId,v.lessonId,v.body]));
- let r=await db.runTransaction(async(tx:any)=>{const old=(await tx.get(ref)).data();if(old){if(old.fingerprint!==fingerprint||old.ownerUid!==actor.uid)throw Error('MESSAGE_CONFLICT');return old;}const next={id:v.id,studentKey:key,subject:v.subject,templateId:uuid(v.templateId),lessonId:v.lessonId,body:v.body,recipient,ownerUid:actor.uid,academyId:actor.academyId,fingerprint,status:'prepared',createdAt:Date.now()};tx.set(ref,next);return next;});
+ let r=await db.runTransaction(async(tx:any)=>{const old=(await tx.get(ref)).data(),member=(await tx.get(db.collection('academyStudentMemberships').doc(key))).data(),edit=(await tx.get(db.collection('teacherStudentEdits').doc(hashStudentKey(key)))).data();assertMember(actor,member);assertContactEditAllowsIssuance(edit,page.last_edited_time);if(old){if(old.fingerprint!==fingerprint||old.ownerUid!==actor.uid)throw Error('MESSAGE_CONFLICT');return old;}const next={id:v.id,studentKey:key,subject:v.subject,templateId:uuid(v.templateId),lessonId:v.lessonId,body:v.body,recipient,ownerUid:actor.uid,academyId:actor.academyId,fingerprint,status:'prepared',createdAt:Date.now()};tx.set(ref,next);return next;});
  // Student text is a backup. Only these two properties are changed; SMS is independent.
  if(r.status==='prepared'){
   const props={'메시지템플릿선택':{relation:[{id:r.templateId}]},'완성된 문자본문':{rich_text:Array.from({length:Math.ceil(r.body.length/1800)},(_,i)=>({text:{content:r.body.slice(i*1800,(i+1)*1800)}}))}};
@@ -49,7 +50,7 @@ export async function prepareTeacherMessage(db:any,actor:any,input:unknown,notio
 }
 export function batiConfig(){
  const raw=process.env.BATI_WEBHOOK_URL||'',bodyKey=process.env.BATI_MESSAGE_PARAM||'';let url:URL;try{url=new URL(raw);}catch{throw Error('MESSAGE_CONFIG_REQUIRED');}
- if(url.protocol!=='https:'||url.hostname!=='app.bati.ai'||!/^\/webhook\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)||url.username||url.password||url.search||url.hash||!bodyKey.trim())throw Error('MESSAGE_CONFIG_REQUIRED');
+ if(url.protocol!=='https:'||url.hostname!=='app.bati.ai'||!/^\/webhook\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)||url.username||url.password||url.search||url.hash||!bodyKey.trim()||bodyKey!==bodyKey.trim()||bodyKey==='보호자연락처'||/[\u0000-\u001f\u007f]/.test(bodyKey))throw Error('MESSAGE_CONFIG_REQUIRED');
  return {url,bodyKey};
 }
 export async function sendTeacherMessage(db:any,actor:any,idInput:unknown,confirmed:unknown,notion:RegistrationNotion=registrationNotion,transport:typeof fetch=fetch){
@@ -63,7 +64,7 @@ export async function sendTeacherMessage(db:any,actor:any,idInput:unknown,confir
  const lock=db.collection('teacherMessageSendLocks').doc(digest(r.studentKey+'\0'+r.recipient+'\0'+r.body)),attempt=randomUUID();
  const claimed=await db.runTransaction(async(tx:any)=>{
   const current=(await tx.get(ref)).data(),old=(await tx.get(lock)).data(),edit=(await tx.get(db.collection('teacherStudentEdits').doc(hashStudentKey(r.studentKey)))).data(),member=(await tx.get(db.collection('academyStudentMemberships').doc(r.studentKey))).data();
-  assertContactEditAllowsIssuance(edit,page.last_edited_time);if(member?.disabled||member?.academyId&&member.academyId!==actor.academyId)throw Error('FORBIDDEN');
+  assertContactEditAllowsIssuance(edit,page.last_edited_time);assertMember(actor,member);
   if(current.status!=='ready')return false;if(old)throw Error('MESSAGE_DUPLICATE');
   tx.set(lock,{messageId:id,attempt,createdAt:Date.now()});tx.set(ref,{...current,status:'sending',attempt,attemptedAt:Date.now()});return true;
  });
