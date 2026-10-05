@@ -465,6 +465,12 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 return sendJson(res, 200, { ok: true, stage: 'processing', pageId });
             }
             catch (error: any) {
+                const saved=(await ref.get()).data();
+                if(saved?.notionPageId&&saved.notionSavedRevision===draft.revision) {
+                    await ref.update({stage:'reflection_pending',failureCode:error.message});
+                    const failure=workspaceError(error,failureStage);
+                    return sendJson(res,200,{ok:true,stage:'reflection_pending',pageId:saved.notionPageId,warning:'노션에는 저장됐지만 리포트 연동은 아직 완료되지 않았습니다. 노션의 전송하기·전송·반영 요청 링크와 Make 연결을 확인한 뒤 반영을 다시 눌러 주세요.',diagnosticId:failure.body.diagnosticId});
+                }
                 await ref.update({ stage: 'failed', failureCode: error.message });
                 throw error;
             }

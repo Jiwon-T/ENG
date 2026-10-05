@@ -24,7 +24,7 @@ import TeacherScheduleEditor from './TeacherScheduleEditor';
 const subjects = ['영어', '수학', '국어', '과학', '한국사'];
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
 const emptyLesson = () => ({ studentKey: '', subject: '영어', date: today(), start: '14:00', end: '15:30', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', content: '', assignment: '', note: '', nextPlan: '', wrong:null as number | null,examWrong:null as number | null,correct: null, total: null, examCorrect: null, examTotal: null, round: null, classSession: '있음', selfStudy: '미확인', selfStudyStart: '', selfStudyEnd: '', selfStudyRound: null, attendanceNote: '', specialNote: '' });
-const stageLabel: any = { draft: '저장됨', publishing: '반영 준비 중', notion_saved: 'Notion 저장됨', processing: '반영 중', published: '반영 완료', failed: '반영 실패' };
+const stageLabel: any = { reflection_pending:'노션 저장 완료 · 연동 대기', draft: '저장됨', publishing: '반영 준비 중', notion_saved: 'Notion 저장됨', processing: '반영 중', published: '반영 완료', failed: '반영 실패' };
 const errors: any = { UNAUTHORIZED: '로그인 인증이 만료되었습니다. 다시 로그인해 주세요.', SESSION_REVOKED: '로그인이 해제되었습니다. 다시 로그인해 주세요.', TEACHER_NOTION_LINK_REQUIRED: '관리자 설정에서 Notion 선생님 페이지를 연결해 주세요.', TEACHER_NOT_CONFIGURED: '관리자가 담당 학생과 과목을 연결하면 사용할 수 있습니다.', SOURCE_IDENTITY_LOCKED: '반영된 기록의 학생·과목은 바꿀 수 없습니다. 새 수업으로 작성해 주세요.', INVALID_INPUT: '입력한 날짜, 시간, 점수와 필수 항목을 확인해 주세요.', FORBIDDEN: '이 자료에 접근할 권한이 없습니다.', DRAFT_CONFLICT: '다른 화면에서 수정되었습니다. 새로고침 후 확인해 주세요.', PUBLISH_IN_PROGRESS: '반영 중입니다. 잠시 후 새로고침해 주세요.', NOTION_SCHEMA_SETUP_REQUIRED: '관리자 설정에서 수업 일지 연결을 준비해 주세요.', MAKE_SUBJECT_NOT_CONFIGURED: '이 과목은 아직 반영 연결이 준비되지 않았습니다.', MAKE_TRIGGER_NOT_CONFIGURED: '수업 일지의 반영 연결을 확인해야 합니다.' };
 export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     onNavigate?: (view: any) => void;
@@ -191,9 +191,9 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
                         publishId=saved.id;setDraftId(saved.id);setRevision(saved.record?.revision);
                         if(saved.record)setLesson(compactLessonInput(saved.record.data));
                     }
-                    await request('publish', { id: publishId });
+                    const published=await request('publish', { id: publishId });
                     await refresh();
-                    setMessage('반영을 요청했습니다. 완료 여부는 새로고침으로 확인해 주세요.');
+                    setMessage(published.warning || '반영을 요청했습니다. 완료 여부는 새로고침으로 확인해 주세요.');
                 })}>반영</button><button disabled={busy} className="small-button" onClick={() => act(refresh)}>새로고침</button><span className="self-center text-xs text-slate-500">{stageLabel[currentDraft?.stage] || '작성 중'}</span></div>
    </section></LessonEditorContainer>
   </div>}

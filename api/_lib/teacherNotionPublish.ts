@@ -1,3 +1,4 @@
+import {teacherMakeTrigger} from './teacherMakeTrigger.js';
 import { lessonSource } from './teacherNotionWorkspace.js';
 import { teacherTestProperties } from './teacherTestProperties.js';
 import { extractAssignmentFromFeedback } from './assignmentExtractor.js';
@@ -16,6 +17,10 @@ async function notion(path: string, method = 'GET', body?: any) {
 }
 const rich = (value: string) => ({ rich_text: value.match(/[\s\S]{1,1900}/g)?.map(content => ({ type: 'text', text: { content } })) || [] });
 export async function publishTeacherDraft(db: Firestore, draftId: string, draft: any) {
+    if(draft.stage==='reflection_pending'&&draft.notionPageId&&draft.notionSavedRevision===draft.revision) {
+        await submitLessonReflection(db,draftId,draft.notionPageId,draft.revision);
+        return draft.notionPageId;
+    }
     const config = (await db.collection('teacherWorkspaceConfig').doc('notion').get()).data();
     const source=await lessonSource(db,draft.ownerUid,draft.data.subject);
     const databaseId = source?.lessonDatabaseId || config?.lessonDatabaseId || LESSON_DATABASE;
@@ -60,18 +65,17 @@ export async function publishTeacherDraft(db: Firestore, draftId: string, draft:
             throw new Error('NOTION_SCHEMA_SETUP_REQUIRED');
     const page = pageId ? await notion(`pages/${pageId}`, 'PATCH', { properties }) : await notion('pages', 'POST', { parent: { database_id: databaseId }, properties });
     const ref = db.collection('teacherLessonDrafts').doc(draftId);
-    await ref.update({ notionPageId: page.id, notionEditedAt:page.last_edited_time, stage: 'notion_saved', updatedAt: Date.now() });
-    // Use the trusted source's existing on-demand button URL; never accept a client URL.
-    const fresh = await notion(`pages/${page.id}`);
-    const formula = fresh.properties?.['전송하기']?.formula?.string || '';
-    const match = formula.match(/https:\/\/hook\.eu1\.make\.com\/[a-zA-Z0-9]+(?:\?[^\s"<>]*)?/);
-    if (!match)
-        throw new Error('MAKE_TRIGGER_NOT_CONFIGURED');
-    const response = await fetch(match[0], { signal: AbortSignal.timeout(15000) });
-    if (!response.ok)
-        throw new Error('MAKE_TRIGGER_FAILED');
-    await ref.update({ stage: 'processing', lastSubmittedRevision: draft.revision, updatedAt: Date.now() });
+    await ref.update({ notionPageId: page.id, notionEditedAt:page.last_edited_time, stage: 'notion_saved', notionSavedRevision:draft.revision, updatedAt: Date.now() });
+    await submitLessonReflection(db,draftId,page.id,draft.revision);
     return page.id;
+}
+async function submitLessonReflection(db:Firestore,draftId:string,pageId:string,revision:number) {
+    const fresh=await notion(`pages/${pageId}`);
+    const url=teacherMakeTrigger(fresh);
+    if(!url)throw new Error('MAKE_TRIGGER_NOT_CONFIGURED');
+    const response=await fetch(url,{signal:AbortSignal.timeout(15000)});
+    if(!response.ok)throw new Error('MAKE_TRIGGER_FAILED');
+    await db.collection('teacherLessonDrafts').doc(draftId).update({stage:'processing',lastSubmittedRevision:revision,failureCode:null,updatedAt:Date.now()});
 }
 export async function prepareNotionWorkspace(db: Firestore) {
     const config = (await db.collection('teacherWorkspaceConfig').doc('notion').get()).data();

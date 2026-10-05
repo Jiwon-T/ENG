@@ -1,5 +1,5 @@
 .exam-material-catalog .exam-period-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; align-items:start; }
-.exam-material-catalog .exam-period-card { min-width:0; padding:18px; border:1px solid #f4dce5; border-radius:20px; background:linear-gradient(145deg,#fff 72%,#fff7fa); box-shadow:0 3px 12px #6b244b06; transition:box-shadow .2s,border-color .2s; }
+.exam-material-catalog .exam-period-card { min-width:0; padding:18px; border:1px solid #f4dce5; border-radius:20px; background:#fff0f5; box-shadow:0 3px 12px #6b244b06; transition:box-shadow .2s,border-color .2s; }
 .exam-material-catalog .exam-period-card:hover { border-color:#f2b7cd; box-shadow:0 7px 20px #6b244b0c; }
 .exam-material-catalog .exam-card-heading { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; }
 .exam-material-catalog .exam-grade-badge,.exam-material-catalog .exam-status-badge { font-size:11px; line-height:1.5; font-weight:700; padding:3px 8px; border-radius:7px; }
@@ -36,7 +36,7 @@
 .exam-material-catalog .exam-detail-heading h3 { font-size:24px; font-weight:800; color:#243248; margin-top:8px; }
 .exam-material-catalog .exam-detail-heading p { font-size:14px; color:#64748b; margin-top:3px; }
 .exam-material-catalog .exam-wordbook-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
-.exam-material-catalog .exam-wordbook-card { min-width:0; text-align:left; display:flex; flex-direction:column; align-items:flex-start; padding:20px; border:1px solid #f3dfe8; border-radius:20px; background:linear-gradient(145deg,#fff,#fff8fb); transition:box-shadow .2s, border-color .2s; }
+.exam-material-catalog .exam-wordbook-card { min-width:0; text-align:left; display:flex; flex-direction:column; align-items:flex-start; padding:20px; border:1px solid #f3dfe8; border-radius:20px; background:#fff0f5; transition:box-shadow .2s, border-color .2s; }
 .exam-material-catalog .exam-wordbook-card:hover { border-color:#efa7c0; box-shadow:0 6px 18px #ad467c14; }
 .exam-material-catalog .exam-book-icon { display:grid; place-items:center; width:38px; height:38px; font-size:24px; background:#ffe8f1; color:#d56991; border-radius:12px; margin-bottom:14px; }
 .exam-material-catalog .exam-book-number { font-size:10px; font-weight:700; letter-spacing:.04em; color:#bf8ca0; }

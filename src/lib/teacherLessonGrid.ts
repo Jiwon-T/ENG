@@ -38,7 +38,7 @@ export async function processLessonRows<R extends {
             }
             if (mode === 'publish') {
                 const result = await request('publish', { id: row.id });
-                update(row.id, { stage: result.stage || 'processing', error: undefined });
+                update(row.id, { stage: result.stage || 'processing', error: result.warning });
             }
             succeeded++;
         }
