@@ -2,7 +2,7 @@ import ts from 'typescript';
 import {mkdtemp,readFile,mkdir,writeFile,rm,readdir} from 'node:fs/promises';
 import {join,dirname,resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const temp=await mkdtemp(join(root,'.server-import-check-'));
 async function compile(directory){
@@ -20,7 +20,7 @@ try{
  await Promise.all([compile('api'),compile('src/lib')]);
  // Plain Node ESM, without tsx or a bundler that resolves extensionless paths.
  // Import only; no handler invocation, network request or operational write.
- const entry=join(temp,'api/teacher/workspace.js');
+ const entry=pathToFileURL(join(temp,'api/teacher/workspace.js')).href;
  const script=`const m=await import(${JSON.stringify(entry)});if(typeof m.handleWorkspace!=='function')throw Error('Missing workspace handler');console.log('Native Node workspace import passed');`;
  const result=spawnSync(process.execPath,['--input-type=module','-e',script],{cwd:root,encoding:'utf8',env:{...process.env,NODE_OPTIONS:''}});
  if(result.stdout)process.stdout.write(result.stdout);if(result.stderr)process.stderr.write(result.stderr);

@@ -1,6 +1,7 @@
 .exam-material-catalog .exam-period-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; align-items:start; }
-.exam-material-catalog .exam-period-card { min-width:0; padding:18px; border:1px solid #f4dce5; border-radius:20px; background:#fff0f5; box-shadow:0 3px 12px #6b244b06; transition:box-shadow .2s,border-color .2s; }
-.exam-material-catalog .exam-period-card:hover { border-color:#f2b7cd; box-shadow:0 7px 20px #6b244b0c; }
+.exam-material-catalog .exam-period-card { min-width:0; border:1px solid #e9edf2; border-radius:28px; background:white; box-shadow:0 2px 4px #0f172a08; overflow:hidden; transition:box-shadow .2s,border-color .2s; }
+.exam-material-catalog .exam-period-card:has(.exam-period-select:hover),.exam-material-catalog .exam-period-card:focus-within { border-color:#f0b4ca; box-shadow:0 8px 24px #d81b6014; }
+.exam-material-catalog .exam-period-select { display:block; width:100%; padding:24px; text-align:left; background:transparent; cursor:pointer; }
 .exam-material-catalog .exam-card-heading { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; }
 .exam-material-catalog .exam-grade-badge,.exam-material-catalog .exam-status-badge { font-size:11px; line-height:1.5; font-weight:700; padding:3px 8px; border-radius:7px; }
 .exam-material-catalog .exam-grade-badge { color:#9c4160; background:#fff0f5; }
@@ -23,24 +24,45 @@
 .exam-material-catalog .exam-more-materials summary { cursor:pointer; padding:4px 0; }
 .exam-material-catalog .exam-more-materials .exam-material-list { margin-top:6px; }
 .exam-material-catalog .exam-missing-material { font-size:11px; color:#94a3b8; padding:5px 0; }
-.exam-material-catalog .exam-card-actions { display:flex; gap:6px; margin-top:12px; }
+.exam-material-catalog .exam-card-actions { display:flex; gap:6px; padding:0 24px 20px; }
 .exam-material-catalog .exam-card-actions button { flex:1; min-height:32px; padding:6px; border:1px solid #f6dce6; border-radius:8px; font-size:11px; font-weight:600; color:#b54d72; background:white; }
 .exam-material-catalog .exam-card-actions button:hover { background:#fff0f5; }
 @media(max-width:1100px) { .exam-material-catalog .exam-period-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media(max-width:600px) { .exam-material-catalog .exam-period-grid { grid-template-columns:minmax(0,1fr); gap:10px; } .exam-material-catalog .exam-period-card { padding:15px; } }
-.exam-material-catalog .exam-period-open { display:flex; justify-content:space-between; align-items:center; gap:10px; width:100%; margin-top:16px; padding:11px 12px; border:0; border-radius:10px; background:#fff0f5; color:#b95479; font-size:12px; font-weight:600; }
-.exam-material-catalog .exam-period-open:hover { background:#ffe3ee; }
+@media(max-width:600px) { .exam-material-catalog .exam-period-grid { grid-template-columns:minmax(0,1fr); gap:12px; } .exam-material-catalog .exam-period-select { padding:20px; } }
+.exam-material-catalog .exam-period-open { display:flex; align-items:center; gap:12px; width:100%; margin-top:22px; color:#64748b; font-size:12px; font-weight:600; }
+.exam-material-catalog .exam-period-open > svg { margin-left:auto; color:#cbd5e1; }
+.exam-material-catalog .exam-period-icon { display:grid; place-items:center; width:42px; height:42px; border-radius:14px; background:#fff0f5; color:#d81b60; }
+.exam-material-catalog .exam-period-select:hover .exam-school-name,.exam-material-catalog .exam-period-select:hover .exam-period-open > svg { color:#d81b60; }
 .exam-material-catalog .exam-period-open strong { color:#d65383; }
 .exam-material-catalog .exam-back { font-size:12px; font-weight:600; color:#9b6b7d; padding:6px 0; }
 .exam-material-catalog .exam-detail-heading { margin:14px 0 20px; }
 .exam-material-catalog .exam-detail-heading h3 { font-size:24px; font-weight:800; color:#243248; margin-top:8px; }
 .exam-material-catalog .exam-detail-heading p { font-size:14px; color:#64748b; margin-top:3px; }
 .exam-material-catalog .exam-wordbook-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
-.exam-material-catalog .exam-wordbook-card { min-width:0; text-align:left; display:flex; flex-direction:column; align-items:flex-start; padding:20px; border:1px solid #f3dfe8; border-radius:20px; background:#fff0f5; transition:box-shadow .2s, border-color .2s; }
+.exam-material-catalog .exam-wordbook-card { min-width:0; text-align:left; display:flex; flex-direction:column; align-items:flex-start; padding:24px; border:1px solid #e9edf2; border-radius:28px; background:white; box-shadow:0 2px 4px #0f172a08; cursor:pointer; transition:box-shadow .2s, border-color .2s; }
 .exam-material-catalog .exam-wordbook-card:hover { border-color:#efa7c0; box-shadow:0 6px 18px #ad467c14; }
-.exam-material-catalog .exam-book-icon { display:grid; place-items:center; width:38px; height:38px; font-size:24px; background:#ffe8f1; color:#d56991; border-radius:12px; margin-bottom:14px; }
+.exam-material-catalog .exam-book-icon { display:grid; place-items:center; width:52px; height:52px; background:#fff0f5; color:#d81b60; border-radius:16px; margin-bottom:18px; }
 .exam-material-catalog .exam-book-number { font-size:10px; font-weight:700; letter-spacing:.04em; color:#bf8ca0; }
 .exam-material-catalog .exam-wordbook-card strong { display:block; font-size:15px; font-weight:700; line-height:1.6; color:#334155; margin:5px 0 16px; overflow-wrap:anywhere; }
 .exam-material-catalog .exam-book-cta { display:flex; justify-content:space-between; width:100%; margin-top:auto; font-size:11px; font-weight:600; color:#c55a83; }
+.exam-material-catalog .exam-wordbook-card:hover strong { color:#d81b60; }
+.exam-material-catalog .exam-filters { display:flex; flex-wrap:wrap; gap:12px; padding:18px 20px; border:1px solid #edf0f4; border-radius:22px; background:white; }
+.exam-material-catalog .exam-filters label { display:flex; flex-direction:column; gap:6px; min-width:120px; color:#64748b; font-size:11px; font-weight:700; }
+.exam-material-catalog .exam-filters label:last-child { flex:1; min-width:220px; }
+.exam-material-catalog .exam-filters select { min-height:44px; padding:10px 32px 10px 12px; border:1px solid #e2e8f0; border-radius:12px; color:#334155; font-size:13px; font-weight:500; cursor:pointer; }
+.exam-material-catalog .exam-filters select:hover { border-color:#f0b4ca; }
+.exam-material-catalog .exam-filters select:focus-visible { outline:2px solid #e66b98; outline-offset:2px; }
+.exam-material-catalog .exam-archive { margin-top:32px; padding:0 20px; border:1px solid #e9edf2; border-radius:24px; background:white; box-shadow:0 2px 4px #0f172a08; }
+.exam-material-catalog .exam-archive summary { display:flex; align-items:center; gap:14px; min-height:84px; padding:16px 0; list-style:none; cursor:pointer; font-size:15px; font-weight:700; color:#334155; }
+.exam-material-catalog .exam-archive summary::-webkit-details-marker { display:none; }
+.exam-material-catalog .exam-archive-icon { display:grid; place-items:center; width:44px; height:44px; border-radius:14px; background:#fff0f5; color:#d81b60; }
+.exam-material-catalog .exam-archive-count { margin-left:6px; color:#94a3b8; font-size:13px; }
+.exam-material-catalog .exam-archive-chevron { margin-left:auto; color:#94a3b8; transition:transform .2s; }
+.exam-material-catalog .exam-archive[open] .exam-archive-chevron { transform:rotate(90deg); }
+.exam-material-catalog .exam-archive summary:hover { color:#d81b60; }
+.exam-material-catalog .exam-archive-description { padding:0 0 18px; font-size:12px; color:#64748b; }
+.exam-material-catalog .exam-archive > .exam-period-grid { padding-bottom:20px; }
+@media(max-width:600px) { .exam-material-catalog .exam-filters { padding:14px; gap:10px; } .exam-material-catalog .exam-filters label { flex:1; min-width:100px; } .exam-material-catalog .exam-filters label:last-child { min-width:100%; } }
 @media(max-width:1100px) { .exam-material-catalog .exam-wordbook-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:600px) { .exam-material-catalog .exam-wordbook-grid { grid-template-columns:minmax(0,1fr); gap:10px; } .exam-material-catalog .exam-wordbook-card { padding:16px; } }
+.exam-material-catalog .exam-period-select > .exam-school-name,.exam-material-catalog .exam-period-select > .exam-period-name,.exam-material-catalog .exam-period-select > .exam-period-dates { display:block; }

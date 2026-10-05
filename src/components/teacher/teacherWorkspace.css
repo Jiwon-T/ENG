@@ -197,3 +197,15 @@
 @media(max-width:640px) { .registration-enrollment { grid-template-columns:repeat(2,minmax(0,1fr)); } .registration-enrollment > span { grid-column:1/-1; } }
 
 .registration-enrollment > .registration-class-selection { grid-column:1/-1; }
+
+.teacher-workspace .student-management-card { display:flex;flex-direction:column;align-items:stretch;text-align:left;min-width:0;padding:14px;border:1px solid #fce7ef;border-radius:14px;background:#fff;transition:border-color .15s,box-shadow .15s; }
+.teacher-workspace .student-management-card:hover {border-color:#f472b6;box-shadow:0 4px 14px #ec489912;}
+.student-management-card>span:first-child {display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.student-management-card-hint {display:block;margin-top:10px;font-size:11px;color:#be416c;}
+.student-management-tabs {display:flex;flex-wrap:wrap;gap:8px;border-bottom:1px solid #fce7ef;padding-bottom:12px;margin-bottom:16px;}
+.student-management-tabs button {min-height:36px;padding:8px 12px;border:1px solid #fce7ef;border-radius:10px;font-size:12px;font-weight:700;background:#fff;color:#64748b;}
+.student-management-tabs button[aria-selected=true] {background:#fff0f6;border-color:#f472b6;color:#be416c;}
+.student-management-tabs button:hover:not(:disabled) {border-color:#f472b6;color:#be416c;}
+
+.student-management-cards > .student-management-card-wrap {padding:0;}
+.student-management-card-wrap > .student-management-card {width:100%;height:100%;}
