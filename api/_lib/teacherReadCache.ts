@@ -32,6 +32,7 @@ export function pageNumber(value: unknown) {
 }
 
 export function invalidateTeacherMutation(action:string) {
+    if(action==='save-student-registration')return; // Separate uncached draft list; existing lesson/grade data is unchanged.
     if(action==='save-draft'){teacherReadCache.invalidate('previous-lessons-local');teacherReadCache.invalidate('draft-summaries');teacherReadCache.invalidate('academy-local');return;}
     if(action==='save-academic'){teacherReadCache.invalidate('academic-local');return;}
     if(action==='save-schedule'){return;}

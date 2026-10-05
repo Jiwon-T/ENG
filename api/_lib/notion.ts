@@ -6,6 +6,7 @@ export interface NotionStudentLookupResult {
   studentKey: string;
   studentDisplayName: string;
   parentPhonePinHash: string;
+  sourceUpdatedAt?: string;
 }
 
 export interface NotionStudentListItem {
@@ -85,6 +86,7 @@ function parseStudentPage(page: any, requireGuardianContact: boolean): NotionStu
     notionStudentPageId: studentKey,
     studentKey,
     studentDisplayName,
+    sourceUpdatedAt:page.last_edited_time,
     parentPhonePinHash: digitsOnly.length >= 9 ? hashPin(digitsOnly.slice(-4)) : '',
   };
 }

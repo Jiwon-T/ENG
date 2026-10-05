@@ -190,3 +190,10 @@
 .academic-card-details {display:flex;flex-wrap:wrap;gap:3px 8px;font-size:11px;color:#64748b;}
 @media(max-width:900px){.student-management-cards,.academic-cards{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:520px){.student-management-cards,.academic-cards{grid-template-columns:1fr;}}
+
+.student-registration-manager { border-bottom:1px solid #fce7ef; padding-bottom:16px; }
+.registration-enrollment { display:grid; grid-template-columns:60px repeat(3,minmax(0,1fr)); gap:12px; align-items:center; padding:12px 0; border-top:1px solid #fce7ef; }
+.student-registration-form fieldset { min-width:0; }
+@media(max-width:640px) { .registration-enrollment { grid-template-columns:repeat(2,minmax(0,1fr)); } .registration-enrollment > span { grid-column:1/-1; } }
+
+.registration-enrollment > .registration-class-selection { grid-column:1/-1; }

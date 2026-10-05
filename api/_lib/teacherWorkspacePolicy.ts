@@ -56,6 +56,7 @@ export function assertDraftEditable(old: any, revision: unknown, value: {
 }) {
     if (!old)
         return;
+    if(old.stage==='report_published_notion_pending' || old.notionWrite && (!old.notionWrite.done || old.lastSubmittedRevision!==old.revision))throw new Error('NOTION_WRITE_PENDING');
     if (['processing', 'publishing', 'notion_saved'].includes(old.stage))
         throw new Error('PUBLISH_IN_PROGRESS');
     if (revision !== old.revision)
@@ -66,7 +67,7 @@ export function assertDraftEditable(old: any, revision: unknown, value: {
 export function publishDecision(old: any) {
     if (old.stage === 'published' && old.lastSubmittedRevision === old.revision)
         return 'already-published';
-    if (['publishing', 'processing', 'notion_saved'].includes(old.stage))
+    if (['publishing', 'processing', 'notion_saved'].includes(old.stage) && !(old.publishStartedAt && Date.now()-old.publishStartedAt>180000 && (old.notionWrite?.leaseUntil || 0)<=Date.now()))
         throw new Error('PUBLISH_IN_PROGRESS');
     return 'publish';
 }
@@ -87,6 +88,7 @@ export const teacherScheduleSchema = z.object({
 
 export function assertLessonComplete(input: unknown) {
     const d = lessonDraftSchema.parse(input);
+    if (!d.content.trim()) throw new Error('LESSON_CONTENT_REQUIRED');
     const absent = ['결석', '보강 결석'].includes(d.attendance);
     if (d.classSession === '있음' && (d.attendance === '미확인' || d.round === null || (!absent && d.round <= 0))) throw new Error('LESSON_ROUNDS_REQUIRED');
     if (d.classSession === '없음' && d.selfStudy !== '있음') throw new Error('LESSON_OR_STUDY_REQUIRED');

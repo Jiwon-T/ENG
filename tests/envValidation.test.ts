@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { getFirebaseAdmin } from '../api/_lib/firebaseAdmin.ts';
 import { lookupStudentAndGuardianContact } from '../api/_lib/notion.ts';
 
-// 공식 확정된 10대 서버 환경변수 목록
+// 등록된 서버 환경변수 목록
 export const OFFICIAL_SERVER_ENV_VARS = [
   'FIREBASE_PROJECT_ID',
   'FIREBASE_CLIENT_EMAIL',
@@ -17,10 +17,12 @@ export const OFFICIAL_SERVER_ENV_VARS = [
   'MAKE_NOTION_WEBHOOK_SECRET',
   'NOTION_INTEGRATION_TOKEN',
   'NOTION_STUDENT_DATABASE_ID',
+  'BATI_WEBHOOK_URL',
+  'BATI_MESSAGE_PARAM',
 ] as const;
 
 describe('Environment Variable and Configuration Enforcement Tests', () => {
-  it('1. .env.example strictly matches the 10 official environment variables with zero divergence', () => {
+  it('1. .env.example strictly matches registered server environment variables with zero divergence', () => {
     const envExample = fs.readFileSync('.env.example', 'utf8');
     const parsedVars = envExample
       .split('\n')

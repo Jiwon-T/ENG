@@ -50,10 +50,10 @@ export async function createParentSession(params: {
  * 4. internalStudentId 일치 검증
  * 5. authVersion 일치 검증 (PIN/링크 갱신 시 기존 세션 즉시 무효화)
  */
-export async function getVerifiedParentSession(rawSessionToken: string): Promise<ParentSessionData | null> {
+export async function getVerifiedParentSession(rawSessionToken: string, adminProvider = getFirebaseAdmin): Promise<ParentSessionData | null> {
   if (!rawSessionToken) return null;
 
-  const { db } = getFirebaseAdmin();
+  const { db } = adminProvider();
   const sessionHash = hashToken(rawSessionToken);
 
   const doc = await db.collection('parentSessions').doc(sessionHash).get();

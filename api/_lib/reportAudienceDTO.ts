@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { StoredLessonReport, StudentLessonReportDTO, ParentLessonReportDTO, StoredStudentSchedule, StudentScheduleDTO } from './reportSchemas.js';
-export const lessonReportId = (r: StoredLessonReport) => crypto.createHash('sha256').update(r.notionPageId).digest('hex').slice(0, 16);
+export const lessonReportId = (r: StoredLessonReport) => crypto.createHash('sha256').update(r.reportIdentity || r.notionPageId).digest('hex').slice(0, 16);
 export const assignmentContentHash = (r: StoredLessonReport) => crypto.createHash('sha256').update(r.derivedAssignment || '').digest('hex');
 export function studentLessonDTO(r: StoredLessonReport, completions = new Map<string, string>()): StudentLessonReportDTO {
     return { reportId: lessonReportId(r), lessonDate: r.lessonDateStart, subject: r.subject || '영어', category: r.category, attendance: r.attendance || '', homework: r.homework || '', vocabularyScore: r.vocabularyScore, schoolExamScore: r.schoolExamScore, assignmentContent: r.derivedAssignment || null, assignmentCompleted: completions.get(lessonReportId(r)) === assignmentContentHash(r) };

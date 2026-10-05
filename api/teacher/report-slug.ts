@@ -1,3 +1,4 @@
+import {assertContactEditAllowsIssuance} from '../_lib/studentContactEdit.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson } from '../_lib/http.js';
 import { verifyAdminAuth } from '../_lib/auth.js';
@@ -145,6 +146,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
         const mappingSnap = await t.get(mappingDocRef);
         const notionMappingSnap = await t.get(notionMappingDocRef);
+        const contactEdit=(await t.get(db.collection('teacherStudentEdits').doc(hashStudentKey(studentKey)))).data();
+        assertContactEditAllowsIssuance(contactEdit,notionLookup.sourceUpdatedAt);
         const now = new Date().toISOString();
 
         if (mappingSnap.exists) {
@@ -350,6 +353,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       allowedMethods: ['GET', 'POST', 'PATCH', 'DELETE'],
     });
   } catch (err: any) {
+    if (err.message === 'STUDENT_PROFILE_CONTACT_PENDING')return sendJson(res,409,{ok:false,error:'STUDENT_PROFILE_CONTACT_PENDING',message:'보호자 번호 변경 결과를 먼저 확인한 뒤 리포트 주소를 발급해 주세요.'});
     if (err.message === 'SLUG_ALREADY_IN_USE' || err.message === 'NEW_SLUG_ALREADY_IN_USE') {
       return sendJson(res, 409, { ok: false, error: 'SLUG_ALREADY_IN_USE' });
     }

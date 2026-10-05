@@ -1,3 +1,4 @@
+import {writeTeacherNotionRecord} from './teacherNotionWrite.js';
 import {readMirroredPages} from './teacherNotionMirror.js';
 import {ids} from './teacherNotionWorkspace.js';
 import {detailMetadata,examDetail} from '../../src/lib/academicExamPeriod.js';
@@ -55,18 +56,16 @@ export async function publishTeacherGrade(db:Firestore,id:string,record:any, dep
  const schema=await gradeNotion(`databases/${GRADE_DATABASE}`);
  if(!schema.properties['앱 기록 ID']) throw new Error('NOTION_SCHEMA_SETUP_REQUIRED');
  const extra:any={}; for(const [name,type] of [['시험 연도','number'],['학기','select'],['고사 구분','select'],['세부 종류','select']])if(!schema.properties[name])extra[name]={[type]:{}};if(Object.keys(extra).length)await gradeNotion(`databases/${GRADE_DATABASE}`,'PATCH',{properties:extra});
- let pageId=record.notionPageId;
- if(!pageId){const matches=await gradeNotion(`databases/${GRADE_DATABASE}/query`,'POST',{filter:{property:'앱 기록 ID',rich_text:{equals:id}},page_size:2});if(matches.results.length>1)throw new Error('DUPLICATE_NOTION_RECORD');pageId=matches.results[0]?.id;}
  const detail=examDetail(d),metadata=detailMetadata(detail);
  const properties:any={'시험명':{title:[{text:{content:d.title}}]},'학생':{relation:[{id:d.studentKey}]},'담당 선생님':{relation:[{id:teacherPage}]},'과목':{select:{name:d.subject}},'시험 종류':{select:{name:d.examType}},'시험일':{date:{start:d.examDate}},'제출 기한':{date:d.deadline?{start:d.deadline}:null},'원점수':{number:d.score},'만점':{number:d.maxScore},'예상 등급':rich(d.grade),'제출 상태':{select:{name:d.submissionStatus}},'비고':rich(d.note),'앱 기록 ID':rich(id)};
  Object.assign(properties,{'세부 종류':{select:detail?{name:detail}:null},'시험 연도':{number:d.examYear??null},'학기':{select:(metadata.semester??d.semester)?{name:`${metadata.semester??d.semester}학기`}:null},'고사 구분':{select:(metadata.examPeriod||d.examPeriod)?{name:metadata.examPeriod||d.examPeriod}:null}});
- const page=pageId ? await gradeNotion(`pages/${pageId}`,'PATCH',{properties}) : await gradeNotion('pages','POST',{parent:{database_id:GRADE_DATABASE},properties});
- await db.collection('teacherAcademicDrafts').doc(id).update({notionPageId:page.id,stage:'notion_saved'});
+ const page=await writeTeacherNotionRecord(db,'teacherAcademicDrafts',id,record,GRADE_DATABASE,properties,gradeNotion);
  // Reuse the existing authoritative Notion->report projection. No client score payload enters reports directly.
  const fresh=await gradeNotion(`pages/${page.id}`);
  if(fresh.archived || fresh.in_trash) throw new Error('NOTION_SOURCE_REMOVED');
  await deps.syncAcademicPage(db,fresh);
  await gradeNotion(`pages/${page.id}`,'PATCH',{properties:{'앱 반영 결과':rich('앱 반영 완료')}});
- await db.collection('teacherAcademicDrafts').doc(id).update({stage:'published',lastSubmittedRevision:record.revision,updatedAt:Date.now()});
+ const confirmed=await gradeNotion(`pages/${page.id}`);
+ await db.collection('teacherAcademicDrafts').doc(id).update({notionEditedAt:confirmed.last_edited_time,stage:'published',lastSubmittedRevision:record.revision,updatedAt:Date.now()});
  return page.id;
 }

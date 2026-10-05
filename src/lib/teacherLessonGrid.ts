@@ -13,7 +13,7 @@ export function gridCanPublish(row: {
     savedData?: any;
 }) { return Boolean(row.revision) && !['published', 'publishing', 'processing', 'notion_saved'].includes(row.stage || '') && JSON.stringify(row.data) === JSON.stringify(row.savedData); }
 export function gridCanSubmit(row: {stage?:string;data:any;savedData?:any;loading?:boolean}) {
- return !row.loading && !['publishing','processing','notion_saved'].includes(row.stage||'') && (row.stage!=='published'||JSON.stringify(row.data)!==JSON.stringify(row.savedData));
+ return Boolean(row.data?.content?.trim()) && !row.loading && !['publishing','processing','notion_saved'].includes(row.stage||'') && (row.stage!=='published'||JSON.stringify(row.data)!==JSON.stringify(row.savedData));
 }
 export function isCurrentStudent(student: {
     subjects?: {
@@ -31,6 +31,7 @@ export async function processLessonRows<R extends {
     let succeeded = 0, failed = 0;
     for (const row of rows) {
         try {
+            if (mode === 'publish' && !row.data?.content?.trim()) throw new Error('수업 내용을 입력해 주세요.');
             if (mode === 'publish' && !gridCanSubmit(row)) throw new Error('반영 중이거나 이미 반영된 기록입니다.');
             if (mode === 'save' || !gridCanPublish(row)) {
                 const saved = await request('save-draft', { id: row.id, revision: row.revision, data: row.data });

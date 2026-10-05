@@ -39,6 +39,7 @@ export async function backfillAcademyPage(db: Firestore, page: any) {
   const [existing, compact] = await Promise.all([ref.get(), compactRef.get()]);
   if (existing.exists && compact.exists) throw new Error('DUPLICATE_SOURCE_IDS');
   const current = existing.exists ? existing : compact;
+  if(current.exists && current.data()?.teacherDraftId)return false;
   if (current.exists && Object.keys(missingScorePatch(current.data(), data)).length === 0) return false;
   const student = await lookupStudentByPageId(data.notionStudentPageId, '', false);
   const mapping = await migrateStudentMapping(db, student.notionStudentPageId, student.studentDisplayName);
@@ -47,6 +48,7 @@ export async function backfillAcademyPage(db: Firestore, page: any) {
     const latest = await tx.get(target);
     if (latest.exists) {
       const stored = latest.data()!;
+      if(stored.teacherDraftId)return false;
       if (stored.internalStudentId !== mapping.internalStudentId || stored.sourceUpdatedAt > (data.sourceUpdatedAt || '')) return false;
       const patch = missingScorePatch(stored, data);
       if (!Object.keys(patch).length) return false;

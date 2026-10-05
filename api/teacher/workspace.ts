@@ -1,3 +1,10 @@
+import {readTeacherMessages,prepareTeacherMessage,sendTeacherMessage} from '../_lib/teacherMessages.js';
+import {readStudentEnrollment,saveStudentEnrollment,discardStudentEnrollment} from '../_lib/teacherStudentEnrollment.js';
+import {readStudentProfile,saveStudentProfile,discardStudentProfile} from '../_lib/teacherStudentProfile.js';
+import {registrationAssignmentOptions, resolveRegistrationAssignments} from '../_lib/teacherRegistrationAssignments.js';
+import { syncStudentRegistration } from '../_lib/teacherStudentRegistrationSync.js';
+import { studentRegistrationSchema, saveStudentRegistration, listStudentRegistrations, readStudentRegistration } from '../_lib/teacherStudentRegistration.js';
+import {writeDirectLessonReport} from '../_lib/teacherDirectReport.js';
 import {classStatusOnlyChange,changedStatusSlots} from '../_lib/teacherClassStatus.js';
 import {scheduleRange,readReflectedRange,readManagedScheduleRange} from '../_lib/teacherScheduleRange.js';
 import { latestPreviousLesson, previousLessonValues } from '../../src/lib/teacherTodayLessons.js';
@@ -52,6 +59,22 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const params = new URL(req.url || '', 'http://localhost').searchParams;
             const action = params.get('action') || 'bootstrap';
             const force = params.get('force') === '1';
+            if(action==='messages'){failureStage='message-read';return sendJson(res,200,{ok:true,...await readTeacherMessages(db,actor,params.get('studentKey'),params.get('subject'))});}
+            if(action==='student-enrollment'){failureStage='student-enrollment-read';return sendJson(res,200,{ok:true,record:await readStudentEnrollment(db,actor,params.get('studentKey'))});}
+            if(action==='student-profile'){failureStage='student-profile-read';return sendJson(res,200,{ok:true,record:await readStudentProfile(db,actor,params.get('studentKey'))});}
+            if (action === 'registration-options') {
+                failureStage='student-registration-options';
+                return sendJson(res,200,{ok:true,...await registrationAssignmentOptions(db,actor)});
+            }
+            if (action === 'student-registrations') {
+                failureStage = 'student-registration-list';
+                const records = await listStudentRegistrations(db,actor);
+                return sendJson(res,200,{ok:true,...pageRows(records,pageNumber(params.get('page')),8)});
+            }
+            if (action === 'student-registration') {
+                failureStage = 'student-registration-read';
+                return sendJson(res,200,{ok:true,record:await readStudentRegistration(db,actor,params.get('id'))});
+            }
             if (action === 'academic-records'||action==='academic-records-fast') {
                 const localPromise=teacherReadCache.get(teacherReadKey(actor,'academic-local'),async()=>{const saved=actor.admin ? await db.collection('teacherAcademicDrafts').get() : actor.principal ? await db.collection('teacherAcademicDrafts').where('academyId','==',actor.academyId).get() : await db.collection('teacherAcademicDrafts').where('ownerUid','==',actor.uid).get();return saved.docs.map(d=>({id:d.id,...d.data()})).filter((r:any)=>canViewAcademyRecord(actor,r));},force);
                 const sourcePromise=action==='academic-records-fast'?Promise.resolve([]):teacherReadCache.get(teacherReadKey(actor,'academic-source'),()=>listTeacherNotionGrades(db,actor,force),force);
@@ -184,8 +207,42 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         if (req.method !== 'POST')
             return sendJson(res, 405, { ok: false });
         const body = await parseJsonBody(req);
+        if(body.action==='prepare-message'){failureStage='message-prepare';return sendJson(res,200,{ok:true,record:await prepareTeacherMessage(db,actor,body)});}
+        if(body.action==='send-message'){failureStage='message-send';const v=z.object({action:z.literal('send-message'),id:z.string().uuid(),confirmed:z.literal(true)}).strict().parse(body);return sendJson(res,200,{ok:true,record:await sendTeacherMessage(db,actor,v.id,v.confirmed)});}
         // Body dispatch also works when a deployment rewrite drops URL parameters.
         if(body.action!=='report-review'&&body.action!=='previous-lesson'){mutation=body.action;invalidateTeacherMutation(body.action);}
+        if (body.action === 'sync-student-registration') {
+            failureStage = 'student-registration-sync';
+            const value=z.object({action:z.literal('sync-student-registration'),id:z.string().regex(/^[a-f0-9]{64}$/),revision:z.number().int().positive()}).strict().parse(body);
+            return sendJson(res,200,{ok:true,...await syncStudentRegistration(db,actor,value.id,value.revision)});
+        }
+        if(body.action==='save-student-enrollment') {
+            failureStage='student-enrollment-save';
+            const v=z.object({action:z.literal('save-student-enrollment'),studentKey:z.string().uuid(),operationId:z.string().uuid(),studentEditedAt:z.string().datetime(),enrollmentEditedAt:z.string().datetime(),data:z.unknown()}).strict().parse(body);
+            return sendJson(res,200,{ok:true,...await saveStudentEnrollment(db,actor,v.studentKey,v)});
+        }
+        if(body.action==='discard-student-enrollment') {
+            failureStage='student-enrollment-discard';
+            const v=z.object({action:z.literal('discard-student-enrollment'),studentKey:z.string().uuid(),operationId:z.string().uuid()}).strict().parse(body);
+            return sendJson(res,200,{ok:true,...await discardStudentEnrollment(db,actor,v.studentKey,v.operationId)});
+        }
+        if(body.action==='save-student-profile') {
+            failureStage='student-profile-save';
+            const v=z.object({action:z.literal('save-student-profile'),studentKey:z.string().uuid(),operationId:z.string().uuid(),expectedEditedAt:z.string().datetime(),data:z.unknown()}).strict().parse(body);
+            return sendJson(res,200,{ok:true,...await saveStudentProfile(db,actor,v.studentKey,v.operationId,v.expectedEditedAt,v.data)});
+        }
+        if(body.action==='discard-student-profile') {
+            failureStage='student-profile-discard';
+            const v=z.object({action:z.literal('discard-student-profile'),studentKey:z.string().uuid(),operationId:z.string().uuid()}).strict().parse(body);
+            return sendJson(res,200,{ok:true,...await discardStudentProfile(db,actor,v.studentKey,v.operationId)});
+        }
+        if (body.action === 'save-student-registration') {
+            failureStage = 'student-registration-save';
+            const value = z.object({action:z.literal('save-student-registration'), requestId:z.string().uuid(), writeId:z.string().uuid(), revision:z.number().int().positive().optional(), data:z.unknown()}).strict().parse(body);
+            await resolveRegistrationAssignments(db,actor,studentRegistrationSchema.parse(value.data));
+            const saved = await saveStudentRegistration(db,actor,value.data,value.requestId,value.revision,value.writeId);
+            return sendJson(res,200,{ok:true,...saved});
+        }
         if (body.action === 'report-review') {
             failureStage = 'report-review';
             const studentKey = z.string().uuid().parse(body.studentKey);
@@ -271,10 +328,10 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(!canTeach(actor,value.studentKey,value.subject)) throw new Error('FORBIDDEN');
             if(!actor.academyId) throw new Error('ACADEMY_REQUIRED');
             const id=body.id ? z.string().uuid().parse(body.id) : randomUUID();
-            let importedPageId: string | undefined;
+            let importedPageId: string | undefined;let importedEditedAt:string|undefined;
             if(body.notionPageId) {
                 importedPageId=z.string().uuid().parse(body.notionPageId);
-                const page=await gradeNotion(`pages/${importedPageId}`);
+                const page=await gradeNotion(`pages/${importedPageId}`);importedEditedAt=page.last_edited_time;
                 const profile=(await db.collection('teacherWorkspaceAccess').doc(actor.uid).get()).data();
                 if(actor.principal || !canReadNotionGrade(actor,profile,page)) throw new Error('FORBIDDEN');
                 if(page.properties['학생']?.relation?.[0]?.id.replace(/-/g,'') !== value.studentKey.replace(/-/g,'')) throw new Error('SOURCE_IDENTITY_LOCKED');
@@ -284,7 +341,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const ref=db.collection('teacherAcademicDrafts').doc(id), old=(await t.get(ref)).data();
                 if(old && !canAccessOwned(actor,old.ownerUid)) throw new Error('FORBIDDEN');
                 assertDraftEditable(old,body.revision,value);
-                t.set(ref,{...old,data:value,ownerUid:old?.ownerUid||actor.uid,academyId:old?.academyId||actor.academyId,revision:(old?.revision||0)+1,stage:'draft',updatedAt:Date.now(),...(importedPageId?{notionPageId:importedPageId}:{})});
+                t.set(ref,{...old,data:value,ownerUid:old?.ownerUid||actor.uid,academyId:old?.academyId||actor.academyId,revision:(old?.revision||0)+1,stage:'draft',updatedAt:Date.now(),...(importedPageId?{notionPageId:importedPageId,notionEditedAt:importedEditedAt}:{})});
             });
             return sendJson(res,200,{ok:true,id});
         }
@@ -379,7 +436,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 t.update(ref,{archived:true,updatedAt:Date.now()});return r;
             });
             if(!old.alreadyArchived&&collection==='teacherSchedules'&&old.notionPageId){
-                try{await publishTeacherSchedule(db,id,old);return sendJson(res,200,{ok:true,pendingCancellation:true});}
+                try{await publishTeacherSchedule(db,id,old);return sendJson(res,200,{ok:true,stage:'published',cancelled:true});}
                 catch(e:any){await ref.update({stage:'failed',failureCode:e.message});throw e;}
             }
             if(collection!=='teacherSchedules')await syncManagedRecord(db,collection,id);
@@ -398,6 +455,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 if(old?.archived || old?.deleteRequested)throw new Error('FORBIDDEN');
                 if (old && !canAccessOwned(actor, old.ownerUid))
                     throw new Error('FORBIDDEN');
+                if(old?.notionWrite && (!old.notionWrite.done || old.lastSubmittedRevision!==old.revision))throw new Error('NOTION_WRITE_PENDING');
                 if (old && ['processing', 'publishing', 'notion_saved'].includes(old.stage))
                     throw new Error('PUBLISH_IN_PROGRESS');
                 if (old && body.revision !== old.revision)
@@ -461,15 +519,19 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if (draft.alreadyPublished)
                 return sendJson(res, 200, { ok: true, stage: 'published', pageId: draft.notionPageId });
             try {
+                // Publish to the app first. Notion is an additional copy, never a Make trigger.
+                await writeDirectLessonReport(db,id,draft);
                 const pageId = await publishTeacherDraft(db, id, draft);
-                return sendJson(res, 200, { ok: true, stage: 'processing', pageId });
+                await writeDirectLessonReport(db,id,{...draft,notionPageId:pageId});
+                await ref.update({stage:'published',lastSubmittedRevision:draft.revision,failureCode:null});
+                return sendJson(res, 200, { ok: true, stage: 'published', pageId });
             }
             catch (error: any) {
                 const saved=(await ref.get()).data();
-                if(saved?.notionPageId&&saved.notionSavedRevision===draft.revision) {
-                    await ref.update({stage:'reflection_pending',failureCode:error.message});
+                if(saved?.directReportRevision===draft.revision) {
+                    await ref.update({stage:'report_published_notion_pending',failureCode:error.message});
                     const failure=workspaceError(error,failureStage);
-                    return sendJson(res,200,{ok:true,stage:'reflection_pending',pageId:saved.notionPageId,warning:'노션에는 저장됐지만 리포트 연동은 아직 완료되지 않았습니다. 노션의 전송하기·전송·반영 요청 링크와 Make 연결을 확인한 뒤 반영을 다시 눌러 주세요.',diagnosticId:failure.body.diagnosticId});
+                    return sendJson(res,200,{ok:true,stage:'report_published_notion_pending',warning:'학생·학부모 리포트에는 반영됐습니다. 노션 복사만 완료되지 않았습니다. 반영을 다시 누르면 재시도합니다.',diagnosticId:failure.body.diagnosticId});
                 }
                 await ref.update({ stage: 'failed', failureCode: error.message });
                 throw error;

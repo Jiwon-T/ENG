@@ -1,3 +1,4 @@
+import {registrationFirestore} from './helpers/registrationFirestore.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {publishTeacherGrade} from '../api/_lib/teacherAcademicNotion.ts';
@@ -14,25 +15,18 @@ test('grade publishing blocks before any page write when source schema is not pr
  try{await assert.rejects(publishTeacherGrade(db,id,{ownerUid:'t',data:d,revision:1}),/NOTION_SCHEMA_SETUP_REQUIRED/);assert.equal(writes.length,0);}finally{global.fetch=original;restore();}
 });
 test('grade retry reuses source ID, persists identity before projection, and preserves zero',async()=>{
- const restore=env(), original=global.fetch, calls:any[]=[], updates:any[]=[];
- let projected=false;
- const db={collection:(name:string)=>({doc:(key:string)=>({get:async()=>({data:()=>profile}),update:async(value:any)=>{updates.push({name,key,...value});}})}),runTransaction:async(f:any)=>f({get:async()=>({exists:false,data:()=>undefined}),set:(_ref:any,value:any)=>{projected=value.score===0;},update:()=>{}})} as any;
- global.fetch=async(url,init)=>{
-  const path=String(url).split('/v1/')[1],body=init?.body?JSON.parse(String(init.body)):null;calls.push({path,method:init?.method,body});
-  if(path.startsWith('databases/')&&init?.method==='GET')return reply({properties:{'앱 기록 ID':{}}});
-  if(path.startsWith('databases/')&&init?.method==='PATCH')return reply({});
-  if(path.endsWith('/query'))return reply({results:[{id:pageId}]});
-  if(path===`pages/${pageId}`&&init?.method==='PATCH')return reply({id:pageId});
-  if(path===`pages/${pageId}`)return reply({id:pageId,archived:false,last_edited_time:'2026-10-03T00:00:00.000Z',parent:{database_id:'fa6ce5a8-9572-4f4d-80d9-4d1485d44e6f'},properties:{'학생':{relation:[{id:studentKey}]},'원점수':{number:0},'만점':{number:100},'과목':{select:{name:'영어'}},'시험 종류':{select:{name:'학력평가'}}}});
-  throw new Error(`unexpected ${path}`);
- };
- try {
-  await publishTeacherGrade(db,id,{ownerUid:'t',data:d,revision:1},{syncAcademicPage: (database,page)=>syncAcademicPage(database,page,async()=>({notionStudentPageId:studentKey,studentKey,studentDisplayName:'학생',parentPhonePinHash:''}),async()=>({internalStudentId:'internal'}) as any)});
-  assert.equal(calls.some(c=>c.path==='pages'&&c.method==='POST'),false);
-  const source=calls.find(c=>c.path===`pages/${pageId}`&&c.body?.properties?.['원점수']);
-  assert.equal(source.body.properties['원점수'].number,0);
-  assert.equal(source.body.properties['세부 종류'].select.name,'9월');
-  assert.equal(updates[0].notionPageId,pageId);assert.equal(updates[0].stage,'notion_saved');
-  assert.equal(updates.at(-1).stage,'published');assert.equal(projected,true);
+ const restore=env(),original=global.fetch,calls:any[]=[];const {db,rows}=registrationFirestore();
+ const record={ownerUid:'t',data:d,revision:1,notionPageId:pageId,notionEditedAt:'2026-10-03T00:00:00.000Z'};
+ rows.set('teacherWorkspaceAccess/t',profile);rows.set('teacherAcademicDrafts/'+id,record);
+ const page:any={id:pageId,archived:false,last_edited_time:record.notionEditedAt,parent:{database_id:'fa6ce5a8-9572-4f4d-80d9-4d1485d44e6f'},properties:{'학생':{relation:[{id:studentKey}]},'원점수':{number:50},'만점':{number:100},'과목':{select:{name:'영어'}},'시험 종류':{select:{name:'학력평가'}}}};
+ global.fetch=async(url,init)=>{const path=String(url).split('/v1/')[1],body=init?.body?JSON.parse(String(init.body)):null;calls.push({path,method:init?.method,body});
+ if(path.startsWith('databases/')&&init?.method==='GET')return reply({properties:{'앱 기록 ID':{}}});
+ if(path.startsWith('databases/')&&init?.method==='PATCH')return reply({});
+ if(path===`pages/${pageId}`){if(init?.method==='PATCH'){Object.assign(page.properties,body.properties);page.last_edited_time='2026-10-03T01:00:00.000Z';}return reply(page);}
+ throw Error('UNEXPECTED_CALL');};
+ let fail=true;
+ const deps={syncAcademicPage:async(database:any,remote:any)=>{assert.equal(rows.get('teacherAcademicDrafts/'+id).stage,'notion_saved');if(fail){fail=false;throw Error('APP_UNAVAILABLE');}return syncAcademicPage(database,remote,async()=>({notionStudentPageId:studentKey,studentKey,studentDisplayName:'학생',parentPhonePinHash:''}),async()=>({internalStudentId:'internal'}) as any);}};
+ try{await assert.rejects(publishTeacherGrade(db as any,id,record,deps),/APP_UNAVAILABLE/);await publishTeacherGrade(db as any,id,record,deps);
+ assert.equal(calls.some(c=>c.path==='pages'&&c.method==='POST'),false);const writes=calls.filter(c=>c.body?.properties?.['원점수']);assert.equal(writes.length,1);assert.equal(writes[0].body.properties['원점수'].number,0);assert.equal(writes[0].body.properties['세부 종류'].select.name,'9월');assert.equal(rows.get('teacherAcademicDrafts/'+id).stage,'published');assert.equal(rows.get('academicRecords/'+pageId).score,0);
  }finally{global.fetch=original;restore();}
 });

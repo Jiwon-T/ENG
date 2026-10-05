@@ -1,14 +1,13 @@
+import {storeWebhookLessonReport} from '../_lib/lessonWebhookProjection.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson } from '../_lib/http.js';
 import {
   NotionReportWebhookSchema,
-  type StoredLessonReport,
 } from '../_lib/reportSchemas.js';
 import { lookupStudentByPageId } from '../_lib/notion.js';
 import { getSecretOrThrow } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 import { migrateStudentMapping } from '../_lib/studentIdentity.js';
-import { extractAssignmentFromFeedback } from '../_lib/assignmentExtractor.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
@@ -57,45 +56,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return sendJson(res, 422, { ok: false, error: 'STUDENT_NOT_FOUND_IN_NOTION' });
     }
     const mapping = await migrateStudentMapping(db, notionLookup.notionStudentPageId, notionLookup.studentDisplayName);
-    const internalStudentId = mapping.internalStudentId;
-
-    const now = new Date().toISOString();
-    const docRef = db.collection('lessonReports').doc(data.notionPageId);
-    const prevSnap = await docRef.get();
-
-    const sourceUpdatedAt = data.sourceUpdatedAt || now;
-
-    // lessonReports 저장 시 Firebase UID가 아닌 internalStudentId를 학생 식별자로 저장
-    const storedReport: StoredLessonReport = {
-      notionPageId: data.notionPageId,
-      studentKey: mapping.studentKey,
-      internalStudentId,
-      lessonDateStart: data.lessonDateStart,
-      lessonDateEnd: data.lessonDateEnd || null,
-      lessonTime: data.lessonTime || '',
-      selfStudyTime: data.selfStudyTime || '',
-      subject: data.subject || '영어',
-      category: data.category,
-      attendance: data.attendance || '',
-      attitude: data.attitude || '',
-      homework: data.homework || '',
-      test: data.test || '',
-      vocabularyScore: data.vocabularyScore ?? null,
-      schoolExamScore: data.schoolExamScore ?? null,
-      feedback: data.feedback || '',
-      derivedAssignment: extractAssignmentFromFeedback(data.feedback),
-      sourceUpdatedAt,
-      serverReceivedAt: prevSnap.exists ? (prevSnap.data() as StoredLessonReport).serverReceivedAt : now,
-      serverUpdatedAt: now,
-    };
-
-    await docRef.set(storedReport, { merge: true });
-
-    return sendJson(res, 200, {
-      ok: true,
-      notionPageId: data.notionPageId,
-      isNew: !prevSnap.exists,
-    });
+    const result=await storeWebhookLessonReport(db,data,mapping);
+    return sendJson(res,200,{ok:true,notionPageId:data.notionPageId,...result});
   } catch (err: any) {
     return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });
   }

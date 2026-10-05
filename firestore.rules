@@ -381,6 +381,12 @@ service cloud.firestore {
     match /academyStudentMemberships/{id} { allow read, write: if false; }
     match /teacherWorkspaceAccess/{id} { allow read, write: if false; }
     match /teacherNotionMirrors/{id} { allow read, write: if false; match /pages/{pageId} { allow read, write: if false; } }
+    match /scheduleSyncStates/{id} { allow read, write: if false; }
+    match /teacherStudentEnrollmentEdits/{id} { allow read, write: if false; }
+    match /teacherMessages/{id} { allow read, write: if false; }
+    match /teacherMessageSendLocks/{id} { allow read, write: if false; }
+    match /teacherStudentEdits/{id} { allow read, write: if false; }
+    match /teacherStudentRegistrations/{id} { allow read, write: if false; }
     match /teacherStudentSnapshots/{id} { allow read, write: if false; }
     match /teacherWorkspaceConfig/{id} { allow read, write: if false; }
   }

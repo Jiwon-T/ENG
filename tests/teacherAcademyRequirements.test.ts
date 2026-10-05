@@ -65,3 +65,12 @@ test('principal scope is server-approved academy membership, not user-editable r
   assert.equal(actor.principal,true);assert.equal(actor.scopes.length,5);assert.ok(actor.scopes.every(s=>s.studentKey===studentKey));assert.equal(canTeach(actor,studentKey,'영어'),false);
  }finally{if(previous===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=previous;}
 });
+
+test('lesson content is required for publication, including absence and self-study-only reports',()=>{
+ for(const content of ['', ' \n\t ']) {
+  assert.equal(lessonDraftSchema.safeParse({...lesson,content}).success,true);
+  assert.throws(()=>assertLessonComplete({...lesson,content}),/LESSON_CONTENT_REQUIRED/);
+  assert.throws(()=>assertLessonComplete({...lesson,content,attendance:'결석',round:0}),/LESSON_CONTENT_REQUIRED/);
+ }
+ assert.equal(workspaceError(Error('LESSON_CONTENT_REQUIRED'),'publish').body.message,'수업 내용을 입력해 주세요.');
+});

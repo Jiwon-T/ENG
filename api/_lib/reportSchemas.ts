@@ -118,6 +118,7 @@ export const UnlinkStudentAccountSchema = z.object({
  * internalStudentId: SHA-256(Notion 학생 페이지 ID)
  */
 export interface StoredLessonReport {
+  reportIdentity?: string;
   subject?: string;
   notionPageId: string;
   studentKey: string;

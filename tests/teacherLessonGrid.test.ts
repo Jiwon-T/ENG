@@ -5,7 +5,7 @@ import { lessonFeedback } from '../api/_lib/teacherWorkspacePolicy.ts';
 import { extractAssignmentFromFeedback } from '../api/_lib/assignmentExtractor.ts';
 import { studentLessonDTO } from '../api/_lib/reportAudienceDTO.ts';
 import { decodeMakeBase64Payload } from '../api/webhooks/notion-report.ts';
-const lesson=()=>newGridLesson('11111111-1111-4111-8111-111111111111','영어','2026-10-03','14:00','15:30');
+const lesson=()=>({...newGridLesson('11111111-1111-4111-8111-111111111111','영어','2026-10-03','14:00','15:30'),content:'관계대명사'});
 test('common class input keeps individual scores, attendance and feedback independent',()=>{
  const previous={...lesson(),correct:27,total:30,note:'개별 메모',attendance:'지각'};
  const result=applyCommonLesson(previous,{content:'관계대명사',assignment:'교재 10쪽',nextPlan:'복습'});
@@ -51,4 +51,11 @@ test('publish failure preserves saved revision for retry; pending rows make no r
  await processLessonRows([{id:'a',stage:'new',data:lesson()}],'publish',async action=>{if(action==='publish')throw new Error('publish failed');return {record:{revision:1,data:lesson()}};},(_,patch)=>updates.push(patch));
  assert.equal(updates[0].stage,'draft');assert.equal(updates[0].revision,1);assert.equal(updates[1].error,'publish failed');
  const result=await processLessonRows([{id:'a',stage:'processing',data:lesson()}],'publish',async()=>{throw new Error('should not call');},()=>{});assert.equal(result.failed,1);
+});
+
+test('blank lesson contents cannot be published while partial drafts remain saveable',async()=>{
+ const row={id:'empty',stage:'new',data:{...lesson(),content:' \n '}};const calls:string[]=[],updates:any[]=[];
+ assert.equal((await processLessonRows([row],'publish',async action=>{calls.push(action);return {};},(_,patch)=>updates.push(patch))).failed,1);
+ assert.equal(calls.length,0);assert.match(updates[0].error,/수업 내용/);
+ assert.equal((await processLessonRows([row],'save',async action=>{calls.push(action);return {};},()=>{})).succeeded,1);
 });
