@@ -16,7 +16,7 @@ export const lessonDraftSchema = z.object({
     selfStudy: z.enum(['미확인', '없음', '있음']).default('미확인'),
     selfStudyStart: z.string().default(''), selfStudyEnd: z.string().default(''),
     selfStudyRound: z.number().nonnegative().nullable().default(null),
-    attendanceNote: z.string().max(5000).default(''), specialNote: z.string().max(5000).default(''),
+    attendanceNote: z.string().max(5000).default(''), specialNote: z.string().max(5000).default(''), examScope:z.string().max(5000).default(''),
 }).transform(d=>({...d,correct:d.wrong!=null&&d.total!=null?d.total-d.wrong:d.correct,examCorrect:d.examWrong!=null&&d.examTotal!=null?d.examTotal-d.examWrong:d.examCorrect})).superRefine((d, ctx) => {
     if (d.classSession === '있음' && d.end <= d.start)
         ctx.addIssue({ code: 'custom', message: '종료 시간은 시작 시간 뒤여야 합니다.' });
@@ -44,7 +44,7 @@ export function canTeach(actor: {
 }, studentKey: string, subject: string) { return actor.admin || (actor.principal ? actor.teachingScopes || [] : actor.scopes).some(s => s.studentKey === studentKey && s.subject === subject); }
 export function percentage(correct: number | null, total: number | null) { return correct === null || total === null || total <= 0 ? null : Math.round(correct / total * 10000) / 100; }
 export function lessonFeedback(d: z.infer<typeof lessonDraftSchema>) { return [d.content, d.note, d.assignment ? `과제: ${d.assignment}` : ''].filter(Boolean).join('\n\n'); }
-export function continuation(previous: any) { return { content: previous.content || '', assignment: previous.assignment || '', note: '', nextPlan: previous.nextPlan || '', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', correct: null, total: null, wrong:null,examWrong:null,examCorrect: null, examTotal: null, round: null, selfStudy: '미확인', selfStudyRound: null, selfStudyStart: '', selfStudyEnd: '', attendanceNote: '', specialNote: '' }; }
+export function continuation(previous: any) { return { examScope:previous.examScope||'', content: previous.content || '', assignment: previous.assignment || '', note: '', nextPlan: previous.nextPlan || '', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', correct: null, total: null, wrong:null,examWrong:null,examCorrect: null, examTotal: null, round: null, selfStudy: '미확인', selfStudyRound: null, selfStudyStart: '', selfStudyEnd: '', attendanceNote: '', specialNote: '' }; }
 export const timetableSlotSchema = z.object({
     weekday: z.number().int().min(0).max(6),
     start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),

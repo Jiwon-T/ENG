@@ -1,9 +1,10 @@
-export const newGridLesson = (studentKey: string, subject: string, date: string, start: string, end: string) => ({ studentKey, subject, date, start, end, attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', content: '', assignment: '', note: '', nextPlan: '', wrong:null as number | null,examWrong:null as number | null,correct: null as number | null, total: null as number | null, examCorrect: null as number | null, examTotal: null as number | null, round: null as number | null, classSession: '있음', selfStudy: '미확인', selfStudyStart: '', selfStudyEnd: '', selfStudyRound: null as number | null, attendanceNote: '', specialNote: '' });
+export const newGridLesson = (studentKey: string, subject: string, date: string, start: string, end: string) => ({ studentKey, subject, date, start, end, attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', content: '', assignment: '', note: '', nextPlan: '', wrong:null as number | null,examWrong:null as number | null,correct: null as number | null, total: null as number | null, examCorrect: null as number | null, examTotal: null as number | null, round: null as number | null, classSession: '있음', selfStudy: '미확인', selfStudyStart: '', selfStudyEnd: '', selfStudyRound: null as number | null, attendanceNote: '', specialNote: '',examScope:'' });
 export function applyCommonLesson<T extends ReturnType<typeof newGridLesson>>(lesson: T, common: {
     content: string;
     assignment: string;
     nextPlan?: string;
     specialNote?: string;
+    examScope?:string;
 }) { return { ...lesson, ...common }; }
 export function gridScore(correct: number | null, total: number | null) { return correct === null || total === null || total <= 0 || correct < 0 || correct > total ? null : Math.round(correct / total * 10000) / 100; }
 export function gridCanPublish(row: {

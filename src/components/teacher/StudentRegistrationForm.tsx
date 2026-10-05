@@ -1,3 +1,5 @@
+import {emptyAdmission} from '../../lib/studentAdmission';
+import StudentAdmissionFields from './StudentAdmissionFields';
 import { useId, type FormEvent } from 'react';
 import { registrationGrades, registrationSubjects, type RegistrationInput, type RegistrationOptions } from '../../lib/studentRegistration';
 import OptionalMark from './OptionalMark';
@@ -40,6 +42,7 @@ export default function StudentRegistrationForm({value,onChange,onSubmit,disable
             </div>)}
             {!value.enrollments.length ? <p className="text-xs text-rose-600">수강 과목을 하나 이상 선택해 주세요.</p> : null}
         </fieldset>
+        <fieldset disabled={disabled||busy}><StudentAdmissionFields value={value.admission||emptyAdmission()} onChange={admission=>onChange({...value,admission})}/></fieldset>
         <button type="submit" className="primary-button mt-5" disabled={busy || (disabled && !retrying) || !value.enrollments.length}>{busy?'저장 중…':retrying?'저장 결과 확인·재시도':'등록 내용 저장'}</button>
     </form>;
 }

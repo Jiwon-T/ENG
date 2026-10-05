@@ -1,0 +1,14 @@
+import {z} from 'zod';
+import {admissionSubjects,emptyAdmission,type AdmissionInput} from '../../src/lib/studentAdmission.js';
+const date=z.string().refine(v=>{if(!v)return true;const d=new Date(v+'T00:00:00Z');return /^\d{4}-\d{2}-\d{2}$/.test(v)&&Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;},'날짜를 확인해 주세요.');
+const text=(max:number)=>z.string().trim().max(max).default('');
+export const admissionSchema=z.object({birthDate:date.default(''),address:text(500),referral:text(200),previousPeriod:text(200),previousAcademy:text(200),previousBooks:text(2000),previousContent:text(3000),
+ levels:z.array(z.object({subject:z.enum(admissionSubjects),schoolScore:z.number().min(0).max(100).nullable(),schoolGrade:text(30),mockScore:z.number().min(0).max(100).nullable(),mockGrade:text(30),diagnostic:text(1000)}).strict()).max(4).refine(rows=>new Set(rows.map(r=>r.subject)).size===rows.length,'과목 중복을 확인해 주세요.').default(emptyAdmission().levels),
+ goal:text(3000),availableDays:z.array(z.enum(['월','화','수','목','금','토','일'])).max(7).refine(days=>new Set(days).size===days.length).default([]),availableTimes:text(1000),notes:text(5000),consent:z.enum(['미확인','동의','미동의']).default('미확인'),consentDate:date.default(''),signerName:text(100),signedPaper:z.boolean().default(false),
+}).strict().default(emptyAdmission() as any).transform(value=>value as AdmissionInput);
+// Admission is backed up in the student page body during the original CREATE.
+// No second page creation or API call is needed, so response-loss recovery keeps the same marker.
+export function admissionBlocks(a:AdmissionInput){
+ const sections=[['입학·상담 정보',[a.birthDate&&`생년월일: ${a.birthDate}`,a.address&&`주소: ${a.address}`,a.referral&&`알게 된 경로: ${a.referral}`]],['이전 학습 이력',[a.previousPeriod&&`기간: ${a.previousPeriod}`,a.previousAcademy&&`학원명: ${a.previousAcademy}`,a.previousBooks&&`사용 교재: ${a.previousBooks}`,a.previousContent&&`학습 내용: ${a.previousContent}`]],['입학 당시 학습 수준',a.levels.filter(r=>r.schoolScore!==null||r.schoolGrade||r.mockScore!==null||r.mockGrade||r.diagnostic).map(r=>`${r.subject}\n내신 점수: ${r.schoolScore??'미입력'} / 등급: ${r.schoolGrade||'미입력'}\n모평 점수: ${r.mockScore??'미입력'} / 등급: ${r.mockGrade||'미입력'}\n진단평가: ${r.diagnostic||'미입력'}`)],['목표·가능 시간·참고 사항',[a.goal&&`목표: ${a.goal}`,a.availableDays.length&&`가능 요일: ${a.availableDays.join(', ')}`,a.availableTimes&&`가능 시간: ${a.availableTimes}`,a.notes&&`참고 사항: ${a.notes}`]],['원서 동의 확인',[`확인 상태: ${a.consent}`,a.consentDate&&`확인일: ${a.consentDate}`,a.signerName&&`서명자: ${a.signerName}`,`서명 원서 보관: ${a.signedPaper?'확인':'미확인'}`]]] as const;
+ return sections.flatMap(([title,values])=>{const body=values.filter(Boolean).join('\n\n');if(!body)return [];return [{object:'block',type:'heading_2',heading_2:{rich_text:[{type:'text',text:{content:title}}]}},...body.match(/[\s\S]{1,1800}/g)!.map(content=>({object:'block',type:'paragraph',paragraph:{rich_text:[{type:'text',text:{content}}]}}))];});
+}

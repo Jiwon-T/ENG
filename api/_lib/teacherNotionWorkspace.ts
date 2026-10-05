@@ -97,11 +97,17 @@ export async function readNotionWorkspace(db:any,actor:any,section:'classes'|'al
 }
 export function mergeNotionRows(local:any[],remote:any[]){
  local=local.map(r=>r.notionSyncStage==='syncing'&&Date.now()-(r.notionSyncStartedAt||0)>=900000?{...r,notionSyncStage:'failed',notionSyncError:'반영 처리가 중단되었습니다. 다시 반영해 주세요.'}:r);
- const linked=new Map(local.filter(r=>r.notionPageId).map(r=>[uuid(r.notionPageId),r]));
- const result=local.filter(r=>!r.notionPageId);
- for(const source of remote){const cached=linked.get(uuid(source.notionPageId));if(cached?.archived)continue;result.push((['pending','failed','syncing'].includes(cached?.notionSyncStage)||(cached?.data&&['draft','failed','publishing','processing','notion_saved'].includes(cached.stage)&&cached.revision>0))?cached:cached?{...cached,...source,id:cached.id,revision:cached.revision,ownerUid:cached.ownerUid,academyId:cached.academyId,notionSyncStage:'synced'}:source);}
- // Keep failed or pending records visible even after upstream deletion.
- for(const r of local)if(r.notionPageId&&!remote.some(s=>uuid(s.notionPageId)===uuid(r.notionPageId))&&!r.archived&&(['failed','pending','syncing'].includes(r.notionSyncStage)||r.data&&r.revision>0))result.push(r);
+ const normalize=(id:any)=>{try{return uuid(id);}catch{return '';}};
+ const markers=new Map<string,number>();for(const r of remote)if(normalize(r.appRecordId))markers.set(normalize(r.appRecordId),(markers.get(normalize(r.appRecordId))||0)+1);
+ const used=new Set<any>(),result:any[]=[];
+ for(const source of remote){
+  const page=normalize(source.notionPageId);
+  const cached=local.find(r=>page&&normalize(r.notionPageId)===page)||local.find(r=>!r.notionPageId&&markers.get(normalize(source.appRecordId))===1&&normalize(r.id)===normalize(source.appRecordId)&&r.ownerUid===source.ownerUid&&r.academyId===source.academyId&&r.data&&source.data&&normalize(r.data.studentKey)===normalize(source.data.studentKey)&&r.data.subject===source.data.subject);
+  if(cached)used.add(cached);if(cached?.archived)continue;
+  const pending=['pending','failed','syncing'].includes(cached?.notionSyncStage)||(cached?.data&&['draft','failed','publishing','processing','notion_saved','report_published_notion_pending','reflection_pending'].includes(cached.stage)&&cached.revision>0);
+  result.push(pending?{...cached,notionPageId:source.notionPageId,appRecordId:source.appRecordId}:cached?{...cached,...source,id:cached.id,revision:cached.revision,ownerUid:cached.ownerUid,academyId:cached.academyId,notionSyncStage:'synced'}:source);
+ }
+ for(const r of local)if(!used.has(r)&&!r.archived&&(!r.notionPageId||['failed','pending','syncing'].includes(r.notionSyncStage)||r.data&&r.revision>0))result.push(r);
  return result;
 }
 async function prepare(database:string,extra:any){const schema=await notion(`databases/${database}`);const properties:any={};for(const [name,type] of Object.entries({'앱 기록 ID':{rich_text:{}},...extra}))if(!schema.properties[name])properties[name]=type;if(Object.keys(properties).length)await notion(`databases/${database}`,'PATCH',{properties});}
@@ -224,8 +230,8 @@ export async function readSourceLessons(db:any,actor:any,force=false){
  const date=p['타임 슬롯']?.date||p['수업 날짜']?.date;const range=text(p['배정 시간']||p['수업']).match(/([0-2]?\d:[0-5]\d)\s*[~–-]\s*([0-2]?\d:[0-5]\d)/);const study=text(p['자습시간']).match(/([0-2]?\d:[0-5]\d)\s*[~–-]\s*([0-2]?\d:[0-5]\d)/);
  const total=p['단어']?.number??null,wrong=p['틀린 단어']?.number??null,examTotal=p['문항 수']?.number??null,examWrong=p['오답 수']?.number??null;
  const feedback=text(p['수업 내용']);const marker=[...feedback.matchAll(/(?:^|\n)[ \t]*과제[ \t]*[:：][ \t]*/g)].at(-1);
- const data={studentKey:key,subject,date:date?.start?.slice(0,10)||'',classSession:range?'있음':'없음',start:range?.[1]?.padStart(5,'0')||'',end:range?.[2]?.padStart(5,'0')||'',round:p['회차']?.number??null,selfStudy:p['자습']?.checkbox||study?'있음':'없음',selfStudyStart:study?.[1]?.padStart(5,'0')||'',selfStudyEnd:study?.[2]?.padStart(5,'0')||'',selfStudyRound:p['자습회차']?.number??p['자습 회차']?.number??null,attendance:choice(p['출석'])||'미확인',attitude:choice(p['태도'])||'미확인',homework:choice(p['숙제'])||'미확인',test:choice(p['테스트'])||'미확인',content:marker?feedback.slice(0,marker.index).trimEnd():feedback,assignment:extractAssignmentFromFeedback(feedback)||'',note:'',nextPlan:text(p['메모']),attendanceNote:text(p['앱 출결 메모']),specialNote:readLessonSpecialNote(p),correct:total!==null&&wrong!==null?total-wrong:null,total:wrong!==null?total:null,examCorrect:examTotal!==null&&examWrong!==null?examTotal-examWrong:null,examTotal:examWrong!==null?examTotal:null};
- out.push({id:uuid(page.id),data,ownerUid:row.ownerUid,academyId:source.academyId,notionPageId:uuid(page.id),sourceDatabaseId:source.lessonDatabaseId,notionEditedAt:page.last_edited_time,stage:choice(p['전송 완료'])==='완료'?'published':'draft',revision:0,source:'notion',updatedAt:Date.parse(page.last_edited_time)});
+ const data={studentKey:key,subject,date:date?.start?.slice(0,10)||'',classSession:range?'있음':'없음',start:range?.[1]?.padStart(5,'0')||'',end:range?.[2]?.padStart(5,'0')||'',round:p['회차']?.number??null,selfStudy:p['자습']?.checkbox||study?'있음':'없음',selfStudyStart:study?.[1]?.padStart(5,'0')||'',selfStudyEnd:study?.[2]?.padStart(5,'0')||'',selfStudyRound:p['자습회차']?.number??p['자습 회차']?.number??null,attendance:choice(p['출석'])||'미확인',attitude:choice(p['태도'])||'미확인',homework:choice(p['숙제'])||'미확인',test:choice(p['테스트'])||'미확인',content:marker?feedback.slice(0,marker.index).trimEnd():feedback,assignment:extractAssignmentFromFeedback(feedback)||'',note:'',nextPlan:text(p['메모']),examScope:text(p['시험범위']),attendanceNote:text(p['앱 출결 메모']),specialNote:readLessonSpecialNote(p),correct:total!==null&&wrong!==null?total-wrong:null,total:wrong!==null?total:null,examCorrect:examTotal!==null&&examWrong!==null?examTotal-examWrong:null,examTotal:examWrong!==null?examTotal:null};
+ out.push({id:uuid(page.id),appRecordId:text(p['앱 기록 ID']),data,ownerUid:row.ownerUid,academyId:source.academyId,notionPageId:uuid(page.id),sourceDatabaseId:source.lessonDatabaseId,notionEditedAt:page.last_edited_time,stage:choice(p['전송 완료'])==='완료'?'published':'draft',revision:0,source:'notion',updatedAt:Date.parse(page.last_edited_time)});
  }}return out;
 }
 export async function readSourceSchedules(db:any,actor:any,range?:ScheduleRange,force=false){

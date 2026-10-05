@@ -37,7 +37,7 @@ test('late autofill respects manual edits, changed students/subjects/dates and e
  const next=applyPreviousLesson(edited,seed,previous);assert.equal(next.content,'작성 중');assert.equal(next.assignment,'새 과제');assert.equal(next.round,3.5);
  for(const patch of [{studentKey:b},{subject:'수학'},{date:'2026-10-06'}]){const changed={...seed,...patch};assert.equal(applyPreviousLesson(changed,seed,previous),changed);}
  const absent={...seed,classSession:'없음',selfStudy:'없음'};assert.equal(applyPreviousLesson(absent,seed,previous).round,null);assert.equal(applyPreviousLesson(absent,seed,previous).selfStudyRound,null);
- assert.deepEqual(previousLessonValues({}),{round:null,selfStudyRound:null,content:'',assignment:''});
+ assert.deepEqual(previousLessonValues({}),{round:null,selfStudyRound:null,content:'',assignment:'',examScope:''});
 });
 test('previous selection uses lesson date before edit time and excludes archived, wrong-subject and future lessons',()=>{
  const records=[{data:{studentKey:a,subject:'영어',date:'2026-10-03',round:1},updatedAt:100},{data:{studentKey:a,subject:'영어',date:'2026-10-04',round:2},updatedAt:5},{data:{studentKey:a,subject:'영어',date:'2026-10-06',round:3}},{archived:true,data:{studentKey:a,subject:'영어',date:day,round:4}},{data:{studentKey:a,subject:'수학',date:day,round:5}}];

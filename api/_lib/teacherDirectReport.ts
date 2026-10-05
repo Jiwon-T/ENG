@@ -17,7 +17,9 @@ export async function writeDirectLessonReport(db:any,draftId:string,draft:any) {
  const compact=draft.notionPageId?db.collection('lessonReports').doc(id.replace(/-/g,'')):null;
  await db.runTransaction(async(t:any)=>{
   const current=await t.get(target),temp=id!==draftId?await t.get(temporary):null,legacy=compact&&compact.id!==target.id?await t.get(compact):null;
-  const previous=current.exists?current.data():temp?.exists?temp.data():legacy?.exists?legacy.data():{};
+  const records=[current,temp,legacy].filter(r=>r?.exists);
+  for(const r of records){const value=r.data();if(value.teacherDraftId&&value.teacherDraftId!==draftId||value.internalStudentId&&value.internalStudentId!==mapping!.internalStudentId)throw new Error('SOURCE_IDENTITY_LOCKED');if(value.teacherDraftId===draftId&&value.teacherAppRevision>draft.revision)throw new Error('DRAFT_CONFLICT');}
+  const previous=temp?.exists&&temp.data().teacherDraftId===draftId?temp.data():current.exists?current.data():legacy?.exists?legacy.data():{};
   if(previous.teacherDraftId===draftId && previous.teacherAppRevision>draft.revision)throw new Error('DRAFT_CONFLICT');
   if(previous.teacherDraftId&&previous.teacherDraftId!==draftId)throw new Error('SOURCE_IDENTITY_LOCKED');
   if(previous.internalStudentId&&previous.internalStudentId!==mapping!.internalStudentId)throw new Error('SOURCE_IDENTITY_LOCKED');

@@ -21,3 +21,18 @@ test('direct writes require no Notion/Make call for mapped students and migrate 
  const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{throw new Error('External service must not be called');};
  try{await writeDirectLessonReport(db,id,draft);assert.ok(store.has(`lessonReports/${id}`));await writeDirectLessonReport(db,id,{...draft,notionPageId:pageId});assert.equal(store.has(`lessonReports/${id}`),false);assert.ok(store.has(`lessonReports/${pageId}`));await writeDirectLessonReport(db,id,{...draft,notionPageId:pageId,revision:2,data:{...draft.data,assignment:'새 과제'}});assert.equal([...store.keys()].filter(k=>k.startsWith('lessonReports/')).length,1);assert.equal(store.get(`lessonReports/${pageId}`).derivedAssignment,'새 과제');assert.equal(store.get(`teacherLessonDrafts/${id}`).directReportRevision,2);}finally{globalThis.fetch=originalFetch;}
 });
+test('migration preserves temporary public identity even if a Notion mirror already exists',async()=>{
+ const {registrationFirestore}=await import('./helpers/registrationFirestore.js');const f=registrationFirestore();
+ f.rows.set('notionStudentMappings/'+hashStudentKey(studentKey),mapping);f.rows.set('teacherLessonDrafts/'+id,draft);
+ const temporary=directLessonReport(id,draft,mapping);f.rows.set('lessonReports/'+id,temporary);
+ f.rows.set('lessonReports/'+pageId,{...temporary,teacherDraftId:undefined,reportIdentity:pageId,notionPageId:pageId});
+ await writeDirectLessonReport(f.db,id,{...draft,notionPageId:pageId});
+ assert.equal(f.rows.has('lessonReports/'+id),false);assert.equal(f.rows.get('lessonReports/'+pageId).reportIdentity,id);
+ assert.equal(lessonReportId(f.rows.get('lessonReports/'+pageId)),lessonReportId(temporary as any));
+});
+test('conflicting temporary report is retained and never deleted during canonical migration',async()=>{
+ const {registrationFirestore}=await import('./helpers/registrationFirestore.js');const f=registrationFirestore();
+ f.rows.set('notionStudentMappings/'+hashStudentKey(studentKey),mapping);f.rows.set('teacherLessonDrafts/'+id,draft);
+ f.rows.set('lessonReports/'+id,{...directLessonReport(id,draft,mapping),internalStudentId:'other-student'});
+ await assert.rejects(writeDirectLessonReport(f.db,id,{...draft,notionPageId:pageId}),/SOURCE_IDENTITY_LOCKED/);assert.equal(f.rows.has('lessonReports/'+id),true);assert.equal(f.rows.has('lessonReports/'+pageId),false);
+});

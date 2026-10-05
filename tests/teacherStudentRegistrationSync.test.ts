@@ -218,3 +218,11 @@ test('수강 저장 부분 실패 중 담당 계정의 노션 연결이 바뀌�
     await assert.rejects(syncStudentRegistration(f.db,actor,f.saved.id,2,f.deps),/NOTION_REGISTRATION_ASSIGNMENT_REQUIRED/);
     assert.deepEqual(f.remote.counts(),{studentCreate:1,enrollmentCreate:1});
 });
+test('입학 상담 본문을 학생 최초 생성에 함께 저장하고 응답 유실에도 복제하지 않음',async()=>{
+ const {emptyAdmission}=await import('../src/lib/studentAdmission.js');const {db,rows,remote,saved,deps}=await fixture();
+ const admission=emptyAdmission();admission.address='테스트 주소';admission.goal='진단 후 목표';admission.levels[1].schoolScore=0;
+ rows.get('teacherStudentRegistrations/'+saved.id).data.admission=admission;
+ remote.setStudentFailure('commit-timeout');await assert.rejects(syncStudentRegistration(db,actor,saved.id,1,deps));
+ const creation=remote.requests.find(r=>r.path==='pages'&&r.body.parent.database_id===studentDB);assert.ok(creation.body.children.length);assert.match(JSON.stringify(creation.body.children),/테스트 주소/);assert.match(JSON.stringify(creation.body.children),/내신 점수: 0/);
+ await syncStudentRegistration(db,actor,saved.id,1,deps);assert.deepEqual(remote.counts(),{studentCreate:1,enrollmentCreate:1});assert.equal(remote.requests.some(r=>r.method==='PATCH'),false);
+});

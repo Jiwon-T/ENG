@@ -1,3 +1,4 @@
+import {admissionBlocks} from './studentAdmission.js';
 import {resolveRegistrationAssignments, REGISTRATION_CLASS_DATABASE, REGISTRATION_TEACHER_DATABASE} from './teacherRegistrationAssignments.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -75,7 +76,7 @@ export async function syncStudentRegistration(db:any,actor:RegistrationActor,id:
                 if(!remote) {
                     if(record[attempt])throw Error('NOTION_REGISTRATION_CREATE_UNCERTAIN');
                     await checkpoint({[attempt]:true});
-                    try { remote=await deps.notion('pages','POST',{parent:{database_id:database},properties}); }
+                    try { remote=await deps.notion('pages','POST',{parent:{database_id:database},properties,...(kind==='student'?{children:admissionBlocks(value.admission)}:{})}); }
                     catch(error) { if(definiteCreationFailure(error))await checkpoint({[attempt]:false});throw error; }
                 }
             }

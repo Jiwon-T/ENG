@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mergeNotionRows} from '../api/_lib/teacherNotionWorkspace.js';
+const app='64fcb977-751c-4aac-a5dd-bb5223d385e8',page='3f00d0f1-c79a-8194-b425-e426ab16a821',student='3e20d0f1-c79a-80a5-bed9-faef008b94c5';
+const local={id:app,ownerUid:'teacher',academyId:'main',revision:1,stage:'report_published_notion_pending',data:{studentKey:student,subject:'영어',content:'앱 입력'}};
+const remote={id:page,notionPageId:page,appRecordId:app,ownerUid:'teacher',academyId:'main',stage:'published',data:{studentKey:student,subject:'영어',content:'노션 값'}};
+test('response loss joins existing student lesson by immutable app marker while retaining pending input',()=>{const r=mergeNotionRows([local],[remote]);assert.equal(r.length,1);assert.equal(r[0].id,app);assert.equal(r[0].notionPageId,page);assert.equal(r[0].stage,'report_published_notion_pending');assert.equal(r[0].data.content,'앱 입력');});
+test('same student and time never merges without exact marker; wrong identity marker stays separate',()=>{for(const changed of [{appRecordId:''},{ownerUid:'other'},{academyId:'other'},{data:{...remote.data,subject:'수학'}},{data:{...remote.data,studentKey:page}}])assert.equal(mergeNotionRows([local],[{...remote,...changed}]).length,2);});
+test('duplicate upstream markers are not silently hidden',()=>{assert.equal(mergeNotionRows([local],[remote,{...remote,id:student,notionPageId:student}]).length,3);});
+test('canonical and compact page IDs match and pending local revision stays editable',()=>{const r=mergeNotionRows([{...local,notionPageId:page.replace(/-/g,'')}],[remote]);assert.equal(r.length,1);assert.equal(r[0].stage,local.stage);});

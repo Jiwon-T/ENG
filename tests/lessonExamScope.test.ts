@@ -1,0 +1,9 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {lessonExamScopeProperties} from '../api/_lib/lessonExamScope.js';
+import {lessonDraftSchema,continuation} from '../api/_lib/teacherWorkspacePolicy.js';
+import {newGridLesson} from '../src/lib/teacherLessonGrid.js';
+import {applyPreviousLesson,previousLessonValues} from '../src/lib/teacherTodayLessons.js';
+const schema={properties:{시험범위:{type:'rich_text'}}};
+test('exam scope is optional, writes independent rich text, and can be cleared',()=>{assert.deepEqual(lessonExamScopeProperties(schema,{},''),{});assert.deepEqual(lessonExamScopeProperties(schema,{examScope:''},''),{시험범위:{rich_text:[]}});const p=lessonExamScopeProperties(schema,{examScope:'교과서 3과\n모의고사 20~25번'},'교과서 3과\n모의고사 20~25번');assert.equal(p.시험범위.rich_text[0].text.content,'교과서 3과\n모의고사 20~25번');assert.deepEqual(lessonExamScopeProperties({properties:{}},{examScope:''},''),{});assert.throws(()=>lessonExamScopeProperties({properties:{}},{examScope:'내용'},'내용'),/NOTION_SCHEMA_SETUP_REQUIRED/);assert.throws(()=>lessonExamScopeProperties({properties:{시험범위:{type:'number'}}},{examScope:'내용'},'내용'),/NOTION_SCHEMA_SETUP_REQUIRED/);});
+test('exam scope survives continuation and late autofill preserves manual changes',()=>{const seed=newGridLesson('11111111-1111-4111-8111-111111111111','영어','2026-10-05','14:00','15:00');assert.equal(seed.examScope,'');assert.equal(continuation({examScope:'3과'}).examScope,'3과');assert.equal(previousLessonValues({examScope:'3과'}).examScope,'3과');assert.equal(applyPreviousLesson(seed,seed,{examScope:'3과'}).examScope,'3과');assert.equal(applyPreviousLesson({...seed,examScope:'수정'},seed,{examScope:'3과'}).examScope,'수정');assert.equal(applyPreviousLesson(seed,seed,{examScope:'3과'},['examScope']).examScope,'');assert.equal(lessonDraftSchema.parse(seed).examScope,'');});

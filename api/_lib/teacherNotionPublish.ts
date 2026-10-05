@@ -1,3 +1,5 @@
+import {lessonExamScopeProperties} from './lessonExamScope.js';
+import {assertLessonNotionFields} from './teacherLessonDiagnostics.js';
 import { notionPropertiesMatch, writeTeacherNotionRecord } from './teacherNotionWrite.js';
 import { projectSchedule, schedulePayloadFromPage } from './scheduleProjection.js';
 import { lessonSpecialNoteProperties } from './lessonSpecialNote.js';
@@ -23,8 +25,7 @@ export async function publishTeacherDraft(db: Firestore, draftId: string, draft:
     const source = await lessonSource(db, draft.ownerUid, draft.data.subject);
     const databaseId = source?.lessonDatabaseId || config?.lessonDatabaseId || LESSON_DATABASE;
     const schema = await notion(`databases/${databaseId}`);
-    if (!schema.properties?.['앱 기록 ID'] || !schema.properties?.['과목'])
-        throw new Error('NOTION_SCHEMA_SETUP_REQUIRED');
+    assertLessonNotionFields(schema,{'앱 기록 ID':{},'과목':{}});
     const d = assertLessonComplete(draft.data);
     const dateProperty = schema.properties['타임 슬롯'] ? '타임 슬롯' : '수업 날짜';
     const titleProperty = schema.properties['배정 시간'] ? '배정 시간' : '수업';
@@ -38,6 +39,7 @@ export async function publishTeacherDraft(db: Firestore, draftId: string, draft:
         '앱 기록 ID': rich(draftId), '과목': { select: { name: d.subject } },
         '학생': { relation: [{ id: d.studentKey }] },
         [dateProperty]: { date: { start: `${d.date}T${d.classSession === '없음' ? d.selfStudyStart : d.start}:00+09:00`, end: `${d.date}T${d.classSession === '없음' ? d.selfStudyEnd : d.end}:00+09:00` } },
+        ...lessonExamScopeProperties(schema,draft.data,d.examScope),
         '수업 내용': rich(lessonFeedback(d)), ...(schema.properties['메모'] ? { '메모': rich(d.nextPlan) } : {}),
         '출석': { select: d.attendance === '미확인' ? null : { name: d.attendance } },
         '태도': { status: { name: d.attitude } }, '숙제': { status: { name: d.homework } }, '테스트': { status: { name: d.test } },
@@ -47,9 +49,7 @@ export async function publishTeacherDraft(db: Firestore, draftId: string, draft:
         '범주': { select: { name: '수업' } }, '전송 완료': { select: { name: '완료' } },
     };
     // Validate the existing source layout before writing any record.
-    for (const key of Object.keys(properties))
-        if (!schema.properties?.[key])
-            throw new Error('NOTION_SCHEMA_SETUP_REQUIRED');
+    assertLessonNotionFields(schema,properties);
     const page = await writeTeacherNotionRecord(db, 'teacherLessonDrafts', draftId, draft, databaseId, properties, notion);
     return page.id;
 }
@@ -92,7 +92,7 @@ export async function previousNotionLesson(studentKey: string, options?: {
     const feedback = properties ? text(properties['수업 내용']) : '';
     const markers = [...feedback.matchAll(/(?:^|\n)[ \t]*과제[ \t]*[:：][ \t]*/g)];
     const last = markers.at(-1);
-    return { round: properties?.['회차']?.number ?? null, selfStudyRound: properties?.['자습회차']?.number ?? properties?.['자습 회차']?.number ?? null, content: last ? feedback.slice(0, last.index).trimEnd() : feedback, nextPlan: properties ? text(properties['메모']) : '', assignment: extractAssignmentFromFeedback(feedback) || '' };
+    return { round: properties?.['회차']?.number ?? null, selfStudyRound: properties?.['자습회차']?.number ?? properties?.['자습 회차']?.number ?? null, content: last ? feedback.slice(0, last.index).trimEnd() : feedback, nextPlan: properties ? text(properties['메모']) : '', examScope:properties?text(properties['시험범위']):'', assignment: extractAssignmentFromFeedback(feedback) || '' };
 }
 const SCHEDULE_DATABASE = '3430f1a4-9dde-4b4c-a5cf-0d11b913b38c';
 export async function publishTeacherSchedule(db: Firestore, id: string, record: any) {

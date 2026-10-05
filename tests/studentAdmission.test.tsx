@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {admissionSchema,admissionBlocks} from '../api/_lib/studentAdmission.js';
+import {emptyAdmission} from '../src/lib/studentAdmission.js';
+import StudentAdmissionFields from '../src/components/teacher/StudentAdmissionFields';
+import {parentLessonDTO,studentLessonDTO} from '../api/_lib/reportAudienceDTO.js';
+test('admission preserves zero score, unknown scores, optional fields and invalid dates',()=>{const v=emptyAdmission();v.levels[1].schoolScore=0;v.goal='목표';const parsed=admissionSchema.parse(v);assert.equal(parsed.levels[1].schoolScore,0);assert.equal(parsed.levels[0].schoolScore,null);assert.equal(admissionSchema.safeParse({...v,birthDate:'2026-02-30'}).success,false);assert.equal(admissionSchema.safeParse({...v,levels:[v.levels[0],v.levels[0]]}).success,false);assert.equal(admissionSchema.safeParse({...v,availableDays:['월','월']}).success,false);assert.equal(admissionSchema.safeParse({...v,levels:[{...v.levels[0],schoolScore:101}]}).success,false);assert.deepEqual(admissionSchema.parse(undefined),emptyAdmission());});
+test('readable Notion backup keeps zero and chunks long text within limits',()=>{const v=emptyAdmission();v.notes='참고'.repeat(2400);v.address='주소';v.levels[1].schoolScore=0;const blocks=admissionBlocks(admissionSchema.parse(v));const texts=blocks.map((b:any)=>b[b.type].rich_text[0].text.content);assert.ok(texts.every(t=>t.length<=1800));assert.ok(texts.join('\n').includes('내신 점수: 0'));assert.ok(texts.join('\n').includes('주소: 주소'));assert.ok(blocks.length<100);});
+test('admission UI has original form sections and explicitly separate consent record',()=>{const html=renderToStaticMarkup(<StudentAdmissionFields value={emptyAdmission()} onChange={()=>{}}/>);for(const label of ['생년월일','알게 된 경로','주소','이전 학습 기간','이전 학원명','사용 교재','현재 수준','국어','영어','수학','과학','학습 목표','가능한 요일','가능 시간','참고 사항','동의 상태','서명자 이름'])assert.ok(html.includes(label),label);assert.ok(html.includes('원본 서명을 대신하지 않습니다'));assert.ok(html.includes('type="date"'));assert.ok(!html.includes('<details open'));});
+test('admission details never escape through parent or student lesson DTO',()=>{const r:any={notionPageId:'lesson',lessonDateStart:'2026-10-05',admission:{address:'private address',notes:'private notes'},vocabularyScore:null,schoolExamScore:null};for(const dto of [parentLessonDTO(r),studentLessonDTO(r)])assert.ok(!JSON.stringify(dto).includes('private'));});

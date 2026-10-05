@@ -1,3 +1,4 @@
+import {admissionSchema} from './studentAdmission.js';
 import { z } from 'zod';
 import { createHash, randomUUID } from 'node:crypto';
 import { subjects } from './teacherWorkspacePolicy.js';
@@ -9,6 +10,7 @@ const calendarDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
 }, '날짜를 확인해 주세요.');
 const phone = z.string().trim().max(30).transform(value => value.replace(/[\s()-]/g, '')).refine(value => value === '' || /^0\d{8,10}$/.test(value), '연락처를 확인해 주세요.');
 export const studentRegistrationSchema = z.object({
+    admission:admissionSchema,
     name: z.string().trim().min(1).max(60),
     school: z.string().trim().max(80).default(''),
     grade: z.enum(['', ...registrationGrades]).default(''),

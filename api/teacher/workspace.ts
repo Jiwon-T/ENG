@@ -1,3 +1,4 @@
+import {lessonSyncWarning} from '../_lib/teacherLessonDiagnostics.js';
 import {readTeacherMessages,prepareTeacherMessage,sendTeacherMessage} from '../_lib/teacherMessages.js';
 import {readStudentEnrollment,saveStudentEnrollment,discardStudentEnrollment} from '../_lib/teacherStudentEnrollment.js';
 import {readStudentProfile,saveStudentProfile,discardStudentProfile} from '../_lib/teacherStudentProfile.js';
@@ -487,6 +488,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             }
         }
         if (body.action === 'save-draft') {
+            failureStage='lesson-draft-validation';
             const value = lessonDraftSchema.parse(body.data);
             if (!canTeach(actor, value.studentKey, value.subject))
                 throw new Error('FORBIDDEN');
@@ -531,7 +533,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 if(saved?.directReportRevision===draft.revision) {
                     await ref.update({stage:'report_published_notion_pending',failureCode:error.message});
                     const failure=workspaceError(error,failureStage);
-                    return sendJson(res,200,{ok:true,stage:'report_published_notion_pending',warning:'학생·학부모 리포트에는 반영됐습니다. 노션 복사만 완료되지 않았습니다. 반영을 다시 누르면 재시도합니다.',diagnosticId:failure.body.diagnosticId});
+                    console.warn('TEACHER_LESSON_NOTION_PENDING',{error:failure.body.error,diagnosticId:failure.body.diagnosticId,failureStage,draftId:id,revision:draft.revision});
+                    return sendJson(res,200,{ok:true,stage:'report_published_notion_pending',failureCode:failure.body.error,warning:lessonSyncWarning(failure),diagnosticId:failure.body.diagnosticId});
                 }
                 await ref.update({ stage: 'failed', failureCode: error.message });
                 throw error;
@@ -558,7 +561,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
     }
     catch (error: any) {
         const result = workspaceError(error, failureStage);
-        if (result.status >= 500) console.warn('TEACHER_WORKSPACE_FAILED', {error: result.body.error, diagnosticId: result.body.diagnosticId, failureStage});
+        if (result.status >= 500 || failureStage.startsWith('lesson-')) console.warn('TEACHER_WORKSPACE_FAILED', {error: result.body.error, diagnosticId: result.body.diagnosticId, failureStage});
         return sendJson(res, result.status, result.body);
     } finally { if(mutation)invalidateTeacherMutation(mutation); }
 }

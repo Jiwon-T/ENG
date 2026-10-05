@@ -42,6 +42,7 @@ test('lesson publish supports configured math directly and reconciles lost creat
         assert.equal(await publishTeacherDraft(f.db as any, id, record), pageId);
         assert.equal(attempts, 1);
         assert.equal(page.properties['과목'].select.name, '수학');
+        assert.equal(page.properties['메모'],undefined,'removed optional Notion memo must not block lesson publication');
         assert.equal(page.properties['특이사항'].rich_text[0].text.content, '질문 적극적');
         assert.ok(page.properties['수업 내용'].rich_text[0].text.content.includes('함수'));
         assert.equal(f.rows.get('teacherLessonDrafts/' + id).notionWrite.done, true);
