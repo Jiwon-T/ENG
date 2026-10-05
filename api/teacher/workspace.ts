@@ -1,3 +1,4 @@
+import {readLessonConflict,resolveLessonConflict} from '../_lib/teacherLessonConflict.js';
 import {archiveTeacherLesson} from '../_lib/teacherLessonArchive.js';
 import {readIntegrityAudit} from '../_lib/teacherIntegrityAudit.js';
 import {lessonSyncWarning} from '../_lib/teacherLessonDiagnostics.js';
@@ -62,6 +63,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const params = new URL(req.url || '', 'http://localhost').searchParams;
             const action = params.get('action') || 'bootstrap';
             const force = params.get('force') === '1';
+            if(action==='lesson-conflict'){failureStage='lesson-conflict-review';return sendJson(res,200,{ok:true,...await readLessonConflict(db,actor,params.get('id'))});}
             if(action==='integrity-audit'){failureStage='integrity-audit';return sendJson(res,200,{ok:true,...await readIntegrityAudit(db,actor)});}
             if(action==='messages'){failureStage='message-read';return sendJson(res,200,{ok:true,...await readTeacherMessages(db,actor,params.get('studentKey'),params.get('subject'))});}
             if(action==='student-enrollment'){failureStage='student-enrollment-read';return sendJson(res,200,{ok:true,record:await readStudentEnrollment(db,actor,params.get('studentKey'))});}
@@ -507,6 +509,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             });
             return sendJson(res, 200, { ok: true, id });
         }
+        if(body.action==='resolve-lesson-conflict'){failureStage='lesson-conflict-resolution';const {action,...input}=body;return sendJson(res,200,{ok:true,...await resolveLessonConflict(db,actor,input)});}
         if(body.action==='archive-lesson'){failureStage='lesson-archive';return sendJson(res,200,{ok:true,...await archiveTeacherLesson(db,actor,body.id,body.revision)});}
         if (body.action === 'publish') {
             failureStage='lesson-reflection';
