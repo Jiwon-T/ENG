@@ -182,10 +182,16 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
    <LessonTests value={lesson} onChange={setField}/>
    {[['content', '수업 내용'], ['specialNote', '특이 사항'], ['assignment', '과제']].map(([key, label]) => <label key={key} className="block mt-3">{label}<OptionalMark/><textarea rows={key === 'content' ? 4 : 2} value={lesson[key] || ''} onChange={e => setField(key, e.target.value)}/></label>)}
    {(lesson.note || lesson.nextPlan) && <details className="mt-3 text-xs text-slate-500"><summary>기존 기록 메모</summary>{lesson.note && <p className="whitespace-pre-wrap mt-2">기존 개인 피드백: {lesson.note}</p>}{lesson.nextPlan && <p className="whitespace-pre-wrap mt-2">기존 다음 수업 메모: {lesson.nextPlan}</p>}</details>}
-   <div className="flex flex-wrap gap-2 mt-4"><button disabled={busy||autoLoading} className="primary-button" onClick={() => act(async () => { const result = await request('save-draft', { id: draftId, revision, data: lesson }); setDraftId(result.id); const savedDraft=result.record;await refresh(); setRevision(savedDraft?.revision); if(savedDraft) setLesson(compactLessonInput(savedDraft.data)); setMessage('초안을 저장했습니다.'); })}>저장</button><button disabled={busy || !draftId || ['publishing', 'processing', 'published'].includes(currentDraft?.stage) || JSON.stringify(currentDraft?.data) !== JSON.stringify(lesson)} className="small-button" onClick={() => act(async () => {
-                    if (!window.confirm('저장된 내용을 Notion과 리포트에 반영할까요?'))
+   <div className="flex flex-wrap gap-2 mt-4"><button disabled={busy||autoLoading} className="primary-button" onClick={() => act(async () => { const result = await request('save-draft', { id: draftId, revision, data: lesson }); setDraftId(result.id); const savedDraft=result.record;await refresh(); setRevision(savedDraft?.revision); if(savedDraft) setLesson(compactLessonInput(savedDraft.data)); setMessage('초안을 저장했습니다.'); })}>저장</button><button disabled={busy || autoLoading || !lesson.studentKey || ['publishing', 'processing', 'notion_saved'].includes(currentDraft?.stage) || (currentDraft?.stage==='published' && JSON.stringify(currentDraft?.data)===JSON.stringify(lesson))} className="small-button" onClick={() => act(async () => {
+                    if (!window.confirm('현재 입력 내용을 저장하고 Notion과 리포트에 반영할까요?'))
                         return;
-                    await request('publish', { id: draftId });
+                    let publishId=draftId;
+                    if(!draftId || JSON.stringify(currentDraft?.data)!==JSON.stringify(lesson)) {
+                        const saved=await request('save-draft',{id:draftId,revision,data:lesson});
+                        publishId=saved.id;setDraftId(saved.id);setRevision(saved.record?.revision);
+                        if(saved.record)setLesson(compactLessonInput(saved.record.data));
+                    }
+                    await request('publish', { id: publishId });
                     await refresh();
                     setMessage('반영을 요청했습니다. 완료 여부는 새로고침으로 확인해 주세요.');
                 })}>반영</button><button disabled={busy} className="small-button" onClick={() => act(refresh)}>새로고침</button><span className="self-center text-xs text-slate-500">{stageLabel[currentDraft?.stage] || '작성 중'}</span></div>

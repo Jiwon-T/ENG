@@ -43,3 +43,11 @@ test('schedule input requires recipients and rejects invalid dates and overnight
  assert.equal(teacherScheduleSchema.safeParse(value).success,true);
  for(const change of [{students:[]},{date:'2026-02-30'},{end:'13:00'}])assert.equal(teacherScheduleSchema.safeParse({...value,...change}).success,false);
 });
+
+test('fractional wrong answers save with normal afternoon lesson times',()=>{
+ const parsed=lessonDraftSchema.parse({...lesson,date:'2026-10-05',start:'12:40',end:'15:20',round:3,correct:null,total:null,examWrong:16.5,examTotal:60,examCorrect:43.5,selfStudy:'없음'});
+ assert.equal(parsed.examCorrect,43.5);
+ assert.equal(percentage(parsed.examCorrect,parsed.examTotal),72.5);
+ assert.equal(lessonDraftSchema.safeParse({...lesson,wrong:3.5,correct:26.5}).success,true);
+ for(const wrong of [-0.5,60.5,Infinity,NaN])assert.equal(lessonDraftSchema.safeParse({...lesson,examWrong:wrong,examTotal:60,examCorrect:43.5}).success,false);
+});

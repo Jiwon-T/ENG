@@ -9,9 +9,9 @@ export const lessonDraftSchema = z.object({
     homework: z.enum(['없는 날', '미확인', '미제출', '최하', '하', '중하', '중', '중상', '상', '최상']),
     test: z.enum(['없는 날', '미확인', '미제출', '최하', '하', '중하', '중', '중상', '상', '최상']),
     content: z.string().max(15000), assignment: z.string().max(5000), note: z.string().max(5000), nextPlan: z.string().max(5000),
-    correct: z.number().int().nonnegative().nullable(), total: z.number().int().positive().nullable(),
-    examCorrect: z.number().int().nonnegative().nullable().default(null), examTotal: z.number().int().positive().nullable().default(null),
-    wrong:z.number().int().nonnegative().nullable().optional(), examWrong:z.number().int().nonnegative().nullable().optional(),
+    correct: z.number().nonnegative().nullable(), total: z.number().positive().nullable(),
+    examCorrect: z.number().nonnegative().nullable().default(null), examTotal: z.number().positive().nullable().default(null),
+    wrong:z.number().nonnegative().nullable().optional(), examWrong:z.number().nonnegative().nullable().optional(),
     round: z.number().nonnegative().nullable(),
     selfStudy: z.enum(['미확인', '없음', '있음']).default('미확인'),
     selfStudyStart: z.string().default(''), selfStudyEnd: z.string().default(''),
@@ -25,7 +25,7 @@ export const lessonDraftSchema = z.object({
     if ((d.correct === null) !== (d.total === null) || (d.correct !== null && d.correct > d.total!))
         ctx.addIssue({ code: 'custom', message: '오답 수와 문항 수를 확인해 주세요.' });
     if ((d.examCorrect === null) !== (d.examTotal === null) || (d.examCorrect !== null && d.examCorrect > d.examTotal!))
-        ctx.addIssue({ code: 'custom', message: '내신 대비 테스트의 정답 수와 문항 수를 확인해 주세요.' });
+        ctx.addIssue({ code: 'custom', message: '내신 대비 테스트의 오답 수와 문항 수를 확인해 주세요.' });
     const date = new Date(`${d.date}T00:00:00Z`);
     if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== d.date || (d.classSession === '있음' && (!/^([01]\d|2[0-3]):[0-5]\d$/.test(d.start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(d.end))))
         ctx.addIssue({ code: 'custom', message: '날짜와 시간을 확인해 주세요.' });

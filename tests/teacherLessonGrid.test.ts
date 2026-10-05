@@ -38,3 +38,17 @@ test('any registered scoped subject means current student; stopped and waiting s
  assert.equal(isCurrentStudent({subjects:[{status:'중단'},{status:'대기'}],enrollmentStatus:'등록'}),false);
  assert.equal(isCurrentStudent({enrollmentStatus:'등록'}),true);assert.equal(isCurrentStudent({}),false);
 });
+
+test('direct publish saves new and edited rows first, and does not publish failed saves',async()=>{
+ const rows=['new','edited','failure'].map(id=>({id,stage:id==='edited'?'draft':'new',revision:id==='edited'?2:undefined,data:lesson(),savedData:id==='edited'?{...lesson(),content:'old'}:undefined}));
+ const calls:string[]=[],updates:any[]=[];
+ const result=await processLessonRows(rows,'publish',async(action,body)=>{calls.push(`${body.id}:${action}`);if(body.id==='failure')throw new Error('save failed');return action==='save-draft'?{record:{revision:3,data:body.data}}:{stage:'processing'};},(id,patch)=>updates.push({id,...patch}));
+ assert.deepEqual(calls,['new:save-draft','new:publish','edited:save-draft','edited:publish','failure:save-draft']);
+ assert.deepEqual(result,{succeeded:2,failed:1});assert.equal(updates[0].revision,3);
+});
+test('publish failure preserves saved revision for retry; pending rows make no requests',async()=>{
+ const updates:any[]=[];
+ await processLessonRows([{id:'a',stage:'new',data:lesson()}],'publish',async action=>{if(action==='publish')throw new Error('publish failed');return {record:{revision:1,data:lesson()}};},(_,patch)=>updates.push(patch));
+ assert.equal(updates[0].stage,'draft');assert.equal(updates[0].revision,1);assert.equal(updates[1].error,'publish failed');
+ const result=await processLessonRows([{id:'a',stage:'processing',data:lesson()}],'publish',async()=>{throw new Error('should not call');},()=>{});assert.equal(result.failed,1);
+});

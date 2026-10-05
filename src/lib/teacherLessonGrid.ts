@@ -12,6 +12,9 @@ export function gridCanPublish(row: {
     data: any;
     savedData?: any;
 }) { return Boolean(row.revision) && !['published', 'publishing', 'processing', 'notion_saved'].includes(row.stage || '') && JSON.stringify(row.data) === JSON.stringify(row.savedData); }
+export function gridCanSubmit(row: {stage?:string;data:any;savedData?:any;loading?:boolean}) {
+ return !row.loading && !['publishing','processing','notion_saved'].includes(row.stage||'') && (row.stage!=='published'||JSON.stringify(row.data)!==JSON.stringify(row.savedData));
+}
 export function isCurrentStudent(student: {
     subjects?: {
         status: string;
@@ -28,13 +31,12 @@ export async function processLessonRows<R extends {
     let succeeded = 0, failed = 0;
     for (const row of rows) {
         try {
-            if (mode === 'save') {
-                await request('save-draft', { id: row.id, revision: row.revision, data: row.data });
-                update(row.id, { revision: (row.revision || 0) + 1, stage: 'draft', savedData: structuredClone(row.data), error: undefined });
+            if (mode === 'publish' && !gridCanSubmit(row)) throw new Error('반영 중이거나 이미 반영된 기록입니다.');
+            if (mode === 'save' || !gridCanPublish(row)) {
+                const saved = await request('save-draft', { id: row.id, revision: row.revision, data: row.data });
+                update(row.id, { revision: saved.record?.revision ?? (row.revision || 0) + 1, stage: 'draft', savedData: structuredClone(saved.record?.data ?? row.data), data:saved.record?.data ?? row.data, error: undefined });
             }
-            else {
-                if (!gridCanPublish(row))
-                    throw new Error('수정한 내용을 먼저 저장해 주세요.');
+            if (mode === 'publish') {
                 const result = await request('publish', { id: row.id });
                 update(row.id, { stage: result.stage || 'processing', error: undefined });
             }

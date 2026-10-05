@@ -2586,10 +2586,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
         )}
       </AnimatePresence>
 
+      {category === 'exam' && <div hidden={Boolean(selectedWordbook)}><ExamMaterialCatalog books={examBooks} onOpen={wb=>{setSelectedWordbook(wb);setCurrentChunk(0);setCurrentCardIndex(0);}} /></div>}
       <AnimatePresence mode="wait">
-        {!selectedWordbook ? Boolean(category === 'exam') ? (
-          <ExamMaterialCatalog books={examBooks} onOpen={wb=>{setSelectedWordbook(wb);setCurrentChunk(0);setCurrentCardIndex(0);}} />
-        ) : (
+        {!selectedWordbook ? Boolean(category === 'exam') ? null : (
           <motion.div
             key="list"
             initial={{ opacity: 0, y: 20 }}
