@@ -1,4 +1,4 @@
-import {emptyAdmission,type AdmissionInput} from './studentAdmission';
+import {emptyAdmission,type AdmissionInput} from './studentAdmission.js';
 // Shared types only: browser code must never import the server module or node:crypto.
 export const registrationSubjects = ['영어', '수학', '국어', '과학', '한국사'] as const;
 export const registrationGrades = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3'] as const;

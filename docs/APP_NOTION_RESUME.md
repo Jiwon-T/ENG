@@ -51,3 +51,6 @@ HOTFIX_LESSON_SYNC_2.md에 이현준 앱 ID 기반 중복 표시 수정, 선택 
 
 ## 체크포인트 9
 관리자 설정에 읽기 전용 연결 정합성 점검을 추가했습니다. 세부 범위·제약과 배포 후 확인은 CHECKPOINT_9.md에 있습니다. 최근 일지 중복·시험범위·입학 상담 핫픽스를 포함합니다. 문자 준비·발송 트랜잭션의 소속 검사를 보강하고 본문 매개변수의 수신번호 덮어쓰기를 차단했습니다. 운영 데이터 변경·배포·실제 발송·Make 중단은 수행하지 않았습니다. 다음 작업은 사용자 배포 후 실제 연결 점검 결과와 Bati 계약 확인입니다.
+
+## 체크포인트 9 긴급 수정 1
+배포된 선생님방 API의 ERR_MODULE_NOT_FOUND 원인을 수정했습니다. studentRegistration.ts → studentAdmission.js 공통 모듈 경로에 .js 확장자를 추가했습니다. 앞으로 npm run check:server-imports로 Node ESM import 검증도 실행합니다. 자세한 증거와 범위는 CHECKPOINT_9_HOTFIX_1.md에 있습니다.
