@@ -218,3 +218,5 @@
 .lesson-review-detail > div { padding-bottom: .7rem; border-bottom: 1px solid #fce7ef; }
 .lesson-review-detail dt { font-size: .8rem; font-weight: 700; color: #64748b; margin-bottom: .25rem; }
 .lesson-review-detail dd { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.teacher-workspace .lesson-export-help { font-size: 11px; line-height: 1.6; }

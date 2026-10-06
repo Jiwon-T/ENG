@@ -33,3 +33,8 @@ test('known permission-denied internal error recovers, normal Admin success need
  let calls=0;await verifyFirebaseSession({verifyIdToken:async()=>{if(++calls===1)throw {code:'auth/internal-error',message:'PERMISSION_DENIED: firebaseauth.users.get'};return decoded;}} as any,'token',async()=>{});assert.equal(calls,2);
  assert.equal((await verifyFirebaseSession({verifyIdToken:async()=>decoded} as any,'token',async()=>assert.fail('no REST'))).uid,'user');
 });
+test('simultaneous authentication is deduplicated without caching completed account checks',async()=>{
+ let complete:any,count=0;const auth:any={verifyIdToken:()=>{count++;return new Promise(resolve=>complete=resolve);}};
+ const first=verifyFirebaseSession(auth,'same'),second=verifyFirebaseSession(auth,'same');assert.equal(count,1);complete(decoded);await Promise.all([first,second]);
+ const next=verifyFirebaseSession(auth,'same');assert.equal(count,2);complete(decoded);await next;
+});

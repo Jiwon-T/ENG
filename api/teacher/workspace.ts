@@ -118,8 +118,9 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                     if(!validLessonDay(params.get('day')||''))throw new Error('INVALID_INPUT');
                     if(!actor.admin&&!actor.principal&&exportTeacher!==actor.uid)throw new Error('FORBIDDEN');
                 }
-                const records=await teacherReadCache.get(teacherReadKey(actor,'academy-local'),async()=>{const saved=actor.admin ? await db.collection('teacherLessonDrafts').get() : actor.principal ? await db.collection('teacherLessonDrafts').where('academyId','==',actor.academyId).get() : await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).get();return saved.docs.map(d=>({id:d.id,...d.data()}));},force);
-                const rows=mergeNotionRows(records,action==='academy-lessons-fast'?[]:await teacherReadCache.get(teacherReadKey(actor,'academy-source'),()=>readSourceLessons(db,actor,force),force)).filter((r:any)=>canViewAcademyRecord(actor,r));
+                const recordsPromise=teacherReadCache.get(teacherReadKey(actor,'academy-local'),async()=>{const saved=actor.admin ? await db.collection('teacherLessonDrafts').get() : actor.principal ? await db.collection('teacherLessonDrafts').where('academyId','==',actor.academyId).get() : await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).get();return saved.docs.map(d=>({id:d.id,...d.data()}));},force);
+                const [records,source]=await Promise.all([recordsPromise,action==='academy-lessons-fast'?Promise.resolve([]):teacherReadCache.get(teacherReadKey(actor,'academy-source'),()=>readSourceLessons(db,actor,force),force)]);
+                const rows=mergeNotionRows(records,source).filter((r:any)=>canViewAcademyRecord(actor,r));
                 const names=new Map<string,string>();
                 await Promise.all([...new Set(rows.map((r:any)=>r.ownerUid))].map(async uid=>{if(!uid)return;const name=await teacherReadCache.get(teacherReadKey(actor,'staff:'+uid),async()=>{const user=(await db.collection('users').doc(uid as string).get()).data();return user?.alias||user?.name||'선생님';},force);names.set(uid as string,name);}));
                 const named=rows.map((r:any)=>({...r,teacherName:names.get(r.ownerUid)||'선생님'})).sort(compareLessonReview);
@@ -625,5 +626,6 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         return sendJson(res, result.status, result.body);
     } finally { if(mutation)invalidateTeacherMutation(mutation); }
 }
+
 
 

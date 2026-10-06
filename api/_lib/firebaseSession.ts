@@ -27,7 +27,7 @@ export async function lookupFirebaseSession(token:string,decoded:DecodedIdToken,
  if(decoded.auth_time<validSince)throw authFailure('auth/id-token-revoked');
 }
 /** Preserve revoked/disabled checks without requiring a new Admin Auth IAM role. */
-export async function verifyFirebaseSession(auth:Pick<Auth,'verifyIdToken'>,token:string,lookup=lookupFirebaseSession){
+async function checkFirebaseSession(auth:Pick<Auth,'verifyIdToken'>,token:string,lookup=lookupFirebaseSession){
  try{return await auth.verifyIdToken(token,true);}catch(error){
   if(!accountLookupPermissionFailure(error))throw error;
  }
@@ -35,4 +35,14 @@ export async function verifyFirebaseSession(auth:Pick<Auth,'verifyIdToken'>,toke
  const decoded=await auth.verifyIdToken(token,false);
  await lookup(token,decoded);
  return decoded;
+}
+// Only simultaneous requests share verification; account state is never TTL cached.
+const pendingSessions=new WeakMap<object,Map<string,Promise<DecodedIdToken>>>();
+export function verifyFirebaseSession(auth:Pick<Auth,'verifyIdToken'>,token:string,lookup=lookupFirebaseSession){
+ if(lookup!==lookupFirebaseSession)return checkFirebaseSession(auth,token,lookup);
+ let pending=pendingSessions.get(auth);if(!pending){pending=new Map();pendingSessions.set(auth,pending);}
+ const existing=pending.get(token);if(existing)return existing;
+ const request=checkFirebaseSession(auth,token,lookup);pending.set(token,request);
+ const cleanup=()=>{if(pending!.get(token)===request)pending!.delete(token);};request.then(cleanup,cleanup);
+ return request;
 }

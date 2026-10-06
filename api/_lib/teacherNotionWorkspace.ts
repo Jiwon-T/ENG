@@ -1,4 +1,6 @@
 import { readLessonSpecialNote } from './lessonSpecialNote.js';
+import {notionReadFilter} from './notionReadFilter.js';
+import {teacherReadCache,teacherReadKey} from './teacherReadCache.js';
 import {readMirroredPages,workspaceSourceFilter} from './teacherNotionMirror.js';
 import {scheduleRange,type ScheduleRange} from './teacherScheduleRange.js';
 import {addCalendarDays} from '../../src/lib/teacherWeekCalendar.js';
@@ -43,11 +45,13 @@ export async function sourcesFor(db:any,actor:any){
 }
 export async function rowSource(page:any,source:any,actor:any) {
  if(!source.shared)return source;
- const legacy=source.legacyLesson && !text(page.properties['학원']) && (!choice(page.properties['과목'])||choice(page.properties['과목'])==='영어');
+ const legacyLesson=source.legacyLesson && source.academyId==='main' && !text(page.properties['학원']) && (!choice(page.properties['과목'])||choice(page.properties['과목'])==='영어');
+ const legacySchedule=source.legacySchedule && source.academyId==='main' && !text(page.properties['학원']) && subjects.includes(choice(page.properties['과목']) as any);
+ const legacy=legacyLesson||legacySchedule;
  const academy=text(page.properties['학원'])||(legacy?'main':'');if(academy!==source.academyId)return null;
  const subject=choice(page.properties['과목'])||(legacy?'영어':'');if(!subjects.includes(subject as any))return null;
  let assigned=await ids(page,'담당 선생님');const authors=await ids(page,'작성자 선생님');
- if(legacy&&!assigned.length)assigned=['3ec0d0f1-c79a-8108-b714-c1d6fc390ba2'];
+ if(legacyLesson&&!assigned.length)assigned=['3ec0d0f1-c79a-8108-b714-c1d6fc390ba2'];
  const profiles=new Map<string,string>((source.profiles||[]).filter((p:any)=>p.notionTeacherPageId).map((p:any)=>[uuid(p.notionTeacherPageId),p.uid]));
  const ownerUid=sharedRecordOwner(authors,assigned,profiles);
  const assignedUids=assigned.map((id:string)=>profiles.get(id)).filter(Boolean);
@@ -70,6 +74,10 @@ export async function enableSharedWorkspace(db:any,actor:any) {
  return {mode:'shared',academyId};
 }
 async function mirroredPages(db:any,actor:any,database:string,filter?:any,force=false) {
+ const schema=filter?await teacherReadCache.get(teacherReadKey(actor,'schema:'+database),()=>notion(`databases/${database}`),force):null;
+ const adapted=schema?notionReadFilter(filter,schema.properties||{}):true;
+ if(adapted===false)return [];
+ filter=adapted===true?undefined:adapted;
  const properties=new Set<string>();
  const visit=(f:any)=>{if(!f)return;if(f.relation)properties.add(f.property);for(const child of [...(f.and||[]),...(f.or||[])])visit(child);};visit(filter);
  return readMirroredPages(db,actor,database,filter,async query=>{
@@ -214,7 +222,9 @@ export async function readSourceLessons(db:any,actor:any,force=false){
  const out:any[]=[];const sourceList=await sourcesFor(db,actor);
  for(const source of sourceList){if(!source.lessonDatabaseId)continue;
  const scoped=workspaceSourceFilter(source,actor);
- const filter=source.shared&&source.lessonDatabaseId===DEFAULT_SOURCE.lessonDatabaseId?{or:[scoped,{and:[{property:'학원',rich_text:{is_empty:true}},{or:[{property:'과목',select:{equals:'영어'}},{property:'과목',select:{is_empty:true}}]}]}]}:scoped;
+ const ownership=source.shared&&source.lessonDatabaseId===DEFAULT_SOURCE.lessonDatabaseId?{or:[scoped,{and:[{property:'학원',rich_text:{is_empty:true}},{or:[{property:'과목',select:{equals:'영어'}},{property:'과목',select:{is_empty:true}}]}]}]}:scoped;
+ // Unlinked historical rows were always excluded below; do not download them.
+ const filter={and:[...(ownership?[ownership]:[]),{property:'학생',relation:{is_not_empty:true}}]};
  const pages=await mirroredPages(db,actor,source.lessonDatabaseId,filter,force);
  for(const page of pages){const row=await rowSource(page,{...source,legacyLesson:source.lessonDatabaseId===DEFAULT_SOURCE.lessonDatabaseId},actor);if(!row)continue;const p=page.properties,studentIds=await ids(page,'학생');if(studentIds.length!==1)continue;const key=studentIds[0];const subject=choice(p['과목'])||source.subject;
  if(!key||(!source.shared&&subject!==source.subject)||(!actor.admin&&!actor.scopes.some((s:any)=>s.studentKey===key&&s.subject===subject)))continue;
@@ -229,11 +239,11 @@ export async function readSourceLessons(db:any,actor:any,force=false){
 export async function readSourceSchedules(db:any,actor:any,range?:ScheduleRange,force=false){
  const database='3430f1a4-9dde-4b4c-a5cf-0d11b913b38c';
  const list=await sourcesFor(db,actor);if(!list.length)return [];
- const scopes=list.map(source=>workspaceSourceFilter(source,actor));
+ const scopes=list.map(source=>source.shared&&source.academyId==='main'?{or:[workspaceSourceFilter(source,actor),{property:'학원',rich_text:{is_empty:true}}]}:workspaceSourceFilter(source,actor));
  const filters=[...(scopes.every(Boolean)?[{or:scopes}]:[]),...(range?[{property:'날짜 및 시간',date:{on_or_after:range.from+'T00:00:00+09:00'}},{property:'날짜 및 시간',date:{before:addCalendarDays(range.to,1)+'T00:00:00+09:00'}}]:[])];
  const filter=filters.length?{and:filters}:undefined;
  const pages=await mirroredPages(db,actor,database,filter,force);const out:any[]=[];
- for(const page of pages){const p=page.properties,teachers=await ids(page,'담당 선생님');const source=list.find(s=>s.shared||teachers.includes(s.teacherPageId));if(!source)continue;const row=await rowSource(page,source,actor);if(!row)continue;const students=await ids(page,'대상 학생'),subject=choice(p['과목'])||source.subject;
+ for(const page of pages){const p=page.properties,teachers=await ids(page,'담당 선생님');const source=list.find(s=>s.shared||teachers.includes(s.teacherPageId));if(!source)continue;const row=await rowSource(page,{...source,legacySchedule:true},actor);if(!row)continue;const students=await ids(page,'대상 학생'),subject=choice(p['과목'])||source.subject;
  if(!actor.admin&&students.some(key=>!actor.scopes.some((s:any)=>s.studentKey===key&&s.subject===subject)))continue;
  const time=p['날짜 및 시간']?.date;if(!time?.start||!time.end)continue;
  const ktime=(s:string)=>new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(s));

@@ -8,9 +8,9 @@ export function matchesNotionFilter(page:any,filter:any):boolean {
  if(filter.and)return filter.and.every((f:any)=>matchesNotionFilter(page,f));
  if(filter.or)return filter.or.some((f:any)=>matchesNotionFilter(page,f));
  const p=page.properties?.[filter.property];
- if(filter.relation)return (p?.relation||[]).some((r:any)=>normalized(r.id)===normalized(filter.relation.contains));
- if(filter.rich_text){const value=(p?.rich_text||[]).map((t:any)=>t.plain_text??t.text?.content??'').join('');return filter.rich_text.is_empty?value==='':value===filter.rich_text.equals;}
- if(filter.select){const value=p?.select?.name||'';return filter.select.is_empty?!value:value===filter.select.equals;}
+ if(filter.relation){if(filter.relation.is_not_empty)return Boolean(p?.relation?.length);if(filter.relation.is_empty)return !p?.relation?.length;return (p?.relation||[]).some((r:any)=>normalized(r.id)===normalized(filter.relation.contains));}
+ if(filter.rich_text||filter.title){const f=filter.rich_text||filter.title,value=(p?.rich_text||p?.title||[]).map((t:any)=>t.plain_text??t.text?.content??'').join('');return f.is_empty?value==='':value===f.equals;}
+ if(filter.select||filter.status){const f=filter.select||filter.status,value=p?.select?.name||p?.status?.name||'';return f.is_empty?!value:value===f.equals;}
  if(filter.date){const date=Date.parse(p?.date?.start||'');if(!Number.isFinite(date))return false;return Object.entries(filter.date).every(([op,value])=>op==='on_or_after'?date>=Date.parse(value as string):op==='before'?date<Date.parse(value as string):op==='on_or_before'?date<=Date.parse(value as string):false);}
  throw new Error('INVALID_MIRROR_FILTER');
 }
