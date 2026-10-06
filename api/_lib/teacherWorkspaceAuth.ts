@@ -9,7 +9,7 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     let uid: string;
     // Use the same signed-token verification as existing app endpoints.
     // Access approval and disabling are checked server-side on every request.
-    try { uid = (await auth.verifyIdToken(header.slice(7).trim())).uid; }
+    try { uid = (await auth.verifyIdToken(header.slice(7).trim(), true)).uid; }
     catch (e: any) {
         const code = String(e?.code || '');
         if (code === 'auth/insufficient-permission' || code === 'auth/internal-error' || code === 'app/invalid-credential') throw new Error('AUTH_SERVER_CONFIG_ERROR');
@@ -22,12 +22,18 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     const user = userDoc.data();
     if (!admin && !['teacher', 'principal'].includes(user?.role)) throw new Error('FORBIDDEN');
     const profile = profileDoc.data();
+    if (profile?.disabled) throw new Error('TEACHER_NOT_CONFIGURED');
     if (!admin && (!profile || profile.disabled)) throw new Error('TEACHER_NOT_CONFIGURED');
     const principal = !admin && profile?.workspaceRole === 'principal' && Boolean(profile.academyId);
     // A client-side role alone never grants access to an academy.
     if (!admin && user?.role === 'principal' && !principal) throw new Error('TEACHER_NOT_CONFIGURED');
     const academyId = profile?.academyId || (admin ? 'main' : null);
-    const teachingScopes = profile?.notionTeacherPageId ? await notionTeachingScopes(db,profile) : profile?.scopes || [];
+    if(!academyId)throw new Error('TEACHER_NOT_CONFIGURED');
+    let teachingScopes = profile?.notionTeacherPageId ? await notionTeachingScopes(db,profile) : profile?.scopes || [];
+    if(!profile?.notionTeacherPageId&&teachingScopes.length){
+        const checked=await Promise.all(teachingScopes.map(async(s:any)=>{const m=(await db.collection('academyStudentMemberships').doc(s.studentKey).get()).data();return m&&!m.disabled&&m.academyId===academyId?s:null;}));
+        teachingScopes=checked.filter(Boolean);
+    }
     let scopes = teachingScopes;
     if (principal) {
         const members = await db.collection('academyStudentMemberships').where('academyId', '==', academyId).get();

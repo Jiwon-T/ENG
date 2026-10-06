@@ -20,3 +20,42 @@ test('truncated relations are incomplete rather than treated as full connections
 test('duplicate Notion markers surface separately from report identities',async()=>{const f=fixture();const id='ab289f5b-1cf5-4160-809e-10d268c9c385';f.pages[id]=['a','b'].map(page=>({id:page,parent:{database_id:id},properties:{학생:{relation:[{id:k}]},'앱 기록 ID':{rich_text:[{plain_text:'draft-id'}]}}}));const r=await readIntegrityAudit(f.db,f.actor,f.notion);assert.equal(r.issues.filter(i=>i.code==='NOTION_LESSON_MARKER_DUPLICATE').length,2);});
 test('pending issues include student name date subject state and concrete next action',async()=>{const f=fixture();f.pages[studentDB][0].properties.학생={title:[{plain_text:'테스트학생(고2)'}]};f.rows.set('teacherLessonDrafts/work',{academyId:'main',stage:'report_published_notion_pending',revision:1,directReportRevision:1,data:{studentKey:k,date:'2026-10-05',subject:'영어'}});const r=await readIntegrityAudit(f.db,f.actor,f.notion);const i=r.issues.find(i=>i.code==='PENDING_teacherLessonDrafts');assert.equal(i.studentName,'테스트학생(고2)');assert.equal(i.date,'2026-10-05');assert.equal(i.workType,'수업 일지');assert.match(i.nextAction,/일지 조회/);});
 test('registered class conflict explicitly compares enrollment status and teacher names',async()=>{const f=fixture(),c='55555555-5555-4555-8555-555555555555',t='66666666-6666-4666-8666-666666666666';f.pages[studentDB][0].properties.소속반={relation:[{id:c}]};f.pages[enrollmentDB][0].properties.영어={status:{name:'등록'}};f.pages['1a554024-20f2-42c5-8837-983bd1a4f61e']=[{id:c,parent:{database_id:'1a554024-20f2-42c5-8837-983bd1a4f61e'},properties:{수업명:{title:[{plain_text:'테스트반'}]},과목:{select:{name:'영어'}},'담당 선생님':{relation:[{id:t}]}}}];f.pages['3d274aff-32ce-4a33-870d-2689259113a6']=[{id:t,parent:{database_id:'3d274aff-32ce-4a33-870d-2689259113a6'},properties:{이름:{title:[{plain_text:'테스트T'}]}}}];const r=await readIntegrityAudit(f.db,f.actor,f.notion);const i=r.issues.find(i=>i.code==='CLASS_ASSIGNMENT_MISMATCH');assert.match(i.message,/테스트반/);assert.match(i.details.join(' '),/등록/);assert.match(i.details.join(' '),/테스트T/);assert.match(i.details.join(' '),/미배정/);});
+
+test('audit includes grade and schedule markers, mismatched students and pending recovery',async()=>{
+ const f=fixture(),gradeDB='fa6ce5a8-9572-4f4d-80d9-4d1485d44e6f',scheduleDB='3430f1a4-9dde-4b4c-a5cf-0d11b913b38c';
+ f.rows.set('teacherAcademicDrafts/g',{academyId:'main',revision:2,stage:'failed',data:{studentKey:k,subject:'영어',examDate:'2026-10-05'}});
+ f.rows.set('teacherSchedules/s',{academyId:'main',stage:'failed',data:{students:[k],subject:'영어',date:'2026-10-06'}});
+ f.pages[gradeDB]=[k,other].map(id=>({id,parent:{database_id:gradeDB},properties:{학생:{relation:[{id:k}]},'앱 기록 ID':{rich_text:[{plain_text:'g'}]}}}));
+ f.pages[scheduleDB]=[{id:k,parent:{database_id:scheduleDB},properties:{'대상 학생':{relation:[{id:other}]},'앱 기록 ID':{rich_text:[{plain_text:'s'}]}}}];
+ const before=structuredClone([...f.rows]),r=await readIntegrityAudit(f.db,f.actor,f.notion);
+ assert.equal(r.issues.filter(i=>i.code==='NOTION_ACADEMIC_MARKER_DUPLICATE').length,2);
+ assert.ok(r.issues.some(i=>i.code==='SCHEDULE_DRAFT_STUDENT_MISMATCH'&&i.studentKey===k));
+ assert.ok(r.issues.some(i=>i.code==='PENDING_teacherAcademicDrafts'&&i.date==='2026-10-05'&&i.workType==='성적'));
+ assert.ok(r.issues.some(i=>i.code==='PENDING_teacherSchedules'&&i.workType==='일정'));
+ assert.deepEqual([...f.rows],before);
+});
+test('audit detects canonical compact schedule duplicates but preserves canceled history',async()=>{
+ const f=fixture();for(const id of ['a','b'])f.rows.set('studentSchedules/'+id,{notionScheduleId:id==='a'?other:other.replace(/-/g,''),internalStudentId:'internal',studentKey:k,status:'예정'});
+ f.rows.set('studentSchedules/c',{notionScheduleId:other,internalStudentId:'internal',studentKey:k,status:'취소'});
+ const r=await readIntegrityAudit(f.db,f.actor,f.notion);assert.equal(r.issues.filter(i=>i.code==='REPORT_RECORD_DUPLICATE').length,1);
+ f.rows.get('studentSchedules/b').status='취소';const clean=await readIntegrityAudit(f.db,f.actor,f.notion);assert.ok(!clean.issues.some(i=>i.code==='REPORT_RECORD_DUPLICATE'));
+});
+test('configured subject lesson databases are queried and failures do not claim completion',async()=>{
+ const f=fixture(),math='55555555-5555-4555-8555-555555555555';f.rows.set('teacherWorkspaceAccess/t',{academyId:'main',notionSources:[{subject:'수학',lessonDatabaseId:math}]});
+ const r=await readIntegrityAudit(f.db,f.actor,async(path,method,body)=>{if(path.includes(math))throw Error('PRIVATE');return f.notion(path,method,body);});
+ assert.equal(r.complete,false);assert.ok(r.sources.some(s=>s.source.includes(math)&&!s.ok));assert.ok(!JSON.stringify(r).includes('PRIVATE'));
+});
+test('unlinked historical labels are warnings for admin only and canceled schedules are normal history',async()=>{
+ const f=fixture(),lesson='ab289f5b-1cf5-4160-809e-10d268c9c385',schedule='3430f1a4-9dde-4b4c-a5cf-0d11b913b38c';
+ f.pages[lesson]=[{id:other,parent:{database_id:lesson},properties:{구분:{select:{name:'과거학생 표기'}},학생:{relation:[]}}}];
+ f.rows.set('teacherSchedules/s',{academyId:'main',archived:true,deleteRequested:true,data:{students:[k]}});
+ f.pages[schedule]=[{id:other,parent:{database_id:schedule},properties:{'앱 기록 ID':{rich_text:[{plain_text:'s'}]},'대상 학생':{relation:[{id:k}]},'일정 상태':{select:{name:'취소'}}}}];
+ const admin=await readIntegrityAudit(f.db,{...f.actor,admin:true},f.notion),principal=await readIntegrityAudit(f.db,f.actor,f.notion);
+ const warning=admin.issues.find(i=>i.code==='LESSON_UNLINKED_HISTORY');assert.equal(warning.studentName,'과거학생 표기');assert.equal(warning.severity,'warning');assert.equal(warning.studentKey,null);
+ assert.ok(!principal.issues.some(i=>i.code==='LESSON_UNLINKED_HISTORY'));assert.ok(!admin.issues.some(i=>i.code==='SCHEDULE_DELETE_PENDING'));
+});
+test('empty enrollment and mismatched report owners are surfaced without changing links',async()=>{
+ const f=fixture();f.pages[enrollmentDB].push({id:k,parent:{database_id:enrollmentDB},properties:{학생:{relation:[]}}});
+ f.rows.set('teacherLessonDrafts/d',{academyId:'main',data:{studentKey:other}});f.rows.set('lessonReports/r',{internalStudentId:'internal',studentKey:k,teacherDraftId:'d'});
+ const r=await readIntegrityAudit(f.db,{...f.actor,admin:true},f.notion);assert.ok(r.issues.some(i=>i.code==='ENROLLMENT_UNLINKED'&&i.severity==='warning'));assert.ok(r.issues.some(i=>i.code==='LESSON_REPORT_STUDENT_MISMATCH'&&i.studentKey===k));
+});

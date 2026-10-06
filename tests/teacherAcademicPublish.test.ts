@@ -16,7 +16,8 @@ test('grade publishing blocks before any page write when source schema is not pr
 });
 test('grade retry reuses source ID, persists identity before projection, and preserves zero',async()=>{
  const restore=env(),original=global.fetch,calls:any[]=[];const {db,rows}=registrationFirestore();
- const record={ownerUid:'t',data:d,revision:1,notionPageId:pageId,notionEditedAt:'2026-10-03T00:00:00.000Z'};
+ const record={ownerUid:'t',academyId:'main',data:d,revision:1,notionPageId:pageId,notionEditedAt:'2026-10-03T00:00:00.000Z'};
+ rows.set('academyStudentMemberships/'+studentKey,{academyId:'main'});
  rows.set('teacherWorkspaceAccess/t',profile);rows.set('teacherAcademicDrafts/'+id,record);
  const page:any={id:pageId,archived:false,last_edited_time:record.notionEditedAt,parent:{database_id:'fa6ce5a8-9572-4f4d-80d9-4d1485d44e6f'},properties:{'학생':{relation:[{id:studentKey}]},'원점수':{number:50},'만점':{number:100},'과목':{select:{name:'영어'}},'시험 종류':{select:{name:'학력평가'}}}};
  global.fetch=async(url,init)=>{const path=String(url).split('/v1/')[1],body=init?.body?JSON.parse(String(init.body)):null;calls.push({path,method:init?.method,body});
@@ -25,7 +26,7 @@ test('grade retry reuses source ID, persists identity before projection, and pre
  if(path===`pages/${pageId}`){if(init?.method==='PATCH'){Object.assign(page.properties,body.properties);page.last_edited_time='2026-10-03T01:00:00.000Z';}return reply(page);}
  throw Error('UNEXPECTED_CALL');};
  let fail=true;
- const deps={syncAcademicPage:async(database:any,remote:any)=>{assert.equal(rows.get('teacherAcademicDrafts/'+id).stage,'notion_saved');if(fail){fail=false;throw Error('APP_UNAVAILABLE');}return syncAcademicPage(database,remote,async()=>({notionStudentPageId:studentKey,studentKey,studentDisplayName:'학생',parentPhonePinHash:''}),async()=>({internalStudentId:'internal'}) as any);}};
+ const deps={syncAcademicPage:async(database:any,remote:any,_resolve?:any,_map?:any,app?:any)=>{assert.equal(rows.get('teacherAcademicDrafts/'+id).stage,'notion_saved');if(fail){fail=false;throw Error('APP_UNAVAILABLE');}return syncAcademicPage(database,remote,async()=>({notionStudentPageId:studentKey,studentKey,studentDisplayName:'학생',parentPhonePinHash:''}),async()=>({internalStudentId:'internal'}) as any,app);}};
  try{await assert.rejects(publishTeacherGrade(db as any,id,record,deps),/APP_UNAVAILABLE/);await publishTeacherGrade(db as any,id,record,deps);
  assert.equal(calls.some(c=>c.path==='pages'&&c.method==='POST'),false);const writes=calls.filter(c=>c.body?.properties?.['원점수']);assert.equal(writes.length,1);assert.equal(writes[0].body.properties['원점수'].number,0);assert.equal(writes[0].body.properties['세부 종류'].select.name,'9월');assert.equal(rows.get('teacherAcademicDrafts/'+id).stage,'published');assert.equal(rows.get('academicRecords/'+pageId).score,0);
  }finally{global.fetch=original;restore();}

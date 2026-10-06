@@ -1,3 +1,4 @@
+import {readRecordConflict,resolveRecordConflict} from '../_lib/teacherRecordConflict.js';
 import { readSchedulePlaceOptions } from '../_lib/teacherSchedulePlaces.js';
 import {assignmentNeedsRecovery} from '../../src/lib/teacherAssignmentStatus.js';
 import {assignmentCheckpoint,retryTeacherAssignment} from '../_lib/teacherAssignmentRetry.js';
@@ -11,7 +12,7 @@ import {readStudentEnrollment,saveStudentEnrollment,discardStudentEnrollment} fr
 import {readStudentProfile,saveStudentProfile,discardStudentProfile} from '../_lib/teacherStudentProfile.js';
 import {registrationAssignmentOptions, resolveRegistrationAssignments} from '../_lib/teacherRegistrationAssignments.js';
 import { syncStudentRegistration } from '../_lib/teacherStudentRegistrationSync.js';
-import { studentRegistrationSchema, saveStudentRegistration, listStudentRegistrations, readStudentRegistration } from '../_lib/teacherStudentRegistration.js';
+import { convertRegistrationToResident, studentRegistrationSchema, saveStudentRegistration, listStudentRegistrations, readStudentRegistration } from '../_lib/teacherStudentRegistration.js';
 import {writeDirectLessonReport} from '../_lib/teacherDirectReport.js';
 import {classStatusOnlyChange,changedStatusSlots} from '../_lib/teacherClassStatus.js';
 import {scheduleRange,readReflectedRange,readManagedScheduleRange} from '../_lib/teacherScheduleRange.js';
@@ -27,6 +28,8 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { academicDraftSchema, canViewAcademyRecord } from '../_lib/teacherAcademicPolicy.js';
+import {archiveTeacherAcademic,cancelAcademicArchive} from '../_lib/teacherAcademicArchive.js';
+import {updatePublicationRevision} from '../_lib/teacherNotionWrite.js';
 import { listTeacherNotionGrades, publishTeacherGrade, gradeNotion, canReadNotionGrade } from '../_lib/teacherAcademicNotion.js';
 import { workspaceError } from '../_lib/teacherWorkspaceError.js';
 import { teacherActor } from '../_lib/teacherWorkspaceAuth.js';
@@ -75,6 +78,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const {notionTeachingScopes}=await import('../_lib/teacherNotionWorkspace.js');
                 return sendJson(res,200,{ok:true,scopes:await notionTeachingScopes(db,profile)});
             }
+            if(action==='academic-conflict'||action==='schedule-conflict')return sendJson(res,200,{ok:true,...await readRecordConflict(db,actor,action==='academic-conflict'?'academic':'schedule',params.get('id'))});
             if(action==='lesson-conflict'){failureStage='lesson-conflict-review';return sendJson(res,200,{ok:true,...await readLessonConflict(db,actor,params.get('id'))});}
             if(action==='integrity-audit'){failureStage='integrity-audit';return sendJson(res,200,{ok:true,...await readIntegrityAudit(db,actor)});}
             if(action==='messages'){failureStage='message-read';return sendJson(res,200,{ok:true,...await readTeacherMessages(db,actor,params.get('studentKey'),params.get('subject'))});}
@@ -86,8 +90,11 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             }
             if (action === 'student-registrations') {
                 failureStage = 'student-registration-list';
-                const records = await listStudentRegistrations(db,actor);
-                return sendJson(res,200,{ok:true,...pageRows(records,pageNumber(params.get('page')),8)});
+                const all = await listStudentRegistrations(db,actor);
+                const intake=z.enum(['all','consultation','new','additional']).parse(params.get('intake')||'all');
+                const group=(r:any)=>r.purpose==='additional'?'additional':r.intakeStage==='consultation'?'consultation':'new';
+                const records=all.filter(r=>intake==='all'||group(r)===intake);
+                return sendJson(res,200,{ok:true,...pageRows(records,pageNumber(params.get('page')),8),counts:{all:all.length,consultation:all.filter(r=>group(r)==='consultation').length,new:all.filter(r=>group(r)==='new').length,additional:all.filter(r=>group(r)==='additional').length}});
             }
             if (action === 'student-registration') {
                 failureStage = 'student-registration-read';
@@ -97,7 +104,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const localPromise=teacherReadCache.get(teacherReadKey(actor,'academic-local'),async()=>{const saved=actor.admin ? await db.collection('teacherAcademicDrafts').get() : actor.principal ? await db.collection('teacherAcademicDrafts').where('academyId','==',actor.academyId).get() : await db.collection('teacherAcademicDrafts').where('ownerUid','==',actor.uid).get();return saved.docs.map(d=>({id:d.id,...d.data()})).filter((r:any)=>canViewAcademyRecord(actor,r));},force);
                 const sourcePromise=action==='academic-records-fast'?Promise.resolve([]):teacherReadCache.get(teacherReadKey(actor,'academic-source'),()=>listTeacherNotionGrades(db,actor,force),force);
                 const [appRecords,source]=await Promise.all([localPromise,sourcePromise]);
-                const records=action==='academic-records-fast'?appRecords:mergeNotionRows(appRecords,source);
+                const records=(action==='academic-records-fast'?appRecords:mergeNotionRows(appRecords,source)).filter((r:any)=>!r.archived);
                 if (!params.has('page')) return sendJson(res,200,{ok:true,records});
                 const {examPeriod}=await import('../../src/lib/academicExamPeriod.js');
                 const students=await teacherReadCache.get(teacherReadKey(actor,'students'),listNotionStudents,force);const names=new Map(students.map(s=>[s.studentKey,s.studentDisplayName]));
@@ -144,7 +151,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const collections={lesson:'teacherLessonDrafts',academic:'teacherAcademicDrafts',schedule:'teacherSchedules',class:'teacherClasses',curriculum:'teacherCurricula'};
                 const id=z.string().uuid().parse(params.get('id'));
                 const doc=await db.collection(collections[kind]).doc(id).get();
-                if(!doc.exists||!canAccessOwned(actor,doc.data()!.ownerUid))throw new Error('FORBIDDEN');
+                if(!doc.exists||!canAccessOwned(actor,doc.data()!.ownerUid,doc.data()!.academyId))throw new Error('FORBIDDEN');
                 return sendJson(res,200,{ok:true,record:{id:doc.id,...doc.data()}});
             }
             if(action==='drafts-page') {
@@ -160,7 +167,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(action==='draft-records') {
                 const ids=z.array(z.string().uuid()).max(100).parse((params.get('ids')||'').split(',').filter(Boolean));
                 const docs=ids.length?await db.getAll(...ids.map(id=>db.collection('teacherLessonDrafts').doc(id))):[];
-                const records=docs.filter(d=>d.exists&&canAccessOwned(actor,d.data()!.ownerUid)).map(d=>({id:d.id,...d.data()}));
+                const records=docs.filter(d=>d.exists&&canAccessOwned(actor,d.data()!.ownerUid,d.data()!.academyId)).map(d=>({id:d.id,...d.data()}));
                 if(force)await confirmLessonRecords(db,records);return sendJson(res,200,{ok:true,records});
             }
             if (action === 'report-review') {
@@ -242,6 +249,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         if(body.action==='send-message'){failureStage='message-send';const v=z.object({action:z.literal('send-message'),id:z.string().uuid(),confirmed:z.literal(true)}).strict().parse(body);return sendJson(res,200,{ok:true,record:await sendTeacherMessage(db,actor,v.id,v.confirmed)});}
         // Body dispatch also works when a deployment rewrite drops URL parameters.
         if(body.action!=='report-review'&&body.action!=='previous-lesson'){mutation=body.action;invalidateTeacherMutation(body.action);}
+        if(body.action==='convert-registration-resident'){const v=z.object({action:z.literal('convert-registration-resident'),id:z.string().regex(/^[a-f0-9]{64}$/),revision:z.number().int().positive()}).strict().parse(body);return sendJson(res,200,{ok:true,...await convertRegistrationToResident(db,actor,v.id,v.revision,key=>readStudentEnrollment(db,actor,key))});}
         if (body.action === 'sync-student-registration') {
             failureStage = 'student-registration-sync';
             const value=z.object({action:z.literal('sync-student-registration'),id:z.string().regex(/^[a-f0-9]{64}$/),revision:z.number().int().positive()}).strict().parse(body);
@@ -285,7 +293,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             for(const collection of ['teacherClasses','teacherCurricula']) {
                 const rows=actor.admin?await db.collection(collection).get():await db.collection(collection).where('ownerUid','==',actor.uid).get();
                 for(const doc of rows.docs.filter((d:any)=>!d.data().archived&&!d.data().notionPageId).slice(0,10)) {
-                    if(!canAccessOwned(actor,doc.data().ownerUid))continue;
+                    if(!canAccessOwned(actor,doc.data().ownerUid,doc.data().academyId))continue;
                     try{await syncManagedRecord(db,collection,doc.id);migrated++;}catch(e:any){failures.push({id:doc.id,error:e.message});}
                 }
             }
@@ -342,11 +350,11 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         if(body.action==='import-source-record'){
             const id=z.string().uuid().parse(body.id),kind=z.enum(['lesson','schedule']).parse(body.kind),collection=kind==='lesson'?'teacherLessonDrafts':'teacherSchedules';
             const source=(await (kind==='lesson'?readSourceLessons(db,actor):readSourceSchedules(db,actor))).find(r=>r.id===id);
-            if(!source||!canAccessOwned(actor,source.ownerUid))throw new Error('FORBIDDEN');
+            if(!source||!canAccessOwned(actor,source.ownerUid,source.academyId))throw new Error('FORBIDDEN');
             const matching=await db.collection(collection).where('notionPageId','==',id).get();
             if(matching.docs.length>1)throw new Error('DUPLICATE_NOTION_RECORD');
             const localId=matching.docs[0]?.id||id,ref=db.collection(collection).doc(localId);
-            const record=await db.runTransaction(async t=>{const old=(await t.get(ref)).data();if(old&&!canAccessOwned(actor,old.ownerUid))throw new Error('FORBIDDEN');
+            const record=await db.runTransaction(async t=>{const old=(await t.get(ref)).data();if(old&&!canAccessOwned(actor,old.ownerUid,old.academyId))throw new Error('FORBIDDEN');
                 if(old&&['processing','publishing','notion_saved'].includes(old.stage))throw new Error('PUBLISH_IN_PROGRESS');
                 if(old?.stage==='draft'&&old.revision>0)return {id:localId,...old};
                 const value={...old,...source,id:localId,ownerUid:old?.ownerUid||source.ownerUid,source:'notion',revision:(old?.revision||0)+1};t.set(ref,value);return value;});
@@ -354,7 +362,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         }
         if(body.action==='sync-notion-record'){
             const id=z.string().uuid().parse(body.id),collection=z.enum(['teacherClasses','teacherCurricula']).parse(body.collection),record=(await db.collection(collection).doc(id).get()).data();
-            if(!record||!canAccessOwned(actor,record.ownerUid))throw new Error('FORBIDDEN');
+            if(!record||!canAccessOwned(actor,record.ownerUid,record.academyId))throw new Error('FORBIDDEN');
             try{await syncManagedRecord(db,collection,id);}catch(e:any){await db.collection(collection).doc(id).update({notionSyncStage:'failed',notionSyncError:e.message});throw e;}return sendJson(res,200,{ok:true});
         }
         if (body.action === 'prepare-notion') {
@@ -367,10 +375,13 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(!canTeach(actor,value.studentKey,value.subject)) throw new Error('FORBIDDEN');
             if(!actor.academyId) throw new Error('ACADEMY_REQUIRED');
             const id=body.id ? z.string().uuid().parse(body.id) : randomUUID();
+            const existingAcademic=(await db.collection('teacherAcademicDrafts').doc(id).get()).data();
             let importedPageId: string | undefined;let importedEditedAt:string|undefined;
-            if(body.notionPageId) {
+            if(body.notionPageId&&existingAcademic&&body.notionPageId!==existingAcademic.notionPageId)throw Error('SOURCE_IDENTITY_LOCKED');
+            if(body.notionPageId&&!existingAcademic) {
                 importedPageId=z.string().uuid().parse(body.notionPageId);
                 const page=await gradeNotion(`pages/${importedPageId}`);importedEditedAt=page.last_edited_time;
+                if(body.notionEditedAt&&body.notionEditedAt!==importedEditedAt)throw Error('NOTION_EDIT_CONFLICT');
                 const profile=(await db.collection('teacherWorkspaceAccess').doc(actor.uid).get()).data();
                 if(actor.principal || !canReadNotionGrade(actor,profile,page)) throw new Error('FORBIDDEN');
                 if(page.properties['학생']?.relation?.[0]?.id.replace(/-/g,'') !== value.studentKey.replace(/-/g,'')) throw new Error('SOURCE_IDENTITY_LOCKED');
@@ -378,42 +389,45 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             }
             await db.runTransaction(async t=>{
                 const ref=db.collection('teacherAcademicDrafts').doc(id), old=(await t.get(ref)).data();
-                if(old && !canAccessOwned(actor,old.ownerUid)) throw new Error('FORBIDDEN');
+                if(old?.archived||old?.deleteRequested)throw Error('FORBIDDEN');
+                if(old && !canAccessOwned(actor,old.ownerUid,old.academyId)) throw new Error('FORBIDDEN');
                 assertDraftEditable(old,body.revision,value);
                 t.set(ref,{...old,data:value,ownerUid:old?.ownerUid||actor.uid,academyId:old?.academyId||actor.academyId,revision:(old?.revision||0)+1,stage:'draft',updatedAt:Date.now(),...(importedPageId?{notionPageId:importedPageId,notionEditedAt:importedEditedAt}:{})});
             });
             return sendJson(res,200,{ok:true,id});
         }
+        if(body.action==='archive-academic'){failureStage='academic-archive';return sendJson(res,200,{ok:true,...await archiveTeacherAcademic(db,actor,body.id,body.revision)});}
+        if(body.action==='cancel-academic-delete'){failureStage='academic-archive-cancel';return sendJson(res,200,{ok:true,...await cancelAcademicArchive(db,actor,body.id,body.revision)});}
         if(body.action === 'publish-academic') {
             failureStage='academic-reflection';
             const id=z.string().uuid().parse(body.id),ref=db.collection('teacherAcademicDrafts').doc(id);
             const record=await db.runTransaction(async t=>{
                 const old=(await t.get(ref)).data();
-                if(!old || !canAccessOwned(actor,old.ownerUid) || !canTeach(actor,old.data.studentKey,old.data.subject)) throw new Error('FORBIDDEN');
+                if(!old || old.archived || old.deleteRequested || !canAccessOwned(actor,old.ownerUid,old.academyId) || !canTeach(actor,old.data.studentKey,old.data.subject)) throw new Error('FORBIDDEN');
                 if(publishDecision(old)==='already-published') return {...old,alreadyPublished:true};
                 academicDraftSchema.parse(old.data);
                 t.update(ref,{stage:'publishing',publishStartedAt:Date.now()});return old;
             });
             if(record.alreadyPublished) return sendJson(res,200,{ok:true,stage:'published'});
             try {return sendJson(res,200,{ok:true,stage:'published',pageId:await publishTeacherGrade(db,id,record)});}
-            catch(e:any) {await ref.update({stage:'failed'});throw e;}
+            catch(e:any) {await updatePublicationRevision(db,'teacherAcademicDrafts',id,record.revision,{stage:'failed',failureCode:e.message}).catch(()=>{});throw e;}
         }
         if (body.action === 'save-curriculum') {
             const value = z.object({ title: z.string().min(1).max(200), subject: z.enum(['영어', '수학', '국어', '과학', '한국사']), content: z.string().max(30000), classId: z.string().uuid().nullable().optional() }).parse(body.data);
             const id = body.id ? z.string().uuid().parse(body.id) : randomUUID();
             const saved=(await db.collection('teacherCurricula').doc(id).get()).data();
             const imported=!saved&&body.id?(await readNotionWorkspace(db,actor)).curricula.find((r:any)=>r.id===id):undefined;
-            if(imported&&!canAccessOwned(actor,imported.ownerUid))throw new Error('FORBIDDEN');
+            if(imported&&!canAccessOwned(actor,imported.ownerUid,imported.academyId))throw new Error('FORBIDDEN');
             if(imported&&body.notionEditedAt&&imported.notionEditedAt!==body.notionEditedAt)throw new Error('NOTION_EDIT_CONFLICT');
             const sourceClass=value.classId?(await readNotionWorkspace(db,actor)).classes.find((c:any)=>c.id===value.classId):undefined;
             await db.runTransaction(async (t) => {
                 const ref = db.collection('teacherCurricula').doc(id);
                 const previous = (await t.get(ref)).data()||imported;
-                if(value.classId){const linked=(await t.get(db.collection('teacherClasses').doc(value.classId))).data()||sourceClass;if(!linked||linked.archived||!canAccessOwned(actor,linked.ownerUid)||linked.subject!==value.subject)throw new Error('FORBIDDEN');}
+                if(value.classId){const linked=(await t.get(db.collection('teacherClasses').doc(value.classId))).data()||sourceClass;if(!linked||linked.archived||!canAccessOwned(actor,linked.ownerUid,linked.academyId)||linked.subject!==value.subject)throw new Error('FORBIDDEN');}
                 if (previous?.archived||previous?.deleteRequested||previous?.notionSyncStage==='syncing')throw new Error('FORBIDDEN');
                 if(previous?.notionPageId && previous.subject!==value.subject)throw new Error('SOURCE_IDENTITY_LOCKED');
                 if(previous && (body.revision??0)!==(previous.revision??0))throw new Error('DRAFT_CONFLICT');
-                if (previous && !canAccessOwned(actor, previous.ownerUid))
+                if (previous && !canAccessOwned(actor, previous.ownerUid, previous.academyId))
                     throw new Error('FORBIDDEN');
                 t.set(ref, { ...previous, ...value, previousClassPageId:previous?.previousClassPageId||(previous?.source==='notion'?previous.classId:null)||null, revision:(previous?.revision||0)+1, ownerUid: previous?.ownerUid || actor.uid, academyId: previous?.academyId || actor.academyId, notionSyncStage:'pending', ...(body.notionEditedAt?{notionEditedAt:body.notionEditedAt}:{}), updatedAt: Date.now() });
             });
@@ -443,13 +457,13 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(new Set(value.books.map(book=>book.id)).size!==value.books.length)throw new Error('INVALID_INPUT');
             if (value.students.some(key => !canTeach(actor, key, value.subject)))
                 throw new Error('FORBIDDEN');
-            if(imported&&!canAccessOwned(actor,imported.ownerUid))throw new Error('FORBIDDEN');
+            if(imported&&!canAccessOwned(actor,imported.ownerUid,imported.academyId))throw new Error('FORBIDDEN');
             if(imported&&body.notionEditedAt&&imported.notionEditedAt!==body.notionEditedAt)throw new Error('NOTION_EDIT_CONFLICT');
             await db.runTransaction(async (t) => {
                 const ref = db.collection('teacherClasses').doc(id);
                 const old = (await t.get(ref)).data()||imported;
                 if(old?.archived||old?.deleteRequested||old?.notionSyncStage==='syncing')throw new Error('FORBIDDEN');
-                if (old && !canAccessOwned(actor, old.ownerUid))
+                if (old && !canAccessOwned(actor, old.ownerUid, old.academyId))
                     throw new Error('FORBIDDEN');
                 if(old?.notionPageId && old.subject!==value.subject)throw new Error('SOURCE_IDENTITY_LOCKED');
                 if(old && (body.revision??0)!==(old.revision??0))throw new Error('DRAFT_CONFLICT');
@@ -464,7 +478,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const id=z.string().uuid().parse(body.id), collection=body.action==='archive-class'?'teacherClasses':body.action==='archive-curriculum'?'teacherCurricula':'teacherSchedules',ref=db.collection(collection).doc(id);
             const imported=collection==='teacherSchedules'?(await readSourceSchedules(db,actor)).find(r=>r.id===id):(await readNotionWorkspace(db,actor))[collection==='teacherClasses'?'classes':'curricula'].find((r:any)=>r.id===id);
             const old=await db.runTransaction(async t=>{
-                const r=(await t.get(ref)).data()||imported;if(!r||!canAccessOwned(actor,r.ownerUid))throw new Error('FORBIDDEN');
+                const r=(await t.get(ref)).data()||imported;if(!r||!canAccessOwned(actor,r.ownerUid,r.academyId))throw new Error('FORBIDDEN');
+                if(collection==='teacherSchedules'&&r.data.students.some((key:string)=>!canTeach(actor,key,r.data.subject)))throw Error('FORBIDDEN');
                 if(r.archived)return {...r,alreadyArchived:true};
                 if(collection==='teacherSchedules'){
                     const patch=scheduleArchivePatch(r,body.revision,Date.now());
@@ -476,7 +491,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             });
             if(!old.alreadyArchived&&collection==='teacherSchedules'&&old.notionPageId){
                 try{await publishTeacherSchedule(db,id,old);return sendJson(res,200,{ok:true,stage:'published',cancelled:true});}
-                catch(e:any){await ref.update({stage:'failed',failureCode:e.message});throw e;}
+                catch(e:any){await updatePublicationRevision(db,'teacherSchedules',id,old.revision,{stage:'failed',failureCode:e.message}).catch(()=>{});throw e;}
             }
             if(collection!=='teacherSchedules')await syncManagedRecord(db,collection,id);
             return sendJson(res,200,{ok:true});
@@ -489,14 +504,14 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const saved=(await db.collection('teacherSchedules').doc(id).get()).data();
             const imported=!saved&&body.id?(await readSourceSchedules(db,actor)).find(r=>r.id===id):undefined;
             const existing=saved||imported;
-            if(existing&&!canAccessOwned(actor,existing.ownerUid))throw Error('FORBIDDEN');
+            if(existing&&!canAccessOwned(actor,existing.ownerUid,existing.academyId))throw Error('FORBIDDEN');
             const places=await readSchedulePlaceOptions();
             if(value.place!==''&&!places.includes(value.place))throw Error('NOTION_SCHEDULE_PLACE_REQUIRED');
             await db.runTransaction(async (t) => {
                 const ref = db.collection('teacherSchedules').doc(id);
                 const old = (await t.get(ref)).data()||imported;
                 if(old?.archived || old?.deleteRequested)throw new Error('FORBIDDEN');
-                if (old && !canAccessOwned(actor, old.ownerUid))
+                if (old && !canAccessOwned(actor, old.ownerUid, old.academyId))
                     throw new Error('FORBIDDEN');
                 if(old?.notionWrite && (!old.notionWrite.done || old.lastSubmittedRevision!==old.revision))throw new Error('NOTION_WRITE_PENDING');
                 if (old && ['processing', 'publishing', 'notion_saved'].includes(old.stage))
@@ -512,7 +527,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const id = z.string().uuid().parse(body.id), ref = db.collection('teacherSchedules').doc(id);
             const record = await db.runTransaction(async (t) => {
                 const old = (await t.get(ref)).data();
-                if (!old || (old.archived||old.deleteRequested) || !canAccessOwned(actor, old.ownerUid) || old.data.students.some((key: string) => !canTeach(actor, key, old.data.subject)))
+                if (!old || (old.archived||old.deleteRequested) || !canAccessOwned(actor, old.ownerUid, old.academyId) || old.data.students.some((key: string) => !canTeach(actor, key, old.data.subject)))
                     throw new Error('FORBIDDEN');
                 if (publishDecision(old) === 'already-published')
                     return { ...old, alreadyPublished: true };
@@ -525,7 +540,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 return sendJson(res, 200, { ok: true, pageId: await publishTeacherSchedule(db, id, record) });
             }
             catch (error: any) {
-                await ref.update({ stage: 'failed', failureCode: error.message });
+                await updatePublicationRevision(db,'teacherSchedules',id,record.revision,{ stage: 'failed', failureCode: error.message }).catch(()=>{});
                 throw error;
             }
         }
@@ -539,13 +554,14 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const ref = db.collection('teacherLessonDrafts').doc(id);
                 const old = (await t.get(ref)).data();
                 if(old?.archived||old?.deleteRequested)throw new Error('FORBIDDEN');
-                if (old && !canAccessOwned(actor, old.ownerUid))
+                if (old && !canAccessOwned(actor, old.ownerUid, old.academyId))
                     throw new Error('FORBIDDEN');
                 assertDraftEditable(old, body.revision, value);
                 t.set(ref, { ...old, data: value, ownerUid: old?.ownerUid || actor.uid, academyId: old?.academyId || actor.academyId, revision: (old?.revision || 0) + 1, stage: 'draft', percentage: percentage(value.correct, value.total), updatedAt: Date.now() });
             });
             return sendJson(res, 200, { ok: true, id });
         }
+        if(body.action==='resolve-academic-conflict'||body.action==='resolve-schedule-conflict'){const {action,...input}=body;return sendJson(res,200,{ok:true,...await resolveRecordConflict(db,actor,action==='resolve-academic-conflict'?'academic':'schedule',input)});}
         if(body.action==='resolve-lesson-conflict'){failureStage='lesson-conflict-resolution';const {action,...input}=body;return sendJson(res,200,{ok:true,...await resolveLessonConflict(db,actor,input)});}
         if(body.action==='archive-lesson'){failureStage='lesson-archive';return sendJson(res,200,{ok:true,...await archiveTeacherLesson(db,actor,body.id,body.revision)});}
         if (body.action === 'publish') {
@@ -554,7 +570,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const ref = db.collection('teacherLessonDrafts').doc(id);
             const draft = await db.runTransaction(async (t) => {
                 const old = (await t.get(ref)).data();
-                if (!old || (old.archived||old.deleteRequested) || !canAccessOwned(actor, old.ownerUid) || !canTeach(actor, old.data.studentKey, old.data.subject))
+                if (!old || (old.archived||old.deleteRequested) || !canAccessOwned(actor, old.ownerUid, old.academyId) || !canTeach(actor, old.data.studentKey, old.data.subject))
                     throw new Error('FORBIDDEN');
                 if (publishDecision(old) === 'already-published')
                     return { ...old, alreadyPublished: true };
@@ -569,18 +585,18 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 await writeDirectLessonReport(db,id,draft);
                 const pageId = await publishTeacherDraft(db, id, draft);
                 await writeDirectLessonReport(db,id,{...draft,notionPageId:pageId});
-                await ref.update({stage:'published',lastSubmittedRevision:draft.revision,failureCode:null});
+                await updatePublicationRevision(db,'teacherLessonDrafts',id,draft.revision,{stage:'published',lastSubmittedRevision:draft.revision,failureCode:null});
                 return sendJson(res, 200, { ok: true, stage: 'published', pageId });
             }
             catch (error: any) {
                 const saved=(await ref.get()).data();
                 if(saved?.directReportRevision===draft.revision) {
-                    await ref.update({stage:'report_published_notion_pending',failureCode:error.message});
+                    await updatePublicationRevision(db,'teacherLessonDrafts',id,draft.revision,{stage:'report_published_notion_pending',failureCode:error.message});
                     const failure=workspaceError(error,failureStage);
                     console.warn('TEACHER_LESSON_NOTION_PENDING',{error:failure.body.error,diagnosticId:failure.body.diagnosticId,failureStage,draftId:id,revision:draft.revision});
                     return sendJson(res,200,{ok:true,stage:'report_published_notion_pending',failureCode:failure.body.error,warning:lessonSyncWarning(failure),diagnosticId:failure.body.diagnosticId});
                 }
-                await ref.update({ stage: 'failed', failureCode: error.message });
+                await updatePublicationRevision(db,'teacherLessonDrafts',id,draft.revision,{ stage: 'failed', failureCode: error.message }).catch(()=>{});
                 throw error;
             }
         }
@@ -597,7 +613,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         if (body.action === 'continue') {
             const id = z.string().uuid().parse(body.id);
             const old = (await db.collection('teacherLessonDrafts').doc(id).get()).data();
-            if (!old || (old.archived||old.deleteRequested) || !canAccessOwned(actor, old.ownerUid))
+            if (!old || (old.archived||old.deleteRequested) || !canAccessOwned(actor, old.ownerUid, old.academyId))
                 throw new Error('FORBIDDEN');
             return sendJson(res, 200, { ok: true, data: continuation(old.data) });
         }
@@ -609,3 +625,5 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         return sendJson(res, result.status, result.body);
     } finally { if(mutation)invalidateTeacherMutation(mutation); }
 }
+
+

@@ -64,9 +64,18 @@ async function resolveAcademicStudent(studentPageId: string) {
   const student = await lookupStudentByPageId(studentPageId, '', false);
   return student;
 }
-export async function syncAcademicPage(db: Firestore, page: any, resolveStudent = resolveAcademicStudent, mapStudent = migrateStudentMapping) {
+export async function syncAcademicPage(db: Firestore, page: any, resolveStudent = resolveAcademicStudent, mapStudent = migrateStudentMapping, app?:{draftId:string;revision:number;academyId:string}) {
   const parsed = parseAcademicPage(page);
   const ref = db.collection(parsed.collection).doc(parsed.id);
+  if(parsed.collection==='academicRecords'&&!app){
+    const saved=(await ref.get()).data();
+    if(saved?.teacherDraftId)return {applied:false,reason:'APP_OWNED',kind:parsed.collection};
+    const marker=text(page.properties?.['앱 기록 ID']);
+    if(/^[0-9a-f-]{36}$/i.test(marker)){
+      const managed=(await db.collection('teacherAcademicDrafts').doc(marker).get()).data();
+      if(managed&&(normalizeNotionPageId(managed.notionPageId||managed.notionWrite?.pageId||'')===parsed.id||managed.notionWrite?.attempted&&managed.notionWrite?.database===GRADE_DATABASE))return {applied:false,reason:'APP_OWNED',kind:parsed.collection};
+    }
+  }
   let internalStudentId: string | null = null;
   if (!parsed.data.removed) {
     const student = await resolveStudent(parsed.studentPageId!);
@@ -74,6 +83,17 @@ export async function syncAcademicPage(db: Firestore, page: any, resolveStudent 
   }
   return db.runTransaction(async tx => {
     const previous = await tx.get(ref);
+    const draftRef=app?db.collection('teacherAcademicDrafts').doc(app.draftId):null;
+    const draft=app?(await tx.get(draftRef!)).data():null;
+    const membership=app&&parsed.studentPageId?(await tx.get(db.collection('academyStudentMemberships').doc(parsed.studentPageId))).data():null;
+    if(parsed.collection==='academicRecords'&&!app&&previous.data()?.teacherDraftId)return {applied:false,reason:'APP_OWNED',kind:parsed.collection};
+    if(app){
+      if(!draft||draft.archived||draft.deleteRequested||draft.revision!==app.revision)throw Error('DRAFT_CONFLICT');
+      if(!membership||membership.disabled||membership.academyId!==app.academyId)throw Error('ACADEMY_MEMBERSHIP_CONFLICT');
+      if(previous.data()?.teacherDraftId&&previous.data()?.teacherDraftId!==app.draftId)throw Error('SOURCE_IDENTITY_LOCKED');
+      if(previous.data()?.teacherAppRevision>app.revision)throw Error('DRAFT_CONFLICT');
+      if(normalizeNotionPageId(draft.data.studentKey)!==parsed.studentPageId)throw Error('SOURCE_IDENTITY_LOCKED');
+    }
     const legacyRef = parsed.collection === 'academicRecords' ? db.collection('examResults').doc(parsed.id) : null;
     const legacyGrade = legacyRef ? await tx.get(legacyRef) : null;
     const legacyOwners = parsed.collection === 'studentEnrollments'
@@ -91,7 +111,8 @@ export async function syncAcademicPage(db: Firestore, page: any, resolveStudent 
     if (legacyGrade?.exists) tx.update(legacyRef!, { archived: true, sourceUpdatedAt: parsed.data.sourceUpdatedAt });
     for (const owner of legacyOwners?.docs || []) tx.update(owner.ref, { archived: true, activeSubjects: [], sourceUpdatedAt: parsed.data.sourceUpdatedAt });
     tx.set(ref, { ...parsed.data, internalStudentId: internalStudentId || previous.data()?.internalStudentId || legacyGrade?.data()?.internalStudentId || legacyOwners?.docs[0]?.data()?.internalStudentId,
-      serverReceivedAt: previous.data()?.serverReceivedAt || new Date().toISOString(), serverUpdatedAt: new Date().toISOString() });
+      serverReceivedAt: previous.data()?.serverReceivedAt || new Date().toISOString(), serverUpdatedAt: new Date().toISOString(),...(app?{teacherDraftId:app.draftId,teacherAppRevision:app.revision}: {}) });
+    if(app)tx.update(draftRef!,{academicProjectionDoneRevision:app.revision});
     return { applied: true, kind: parsed.collection };
   });
 }

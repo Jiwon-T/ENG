@@ -1,4 +1,4 @@
-import {writeTeacherNotionRecord} from './teacherNotionWrite.js';
+import {writeTeacherNotionRecord,notionPropertiesMatch,updatePublicationRevision} from './teacherNotionWrite.js';
 import {readMirroredPages} from './teacherNotionMirror.js';
 import {ids} from './teacherNotionWorkspace.js';
 import {detailMetadata,examDetail} from '../../src/lib/academicExamPeriod.js';
@@ -63,9 +63,10 @@ export async function publishTeacherGrade(db:Firestore,id:string,record:any, dep
  // Reuse the existing authoritative Notion->report projection. No client score payload enters reports directly.
  const fresh=await gradeNotion(`pages/${page.id}`);
  if(fresh.archived || fresh.in_trash) throw new Error('NOTION_SOURCE_REMOVED');
- await deps.syncAcademicPage(db,fresh);
+ if(!notionPropertiesMatch(fresh,properties))throw new Error('NOTION_EDIT_CONFLICT');
+ await deps.syncAcademicPage(db,fresh,undefined,undefined,{draftId:id,revision:record.revision,academyId:record.academyId});
  await gradeNotion(`pages/${page.id}`,'PATCH',{properties:{'앱 반영 결과':rich('앱 반영 완료')}});
  const confirmed=await gradeNotion(`pages/${page.id}`);
- await db.collection('teacherAcademicDrafts').doc(id).update({notionEditedAt:confirmed.last_edited_time,stage:'published',lastSubmittedRevision:record.revision,updatedAt:Date.now()});
+ await updatePublicationRevision(db,'teacherAcademicDrafts',id,record.revision,{notionEditedAt:confirmed.last_edited_time,stage:'published',lastSubmittedRevision:record.revision,failureCode:null,updatedAt:Date.now()});
  return page.id;
 }

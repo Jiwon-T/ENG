@@ -38,7 +38,7 @@ test('enrollment retains stopped English and current math in same source row', (
 });
 test('upsert replaces same source, handles reassignment and prevents stale overwrites', async () => {
   const saved = new Map<string, any>();
-  const fake: any = { collection: (name: string) => ({ doc: (id: string) => ({ key: `${name}/${id}` }) }),
+  const fake: any = { collection: (name: string) => ({ doc: (id: string) => ({ key: `${name}/${id}`,get:async()=>({exists:saved.has(`${name}/${id}`),data:()=>saved.get(`${name}/${id}`)}) }) }),
     runTransaction: async (fn: any) => fn({ get: async (ref: any) => ({ exists: saved.has(ref.key), data: () => saved.get(ref.key) }), set: (ref: any, data: any) => saved.set(ref.key, data), update: (ref: any, data: any) => saved.set(ref.key, { ...saved.get(ref.key), ...data }) }) };
   let student = 'internal-A';
   const lookup: any = async () => ({ notionStudentPageId: studentId, studentDisplayName: '학생' });
@@ -110,7 +110,7 @@ test('previous ZIP data remains visible and same-source legacy scores are dedupl
 });
 test('source reassignment archives previous-ZIP copy in same transaction', async () => {
   const docs = new Map<string, any>([[`examResults/${pageId}`, { sourceUpdatedAt: '2026-10-01T00:00:00Z', internalStudentId: 'old-student' }]]);
-  const db: any = { collection: (name: string) => ({ doc: (id: string) => ({ key: `${name}/${id}` }) }), runTransaction: async (fn: any) => fn({
+  const db: any = { collection: (name: string) => ({ doc: (id: string) => ({ key: `${name}/${id}`,get:async()=>({exists:docs.has(`${name}/${id}`),data:()=>docs.get(`${name}/${id}`)}) }) }), runTransaction: async (fn: any) => fn({
     get: async (r: any) => ({ exists: docs.has(r.key), data: () => docs.get(r.key) }),
     set: (r: any, d: any) => docs.set(r.key, d), update: (r: any, d: any) => docs.set(r.key, { ...docs.get(r.key), ...d }),
   }) };

@@ -7,7 +7,7 @@ import {normalizeNotionPageId as uuid} from './notionPageId.js';
 export async function archiveTeacherLesson(db:any,actor:any,idInput:unknown,revision:unknown,notion:RegistrationNotion=registrationNotion){
  const id=z.string().uuid().parse(idInput),version=z.number().int().positive().parse(revision),ref=db.collection('teacherLessonDrafts').doc(id),lease=randomUUID();
  const r=await db.runTransaction(async(tx:any)=>{const old=(await tx.get(ref)).data();
- if(!old||!canAccessOwned(actor,old.ownerUid)||!canTeach(actor,old.data.studentKey,old.data.subject))throw Error('FORBIDDEN');
+ if(!old||!canAccessOwned(actor,old.ownerUid,old.academyId)||!canTeach(actor,old.data.studentKey,old.data.subject))throw Error('FORBIDDEN');
  if(old.revision!==version)throw Error('DRAFT_CONFLICT');if(old.archived)return {...old,alreadyArchived:true};
  if(old.notionWrite?.leaseUntil>Date.now()||old.deleteLeaseUntil>Date.now()||old.stage==='publishing'&&Date.now()-(old.publishStartedAt||Date.now())<180000)throw Error('PUBLISH_IN_PROGRESS');
  const next={...old,deleteRequested:true,deleteLease:lease,deleteLeaseUntil:Date.now()+180000};tx.set(ref,next);return {...next,previousDeleteRequested:Boolean(old.deleteRequested)};});

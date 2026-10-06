@@ -33,7 +33,8 @@ export const lessonDraftSchema = z.object({
 export function canAccessOwned(actor: {
     uid: string;
     admin: boolean;
-}, ownerUid: string) { return actor.admin || actor.uid === ownerUid; }
+    academyId?:string|null;
+}, ownerUid: string,academyId?:string) { return actor.admin || actor.uid === ownerUid&&(!academyId||academyId===actor.academyId); }
 export function canTeach(actor: {
     admin: boolean;
     principal?: boolean; teachingScopes?: {studentKey:string;subject:string}[];

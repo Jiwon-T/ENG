@@ -14,7 +14,7 @@ function currentInput(p:any,original:any){
 }
 async function snapshot(db:any,actor:any,idInput:unknown,notion:RegistrationNotion){
  const id=z.string().uuid().parse(idInput),ref=db.collection('teacherLessonDrafts').doc(id),r=(await ref.get()).data();
- if(!r||r.archived||r.deleteRequested||!canAccessOwned(actor,r.ownerUid)||!canTeach(actor,r.data.studentKey,r.data.subject))throw Error('FORBIDDEN');
+ if(!r||r.archived||r.deleteRequested||!canAccessOwned(actor,r.ownerUid,r.academyId)||!canTeach(actor,r.data.studentKey,r.data.subject))throw Error('FORBIDDEN');
  if(r.failureCode!=='NOTION_EDIT_CONFLICT'||!r.notionWrite)throw Error('DRAFT_CONFLICT');
  if(r.notionWrite.leaseUntil>Date.now()||r.stage==='publishing'&&Date.now()-(r.publishStartedAt||Date.now())<180000)throw Error('PUBLISH_IN_PROGRESS');
  let pageId=r.notionPageId||r.notionWrite.pageId;

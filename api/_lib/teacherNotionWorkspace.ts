@@ -104,7 +104,7 @@ export function mergeNotionRows(local:any[],remote:any[]){
   const page=normalize(source.notionPageId);
   const cached=local.find(r=>page&&normalize(r.notionPageId)===page)||local.find(r=>!r.notionPageId&&markers.get(normalize(source.appRecordId))===1&&normalize(r.id)===normalize(source.appRecordId)&&r.ownerUid===source.ownerUid&&r.academyId===source.academyId&&r.data&&source.data&&normalize(r.data.studentKey)===normalize(source.data.studentKey)&&r.data.subject===source.data.subject);
   if(cached)used.add(cached);if(cached?.archived)continue;
-  const pending=['pending','failed','syncing'].includes(cached?.notionSyncStage)||(cached?.data&&['draft','failed','publishing','processing','notion_saved','report_published_notion_pending','reflection_pending'].includes(cached.stage)&&cached.revision>0);
+  const pending=['pending','failed','syncing'].includes(cached?.notionSyncStage)||(cached?.data&&['draft','failed','publishing','processing','notion_saved','report_published_notion_pending','reflection_pending'].includes(cached.stage)&&cached.revision>0)||Boolean(cached?.notionWrite&&cached?.stage==='published');
   result.push(pending?{...cached,notionPageId:source.notionPageId,appRecordId:source.appRecordId}:cached?{...cached,...source,id:cached.id,revision:cached.revision,ownerUid:cached.ownerUid,academyId:cached.academyId,notionSyncStage:'synced'}:source);
  }
  for(const r of local)if(!used.has(r)&&!r.archived&&(!r.notionPageId||['failed','pending','syncing'].includes(r.notionSyncStage)||r.data&&r.revision>0))result.push(r);

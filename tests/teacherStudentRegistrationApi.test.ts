@@ -14,6 +14,15 @@ async function call(db:any,method:string,values:any,actorOverride:any=actor){
     await handleWorkspace(req,res,async()=>({...actorOverride,db}) as any);
     return {status:res.statusCode,data,headers};
 }
+test('intake filters run before pagination and resident records disappear from all counts',async()=>{
+ const {db,rows}=registrationFirestore();
+ for(let i=0;i<12;i++)rows.set('teacherStudentRegistrations/'+String(i),{academyId:actor.academyId,title:'상담'+i,revision:1,syncStatus:'pending',updatedAt:i,data:{purpose:'new',intakeStage:'consultation',enrollments:[]}});
+ rows.set('teacherStudentRegistrations/new',{academyId:actor.academyId,title:'등록',revision:1,syncStatus:'synced',updatedAt:99,data:{enrollments:[]}});
+ rows.set('teacherStudentRegistrations/resident',{academyId:actor.academyId,residentAt:1,data:{enrollments:[]}});
+ const consult=await call(db,'GET',{action:'student-registrations',intake:'consultation',page:'2'});assert.equal(consult.data.total,12);assert.equal(consult.data.records.length,4);assert.equal(consult.data.counts.all,13);
+ const firstMonth=await call(db,'GET',{action:'student-registrations',intake:'new'});assert.equal(firstMonth.data.total,1);assert.equal(firstMonth.data.records[0].title,'등록');
+ const bad=await call(db,'GET',{action:'student-registrations',intake:'bad'});assert.equal(bad.status,400);
+});
 test('등록 API 저장·목록·조회 연결과 연락처의 목록 제외',async()=>{
     const {db}=registrationFirestore();
     const saved=await call(db,'POST',{action:'save-student-registration',requestId,writeId,data:input});

@@ -1,3 +1,6 @@
+import {auditTeachingRecords} from './teacherRecordAudit.js';
+import {GRADE_DATABASE} from './academic.js';
+import {SCHEDULE_DATABASE} from './teacherSchedulePlaces.js';
 import {assignmentError} from '../../src/lib/teacherAssignmentStatus.js';
 import {auditPendingDetails} from './teacherAuditDetails.js';
 import {assertRegistrationAccess} from './teacherStudentRegistration.js';
@@ -22,16 +25,20 @@ async function pages(notion:RegistrationNotion,id:string){
 export async function readIntegrityAudit(db:any,actor:any,notion:RegistrationNotion=registrationNotion){
  assertRegistrationAccess(actor);
  if(actor.academyId!=='main'||key(process.env.NOTION_STUDENT_DATABASE_ID)!==REGISTRATION_STUDENT_DATABASE)throw Error('NOTION_REGISTRATION_SOURCE_REQUIRED');
- const collections=['academyStudentMemberships','notionStudentMappings','users','studentEnrollments','reportSlugs','lessonReports','teacherLessonDrafts','teacherStudentRegistrations','teacherStudentEdits','teacherStudentEnrollmentEdits','teacherMessages','teacherWorkspaceAccess'];
+ const collections=['academyStudentMemberships','notionStudentMappings','users','studentEnrollments','reportSlugs','lessonReports','teacherLessonDrafts','teacherStudentRegistrations','teacherStudentEdits','teacherStudentEnrollmentEdits','teacherMessages','teacherWorkspaceAccess','teacherAcademicDrafts','teacherSchedules','academicRecords','studentSchedules'];
  const snapshots=await Promise.all(collections.map(c=>db.collection(c).get()));
  const rows=Object.fromEntries(collections.map((c,i)=>[c,snapshots[i].docs.map((d:any)=>({ ...d.data(),id:d.id}))]));
  const members=rows.academyStudentMemberships.filter((r:any)=>r.academyId===actor.academyId&&!r.disabled);
  const keys=new Set<string>(members.map((r:any)=>key(r.studentKey||r.id)).filter(Boolean));
  // Administrators also inspect legacy students not yet assigned to a membership.
- const remote=await Promise.allSettled([REGISTRATION_STUDENT_DATABASE,ENROLLMENTS,CLASSES,TEACHERS,LESSONS].map(id=>pages(notion,id)));
- const statuses=remote.map((r,i)=>({source:['학생','수강','반','선생님','수업 일지'][i],ok:r.status==='fulfilled'}));
- const [students,enrollments,classes,teachers,lessons]=remote.map(r=>r.status==='fulfilled'?r.value:[]);
+ const sharedConfig=(await db.collection('academyNotionConfig').doc(actor.academyId).get()).data();
+ const configuredLessons=[...new Set<string>([LESSONS,...(key(sharedConfig?.lessonDatabaseId)?[key(sharedConfig.lessonDatabaseId)!]:[]),...rows.teacherWorkspaceAccess.filter((r:any)=>r.academyId===actor.academyId&&!r.disabled).flatMap((r:any)=>(r.notionSources||[]).map((s:any)=>key(s.lessonDatabaseId)).filter(Boolean)),...rows.teacherLessonDrafts.filter((r:any)=>r.academyId===actor.academyId).map((r:any)=>key(r.notionWrite?.database)).filter(Boolean)])];
+ const remote=await Promise.allSettled([REGISTRATION_STUDENT_DATABASE,ENROLLMENTS,CLASSES,TEACHERS,...configuredLessons,GRADE_DATABASE,SCHEDULE_DATABASE].map(id=>pages(notion,id)));
+ const statuses=remote.map((r,i)=>({source:['학생','수강','반','선생님',...configuredLessons.map((id,i)=>i===0?'수업 일지':`수업 일지 (${id})`),'성적','일정'][i],ok:r.status==='fulfilled'}));
+ const [students,enrollments,classes,teachers]=remote.map(r=>r.status==='fulfilled'?r.value:[]);
  if(actor.admin)for(const p of students){const k=key(p.id);if(k)keys.add(k);}
+ const lessons=remote.slice(4,4+configuredLessons.length).flatMap(r=>r.status==='fulfilled'?r.value:[]);
+ const grades=remote.at(-2),schedules=remote.at(-1);
  const issues:any[]=[];
  const add=(code:string,message:string,k:string|null=null,id:string|null=null,severity:'error'|'warning'='error',extra:any={})=>issues.push({code,message,studentKey:k,recordId:id,severity,...extra});
  const groups=new Map<string,any[]>();
@@ -45,6 +52,7 @@ export async function readIntegrityAudit(db:any,actor:any,notion:RegistrationNot
  }
  for(const k of keys){const accounts=rows.users.filter((u:any)=>key(u.notionStudentKey)===k);if(accounts.length>1)add('DUPLICATE_ACCOUNT','한 학생에 여러 앱 계정이 연결돼 있습니다.',k);if(accounts.some((u:any)=>effective.get(k)?.firebaseUid!==u.id))add('ACCOUNT_REVERSE_LINK','앱 계정의 학생 연결과 대표 매핑이 일치하지 않습니다.',k);}
  const available=new Set(students.map((p:any)=>key(p.id)));const teacherIds=new Set(teachers.map((p:any)=>key(p.id)));const classIds=new Set(classes.map((p:any)=>key(p.id)));
+ if(actor.admin)for(const e of enrollments)if(!relations(e.properties?.['학생']).length)add('ENROLLMENT_UNLINKED','수강 원본의 학생 관계가 비어 있습니다.',null,e.id,'warning',{workType:'수강',nextAction:'빈 수강 원본의 사용 여부와 보존할 이력을 확인하세요. 학생 이름으로 자동 연결하거나 삭제하지 않습니다.'});
  for(const k of keys){if(statuses[0].ok&&!available.has(k))add('STUDENT_MISSING','소속 학생의 노션 원본을 찾을 수 없습니다.',k);
  const es=enrollments.filter((p:any)=>relations(p.properties?.['학생']).includes(k));
  if(statuses[1].ok&&es.length!==1)add('ENROLLMENT_COUNT',es.length?'노션 수강 행이 중복되어 있습니다.':'노션 수강 행이 없습니다.',k);
@@ -55,14 +63,15 @@ export async function readIntegrityAudit(db:any,actor:any,notion:RegistrationNot
  const m=effective.get(k);if(m){const slugs=rows.reportSlugs.filter((r:any)=>r.internalStudentId===m.internalStudentId&&r.active);if(slugs.length>1)add('ACTIVE_REPORT_DUPLICATE','활성 리포트 주소가 여러 개입니다.',k);if(slugs.some((r:any)=>key(r.studentKey)!==k))add('REPORT_STUDENT_MISMATCH','리포트 주소의 학생 식별자가 매핑과 다릅니다.',k);
  const cached=rows.studentEnrollments.filter((r:any)=>r.internalStudentId===m.internalStudentId&&!r.removed);if(cached.length>1)add('ENROLLMENT_MIRROR_DUPLICATE','앱 수강 연결이 여러 개입니다.',k,null,'warning');}
  }
- const markers=new Map<string,any[]>();for(const l of lessons){const student=relations(l.properties?.['학생']);if(student.length!==1||!keys.has(student[0]))continue;const marker=(l.properties?.['앱 기록 ID']?.rich_text||[]).map((r:any)=>r.plain_text??r.text?.content??'').join('');if(marker)markers.set(marker,[...(markers.get(marker)||[]),{id:l.id,key:student[0]}]);}
- for(const [marker,ls] of markers)if(ls.length>1)for(const l of ls)add('NOTION_LESSON_MARKER_DUPLICATE','같은 앱 기록 ID를 가진 노션 일지가 여러 개입니다.',l.key,marker);
+ auditTeachingRecords(rows,{lessons,grades:grades?.status==='fulfilled'?grades.value:[],schedules:schedules?.status==='fulfilled'?schedules.value:[]},keys,internal,add,Boolean(actor.admin));
  const reportGroups=new Map<string,any[]>();for(const r of rows.lessonReports){const k=internal.get(r.internalStudentId);if(!k||!r.teacherDraftId)continue;const identity=k+'\0'+r.teacherDraftId+'\0'+r.teacherAppRevision;reportGroups.set(identity,[...(reportGroups.get(identity)||[]),r]);}
  for(const reports of reportGroups.values())if(reports.length>1)add('LESSON_REPORT_DUPLICATE','같은 초안·수정 차수의 리포트가 여러 개입니다.',internal.get(reports[0].internalStudentId)!,reports[0].teacherDraftId);
- for(const c of ['teacherLessonDrafts','teacherStudentRegistrations','teacherStudentEdits','teacherStudentEnrollmentEdits','teacherMessages'])for(const r of rows[c]){
- if(r.academyId!==actor.academyId)continue;const k=key(r.studentKey||r.data?.studentKey||r.notionStudentPageId);if(k&&!keys.has(k))continue;
- const state=r.syncStatus||r.stage||r.status;const pending=c==='teacherLessonDrafts'?['failed','report_published_notion_pending','reflection_pending','publishing','processing','notion_saved'].includes(state):c==='teacherMessages'?['prepared','sending','uncertain'].includes(state):!['synced','completed','discarded','draft'].includes(state);
- if(pending&&!r.archived){const detail=auditPendingDetails(c,r);add('PENDING_'+c,detail.message,k,r.id,'warning',{...detail,studentName:c==='teacherStudentRegistrations'?r.data?.name||null:null});}
+ for(const r of rows.lessonReports){const k=internal.get(r.internalStudentId),draft=rows.teacherLessonDrafts.find((d:any)=>d.id===r.teacherDraftId);if(k&&((r.studentKey&&key(r.studentKey)!==k)||(draft&&key(draft.data?.studentKey)!==k)))add('LESSON_REPORT_STUDENT_MISMATCH','수업 일지 리포트와 앱 요청의 학생 연결이 다릅니다.',k,r.id,'error',{workType:'수업 일지',nextAction:'원본 일지·초안·리포트 학생 ID를 비교하세요. 기존 리포트 주소를 보존하고 수정 대상은 승인 후 처리하세요.'});}
+ for(const c of ['teacherLessonDrafts','teacherStudentRegistrations','teacherStudentEdits','teacherStudentEnrollmentEdits','teacherMessages','teacherAcademicDrafts','teacherSchedules'])for(const r of rows[c]){
+ if(r.academyId!==actor.academyId)continue;const recordKeys=(r.data?.students||[r.studentKey||r.data?.studentKey||r.notionStudentPageId]).map(key).filter(Boolean);const k=recordKeys.find((k:string)=>keys.has(k))||null;if(recordKeys.length&&!k)continue;
+ if(c==='teacherStudentRegistrations'&&(r.residentAt||r.data?.intakeStage==='consultation'||r.data?.purpose==='additional'))continue;
+ const state=r.syncStatus||r.stage||r.status;const pending=['teacherLessonDrafts','teacherAcademicDrafts','teacherSchedules'].includes(c)?['failed','report_published_notion_pending','reflection_pending','publishing','processing','notion_saved'].includes(state):c==='teacherMessages'?['prepared','sending','uncertain'].includes(state):!['synced','completed','discarded','draft'].includes(state);
+ if((pending||r.deleteRequested)&&!r.archived){const detail=auditPendingDetails(c,r);add('PENDING_'+c,detail.message,k,r.id,'warning',{...detail,studentName:c==='teacherStudentRegistrations'?r.data?.name||null:null});}
  }
  for(const r of rows.teacherWorkspaceAccess){if(r.academyId!==actor.academyId||r.disabled)continue;const u=rows.users.find((u:any)=>u.id===r.id);if(r.id!==process.env.ADMIN_UID&&(!u||!['teacher','principal','admin'].includes(u.role)))add('WORKSPACE_ROLE','교직원 설정과 계정 역할이 일치하지 않습니다.',null,r.id);if(['pending','failed'].includes(r.notionAssignmentStage))add('TEACHER_ASSIGNMENT_PENDING','선생님 담당 연결 · '+(r.notionAssignmentStage==='failed'?'노션 반영 실패':'노션 반영 대기'),null,r.id,'warning',{teacherName:u?.alias||u?.name||'선생님',workType:'선생님 담당 범위',details:[assignmentError(r.notionAssignmentError)],nextAction:'관리자 설정 → 선생님 담당 범위 목록에서 해당 선생님을 선택하고 저장한 범위 다시 반영을 누르세요.'});if(statuses[3].ok&&r.notionTeacherPageId&&!teacherIds.has(key(r.notionTeacherPageId)))add('WORKSPACE_TEACHER_MISSING','교직원 노션 선생님 연결을 찾을 수 없습니다.',null,r.id);}
  for(const s of statuses)if(!s.ok)add('SOURCE_UNAVAILABLE',s.source+' 원본을 읽지 못했습니다. 해당 검사는 완료되지 않았습니다.',null,null,'warning');
@@ -71,3 +80,5 @@ export async function readIntegrityAudit(db:any,actor:any,notion:RegistrationNot
  for(const issue of issues){issue.studentName=issue.studentName||pageName(students.find((p:any)=>key(p.id)===issue.studentKey))||effective.get(issue.studentKey)?.studentDisplayName||null;if(!issue.nextAction)issue.nextAction=issue.code==='SOURCE_UNAVAILABLE'?'다시 점검하세요. 조회 실패가 계속되면 노션 연결 권한과 서버 설정을 확인하세요.':'노션 학생과 관련 연결을 확인하세요. 학생 계정·리포트 연결 문제는 기존 계정·리포트 관리에서 확인하세요.';}
  return {checkedAt:new Date().toISOString(),academyId:actor.academyId,studentCount:keys.size,sources:statuses,complete:statuses.every(s=>s.ok),batiConfigured:batiReady,batiContractVerified:false,issues};
 }
+
+

@@ -89,3 +89,9 @@ NOTION_EDIT_CONFLICT 일지의 앱·노션 비교 및 유지할 내용 선택 �
 
 ## 최신 재개 지점: checkpoint 9 hotfix 11
 사용자 정정에 따라 시험기간/개별 단어장 카드, 필터, 지난 시험기간 디자인을 먼저 수정했습니다. CHECKPOINT_9_HOTFIX_11.md 참조. 본 체크포인트 10 A는 보류했으며 사용자 재개 후 진행합니다.
+
+## 최신 재개 지점: checkpoint 10 A
+연결·권한·중복·복구 코드 보강 및 운영 Notion 읽기 점검을 수행했습니다. CHECKPOINT_10_A.md와 CHECKPOINT_10_A_OPERATIONAL_READ.md 참조. 이전 디자인 hotfix 11 포함. 운영 Firebase 매핑/계정 및 실제 UI 확인은 사용자 배포 후 필요합니다. 다음 재개는 Bati 규약 확인·모의 발송 준비(B). 배포·문자 발송·운영 데이터 수정·Make 변경 없음.
+
+## 최신 재개 지점: checkpoint 10 A hotfix 1
+B 전 사용자 hotfix 요청으로 상담/등록 첫 달/추가 과목 상담 구분과 재원생 전환 후 목록 제외, 일지 조회 탭 위치·행 클릭 상세 모달, 일정의 저장+반영과 모달 조기 닫기를 수정했습니다. 테스트 450개 및 타입/서버 import/빌드 통과. 상세 CHECKPOINT_10_A_HOTFIX_1.md. 기존 A와 디자인 전체 포함. 다음 사용자 재개는 B, 운영 변경·배포·발송·Make 변경 없음.

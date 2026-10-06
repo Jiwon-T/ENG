@@ -17,5 +17,5 @@ export const academicDraftSchema = z.object({
  if(v.submissionStatus === '제출 완료' && (v.score === null || v.maxScore === null)) c.addIssue({code:'custom',message:'제출 완료 점수와 만점을 입력해 주세요.'});
 });
 export function canViewAcademyRecord(actor:{uid:string;admin:boolean;principal?:boolean;academyId?:string|null}, record:{ownerUid?:string;academyId?:string}) {
- return actor.admin || record.ownerUid === actor.uid || Boolean(actor.principal && actor.academyId && record.academyId === actor.academyId);
+ return actor.admin || record.ownerUid === actor.uid&&(!actor.academyId||!record.academyId||record.academyId===actor.academyId) || Boolean(actor.principal && actor.academyId && record.academyId === actor.academyId);
 }

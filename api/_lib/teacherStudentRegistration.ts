@@ -10,6 +10,9 @@ const calendarDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
 }, '날짜를 확인해 주세요.');
 const phone = z.string().trim().max(30).transform(value => value.replace(/[\s()-]/g, '')).refine(value => value === '' || /^0\d{8,10}$/.test(value), '연락처를 확인해 주세요.');
 export const studentRegistrationSchema = z.object({
+    purpose:z.enum(['new','additional']).default('new'),
+    intakeStage:z.enum(['consultation','new']).default('new'),
+    existingStudentKey:z.string().uuid().nullable().default(null),
     admission:admissionSchema,
     name: z.string().trim().min(1).max(60),
     school: z.string().trim().max(80).default(''),
@@ -33,6 +36,7 @@ export const studentRegistrationSchema = z.object({
         if (value.endDate && value.endDate < value.startDate) ctx.addIssue({code:'custom', message:'중단일은 시작일 이후여야 합니다.'});
     })).min(1).max(subjects.length),
 }).strict().superRefine((value, ctx) => {
+    if(value.purpose==='additional'&&!value.existingStudentKey||value.purpose==='new'&&value.existingStudentKey)ctx.addIssue({code:'custom',message:'추가 과목 상담은 기존 학생을 선택해 주세요.'});
     if (new Set(value.enrollments.map(item => item.subject)).size !== value.enrollments.length) ctx.addIssue({code:'custom', message:'과목별 수강은 한 번씩 입력해 주세요.'});
 });
 export type StudentRegistration = z.infer<typeof studentRegistrationSchema>;
@@ -61,6 +65,8 @@ export async function saveStudentRegistration(db:any, actor:RegistrationActor, i
     return db.runTransaction(async (transaction:any) => {
         const previous = (await transaction.get(ref)).data();
         assertRegistrationAccess(actor,previous);
+        if(previous?.residentAt)throw Error('REGISTRATION_ALREADY_RESIDENT');
+        if(value.existingStudentKey){const member=(await transaction.get(db.collection('academyStudentMemberships').doc(value.existingStudentKey))).data();if(!member||member.disabled||member.academyId!==actor.academyId)throw Error('FORBIDDEN');}
         if (previous?.lastWriteId === operation) {
             if (JSON.stringify(studentRegistrationSchema.parse(previous.data)) !== JSON.stringify(value) || previous.lastWriteBaseRevision !== (expectedRevision ?? null)) throw new Error('REGISTRATION_REQUEST_CONFLICT');
             return {id:ref.id, revision:previous.revision, syncStatus:previous.syncStatus, alreadySaved:true};
@@ -86,16 +92,42 @@ export async function saveStudentRegistration(db:any, actor:RegistrationActor, i
 
 export function registrationSummary(id:string, record:any): RegistrationSummary {
     return {id, title:record.title, revision:record.revision, syncStatus:record.syncStatus, updatedAt:record.updatedAt,
+        purpose:record.data?.purpose||'new',intakeStage:record.data?.intakeStage||'new',existingStudentKey:record.data?.existingStudentKey||null,studentKey:record.notionStudentPageId||record.data?.existingStudentKey||null,
         canEdit:!(['syncing','uncertain','synced'].includes(record.syncStatus) || record.notionStudentPageId || record.studentCreateAttempted || record.enrollmentCreateAttempted),
         studentSaved:Boolean(record.studentSaved),enrollmentSaved:Boolean(record.enrollmentSaved),
-        enrollments:(record.data?.enrollments || []).map((item:any)=>({subject:item.subject, status:item.status}))};
+        enrollments:(record.data?.enrollments || []).map((item:any)=>({subject:item.subject, status:item.status,startDate:item.startDate}))};
 }
 export async function listStudentRegistrations(db:any, actor:RegistrationActor) {
     assertRegistrationAccess(actor);
     const result = await db.collection('teacherStudentRegistrations').where('academyId','==',actor.academyId).get();
-    return result.docs.filter((doc:any)=>doc.data().academyId === actor.academyId)
+    return result.docs.filter((doc:any)=>doc.data().academyId === actor.academyId&&!doc.data().residentAt)
         .map((doc:any)=>registrationSummary(doc.id,doc.data()))
         .sort((a:RegistrationSummary,b:RegistrationSummary)=>b.updatedAt-a.updatedAt || a.id.localeCompare(b.id));
+}
+/** Move only the intake-list state; preserve student, enrollment, accounts and report IDs. */
+export async function convertRegistrationToResident(db:any,actor:RegistrationActor,id:unknown,revision:unknown,verifyAdditional?:(key:string)=>Promise<any>){
+    assertRegistrationAccess(actor);
+    const key=z.string().regex(/^[a-f0-9]{64}$/).parse(id),version=z.number().int().positive().parse(revision),ref=db.collection('teacherStudentRegistrations').doc(key);
+    const initial=(await ref.get()).data();if(!initial)throw Error('REGISTRATION_NOT_FOUND');assertRegistrationAccess(actor,initial);
+    if(initial.residentAt)return {id:key,studentKey:initial.notionStudentPageId||initial.data.existingStudentKey,alreadyConverted:true};
+    const data=studentRegistrationSchema.parse(initial.data);
+    if(data.purpose==='additional'){
+        if(!verifyAdditional)throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
+        const enrolled=await verifyAdditional(data.existingStudentKey!);
+        if(enrolled.pending||data.enrollments.some(e=>!enrolled.subjects.some((s:any)=>s.subject===e.subject&&s.status==='등록')))throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
+    }
+    return db.runTransaction(async(tx:any)=>{
+        const current=(await tx.get(ref)).data();if(!current)throw Error('REGISTRATION_NOT_FOUND');assertRegistrationAccess(actor,current);
+        if(current.residentAt)return {id:key,studentKey:current.notionStudentPageId||current.data.existingStudentKey,alreadyConverted:true};
+        if(current.revision!==version||JSON.stringify(current.data)!==JSON.stringify(initial.data))throw Error('REGISTRATION_CONFLICT');
+        if(data.purpose==='new'&&(data.intakeStage==='consultation'||current.syncStatus!=='synced'||!data.enrollments.some(e=>e.status==='등록')))throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
+        const studentKey=current.notionStudentPageId||data.existingStudentKey;
+        if(!studentKey)throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
+        const member=(await tx.get(db.collection('academyStudentMemberships').doc(studentKey))).data();
+        if(!member||member.disabled||member.academyId!==actor.academyId)throw Error('FORBIDDEN');
+        tx.set(ref,{...current,residentAt:Date.now(),residentBy:actor.uid,updatedAt:Date.now()});
+        return {id:key,studentKey,alreadyConverted:false};
+    });
 }
 export async function readStudentRegistration(db:any, actor:RegistrationActor, id:unknown) {
     assertRegistrationAccess(actor);
@@ -105,3 +137,4 @@ export async function readStudentRegistration(db:any, actor:RegistrationActor, i
     assertRegistrationAccess(actor,record);
     return {...registrationSummary(key,record),requestId:record.requestId,data:studentRegistrationSchema.parse(record.data)};
 }
+

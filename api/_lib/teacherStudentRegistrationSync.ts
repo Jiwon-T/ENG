@@ -31,6 +31,7 @@ export async function syncStudentRegistration(db:any,actor:RegistrationActor,id:
     let record:any=await db.runTransaction(async(tx:any)=>{
         const previous=(await tx.get(ref)).data();if(!previous)throw Error('REGISTRATION_NOT_FOUND');assertRegistrationAccess(actor,previous);
         if(previous.revision!==version)throw Error('REGISTRATION_CONFLICT');
+        if(previous.data?.purpose==='additional'||previous.data?.intakeStage==='consultation')throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
         if(previous.syncStatus==='synced')return {...previous,alreadySynced:true};
         if(previous.syncStatus==='syncing' && previous.syncLeaseUntil>Date.now())throw Error('REGISTRATION_SYNC_IN_PROGRESS');
         const next={...previous,syncStatus:'syncing',syncLease:lease,syncLeaseUntil:Date.now()+LEASE_MS,syncError:null};

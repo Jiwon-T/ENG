@@ -23,7 +23,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     let decoded;
     try {
       const { auth } = getFirebaseAdmin();
-      decoded = await auth.verifyIdToken(token);
+      decoded = await auth.verifyIdToken(token, true);
     } catch (authErr: any) {
       if (authErr.message?.startsWith('CONFIG_ERROR')) {
         return sendJson(res, 500, { ok: false, error: 'SERVER_CONFIG_ERROR' });

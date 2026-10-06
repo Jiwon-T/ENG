@@ -15,7 +15,7 @@ export async function academicStudentId(req: IncomingMessage, audience: 'parent'
   if (!header?.startsWith('Bearer ')) throw new Error('UNAUTHORIZED');
   const { auth, db } = deps.getFirebaseAdmin();
   let uid: string;
-  try { uid = (await auth.verifyIdToken(header.slice(7).trim())).uid; } catch { throw new Error('UNAUTHORIZED'); }
+  try { uid = (await auth.verifyIdToken(header.slice(7).trim(), true)).uid; } catch { throw new Error('UNAUTHORIZED'); }
   const user = await db.collection('users').doc(uid).get();
   const key = user.data()?.notionStudentKey;
   const mapping = key ? await deps.readStudentMapping(db, key) : null;

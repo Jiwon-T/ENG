@@ -17,7 +17,7 @@ export async function verifyAdminAuth(req: IncomingMessage): Promise<VerifiedAdm
 
   let decoded;
   try {
-    decoded = await auth.verifyIdToken(token);
+    decoded = await auth.verifyIdToken(token, true);
   } catch (e: any) {
     throw new Error('INVALID_TOKEN');
   }

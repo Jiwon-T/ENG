@@ -209,3 +209,12 @@
 
 .student-management-cards > .student-management-card-wrap {padding:0;}
 .student-management-card-wrap > .student-management-card {width:100%;height:100%;}
+
+.lesson-review-row { cursor: pointer; }
+.lesson-review-row:hover { background: #fff5f8; }
+.lesson-review-open { text-align: left; color: inherit; font: inherit; }
+.lesson-review-open:focus-visible { outline: 2px solid #ff4778; outline-offset: 4px; border-radius: 4px; }
+.lesson-review-detail { margin-top: 1.25rem; display: grid; gap: .8rem; }
+.lesson-review-detail > div { padding-bottom: .7rem; border-bottom: 1px solid #fce7ef; }
+.lesson-review-detail dt { font-size: .8rem; font-weight: 700; color: #64748b; margin-bottom: .25rem; }
+.lesson-review-detail dd { white-space: pre-wrap; overflow-wrap: anywhere; }

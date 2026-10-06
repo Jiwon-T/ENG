@@ -2,6 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { normalizeNotionPageId as uuid } from './notionPageId.js';
 import type { RegistrationNotion } from './teacherStudentRegistrationNotion.js';
 const text = (p: any) => (p?.rich_text || p?.title || []).map((r: any) => r.plain_text ?? r.text?.content ?? '').join('');
+export async function updatePublicationRevision(db:any,collection:string,id:string,revision:number,patch:any){
+    const ref=db.collection(collection).doc(id);
+    await db.runTransaction(async(tx:any)=>{const current=(await tx.get(ref)).data();
+        if(!current||current.revision!==revision||current.archived)throw Error('DRAFT_CONFLICT');
+        if(current.deleteRequested&&patch.stage==='published'&&collection!=='teacherSchedules')throw Error('FORBIDDEN');
+        tx.update(ref,patch);
+    });
+}
 function comparable(p: any): any {
     if (!p)
         return undefined;

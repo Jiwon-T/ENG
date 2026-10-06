@@ -1,7 +1,7 @@
 import { SCHEDULE_DATABASE, assertSchedulePlace } from './teacherSchedulePlaces.js';
 import {lessonExamScopeProperties} from './lessonExamScope.js';
 import {assertLessonNotionFields} from './teacherLessonDiagnostics.js';
-import { notionPropertiesMatch, writeTeacherNotionRecord } from './teacherNotionWrite.js';
+import { notionPropertiesMatch, writeTeacherNotionRecord,updatePublicationRevision } from './teacherNotionWrite.js';
 import { projectSchedule, schedulePayloadFromPage } from './scheduleProjection.js';
 import { lessonSpecialNoteProperties } from './lessonSpecialNote.js';
 import { lessonSource } from './teacherNotionWorkspace.js';
@@ -130,7 +130,7 @@ export async function publishTeacherSchedule(db: Firestore, id: string, record: 
     // Completion marker is informational; reports are already atomically projected.
     await notion(`pages/${page.id}`, 'PATCH', { properties: { '반영 상태': { select: { name: '반영 완료' } } } });
     const confirmed = await notion(`pages/${page.id}`);
-    await db.collection('teacherSchedules').doc(id).update({ notionPageId: confirmed.id, notionEditedAt: confirmed.last_edited_time, stage: 'published', lastSubmittedRevision: record.revision, failureCode: null, ...(record.deleteRequested ? { archived: true } : {}), updatedAt: Date.now() });
+    await updatePublicationRevision(db,'teacherSchedules',id,record.revision,{ notionPageId: confirmed.id, notionEditedAt: confirmed.last_edited_time, stage: 'published', lastSubmittedRevision: record.revision, failureCode: null, ...(record.deleteRequested ? { archived: true } : {}), updatedAt: Date.now() });
     return page.id;
 }
 export async function confirmTeacherReflection(pageId: string, kind: 'lesson' | 'schedule') {
