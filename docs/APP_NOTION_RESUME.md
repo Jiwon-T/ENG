@@ -95,3 +95,6 @@ NOTION_EDIT_CONFLICT 일지의 앱·노션 비교 및 유지할 내용 선택 �
 
 ## 최신 재개 지점: checkpoint 10 A hotfix 1
 B 전 사용자 hotfix 요청으로 상담/등록 첫 달/추가 과목 상담 구분과 재원생 전환 후 목록 제외, 일지 조회 탭 위치·행 클릭 상세 모달, 일정의 저장+반영과 모달 조기 닫기를 수정했습니다. 테스트 450개 및 타입/서버 import/빌드 통과. 상세 CHECKPOINT_10_A_HOTFIX_1.md. 기존 A와 디자인 전체 포함. 다음 사용자 재개는 B, 운영 변경·배포·발송·Make 변경 없음.
+
+## 최신 재개 지점: checkpoint 10 A hotfix 2
+선생님방 authentication 단계 SERVER_CONFIG_ERROR에 대응해 Firebase Admin 계정 조회 권한 부족 시 서명 검증+공식 본인 계정 조회로 정지/취소 검증을 유지하는 호환 경로를 추가했습니다. 운영 로그 확인, 실제 토큰 없는 읽기 테스트 수행. 456 테스트 및 타입/서버 import/빌드 통과. CHECKPOINT_10_A_HOTFIX_2.md 참조. 직접 배포/운영 데이터 변경 없음. 재배포 후 실제 계정 화면 복구 확인 필요. B는 아직 진행하지 않았습니다.

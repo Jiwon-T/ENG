@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { createRequire } from 'node:module';
 import { getFirebaseAdmin } from '../api/_lib/firebaseAdmin.ts';
 import { lookupStudentAndGuardianContact } from '../api/_lib/notion.ts';
@@ -166,9 +167,12 @@ describe('Environment Variable and Configuration Enforcement Tests', () => {
           `Vercel runtime violation: ${filePath} contains relative import ending in .ts: "${importPath}"`
         );
 
-        // 상대 경로 import는 반드시 .js로 끝나야 함 (확장자 누락 방지)
+        // JSON modules require an explicit Node ESM type attribute.
+        const jsonModule=importPath.endsWith('.json')&&/^\s+with\s*\{\s*type\s*:\s*['"]json['"]\s*\}/.test(content.slice(relativeImportRegex.lastIndex));
+        if(jsonModule)assert.doesNotThrow(()=>JSON.parse(fs.readFileSync(path.resolve(path.dirname(filePath),importPath),'utf8')));
+        // Executable modules still require .js; JSON is checked separately above.
         assert.ok(
-          importPath.endsWith('.js'),
+          importPath.endsWith('.js')||jsonModule,
           `Node ESM violation: ${filePath} contains relative import not ending in .js: "${importPath}"`
         );
       }

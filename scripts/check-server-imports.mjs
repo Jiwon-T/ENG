@@ -1,5 +1,5 @@
 import ts from 'typescript';
-import {mkdtemp,readFile,mkdir,writeFile,rm,readdir} from 'node:fs/promises';
+import {mkdtemp,readFile,mkdir,writeFile,rm,readdir,copyFile} from 'node:fs/promises';
 import {join,dirname,resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
@@ -18,6 +18,7 @@ async function compile(directory){
 }
 try{
  await Promise.all([compile('api'),compile('src/lib')]);
+ await copyFile(join(root,'firebase-applet-config.json'),join(temp,'firebase-applet-config.json'));
  // Plain Node ESM, without tsx or a bundler that resolves extensionless paths.
  // Import only; no handler invocation, network request or operational write.
  const entry=pathToFileURL(join(temp,'api/teacher/workspace.js')).href;

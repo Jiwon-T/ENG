@@ -1,3 +1,4 @@
+import {verifyFirebaseSession} from '../firebaseSession.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson } from '../http.js';
 import { getFirebaseAdmin } from '../firebaseAdmin.js';
@@ -22,7 +23,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     let decoded;
     try {
       const { auth } = getFirebaseAdmin();
-      decoded = await auth.verifyIdToken(token, true);
+      decoded = await verifyFirebaseSession(auth,token);
     } catch (authErr: any) {
       if (authErr.message?.startsWith('CONFIG_ERROR')) {
         return sendJson(res, 500, { ok: false, error: 'SERVER_CONFIG_ERROR' });
@@ -127,3 +128,4 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });
   }
 }
+

@@ -1,3 +1,4 @@
+import {verifyFirebaseSession} from './firebaseSession.js';
 import type { IncomingMessage } from 'http';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
 
@@ -17,7 +18,7 @@ export async function verifyAdminAuth(req: IncomingMessage): Promise<VerifiedAdm
 
   let decoded;
   try {
-    decoded = await auth.verifyIdToken(token, true);
+    decoded = await verifyFirebaseSession(auth,token);
   } catch (e: any) {
     throw new Error('INVALID_TOKEN');
   }
@@ -36,3 +37,4 @@ export async function verifyAdminAuth(req: IncomingMessage): Promise<VerifiedAdm
     email: decoded.email,
   };
 }
+

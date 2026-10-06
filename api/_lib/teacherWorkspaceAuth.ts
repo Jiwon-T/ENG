@@ -1,3 +1,4 @@
+import {verifyFirebaseSession} from './firebaseSession.js';
 import {notionTeachingScopes} from './teacherNotionWorkspace.js';
 import type { IncomingMessage } from 'http';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
@@ -9,9 +10,11 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     let uid: string;
     // Use the same signed-token verification as existing app endpoints.
     // Access approval and disabling are checked server-side on every request.
-    try { uid = (await auth.verifyIdToken(header.slice(7).trim(), true)).uid; }
+    try { uid = (await verifyFirebaseSession(auth,header.slice(7).trim())).uid; }
     catch (e: any) {
         const code = String(e?.code || '');
+        console.warn('TEACHER_AUTH_CHECK_FAILED',{code:/^(auth|app)\/[a-z-]+$/.test(code)?code:e?.message==='AUTH_SERVER_CONFIG_ERROR'?'AUTH_SERVER_CONFIG_ERROR':'unknown'});
+        if(e?.message==='AUTH_SERVER_CONFIG_ERROR')throw new Error('AUTH_SERVER_CONFIG_ERROR');
         if (code === 'auth/insufficient-permission' || code === 'auth/internal-error' || code === 'app/invalid-credential') throw new Error('AUTH_SERVER_CONFIG_ERROR');
         if (code === 'auth/id-token-revoked' || code === 'auth/user-disabled') throw new Error('SESSION_REVOKED');
         throw new Error('UNAUTHORIZED');
@@ -41,3 +44,4 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     }
     return { uid, admin, principal, academyId, scopes, teachingScopes, db, workspaceProfile:profile, readAccessKey:JSON.stringify([profile?.notionTeacherPageId,profile?.notionSources,profile?.workspaceRole]) };
 }
+
