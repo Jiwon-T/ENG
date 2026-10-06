@@ -1,3 +1,4 @@
+import {workspaceFailureDiagnostic} from '../_lib/workspaceFailureDiagnostic.js';
 import {readRecordConflict,resolveRecordConflict} from '../_lib/teacherRecordConflict.js';
 import { readSchedulePlaceOptions } from '../_lib/teacherSchedulePlaces.js';
 import {assignmentNeedsRecovery} from '../../src/lib/teacherAssignmentStatus.js';
@@ -621,11 +622,13 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         return sendJson(res, 400, { ok: false, error: 'UNKNOWN_ACTION' });
     }
     catch (error: any) {
+        failureStage=error?.workspaceStage||failureStage;
         const result = workspaceError(error, failureStage);
-        if (result.status >= 500 || failureStage.startsWith('lesson-')) console.warn('TEACHER_WORKSPACE_FAILED', {error: result.body.error, diagnosticId: result.body.diagnosticId, failureStage});
+        if (result.status >= 500 || failureStage.startsWith('lesson-')) console.warn('TEACHER_WORKSPACE_FAILED', {error: result.body.error, diagnosticId: result.body.diagnosticId, failureStage,...workspaceFailureDiagnostic(error)});
         return sendJson(res, result.status, result.body);
     } finally { if(mutation)invalidateTeacherMutation(mutation); }
 }
+
 
 
 

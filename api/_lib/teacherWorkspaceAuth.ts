@@ -4,7 +4,10 @@ import type { IncomingMessage } from 'http';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
 import { subjects } from './teacherWorkspacePolicy.js';
 export async function teacherActor(req: IncomingMessage, initialize = getFirebaseAdmin) {
+    let workspaceStage='firebase-initialize';
+    try{
     const { db, auth } = initialize();
+    workspaceStage='token-verification';
     const header = req.headers.authorization;
     if (!header?.startsWith('Bearer ') || !header.slice(7).trim() || header.slice(7) === 'undefined') throw new Error('UNAUTHORIZED');
     let uid: string;
@@ -19,6 +22,7 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
         if (code === 'auth/id-token-revoked' || code === 'auth/user-disabled') throw new Error('SESSION_REVOKED');
         throw new Error('UNAUTHORIZED');
     }
+    workspaceStage='workspace-account';
     if (!process.env.ADMIN_UID) throw new Error('CONFIG_ERROR');
     const admin = uid === process.env.ADMIN_UID;
     const [userDoc,profileDoc]=await Promise.all([db.collection('users').doc(uid).get(),db.collection('teacherWorkspaceAccess').doc(uid).get()]);
@@ -32,6 +36,7 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     if (!admin && user?.role === 'principal' && !principal) throw new Error('TEACHER_NOT_CONFIGURED');
     const academyId = profile?.academyId || (admin ? 'main' : null);
     if(!academyId)throw new Error('TEACHER_NOT_CONFIGURED');
+    workspaceStage='workspace-scope';
     let teachingScopes = profile?.notionTeacherPageId ? await notionTeachingScopes(db,profile) : profile?.scopes || [];
     if(!profile?.notionTeacherPageId&&teachingScopes.length){
         const checked=await Promise.all(teachingScopes.map(async(s:any)=>{const m=(await db.collection('academyStudentMemberships').doc(s.studentKey).get()).data();return m&&!m.disabled&&m.academyId===academyId?s:null;}));
@@ -43,5 +48,7 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
         scopes = members.docs.filter(d => !d.data().disabled).flatMap(d => subjects.map(subject => ({studentKey: d.id, subject})));
     }
     return { uid, admin, principal, academyId, scopes, teachingScopes, db, workspaceProfile:profile, readAccessKey:JSON.stringify([profile?.notionTeacherPageId,profile?.notionSources,profile?.workspaceRole]) };
+    }catch(error:any){const failure=error instanceof Error?error:new Error('WORKSPACE_ERROR');Object.assign(failure,{workspaceStage});throw failure;}
 }
+
 
