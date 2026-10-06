@@ -393,14 +393,14 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 if(page.properties['학생']?.relation?.[0]?.id.replace(/-/g,'') !== value.studentKey.replace(/-/g,'')) throw new Error('SOURCE_IDENTITY_LOCKED');
                 if(id !== importedPageId || page.properties['과목']?.select?.name !== value.subject) throw new Error('SOURCE_IDENTITY_LOCKED');
             }
-            await db.runTransaction(async t=>{
+            const record=await db.runTransaction(async t=>{
                 const ref=db.collection('teacherAcademicDrafts').doc(id), old=(await t.get(ref)).data();
                 if(old?.archived||old?.deleteRequested)throw Error('FORBIDDEN');
                 if(old && !canAccessOwned(actor,old.ownerUid,old.academyId)) throw new Error('FORBIDDEN');
                 assertDraftEditable(old,body.revision,value);
-                t.set(ref,{...old,data:value,ownerUid:old?.ownerUid||actor.uid,academyId:old?.academyId||actor.academyId,revision:(old?.revision||0)+1,stage:'draft',updatedAt:Date.now(),...(importedPageId?{notionPageId:importedPageId,notionEditedAt:importedEditedAt}:{})});
+                const next={...old,data:value,ownerUid:old?.ownerUid||actor.uid,academyId:old?.academyId||actor.academyId,revision:(old?.revision||0)+1,stage:'draft',updatedAt:Date.now(),...(importedPageId?{notionPageId:importedPageId,notionEditedAt:importedEditedAt}:{})}; t.set(ref,next);return {id,...next};
             });
-            return sendJson(res,200,{ok:true,id});
+            return sendJson(res,200,{ok:true,id,record});
         }
         if(body.action==='archive-academic'){failureStage='academic-archive';return sendJson(res,200,{ok:true,...await archiveTeacherAcademic(db,actor,body.id,body.revision)});}
         if(body.action==='cancel-academic-delete'){failureStage='academic-archive-cancel';return sendJson(res,200,{ok:true,...await cancelAcademicArchive(db,actor,body.id,body.revision)});}
@@ -414,8 +414,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 academicDraftSchema.parse(old.data);
                 t.update(ref,{stage:'publishing',publishStartedAt:Date.now()});return old;
             });
-            if(record.alreadyPublished) return sendJson(res,200,{ok:true,stage:'published'});
-            try {return sendJson(res,200,{ok:true,stage:'published',pageId:await publishTeacherGrade(db,id,record)});}
+            if(record.alreadyPublished) return sendJson(res,200,{ok:true,stage:'published',record:{id,...record}});
+            try {return sendJson(res,200,{ok:true,stage:'published',pageId:await publishTeacherGrade(db,id,record),record:{id,...(await ref.get()).data()}});}
             catch(e:any) {await updatePublicationRevision(db,'teacherAcademicDrafts',id,record.revision,{stage:'failed',failureCode:e.message}).catch(()=>{});throw e;}
         }
         if (body.action === 'save-curriculum') {
@@ -513,7 +513,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(existing&&!canAccessOwned(actor,existing.ownerUid,existing.academyId))throw Error('FORBIDDEN');
             const places=await readSchedulePlaceOptions();
             if(value.place!==''&&!places.includes(value.place))throw Error('NOTION_SCHEDULE_PLACE_REQUIRED');
-            await db.runTransaction(async (t) => {
+            const record=await db.runTransaction(async (t) => {
                 const ref = db.collection('teacherSchedules').doc(id);
                 const old = (await t.get(ref)).data()||imported;
                 if(old?.archived || old?.deleteRequested)throw new Error('FORBIDDEN');
@@ -524,9 +524,9 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                     throw new Error('PUBLISH_IN_PROGRESS');
                 if (old && body.revision !== old.revision)
                     throw new Error('DRAFT_CONFLICT');
-                t.set(ref, { ...old, data: value, ownerUid: old?.ownerUid || actor.uid, academyId: old?.academyId || actor.academyId, revision: (old?.revision || 0) + 1, stage: 'draft', updatedAt: Date.now() });
+                const next={ ...old, data: value, ownerUid: old?.ownerUid || actor.uid, academyId: old?.academyId || actor.academyId, revision: (old?.revision || 0) + 1, stage: 'draft', updatedAt: Date.now() }; t.set(ref,next);return {id,...next};
             });
-            return sendJson(res, 200, { ok: true, id });
+            return sendJson(res, 200, { ok: true, id, record });
         }
         if (body.action === 'publish-schedule') {
             failureStage='schedule-reflection';
@@ -541,9 +541,9 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 return old;
             });
             if (record.alreadyPublished)
-                return sendJson(res, 200, { ok: true, stage: 'published' });
+                return sendJson(res, 200, { ok: true, stage: 'published',record:{id,...record} });
             try {
-                return sendJson(res, 200, { ok: true, pageId: await publishTeacherSchedule(db, id, record) });
+                return sendJson(res, 200, { ok: true, pageId: await publishTeacherSchedule(db, id, record),record:{id,...(await ref.get()).data()} });
             }
             catch (error: any) {
                 await updatePublicationRevision(db,'teacherSchedules',id,record.revision,{ stage: 'failed', failureCode: error.message }).catch(()=>{});
@@ -556,16 +556,16 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if (!canTeach(actor, value.studentKey, value.subject))
                 throw new Error('FORBIDDEN');
             const id = body.id ? z.string().uuid().parse(body.id) : randomUUID();
-            await db.runTransaction(async (t) => {
+            const record=await db.runTransaction(async (t) => {
                 const ref = db.collection('teacherLessonDrafts').doc(id);
                 const old = (await t.get(ref)).data();
                 if(old?.archived||old?.deleteRequested)throw new Error('FORBIDDEN');
                 if (old && !canAccessOwned(actor, old.ownerUid, old.academyId))
                     throw new Error('FORBIDDEN');
                 assertDraftEditable(old, body.revision, value);
-                t.set(ref, { ...old, data: value, ownerUid: old?.ownerUid || actor.uid, academyId: old?.academyId || actor.academyId, revision: (old?.revision || 0) + 1, stage: 'draft', percentage: percentage(value.correct, value.total), updatedAt: Date.now() });
+                const next={ ...old, data: value, ownerUid: old?.ownerUid || actor.uid, academyId: old?.academyId || actor.academyId, revision: (old?.revision || 0) + 1, stage: 'draft', percentage: percentage(value.correct, value.total), updatedAt: Date.now() }; t.set(ref,next);return {id,...next};
             });
-            return sendJson(res, 200, { ok: true, id });
+            return sendJson(res, 200, { ok: true, id, record });
         }
         if(body.action==='resolve-academic-conflict'||body.action==='resolve-schedule-conflict'){const {action,...input}=body;return sendJson(res,200,{ok:true,...await resolveRecordConflict(db,actor,action==='resolve-academic-conflict'?'academic':'schedule',input)});}
         if(body.action==='resolve-lesson-conflict'){failureStage='lesson-conflict-resolution';const {action,...input}=body;return sendJson(res,200,{ok:true,...await resolveLessonConflict(db,actor,input)});}
@@ -585,14 +585,14 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 return old;
             });
             if (draft.alreadyPublished)
-                return sendJson(res, 200, { ok: true, stage: 'published', pageId: draft.notionPageId });
+                return sendJson(res, 200, { ok: true, stage: 'published', pageId: draft.notionPageId,record:{id,...draft} });
             try {
                 // Publish to the app first. Notion is an additional copy, never a Make trigger.
                 await writeDirectLessonReport(db,id,draft);
                 const pageId = await publishTeacherDraft(db, id, draft);
                 await writeDirectLessonReport(db,id,{...draft,notionPageId:pageId});
                 await updatePublicationRevision(db,'teacherLessonDrafts',id,draft.revision,{stage:'published',lastSubmittedRevision:draft.revision,failureCode:null});
-                return sendJson(res, 200, { ok: true, stage: 'published', pageId });
+                return sendJson(res, 200, { ok: true, stage: 'published', pageId,record:{id,...(await ref.get()).data()} });
             }
             catch (error: any) {
                 const saved=(await ref.get()).data();
@@ -600,7 +600,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                     await updatePublicationRevision(db,'teacherLessonDrafts',id,draft.revision,{stage:'report_published_notion_pending',failureCode:error.message});
                     const failure=workspaceError(error,failureStage);
                     console.warn('TEACHER_LESSON_NOTION_PENDING',{error:failure.body.error,diagnosticId:failure.body.diagnosticId,failureStage,draftId:id,revision:draft.revision});
-                    return sendJson(res,200,{ok:true,stage:'report_published_notion_pending',failureCode:failure.body.error,warning:lessonSyncWarning(failure),diagnosticId:failure.body.diagnosticId});
+                    return sendJson(res,200,{ok:true,stage:'report_published_notion_pending',failureCode:failure.body.error,warning:lessonSyncWarning(failure),diagnosticId:failure.body.diagnosticId,record:{id,...(await ref.get()).data()}});
                 }
                 await updatePublicationRevision(db,'teacherLessonDrafts',id,draft.revision,{ stage: 'failed', failureCode: error.message }).catch(()=>{});
                 throw error;
@@ -633,6 +633,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         return sendJson(res, result.status, result.body);
     } finally { if(mutation)invalidateTeacherMutation(mutation); }
 }
+
+
 
 
 

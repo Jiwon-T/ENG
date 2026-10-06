@@ -227,3 +227,12 @@
 @media(max-width:700px){.workspace-dialog-scroll {padding:6px;}.workspace-dialog-header {top:-6px;}}
 @media(max-width:767px){.calendar-dialog-scroll {padding:10px;}}
 
+
+.grid-student-chip {display:inline-flex;align-items:center;border:1px solid #fce1eb;border-radius:12px;overflow:hidden;background:#fff5f8;}
+.grid-student-chip .primary-button,.grid-student-chip .small-button {border:0;border-radius:0;box-shadow:none;}
+.teacher-workspace .grid-student-remove {width:28px;min-height:34px;padding:0;font-size:17px;color:#be416c;background:transparent;}
+.workspace-toast {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;margin-bottom:12px;border:1px solid #fbcfe8;border-radius:14px;background:#fff5f8;color:#8d3555;font-size:13px;}
+.workspace-toast button {flex:none;min-width:32px;min-height:32px;font-size:20px;}
+.workspace-job-status,.workspace-job-history {font-size:12px;color:#64748b;margin-bottom:12px;}
+.workspace-job-history summary {cursor:pointer;}
+.workspace-job-history p {padding:4px 0;}

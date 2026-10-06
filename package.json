@@ -10,6 +10,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts tests/*.test.tsx",
+    "test:bati": "node --import tsx --test tests/batiTransport.test.ts tests/teacherMessages.test.ts",
     "check:server-imports": "node scripts/check-server-imports.mjs"
   },
   "dependencies": {
@@ -57,3 +58,4 @@
     }
   }
 }
+

@@ -20,6 +20,12 @@ export const OFFICIAL_SERVER_ENV_VARS = [
   'NOTION_STUDENT_DATABASE_ID',
   'BATI_WEBHOOK_URL',
   'BATI_MESSAGE_PARAM',
+  'BATI_RECIPIENT_PARAM',
+  'BATI_WEBHOOK_METHOD',
+  'BATI_PAYLOAD_MODE',
+  'BATI_RESPONSE_RULE',
+  'BATI_SECURITY_HEADER_NAME',
+  'BATI_SECURITY_HEADER_VALUE',
 ] as const;
 
 describe('Environment Variable and Configuration Enforcement Tests', () => {
@@ -218,3 +224,4 @@ describe('Environment Variable and Configuration Enforcement Tests', () => {
     }, 'require("jwks-rsa") threw an error');
   });
 });
+
