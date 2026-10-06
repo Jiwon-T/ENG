@@ -1,0 +1,28 @@
+/* One frame for native teacher dialogs and custom management overlays. */
+dialog.workspace-dialog,.teacher-workspace dialog.workspace-dialog,
+dialog.calendar-detail-dialog,.teacher-workspace dialog.calendar-detail-dialog {
+ border-radius:24px;overflow:hidden;padding:0;background:#fff;box-sizing:border-box;
+}
+dialog.workspace-dialog[open] {display:flex;flex-direction:column;}
+.workspace-dialog>.workspace-dialog-header {flex:none;position:relative;top:auto;margin:0;padding:16px 20px;background:#fff;border-radius:24px 24px 0 0;}
+.workspace-dialog>.workspace-dialog-scroll {flex:1 1 auto;min-height:0;max-height:none;margin:0 10px 12px;padding:4px 10px 12px;border-radius:12px;overflow:auto;}
+.calendar-detail-dialog>.calendar-dialog-scroll {margin:12px;max-height:calc(var(--dialog-limit) - 26px);padding:8px;}
+.teacher-modal-shell {overflow:hidden;isolation:isolate;}
+.teacher-modal-shell>div[class*="overflow-y-auto"] {min-height:0;border-radius:12px;}
+.teacher-modal-shell.teacher-exam-modal {padding:0;}
+.teacher-modal-scroll {margin:12px;padding:12px;max-height:calc(90dvh - 26px);overflow:auto;border-radius:12px;}
+.workspace-dialog-scroll,.calendar-dialog-scroll,.teacher-modal-scroll,
+.teacher-modal-shell [class*="overflow-y-auto"],.teacher-modal-shell [class*="overflow-auto"] {
+ scrollbar-width:thin;scrollbar-color:#dca4b9 transparent;overscroll-behavior:contain;
+}
+.workspace-dialog-scroll:focus,.calendar-dialog-scroll:focus,.teacher-modal-scroll:focus {outline:none;}
+.workspace-dialog-scroll:focus-visible {box-shadow:inset 0 0 0 1px #fbcfe8;}
+.workspace-dialog-scroll::-webkit-scrollbar,.calendar-dialog-scroll::-webkit-scrollbar,.teacher-modal-scroll::-webkit-scrollbar,
+.teacher-modal-shell ::-webkit-scrollbar {width:7px;height:7px;}
+.workspace-dialog-scroll::-webkit-scrollbar-track,.calendar-dialog-scroll::-webkit-scrollbar-track,.teacher-modal-scroll::-webkit-scrollbar-track,
+.teacher-modal-shell ::-webkit-scrollbar-track {background:transparent;}
+.workspace-dialog-scroll::-webkit-scrollbar-thumb,.calendar-dialog-scroll::-webkit-scrollbar-thumb,.teacher-modal-scroll::-webkit-scrollbar-thumb,
+.teacher-modal-shell ::-webkit-scrollbar-thumb {background:#dca4b9;border-radius:999px;}
+.workspace-dialog-scroll::-webkit-scrollbar-button,.calendar-dialog-scroll::-webkit-scrollbar-button,.teacher-modal-scroll::-webkit-scrollbar-button,
+.teacher-modal-shell ::-webkit-scrollbar-button {display:none;width:0;height:0;}
+@media(max-width:700px){.workspace-dialog>.workspace-dialog-header{padding:12px 16px;}.workspace-dialog>.workspace-dialog-scroll{margin:0 8px 10px;padding:4px 6px 10px;}}

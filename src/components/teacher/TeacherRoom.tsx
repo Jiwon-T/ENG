@@ -432,7 +432,7 @@ function LegacyTeacherRoom({ onNavigate }: TeacherRoomProps) {
               {/* 학부모 고정 리포트 주소 발급 모달 */}
               {reportSlugModal.open && (
                 <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-                  <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+                  <div className="teacher-modal-shell bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
                         <span>🏷️</span> 학부모 고정 주소 발급
@@ -885,3 +885,5 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
     </button>
   );
 }
+
+

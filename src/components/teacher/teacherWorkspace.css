@@ -1,3 +1,4 @@
+@import './modalFrame.css';
 .teacher-workspace .panel { border:1px solid #e2e8f0; background:white; border-radius:16px; padding:16px; box-shadow:0 2px 8px #0f172a05; }
 .teacher-workspace h2 { font-size:15px; font-weight:800; color:#334155; margin-bottom:12px; }
 .teacher-workspace label { font-size:12px; font-weight:600; color:#64748b; }
@@ -225,3 +226,4 @@
 .workspace-dialog-scroll,.calendar-dialog-scroll { margin:8px; padding:12px; max-height:calc(var(--dialog-limit) - 18px); overflow:auto; border-radius:12px; box-sizing:border-box; overscroll-behavior:contain; scrollbar-gutter:stable; }
 @media(max-width:700px){.workspace-dialog-scroll {padding:6px;}.workspace-dialog-header {top:-6px;}}
 @media(max-width:767px){.calendar-dialog-scroll {padding:10px;}}
+

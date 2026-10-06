@@ -2032,7 +2032,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       {/* Create Wordbook Modal */}
       {isExampleModalOpen && currentWordForExamples && selectedWordbook && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-2xl w-full bg-white rounded-[3rem] p-10 shadow-2xl max-h-[90vh] flex flex-col">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-2xl w-full bg-white rounded-[3rem] p-10 shadow-2xl max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 leading-tight">[{currentWordForExamples.word}] 랜덤 예문 풀</h2>
@@ -2148,7 +2148,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       {/* Create Wordbook Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
             <h2 className="text-2xl font-black text-slate-900 mb-6">새 단어장 만들기</h2>
             <div className="space-y-4 mb-6">
               <div>
@@ -2246,7 +2246,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       {/* Edit Wordbook Modal */}
       {editingWordbook && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
             <h2 className="text-2xl font-black text-slate-900 mb-6">단어장 설정 수정</h2>
             <div className="space-y-4 mb-6">
               <div>
@@ -2369,7 +2369,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       {/* Passage Bulk Add Modal for sentence-order */}
       {isPassageModalOpen && selectedWordbook && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-2xl w-full bg-white rounded-[2.5rem] p-8 md:p-10 shadow-2xl max-h-[90vh] flex flex-col">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-2xl w-full bg-white rounded-[2.5rem] p-8 md:p-10 shadow-2xl max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
@@ -2509,7 +2509,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       )}
       {editingWord && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
             <h2 className="text-2xl font-black text-slate-900 mb-6">단어 수정</h2>
             <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               <div>
@@ -2690,7 +2690,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       {/* Individual Add Word Modal */}
       {isIndividualAddOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
             <h2 className="text-2xl font-black text-slate-900 mb-6">
               {selectedWordbook?.type === 'sentence-order' ? '문장 추가' : '단어 추가'}
             </h2>
@@ -2831,7 +2831,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       )}
       {isBulkAddOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-2xl w-full bg-white rounded-[3rem] p-10 shadow-2xl">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-2xl w-full bg-white rounded-[3rem] p-10 shadow-2xl">
             <div className="flex justify-between items-start mb-6">
               <h2 className="text-2xl font-black text-slate-900">단어 엑셀 일괄 등록</h2>
               <button onClick={() => setIsBulkAddOpen(false)}><X size={24} className="text-slate-400" /></button>
@@ -2861,7 +2861,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }} 
             animate={{ scale: 1, opacity: 1 }} 
-            className="max-w-2xl w-full bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh]"
+            className="teacher-modal-shell max-w-2xl w-full bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh]"
           >
             <div className="flex justify-between items-center p-8 pb-4 border-b border-slate-50">
               <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
@@ -2969,7 +2969,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       {/* Delete Confirmation Modal */}
       {deleteTarget && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl text-center">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl text-center">
             <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 text-red-500">
               <Trash2 size={40} />
             </div>
@@ -2998,7 +2998,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }} 
             animate={{ scale: 1, opacity: 1 }} 
-            className="max-w-lg w-full bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh]"
+            className="teacher-modal-shell max-w-lg w-full bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh]"
           >
             <div className="flex justify-between items-center p-8 pb-4 border-b border-slate-50">
               <h2 className="text-xl font-black text-slate-900">
@@ -3385,7 +3385,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }} 
             animate={{ scale: 1, opacity: 1 }} 
-            className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl p-10"
+            className="teacher-modal-shell max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl p-10"
           >
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-slate-900">단어장 출력 설정</h2>
@@ -3468,7 +3468,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       {/* Wordbook Merge Modal */}
       {isMergeModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-2xl w-full bg-white rounded-[3rem] p-8 md:p-10 shadow-2xl max-h-[90vh] flex flex-col">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-2xl w-full bg-white rounded-[3rem] p-8 md:p-10 shadow-2xl max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
@@ -3759,7 +3759,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       {/* DAY Management Modal */}
       {isDayManagementOpen && selectedWordbook && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-lg w-full bg-white rounded-[3rem] p-8 md:p-10 shadow-2xl max-h-[90vh] flex flex-col">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-lg w-full bg-white rounded-[3rem] p-8 md:p-10 shadow-2xl max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
@@ -4189,3 +4189,5 @@ function SortableWordCard({
     </div>
   );
 }
+
+

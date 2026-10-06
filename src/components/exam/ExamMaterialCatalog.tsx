@@ -1,3 +1,4 @@
+import '../teacher/modalFrame.css';
 import './examMaterialCatalog.css';
 import React, {useEffect, useRef, useState} from 'react';
 import {BookOpen, ChevronRight, Archive} from 'lucide-react';
@@ -63,7 +64,7 @@ export default function ExamMaterialCatalog<T extends Book>({books, manage=false
     <div hidden={Boolean(openedPeriod)}>{error&&<p role="alert" className="text-red-600">{error}</p>}{loading?<p>시험기간 불러오는 중…</p>:<><div className="exam-period-grid">{cards(current)}</div>{!current.length&&<p className="text-slate-500">선택한 학교·학년의 현재 시험기간이 없습니다.</p>}<details className="exam-archive" open={Boolean(period&&past.some(p=>p.id===period))}><summary><span className="exam-archive-icon" aria-hidden="true"><Archive size={22}/></span><span>지난 시험기간 <span className="exam-archive-count">{past.length}</span></span><ChevronRight className="exam-archive-chevron" size={20} aria-hidden="true"/></summary><p className="exam-archive-description">과거 자료를 보관하며, 다시 열거나 다음 시험기간에 재사용할 수 있습니다.</p><div className="exam-period-grid">{cards(past)}</div></details></>}
     {unassigned.length>0&&<details><summary className="cursor-pointer font-bold">시험기간 미지정 자료 ({unassigned.length})</summary><div className="grid sm:grid-cols-2 gap-2 mt-3">{unassigned.map(b=><button className={control+' text-left'} key={b.id} onClick={()=>onOpen(b)}>{b.title} →</button>)}</div></details>}
     </div>
-    {editing&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><form role="dialog" aria-modal="true" aria-label="시험기간 관리" onSubmit={e=>{e.preventDefault();void save();}} className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-auto space-y-4">
+    {editing&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><form role="dialog" aria-modal="true" aria-label="시험기간 관리" onSubmit={e=>{e.preventDefault();void save();}} className="teacher-modal-shell teacher-exam-modal bg-white rounded-2xl w-full max-w-2xl max-h-[90vh]"><div className="teacher-modal-scroll space-y-4">
       <h3 className="text-xl font-bold">{editing.id?'시험기간 수정':'시험기간 만들기'}</h3><div className="grid sm:grid-cols-2 gap-3">
       <label>학교<input required className={control+' w-full'} value={editing.school} onChange={e=>field('school',e.target.value)} placeholder="예: 용죽고"/></label><label>학년<input required className={control+' w-full'} value={editing.grade} onChange={e=>field('grade',e.target.value)} placeholder="예: 1학년"/></label>
       <label>연도<input type="number" min="2000" max="2200" required className={control+' w-full'} value={editing.year} onChange={e=>field('year',Number(e.target.value))}/></label><label>학기<select className={control+' w-full'} value={editing.semester} onChange={e=>field('semester',e.target.value)}><option>1학기</option><option>2학기</option></select></label>
@@ -73,6 +74,7 @@ export default function ExamMaterialCatalog<T extends Book>({books, manage=false
       <p className="text-sm text-slate-500">단어장은 여러 기간에 연결할 수 있습니다. 연결 해제는 원본 자료를 삭제하지 않습니다. 공유된 단어장을 수정하면 연결된 모든 기간에 반영됩니다.</p>
       <label>연결할 자료 검색<input className={control+' w-full'} value={linkSearch} onChange={e=>setLinkSearch(e.target.value)}/></label><div className="max-h-48 overflow-auto space-y-2">{books.filter(b=>b.title.toLowerCase().includes(linkSearch.toLowerCase())).map(b=><label key={b.id} className="flex gap-2"><input type="checkbox" checked={editing.wordbookIds.includes(b.id)} onChange={e=>field('wordbookIds',e.target.checked?[...editing.wordbookIds,b.id]:editing.wordbookIds.filter(id=>id!==b.id))}/>{b.title}</label>)}</div>
       {error&&<p role="alert" className="text-red-600">{error}</p>}<div className="flex gap-3"><button disabled={busy} className="bg-amber-500 text-white rounded-lg px-4 py-2">{busy?'저장 중…':'저장'}</button><button type="button" disabled={busy} onClick={()=>setEditing(null)}>닫기</button></div>
-    </form></div>}
+    </div></form></div>}
   </section>;
 }
+
