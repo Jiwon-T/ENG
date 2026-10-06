@@ -208,7 +208,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
    </aside>
    <LessonEditorContainer modal={lessonDialogOpen} onClose={()=>setLessonDialogOpen(false)}>{lessonEditor}</LessonEditorContainer>
   </div>}
-  <div hidden={tab !== 'schedule'}><TeacherWeeklyCalendar data={data} busy={busy} request={request} active={tab==='schedule'} onAdd={date => openSchedule(date)} onEdit={record => {if(record.source==='notion'&&!record.data.title){void act(async()=>{const result=await request('import-source-record',{id:record.id,kind:'schedule'});openSchedule(result.record.data.date,result.record);});}else openSchedule(record.data.date,record);}} onRegular={() => {}}/><div ref={scheduleEditorRef}><WorkspaceDialog open={Boolean(scheduleSelection) && tab==='schedule'} title="일정 추가·수정" onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) { setScheduleSelection(undefined); setScheduleDirty(false); } }}>{scheduleSelection && <TeacherScheduleEditor data={data} busy={busy} request={request} refresh={refresh} act={act} selection={scheduleSelection} onWorking={setScheduleWorking} onNotice={setMessage} onDirty={setScheduleDirty} onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) {
+  <div hidden={tab !== 'schedule'}><TeacherWeeklyCalendar data={data} busy={busy} request={request} active={tab==='schedule'} onAdd={date => openSchedule(date)} onEdit={record => {if((record.source==='notion'||record.notionPageId)&&!record.deleteRequested&&!canRetryPublication(record)){void act(async()=>{const result=await request('import-source-record',{id:record.notionPageId||record.id,kind:'schedule'});setData((old:any)=>({...old,schedules:[result.record,...old.schedules.filter((r:any)=>r.id!==result.record.id&&r.notionPageId!==result.record.notionPageId)]}));openSchedule(result.record.data.date,result.record);});}else openSchedule(record.data.date,record);}} onRegular={() => {}}/><div ref={scheduleEditorRef}><WorkspaceDialog open={Boolean(scheduleSelection) && tab==='schedule'} title="일정 추가·수정" onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) { setScheduleSelection(undefined); setScheduleDirty(false); } }}>{scheduleSelection && <TeacherScheduleEditor data={data} busy={busy} request={request} refresh={refresh} act={act} selection={scheduleSelection} onWorking={setScheduleWorking} onNotice={setMessage} onDirty={setScheduleDirty} onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) {
             setScheduleSelection(undefined);
             setScheduleDirty(false);
         } }}/>}</WorkspaceDialog></div><div ref={regularRef} className="mt-4"><TeacherClassManager data={data} busy={busy} request={request} refresh={refresh} act={act} active={tab==='schedule'} mode="schedule"/></div></div>
@@ -232,6 +232,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
 }
 
 function LessonEditorContainer({modal,onClose,children}:{modal:boolean;onClose:()=>void;children:ReactNode}) {return modal?<WorkspaceDialog open title="일지 수정" onClose={onClose}>{children}</WorkspaceDialog>:<>{children}</>;}
+
 
 
 

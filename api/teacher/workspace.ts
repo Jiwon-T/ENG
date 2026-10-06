@@ -351,15 +351,19 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         }
         if(body.action==='import-source-record'){
             const id=z.string().uuid().parse(body.id),kind=z.enum(['lesson','schedule']).parse(body.kind),collection=kind==='lesson'?'teacherLessonDrafts':'teacherSchedules';
-            const source=(await (kind==='lesson'?readSourceLessons(db,actor):readSourceSchedules(db,actor))).find(r=>r.id===id);
-            if(!source||!canAccessOwned(actor,source.ownerUid,source.academyId))throw new Error('FORBIDDEN');
+            failureStage=kind+'-source-import';
+            const source=(await (kind==='lesson'?readSourceLessons(db,actor,true):readSourceSchedules(db,actor,undefined,true))).find(r=>r.id===id);
+            if(!source)throw new Error(kind==='schedule'&&actor.admin?'NOTION_SCHEDULE_SOURCE_UNAVAILABLE':'FORBIDDEN');
+            if(!canAccessOwned(actor,source.ownerUid,source.academyId))throw new Error('FORBIDDEN');
             const matching=await db.collection(collection).where('notionPageId','==',id).get();
             if(matching.docs.length>1)throw new Error('DUPLICATE_NOTION_RECORD');
             const localId=matching.docs[0]?.id||id,ref=db.collection(collection).doc(localId);
             const record=await db.runTransaction(async t=>{const old=(await t.get(ref)).data();if(old&&!canAccessOwned(actor,old.ownerUid,old.academyId))throw new Error('FORBIDDEN');
+                if(old?.archived||old?.deleteRequested)throw new Error('FORBIDDEN');
                 if(old&&['processing','publishing','notion_saved'].includes(old.stage))throw new Error('PUBLISH_IN_PROGRESS');
+                if(old?.notionWrite&&(!old.notionWrite.done||old.lastSubmittedRevision!==old.revision))throw new Error('NOTION_WRITE_PENDING');
                 if(old?.stage==='draft'&&old.revision>0)return {id:localId,...old};
-                const value={...old,...source,id:localId,ownerUid:old?.ownerUid||source.ownerUid,source:'notion',revision:(old?.revision||0)+1};t.set(ref,value);return value;});
+                const value={...old,...source,id:localId,ownerUid:old?.ownerUid||source.ownerUid,source:'notion',revision:(old?.revision||0)+1,...(kind==='schedule'?{stage:'draft',notionWrite:null}:{} )};t.set(ref,value);return value;});
             return sendJson(res,200,{ok:true,record});
         }
         if(body.action==='sync-notion-record'){
@@ -625,10 +629,11 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         failureStage=error?.workspaceStage||failureStage;
         const result = workspaceError(error, failureStage);
         if(result.body.error==='FIRESTORE_RESOURCE_EXHAUSTED')res.setHeader('Retry-After','30');
-        if (result.status >= 500 || result.body.error==='FIRESTORE_RESOURCE_EXHAUSTED' || failureStage.startsWith('lesson-')) console.warn('TEACHER_WORKSPACE_FAILED', {error: result.body.error, diagnosticId: result.body.diagnosticId, failureStage,...workspaceFailureDiagnostic(error)});
+        if (result.status >= 500 || result.body.error==='FIRESTORE_RESOURCE_EXHAUSTED' || failureStage.startsWith('lesson-') || failureStage.endsWith('-source-import')) console.warn('TEACHER_WORKSPACE_FAILED', {error: result.body.error, diagnosticId: result.body.diagnosticId, failureStage,...workspaceFailureDiagnostic(error)});
         return sendJson(res, result.status, result.body);
     } finally { if(mutation)invalidateTeacherMutation(mutation); }
 }
+
 
 
 

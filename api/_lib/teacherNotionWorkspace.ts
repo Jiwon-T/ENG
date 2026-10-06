@@ -46,12 +46,13 @@ export async function sourcesFor(db:any,actor:any){
 }
 export async function rowSource(page:any,source:any,actor:any) {
  if(!source.shared)return source;
+ let assigned=await ids(page,'담당 선생님');const authors=await ids(page,'작성자 선생님');
+ const legacyEnglishSchedule=source.legacySchedule&&source.academyId==='main'&&source.subject==='영어'&&!choice(page.properties['과목'])&&page.parent?.database_id&&uuid(page.parent.database_id)==='3430f1a4-9dde-4b4c-a5cf-0d11b913b38c'&&assigned.length===1&&assigned[0]==='3ec0d0f1-c79a-8108-b714-c1d6fc390ba2'&&(!authors.length||authors.length===1&&authors[0]===assigned[0]);
  const legacyLesson=source.legacyLesson && source.academyId==='main' && !text(page.properties['학원']) && (!choice(page.properties['과목'])||choice(page.properties['과목'])==='영어');
- const legacySchedule=source.legacySchedule && source.academyId==='main' && !text(page.properties['학원']) && subjects.includes(choice(page.properties['과목']) as any);
+ const legacySchedule=source.legacySchedule && source.academyId==='main' && !text(page.properties['학원']) && (subjects.includes(choice(page.properties['과목']) as any)||legacyEnglishSchedule);
  const legacy=legacyLesson||legacySchedule;
  const academy=text(page.properties['학원'])||(legacy?'main':'');if(academy!==source.academyId)return null;
  const subject=choice(page.properties['과목'])||(legacy?'영어':'');if(!subjects.includes(subject as any))return null;
- let assigned=await ids(page,'담당 선생님');const authors=await ids(page,'작성자 선생님');
  if(legacyLesson&&!assigned.length)assigned=['3ec0d0f1-c79a-8108-b714-c1d6fc390ba2'];
  const profiles=new Map<string,string>((source.profiles||[]).filter((p:any)=>p.notionTeacherPageId).map((p:any)=>[uuid(p.notionTeacherPageId),p.uid]));
  const ownerUid=sharedRecordOwner(authors,assigned,profiles);
