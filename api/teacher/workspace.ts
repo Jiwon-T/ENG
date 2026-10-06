@@ -624,10 +624,12 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
     catch (error: any) {
         failureStage=error?.workspaceStage||failureStage;
         const result = workspaceError(error, failureStage);
-        if (result.status >= 500 || failureStage.startsWith('lesson-')) console.warn('TEACHER_WORKSPACE_FAILED', {error: result.body.error, diagnosticId: result.body.diagnosticId, failureStage,...workspaceFailureDiagnostic(error)});
+        if(result.body.error==='FIRESTORE_RESOURCE_EXHAUSTED')res.setHeader('Retry-After','30');
+        if (result.status >= 500 || result.body.error==='FIRESTORE_RESOURCE_EXHAUSTED' || failureStage.startsWith('lesson-')) console.warn('TEACHER_WORKSPACE_FAILED', {error: result.body.error, diagnosticId: result.body.diagnosticId, failureStage,...workspaceFailureDiagnostic(error)});
         return sendJson(res, result.status, result.body);
     } finally { if(mutation)invalidateTeacherMutation(mutation); }
 }
+
 
 
 

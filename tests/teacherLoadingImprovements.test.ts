@@ -59,7 +59,7 @@ test('concurrent permission reads share remote requests, batch memberships, and 
  const profile={notionTeacherPageId:teacher,academyId:'main'};
  try {
   const values=await Promise.all([notionTeachingScopes(db,profile),notionTeachingScopes(db,profile)]);
-  assert.deepEqual(values.map(v=>v.length),[4,4]);assert.equal(remote,2);assert.equal(batches,2);
+  assert.deepEqual(values.map(v=>v.length),[4,4]);assert.equal(remote,2);assert.equal(batches,1);
   disabled=true;assert.deepEqual(await notionTeachingScopes(db,profile),[]);assert.equal(remote,4);
   teacherStopped=true;await assert.rejects(notionTeachingScopes(db,profile),/TEACHER_NOT_CONFIGURED/);
   teacherStopped=false;assert.deepEqual(await notionTeachingScopes(db,profile),[]);

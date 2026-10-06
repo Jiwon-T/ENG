@@ -1,4 +1,5 @@
 import {verifyFirebaseSession} from './firebaseSession.js';
+import {workspaceInflightRead} from './workspaceInflightRead.js';
 import {notionTeachingScopes} from './teacherNotionWorkspace.js';
 import type { IncomingMessage } from 'http';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
@@ -25,7 +26,7 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     workspaceStage='workspace-account';
     if (!process.env.ADMIN_UID) throw new Error('CONFIG_ERROR');
     const admin = uid === process.env.ADMIN_UID;
-    const [userDoc,profileDoc]=await Promise.all([db.collection('users').doc(uid).get(),db.collection('teacherWorkspaceAccess').doc(uid).get()]);
+    const [userDoc,profileDoc]=await workspaceInflightRead(db,'account:'+uid,()=>Promise.all([db.collection('users').doc(uid).get(),db.collection('teacherWorkspaceAccess').doc(uid).get()]));
     const user = userDoc.data();
     if (!admin && !['teacher', 'principal'].includes(user?.role)) throw new Error('FORBIDDEN');
     const profile = profileDoc.data();

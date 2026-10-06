@@ -7,9 +7,11 @@ export function workspaceError(error: unknown, failureStage: string) {
  const config = raw.startsWith('CONFIG_ERROR') || raw === 'AUTH_SERVER_CONFIG_ERROR';
  const notion = /^NOTION_/.test(raw);
  const missingIndex = failureStage === 'report-review' && /requires an index|FAILED_PRECONDITION.*index/i.test(raw);
- const code = error instanceof z.ZodError ? 'INVALID_INPUT' : missingIndex ? 'REPORT_INDEX_REQUIRED' : config ? 'SERVER_CONFIG_ERROR' : allowed.includes(raw) ? raw : notion ? 'NOTION_CONNECTION_ERROR' : 'WORKSPACE_ERROR';
+ const exhausted=(error as any)?.code===8||['resource-exhausted','firestore/resource-exhausted'].includes((error as any)?.code);
+ const code = exhausted?'FIRESTORE_RESOURCE_EXHAUSTED':error instanceof z.ZodError ? 'INVALID_INPUT' : missingIndex ? 'REPORT_INDEX_REQUIRED' : config ? 'SERVER_CONFIG_ERROR' : allowed.includes(raw) ? raw : notion ? 'NOTION_CONNECTION_ERROR' : 'WORKSPACE_ERROR';
  const diagnosticId = randomUUID();
  const messages: Record<string,string> = {SERVER_CONFIG_ERROR:'서버 인증·연결 설정을 확인해야 합니다.',UNAUTHORIZED:'로그인 인증이 만료되었습니다. 다시 로그인해 주세요.',SESSION_REVOKED:'로그인이 해제되었습니다. 다시 로그인해 주세요.',NOTION_CONNECTION_ERROR:'Notion 연결 권한과 데이터베이스 설정을 확인해야 합니다.',LESSON_ROUNDS_REQUIRED:'수업이 있는 날은 출결과 수업 회차를 입력해 주세요.',SELF_STUDY_REQUIRED:'자습 여부를 선택하고, 자습이 있는 날은 시간과 회차를 입력해 주세요.',LESSON_OR_STUDY_REQUIRED:'수업 또는 자습 중 하나 이상을 기록해 주세요.'};
+ messages.FIRESTORE_RESOURCE_EXHAUSTED='학생 데이터 서버의 사용량·자원 한도에 걸려 조회가 중단됐습니다. 관리자에게 Firebase Firestore 사용량·할당량 확인을 요청해 주세요. 반복 새로고침은 한도를 복구하지 않습니다.';
  messages.MESSAGE_VARIABLE_REQUIRED='치환하지 않은 변수를 입력하거나 해당 항목을 삭제해 주세요.';
 messages.MESSAGE_CONTACT_REQUIRED='보호자 연락처를 확인해 주세요.';
 messages.MESSAGE_CONTACT_CHANGED='보호자 연락처가 변경되었습니다. 새 문자 요청을 준비해 주세요.';
@@ -78,7 +80,8 @@ messages.STUDENT_PROFILE_CONTACT_PENDING='보호자 연락처 변경을 먼저 �
  messages.NOTION_SCHEMA_SETUP_REQUIRED=error instanceof LessonSchemaError?`노션 수업 일지 DB에 필요한 속성이 없습니다: ${error.fields.join(', ')}. 관리자 연결 설정을 확인해 주세요.`:'노션 수업 일지 DB의 속성과 연결 설정을 확인해 주세요.';
 
  messages.REPORT_INDEX_REQUIRED = '리포트 조회에 필요한 서버 인덱스 설정을 확인해야 합니다.';
- return {status: ['UNAUTHORIZED','SESSION_REVOKED'].includes(code) ? 401 : code === 'FORBIDDEN' ? 403 : code === 'REGISTRATION_NOT_FOUND' ? 404 : ['SERVER_CONFIG_ERROR','WORKSPACE_ERROR','REPORT_INDEX_REQUIRED'].includes(code) ? 500 : code === 'NOTION_EDIT_CONFLICT' ? 409 : ['NOTION_CONNECTION_ERROR','NOTION_400','NOTION_401','NOTION_403','NOTION_404','NOTION_429'].includes(code) ? 502 : code === 'INVALID_INPUT' || code.includes('REQUIRED') ? 400 : 409, body:{ok:false,error:code,message:messages[code],failureStage,diagnosticId}};
+ return {status: code==='FIRESTORE_RESOURCE_EXHAUSTED'?429:['UNAUTHORIZED','SESSION_REVOKED'].includes(code) ? 401 : code === 'FORBIDDEN' ? 403 : code === 'REGISTRATION_NOT_FOUND' ? 404 : ['SERVER_CONFIG_ERROR','WORKSPACE_ERROR','REPORT_INDEX_REQUIRED'].includes(code) ? 500 : code === 'NOTION_EDIT_CONFLICT' ? 409 : ['NOTION_CONNECTION_ERROR','NOTION_400','NOTION_401','NOTION_403','NOTION_404','NOTION_429'].includes(code) ? 502 : code === 'INVALID_INPUT' || code.includes('REQUIRED') ? 400 : 409, body:{ok:false,error:code,message:messages[code],failureStage,diagnosticId}};
 }
+
 
 

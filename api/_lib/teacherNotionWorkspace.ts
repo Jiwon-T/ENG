@@ -1,6 +1,7 @@
 import { readLessonSpecialNote } from './lessonSpecialNote.js';
 import {notionReadFilter} from './notionReadFilter.js';
 import {teacherReadCache,teacherReadKey} from './teacherReadCache.js';
+import {workspaceInflightRead} from './workspaceInflightRead.js';
 import {readMirroredPages,workspaceSourceFilter} from './teacherNotionMirror.js';
 import {scheduleRange,type ScheduleRange} from './teacherScheduleRange.js';
 import {addCalendarDays} from '../../src/lib/teacherWeekCalendar.js';
@@ -282,7 +283,7 @@ export async function notionTeachingScopes(db:any,profile:any){
  for(let offset=0;offset<keys.length;offset+=100){
   const chunk=keys.slice(offset,offset+100);
   const refs=chunk.map(key=>db.collection('academyStudentMemberships').doc(key));
-  const docs=typeof db.getAll==='function'?await db.getAll(...refs):await Promise.all(refs.map(ref=>ref.get()));
+  const docs=await workspaceInflightRead<any[]>(db,'scope-members:'+JSON.stringify(chunk),()=>typeof db.getAll==='function'?db.getAll(...refs):Promise.all(refs.map(ref=>ref.get())));
   docs.forEach((doc:any,i:number)=>membership.set(chunk[i],doc.data()));
  }
  return assignments.filter(s=>{const member=membership.get(s.studentKey);return member&&!member.disabled&&member.academyId===profile.academyId;});

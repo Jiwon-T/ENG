@@ -1,5 +1,5 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {teacherReadKey} from './teacherReadCache.js';
+import {teacherReadKey,teacherReadCache} from './teacherReadCache.js';
 import {normalizeNotionPageId} from './notionPageId.js';
 const normalized=(v:string)=>normalizeNotionPageId(v);
 export function matchesNotionFilter(page:any,filter:any):boolean {
@@ -16,8 +16,11 @@ export function matchesNotionFilter(page:any,filter:any):boolean {
 }
 // Persistent server-only raw pages, isolated by current permissions and query.
 // Delta reads include moved-out rows; full reconciliation detects archive/deletion.
-export async function readMirroredPages(db:any,actor:any,database:string,filter:any,load:(filter?:any)=>Promise<any[]>,force=false) {
+export async function readMirroredPages(db:any,actor:any,database:string,filter:any,load:(filter?:any)=>Promise<any[]>,force=false,storage:'memory'|'firestore'='memory') {
  if(typeof db.batch!=='function'||typeof db.runTransaction!=='function')return load(filter);
+ // Raw Notion responses are a disposable read cache, not authoritative reports.
+ // Large JSON pages otherwise consume Firestore read/write units on each refresh.
+ if(storage==='memory')return teacherReadCache.get(teacherReadKey(actor,'raw-source:'+JSON.stringify([database,filter||null])),()=>load(filter),force);
  const key=createHash('sha256').update(teacherReadKey(actor,JSON.stringify([database,filter||null]))).digest('hex');
  const ref=db.collection('teacherNotionMirrors').doc(key),pagesRef=ref.collection('pages');
  const owner=randomUUID(),started=Date.now();

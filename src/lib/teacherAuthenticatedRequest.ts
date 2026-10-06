@@ -4,12 +4,16 @@ interface TeacherAuth {
   authStateReady(): Promise<void>;
   currentUser: { getIdToken(forceRefresh?: boolean): Promise<string> } | null;
 }
+const quotaPauses=new WeakMap<TeacherAuth,{user:object;until:number;data:any;message:string}>();
 
 // All teacher screens wait for Firebase restoration and retry an expired token once.
 export async function teacherAuthenticatedRequest<T>(auth: TeacherAuth, endpoint: string, init: RequestInit = {}) {
   await auth.authStateReady();
   const user = auth.currentUser;
   if (!user) throw new Error('로그인 인증이 만료되었습니다. 다시 로그인해 주세요.');
+  const pause=quotaPauses.get(auth);
+  if(pause?.user===user&&pause.until>Date.now())return {ok:false,status:429,error:'FIRESTORE_RESOURCE_EXHAUSTED',data:pause.data as T,userMessage:pause.message};
+  if(pause)quotaPauses.delete(auth);
   const send = async (refresh = false) => {
     const headers = new Headers(init.headers);
     headers.set('Authorization', `Bearer ${await user.getIdToken(refresh)}`);
@@ -17,6 +21,10 @@ export async function teacherAuthenticatedRequest<T>(auth: TeacherAuth, endpoint
   };
   let result = await send();
   if (result.status === 401 && result.error === 'UNAUTHORIZED') result = await send(true);
+  if(result.error==='FIRESTORE_RESOURCE_EXHAUSTED'){
+    const body=result.data as any;
+    quotaPauses.set(auth,{user,until:Date.now()+30_000,message:result.userMessage,data:{ok:false,error:'FIRESTORE_RESOURCE_EXHAUSTED',message:result.userMessage,diagnosticId:body?.diagnosticId}});
+  }
   return result;
 }
 
