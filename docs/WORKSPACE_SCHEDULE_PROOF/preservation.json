@@ -1,0 +1,28 @@
+{
+  "protectedFunctions": [
+    "TeacherWorkspace.tsx:request",
+    "TeacherWorkspace.tsx:workspaceSection",
+    "TeacherWorkspace.tsx:mergeData",
+    "TeacherWorkspace.tsx:loadDrafts",
+    "TeacherWorkspace.tsx:refresh",
+    "TeacherWorkspace.tsx:act",
+    "TeacherWorkspace.tsx:selectStudent",
+    "TeacherWorkspace.tsx:resetLesson",
+    "TeacherWorkspace.tsx:setField",
+    "TeacherWorkspace.tsx:openDraft",
+    "TeacherWorkspace.tsx:openSchedule",
+    "TeacherWorkspace.tsx:submitSingleLesson",
+    "TeacherScheduleEditor.tsx:initial",
+    "TeacherScheduleEditor.tsx:submit",
+    "TeacherClassManager.tsx:archive"
+  ],
+  "weeklyLoadingBlockIdentical": true,
+  "protectedFiles": [
+    "src/components/teacher/LessonAcademyFields.tsx",
+    "src/components/teacher/TeacherLessonGrid.tsx",
+    "src/components/teacher/teacherWorkspace.css",
+    "src/lib/sessionNumbers.ts",
+    "src/lib/teacherReadCache.ts",
+    "src/lib/scheduleSubmission.ts"
+  ]
+}

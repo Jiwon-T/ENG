@@ -1,3 +1,4 @@
+import {canRetryPublication} from './teacherPublicationRecovery';
 export const newGridLesson = (studentKey: string, subject: string, date: string, start: string, end: string) => ({ studentKey, subject, date, start, end, attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', content: '', assignment: '', note: '', nextPlan: '', wrong:null as number | null,examWrong:null as number | null,correct: null as number | null, total: null as number | null, examCorrect: null as number | null, examTotal: null as number | null, round: null as number | null, classSession: '있음', selfStudy: '미확인', selfStudyStart: '', selfStudyEnd: '', selfStudyRound: null as number | null, attendanceNote: '', specialNote: '',examScope:'' });
 export function applyCommonLesson<T extends ReturnType<typeof newGridLesson>>(lesson: T, common: {
     content: string;
@@ -39,7 +40,8 @@ export async function processLessonRows<R extends {
         try {
             if (mode === 'publish' && !row.data?.content?.trim()) throw new Error('수업 내용을 입력해 주세요.');
             if (mode === 'publish' && !gridCanSubmit(row)) throw new Error('반영 중이거나 이미 반영된 기록입니다.');
-            if (mode === 'save' || !gridCanPublish(row)) {
+            const retry=mode==='publish'&&canRetryPublication(row)&&JSON.stringify(row.data)===JSON.stringify(row.savedData);
+            if (mode === 'save' || !retry&&!gridCanPublish(row)) {
                 const saved = await request('save-draft', { id: row.id, revision: row.revision, data: row.data });
                 update(row.id, { revision: saved.record?.revision ?? (row.revision || 0) + 1, stage: 'draft', savedData: structuredClone(saved.record?.data ?? row.data), data:saved.record?.data ?? row.data, error: undefined });
             }

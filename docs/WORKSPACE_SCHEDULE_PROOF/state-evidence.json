@@ -1,0 +1,20 @@
+[
+  {
+    "state": "empty",
+    "empty": 16,
+    "skeleton": 0
+  },
+  {
+    "state": "loading",
+    "empty": 5,
+    "skeleton": 8
+  },
+  {
+    "state": "cancelled",
+    "cards": 1
+  },
+  {
+    "state": "stopped",
+    "cards": 1
+  }
+]

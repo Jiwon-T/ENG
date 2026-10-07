@@ -1,3 +1,4 @@
+import {excelTextParts,lessonExcelWidths,lessonExcelFontSizes,lessonExcelRowHeight} from './lessonExcelLayout';
 import JSZip from 'jszip';
 import {compareLessonReview,validLessonDay} from './lessonReview';
 
@@ -15,8 +16,9 @@ export function lessonExcelCells(record:any):string[] {
  const time=d.classSession==='없음'?'수업 없음':`${d.start||'미입력'}-${d.end||'미입력'}${round}${String(d.attendance||'').startsWith('보강')?'-보강':''}`;
  const study=d.selfStudy==='있음'?`${d.selfStudyStart||'미입력'}-${d.selfStudyEnd||'미입력'}${d.selfStudyRound!=null?` (${d.selfStudyRound})`:''}`:d.selfStudy==='없음'?'.':'미확인';
  const learning=[d.content,d.assignment&&`과제: ${d.assignment}`,d.examScope&&`시험범위: ${d.examScope}`,d.note&&`피드백: ${d.note}`,d.nextPlan&&`다음 계획: ${d.nextPlan}`,d.total>0&&`일반 테스트: ${d.correct??'미입력'}/${d.total}`,d.examTotal>0&&`내신 대비 테스트: ${d.examCorrect??'미입력'}/${d.examTotal}`].filter(Boolean).join('\n');
- const attendance=[d.attendance&&d.attendance!=='출석'?d.attendance:'',d.attendanceNote].filter(Boolean).join('\n')||'.';
- return [excelStudentName(record.studentDisplayName||'학생'),time,study,learning||'.',attendance,d.specialNote||'.'];
+ const attendance=d.attendance==='지각'||d.attendance==='보강 지각'?'지각':d.attendance==='결석'||d.attendance==='보강 결석'?'결석':'';
+ const attendanceMemo=d.attendanceNote?`출결 메모: ${d.attendanceNote}`:'';
+ return [excelStudentName(record.studentDisplayName||'학생'),time,study,learning||'.',attendance,[d.specialNote,attendanceMemo].filter(Boolean).join('\n')||'.'];
 }
 function xml(value:string) {
  // All exported values are literal strings, including leading =, +, - and @.
@@ -24,12 +26,6 @@ function xml(value:string) {
 }
 const cell=(address:string,style:number,value:string)=>`<x:c r="${address}" s="${style}" t="inlineStr"><x:is><x:t xml:space="preserve">${xml(value)}</x:t></x:is></x:c>`;
 const row=(n:number,height:number,cells:string)=>`<x:row r="${n}" ht="${height}" customHeight="1">${cells}</x:row>`;
-function chunks(value:string) {
- const out:string[]=[];
- do {let end=Math.min(32767,value.length);if(end<value.length&&/[\uD800-\uDBFF]/.test(value[end-1]))end--;out.push(value.slice(0,end));value=value.slice(end);}while(value.length);
- return out;
-}
-
 /** Fill the sanitized reference workbook in the browser; no spreadsheet service required. */
 export async function buildLessonExcel(template:ArrayBuffer|Uint8Array,day:string,teacher:string,records:any[]) {
  lessonExcelFilename(day,teacher);
@@ -41,18 +37,16 @@ export async function buildLessonExcel(template:ArrayBuffer|Uint8Array,day:strin
  const label=`${date.getUTCMonth()+1}월 ${date.getUTCDate()}일 (${['일','월','화','수','목','금','토'][date.getUTCDay()]})`;
  const names=[...new Set(sorted.map(r=>excelStudentName(r.studentDisplayName||'학생')))];
  const roster=names.join(', ');
- let body=row(1,22,cell('F1',8,teacher))+row(2,22,cell('F2',8,roster.length<=32767?roster:`총 ${names.length}명 (전체 학생 이름은 아래 일지에 표시)`))+row(3,26,cell('B3',9,label));
+ let body=row(1,14.65,cell('F1',8,teacher))+row(2,22,cell('F2',8,roster.length<=32767?roster:`총 ${names.length}명 (전체 학생 이름은 아래 일지에 표시)`))+row(3,17.4,cell('B3',9,label));
  const headers=['학생 이름','수업 시간 (회차)','자습 시간','학습 내용','지각, 결석','특이사항'],cols=['B','C','D','E','F','G'];
- body+=row(4,65.25,headers.map((v,i)=>cell(cols[i]+'4',[1,2,2,1,5,6][i],v)).join(''));
+ body+=row(4,43.5,headers.map((v,i)=>cell(cols[i]+'4',[1,2,2,1,5,6][i],v)).join(''));
  let n=5;
  for(const r of sorted){
-  const pieces=lessonExcelCells(r).map(chunks);
+  const pieces=lessonExcelCells(r).map((value,i)=>excelTextParts(value,lessonExcelWidths[i],lessonExcelFontSizes[i]));
   for(let part=0;part<Math.max(...pieces.map(p=>p.length));part++,n++){
   if(n>1048576)throw Error('엑셀의 최대 행 수를 초과했습니다. 학생 조건으로 나누어 내보내 주세요.');
   const values=pieces.map(p=>p[part]||'');
-  const widths=[22,32,31,39,29,33];
-  const lines=Math.max(...values.map((v,c)=>v.split('\n').reduce((sum,line)=>sum+Math.max(1,Math.ceil([...line].reduce((size,ch)=>size+(ch.charCodeAt(0)>255?2:1),0)/widths[c])),0)));
-  body+=row(n,Math.min(409,Math.max(34,lines*21)),values.map((v,c)=>cell(cols[c]+n,[10,11,11,12,11,13][c],v)).join(''));
+  body+=row(n,lessonExcelRowHeight(values),values.map((v,c)=>cell(cols[c]+n,[10,11,11,12,11,13][c],v)).join(''));
   }
  }
  const source=await sheet.async('string');

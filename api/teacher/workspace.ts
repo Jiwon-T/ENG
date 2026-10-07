@@ -1,3 +1,5 @@
+import {lessonImportPublicationPatch} from '../_lib/teacherLessonImport.js';
+import {readTodayVisibility,changeTodayVisibility} from '../_lib/teacherTodayVisibility.js';
 import {workspaceFailureDiagnostic} from '../_lib/workspaceFailureDiagnostic.js';
 import {readRecordConflict,resolveRecordConflict} from '../_lib/teacherRecordConflict.js';
 import { readSchedulePlaceOptions } from '../_lib/teacherSchedulePlaces.js';
@@ -147,7 +149,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const records=local.docs.map(d=>({id:d.id,...d.data()}));
                 if(force)await Promise.all(records.map(async(r:any)=>{if(r.stage==='processing'&&r.notionPageId&&await confirmTeacherReflection(r.notionPageId,'schedule').catch(()=>false)){r.stage='published';if(r.deleteRequested)r.archived=true;await db.collection('teacherSchedules').doc(r.id).update({stage:'published',...(r.archived?{archived:true}:{})});}}));
                 const day=params.get('day');if(day&&!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new Error('INVALID_INPUT');
-                return sendJson(res,200,{ok:true,schedules:mergeNotionRows(records,remote).filter((r:any)=>!r.archived&&(!day||r.data?.date===day)),reflectedSchedules:teacherReflectedSchedules(reflected.map(d=>d.data()),mappings,actor).filter((r:any)=>!day||r.date===day)});
+                const hiddenTodayLessons=day?await readTodayVisibility(db,actor.uid,day):[];
+                return sendJson(res,200,{ok:true,hiddenTodayLessons,schedules:mergeNotionRows(records,remote).filter((r:any)=>!r.archived&&(!day||r.data?.date===day)),reflectedSchedules:teacherReflectedSchedules(reflected.map(d=>d.data()),mappings,actor).filter((r:any)=>!day||r.date===day)});
             }
             if(action==='managed-record') {
                 const kind=z.enum(['lesson','academic','schedule','class','curriculum']).parse(params.get('kind'));
@@ -358,13 +361,18 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(!canAccessOwned(actor,source.ownerUid,source.academyId))throw new Error('FORBIDDEN');
             const matching=await db.collection(collection).where('notionPageId','==',id).get();
             if(matching.docs.length>1)throw new Error('DUPLICATE_NOTION_RECORD');
-            const localId=matching.docs[0]?.id||id,ref=db.collection(collection).doc(localId);
+            // Recover the exact app marker before importing; never create a second local identity.
+            const marked=kind==='lesson'&&source.appRecordId?(await db.collection(collection).doc(source.appRecordId).get()):null;
+            const markerData=marked?.data();
+            const markerMatches=markerData&&!markerData.archived&&!markerData.deleteRequested&&canAccessOwned(actor,markerData.ownerUid,markerData.academyId)&&markerData.data?.studentKey===source.data.studentKey&&markerData.data?.subject===source.data.subject;
+            const localId=matching.docs[0]?.id||(markerMatches?marked!.id:id),ref=db.collection(collection).doc(localId);
             const record=await db.runTransaction(async t=>{const old=(await t.get(ref)).data();if(old&&!canAccessOwned(actor,old.ownerUid,old.academyId))throw new Error('FORBIDDEN');
                 if(old?.archived||old?.deleteRequested)throw new Error('FORBIDDEN');
+                if(kind==='lesson'&&old?.notionWrite&&(!old.notionWrite.done||old.lastSubmittedRevision!==old.revision))return {id:localId,...old};
                 if(old&&['processing','publishing','notion_saved'].includes(old.stage))throw new Error('PUBLISH_IN_PROGRESS');
                 if(old?.notionWrite&&(!old.notionWrite.done||old.lastSubmittedRevision!==old.revision))throw new Error('NOTION_WRITE_PENDING');
                 if(old?.stage==='draft'&&old.revision>0)return {id:localId,...old};
-                const value={...old,...source,id:localId,ownerUid:old?.ownerUid||source.ownerUid,source:'notion',revision:(old?.revision||0)+1,...(kind==='schedule'?{stage:'draft',notionWrite:null}:{} )};t.set(ref,value);return value;});
+                const value={...old,...source,id:localId,ownerUid:old?.ownerUid||source.ownerUid,source:'notion',revision:(old?.revision||0)+1,...(kind==='schedule'?{stage:'draft',notionWrite:null}:lessonImportPublicationPatch(old,source) )};t.set(ref,value);return value;});
             return sendJson(res,200,{ok:true,record});
         }
         if(body.action==='sync-notion-record'){
@@ -570,6 +578,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         }
         if(body.action==='resolve-academic-conflict'||body.action==='resolve-schedule-conflict'){const {action,...input}=body;return sendJson(res,200,{ok:true,...await resolveRecordConflict(db,actor,action==='resolve-academic-conflict'?'academic':'schedule',input)});}
         if(body.action==='resolve-lesson-conflict'){failureStage='lesson-conflict-resolution';const {action,...input}=body;return sendJson(res,200,{ok:true,...await resolveLessonConflict(db,actor,input)});}
+        if(body.action==='today-lesson-visibility'){const {action,...input}=body;return sendJson(res,200,{ok:true,hiddenTodayLessons:await changeTodayVisibility(db,actor.uid,input)});}
         if(body.action==='archive-lesson'){failureStage='lesson-archive';return sendJson(res,200,{ok:true,...await archiveTeacherLesson(db,actor,body.id,body.revision)});}
         if (body.action === 'publish') {
             failureStage='lesson-reflection';

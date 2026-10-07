@@ -157,3 +157,16 @@ ENG-app-notion-checkpoint-10-B-hotfix-9.zip. 점수 접기 취소, 두 점수 �
 
 ## 2026-10-07 B hotfix 12
 최신 누적본: ENG-app-notion-checkpoint-10-B-hotfix-12.zip. 폼 바깥 구조·상태색·오늘 수업·모바일 탭바를 개선하고 단일/여러 학생의 빈 시간 카드 여백을 함께 보정했다. 상세 검증, 미확인 범위, 전후 32장과 밀도 측정은 CHECKPOINT_10_B_HOTFIX_12.md 및 WORKSPACE_SHELL_PROOF/index.html 참고. 운영 배포와 실제 키보드 확인은 별도 필요하며 Bati/Make 후속 작업은 기존 상태다.
+
+## 2026-10-07 B hotfix 13
+최신 누적본: ENG-app-notion-checkpoint-10-B-hotfix-13.zip. 시간표·일정의 세 보기와 일정/반 다이얼로그를 수업 일지 디자인으로 통일했다. 핵심 함수/로딩/저장 payload와 수업 일지 폼은 보존했다. 상세, 미확인 범위, 전후 30장은 CHECKPOINT_10_B_HOTFIX_13.md 및 WORKSPACE_SCHEDULE_PROOF/index.html 참고. 실제 배포·Notion/SMS/Make 운영은 하지 않았다.
+
+
+## Hotfix 14 — 당일 여러 수업 및 일지 재반영
+
+`CHECKPOINT_10_B_HOTFIX_14.md` 참조. 월별 회차의 같은 날 선행 수업 포함, 저장 일지 시간 수정 재계산, 미완료 반영 재시도/원본 재가져오기 baseline 보정, 예정·변경·완료 오늘 일정, 서버 계정·날짜별 숨김 및 복원을 추가했다. Notion→Firestore 전체 자료 전환과 실제 운영 오류 로그 확인은 별도 미완료 범위다.
+
+
+## Hotfix 15 — 일지 Excel 및 상세 버튼
+
+CHECKPOINT_10_B_HOTFIX_15.md 참조. 참조 파일의 글꼴/열 폭에 맞춘 자동 행 높이와 한도 초과 이어쓰기, 지각·결석만 표기, 본인 일지 상세 버튼 상단 sticky 및 모달 스크롤 범위 보정. 운영 작성자 ID 연결과 실제 Excel 렌더링은 직접 확인하지 못함.

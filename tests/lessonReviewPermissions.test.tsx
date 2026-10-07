@@ -18,3 +18,21 @@ test('principal may select teacher but cannot edit or delete another teacher log
 test('administrator may select teacher and oversee both log controls',()=>{
  const html=render({admin:true});assert.match(html,/작성자 선생님/);assert.equal((html.match(/일지 수정/g)||[]).length,0);assert.equal((html.match(/일지 삭제/g)||[]).length,0);
 });
+
+import LessonReviewActions,{canManageLessonReview} from '../src/components/teacher/LessonReviewActions';
+import fs from 'node:fs';
+test('own saved and published lessons show both actions; foreign/unlinked author does not gain edit rights',()=>{
+ for(const stage of ['draft','published','report_published_notion_pending']){
+  const viewer={uid:'support-teacher',admin:false};const record={ownerUid:viewer.uid,stage,teacherName:'지원T'};
+  const html=renderToStaticMarkup(<LessonReviewActions allowed={canManageLessonReview(viewer,record)} busy={false} onEdit={()=>{}} onDelete={()=>{}}/>);
+  assert.match(html,/일지 수정/);assert.match(html,/일지 삭제/);
+ }
+ for(const ownerUid of ['other','__unlinked_author__',undefined])assert.equal(canManageLessonReview({uid:'support-teacher',admin:false},{ownerUid,teacherName:'지원T'}),false);
+ assert.equal(canManageLessonReview({uid:'admin',admin:true},{ownerUid:'other'}),true);
+});
+test('review actions precede long details and dialog body has a header-aware scroll frame',()=>{
+ const source=fs.readFileSync(new URL('../src/components/teacher/AcademyLessonReview.tsx',import.meta.url),'utf8');
+ assert.ok(source.indexOf('<LessonReviewActions')<source.indexOf('<dl className="lesson-review-detail">'));
+ const css=fs.readFileSync(new URL('../src/components/teacher/teacherWorkspace.css',import.meta.url),'utf8');
+ assert.match(css,/workspace-dialog\[open\]:has\(\.lesson-review-summary\).*display:flex/);
+});

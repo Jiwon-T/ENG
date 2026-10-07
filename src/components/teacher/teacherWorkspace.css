@@ -803,3 +803,13 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 .teacher-workspace .mobile-event-time {color:var(--workspace-muted);}
 .teacher-workspace .lesson-action-state .workspace-status-badge {white-space:normal;max-width:100%;}
 
+
+.teacher-workspace .today-lesson-card{position:relative;padding-right:24px}.teacher-workspace .today-dismiss{position:absolute;right:0;top:8px;width:24px;height:24px;display:grid;place-items:center;color:var(--neutral-fg,#64748b);border-radius:999px}.teacher-workspace .today-dismiss:hover{background:var(--neutral-bg,#f8fafc)}
+
+.teacher-workspace .today-dismiss:focus-visible{outline:2px solid #ec4899;outline-offset:2px}@media(pointer:coarse){.teacher-workspace .today-lesson-card{padding-right:44px}.teacher-workspace .today-dismiss{width:44px;height:44px;top:0}}
+
+/* Keep owned review actions visible and give the body the space remaining below the header. */
+.teacher-workspace .workspace-dialog[open]:has(.lesson-review-summary){display:flex;flex-direction:column;overflow:hidden;}
+.teacher-workspace .workspace-dialog:has(.lesson-review-summary)>.workspace-dialog-header{position:relative;top:0;flex:none;padding:12px 16px;background:var(--workspace-surface);}
+.teacher-workspace .workspace-dialog:has(.lesson-review-summary)>.workspace-dialog-scroll{flex:1 1 auto;min-height:0;max-height:none;overflow:auto;margin:0 8px 8px;padding:4px 8px 8px;}
+.lesson-review-actions{display:flex;gap:8px;position:sticky;top:0;background:var(--workspace-surface);padding:8px 0;border-bottom:1px solid var(--workspace-neutral-border);z-index:2;}

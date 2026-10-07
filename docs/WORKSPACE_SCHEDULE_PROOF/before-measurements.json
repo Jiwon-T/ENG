@@ -1,0 +1,12 @@
+{
+  "height": 1334.2083740234375,
+  "innerScrollbars": 1,
+  "requests": {
+    "bootstrap": 2,
+    "bootstrap-fast": 2,
+    "drafts-page": 1,
+    "schedule-records": 2
+  },
+  "visibleCards": 10,
+  "width": 1440
+}

@@ -38,3 +38,27 @@ test('long notes continue on another row without losing text or exceeding Excel 
  const sheet=await zip.file('xl/worksheets/sheet1.xml')!.async('string');
  assert.equal((sheet.match(/가/g)||[]).length,40000);assert.match(sheet,/r="E6"/);assert.ok((sheet.match(/<x:t[^>]*>([\s\S]*?)<\/x:t>/g)||[]).every((v:string)=>v.replace(/<[^>]+>/g,'').length<=32767));
 });
+
+import {excelTextParts,lessonExcelRowHeight,lessonExcelWidths,lessonExcelFontSizes} from '../src/lib/lessonExcelLayout';
+test('attendance column contains only late or absent, while attendance memo is retained elsewhere',()=>{
+ for(const [attendance,want] of [['보강 지각','지각'],['보강 결석','결석'],['지각','지각'],['결석','결석'],['보강 출석',''],['출석',''],['미확인','']]){
+  const r:any=record('a','15:30');r.data.attendance=attendance;r.data.attendanceNote='10분 늦음';
+  const cells=lessonExcelCells(r);assert.equal(cells[4],want);assert.match(cells[5],/출결 메모: 10분 늦음/);
+ }
+});
+test('14pt Korean wrapping grows with content and never clips at Excel row height limit',()=>{
+ const short=['학생','15:30–16:50','','짧은 내용','',''];
+ const long=[...short];long[3]='문장의 형식 채점 및 피드백, 다양한 문장의 종류\n'.repeat(100);
+ assert.ok(lessonExcelRowHeight(long)>lessonExcelRowHeight(short));
+ const pieces=excelTextParts(long[3],lessonExcelWidths[3],lessonExcelFontSizes[3]);
+ assert.ok(pieces.length>1);assert.equal(pieces.join(''),long[3]);
+ for(const piece of pieces)assert.ok(lessonExcelRowHeight(['','','',piece,'',''])<=409);
+});
+test('ordinary paragraphs preserve wrapping styles and tall rows, long notes continue below without clipping',async()=>{
+ const template=await fs.readFile(new URL('../public/templates/lesson-log.xlsx',import.meta.url));const r=record('a','15:30');
+ r.data.content='문장의 형식 채점 및 피드백, 다양한 문장의 종류\n'.repeat(40);
+ const zip=await JSZip.loadAsync(await buildLessonExcel(template,day,'지원T',[r]));const sheet=await zip.file('xl/worksheets/sheet1.xml')!.async('string');
+ const heights=[...sheet.matchAll(/<x:row r="(\d+)" ht="([\d.]+)"/g)].filter(m=>Number(m[1])>=5).map(m=>Number(m[2]));
+ assert.ok(heights.length>1);assert.ok(heights.every(h=>h<=409&&h>21));
+ assert.equal((sheet.match(/문장의 형식/g)||[]).length,40);assert.match(sheet,/r="E5" s="12"/);
+});

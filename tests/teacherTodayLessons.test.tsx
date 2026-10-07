@@ -13,7 +13,7 @@ const data:any={uid:'teacher',admin:false,scopes:[{studentKey:a,subject:'영어'
 const schedule=(id:string,status='예정',extra:any={})=>({id,notionPageId:id,data:{date:day,title:'보강',kind:'보강',subject:'영어',start:'15:00',end:'16:00',students:[a,b],status,...extra}});
 test('today list combines every regular slot and scheduled student, filters cancellations and permissions, and sorts by time',()=>{
  const events=todayLessons({...data,classes:[...data.classes,{...data.classes[0],id:'stopped',status:'중단'},{...data.classes[0],id:'other',ownerUid:'other'}]},day,[schedule('makeup'),schedule('cancel','취소'),schedule('done','완료'),schedule('tomorrow','예정',{date:'2026-10-06'}),{...schedule('archived'),archived:true},schedule('foreign','예정',{students:['unknown']})]);
- assert.deepEqual(events.map(e=>e.id),['schedule:makeup','regular:class:0']);assert.deepEqual(events[0].students,[a,b]);
+ assert.deepEqual(events.map(e=>e.id),['schedule:makeup','schedule:done','regular:class:0']);assert.deepEqual(events[0].students,[a,b]);
  const restricted=todayLessons({...data,scopes:[{studentKey:a,subject:'영어'}]},day,[schedule('makeup')]);assert.ok(restricted.every(e=>e.students.length===1&&e.students[0]===a));
 });
 test('reflected schedule copies are deduplicated against source records, including cancelled sources',()=>{

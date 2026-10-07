@@ -1,0 +1,174 @@
+/* Schedule-only surface styles. Lesson form rules and breakpoints remain unchanged. */
+@media(max-width:767px){.teacher-workspace .weekly-calendar .weekly-board {min-width:700px;}.teacher-workspace .weekly-calendar .weekly-event {word-break:normal;overflow-wrap:normal;}}
+.teacher-workspace .workspace-mobile-tabs>button {flex:1;min-width:0;}
+.teacher-workspace .workspace-mobile-tabs>button>span {display:block;max-width:100%;min-width:0;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.teacher-workspace nav.workspace-navigation {background:var(--workspace-surface);min-height:44px;isolation:isolate;}
+.teacher-workspace .workspace-nav-title {padding-block:2px;}
+body:has(.teacher-workspace) nav.no-print.sticky {background:var(--workspace-surface,white)!important;}
+.schedule-sync-done {display:inline-flex;flex:none;align-items:center;color:var(--workspace-success-fg);}
+.schedule-status,.schedule-class-status {display:inline-flex;align-items:center;gap:3px;font-size:12px;color:var(--workspace-muted);white-space:nowrap;}
+.schedule-status.status-danger {color:var(--workspace-danger-fg);}
+.schedule-kind {font-size:12px;padding:1px 4px;background:var(--workspace-neutral-bg);color:var(--workspace-muted);border-radius:var(--workspace-radius-badge);white-space:nowrap;}
+.schedule-event-card {position:relative;background:var(--workspace-surface);border:1px solid var(--workspace-neutral-border);border-radius:var(--workspace-radius-input);min-width:0;}
+.teacher-workspace .schedule-event-open {display:grid;gap:2px;width:100%;min-height:80px;padding:8px;text-align:left;border-radius:var(--workspace-radius-input);background:transparent;color:var(--workspace-text);}
+.schedule-event-top,.schedule-event-title-row,.schedule-event-bottom {display:flex;align-items:center;justify-content:space-between;gap:4px;min-width:0;}
+.schedule-event-time {font-size:14px;line-height:18px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.schedule-event-title {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;line-height:18px;font-weight:600;}
+.schedule-event-title-row .workspace-status-badge {font-size:11px;padding:1px 3px;}
+.schedule-event-subtitle {font-size:12px;line-height:16px;color:var(--workspace-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.schedule-event-card:has(.schedule-notion-link) .schedule-event-bottom {padding-right:20px;}
+.schedule-notion-link {position:absolute;bottom:8px;right:6px;width:24px;height:24px;display:grid;place-items:center;color:var(--workspace-muted);border-radius:8px;}
+.schedule-event-card.is-cancelled .schedule-event-title,.schedule-event-card.is-cancelled .schedule-event-time {text-decoration:line-through;color:var(--workspace-muted);}
+.schedule-week-board {container-name:schedule-board;container-type:inline-size;}
+.schedule-board-wide {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:stretch;}
+.schedule-week-column {border:1px solid var(--workspace-neutral-border);border-radius:var(--workspace-radius-input);min-width:0;}
+.schedule-week-column>header {position:sticky;top:calc(var(--workspace-appbar-offset,0px) + 44px);z-index:10;display:flex;align-items:center;gap:4px;padding:8px;border-top:3px solid transparent;background:var(--workspace-neutral-bg);border-radius:12px 12px 0 0;font-size:12px;}
+.schedule-week-column>header>button {margin-left:auto;min-width:28px;min-height:28px;display:grid;place-items:center;}
+.schedule-day-count {color:var(--workspace-muted);}
+.schedule-week-column.is-today {background:var(--workspace-brand-bg);}
+.schedule-week-column.is-today>header {border-top-color:var(--workspace-brand-dot);background:var(--workspace-brand-bg);}
+.schedule-day-events {display:grid;gap:6px;padding:6px;align-content:start;}
+.schedule-empty-day {display:flex;align-items:center;justify-content:center;gap:4px;min-height:80px;color:var(--workspace-muted);font-size:12px;}
+.schedule-empty-day>button {display:grid;place-items:center;min-width:32px;min-height:32px;}
+.schedule-board-narrow {display:none;}
+.schedule-week-strip {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;}
+.schedule-week-strip>button {display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;min-height:72px;padding:4px;font-size:12px;border:1px solid var(--workspace-neutral-border);border-radius:12px;color:var(--workspace-text);}
+.schedule-week-strip>button.is-today {border-top:3px solid var(--workspace-brand-dot);}
+.schedule-week-strip>button[aria-selected=true] {background:var(--workspace-brand-dot);color:var(--workspace-brand-on-solid);}
+.schedule-week-strip>button>span {white-space:nowrap;font-variant-numeric:tabular-nums;}
+.schedule-agenda>header {display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0;}
+.schedule-agenda h3 {font-size:14px;font-weight:700;}
+.schedule-agenda>div {margin-bottom:8px;}
+.schedule-agenda header button {display:flex;align-items:center;gap:4px;}
+.schedule-skeleton {display:grid;gap:8px;min-height:240px;}
+.schedule-skeleton>span {display:block;min-height:72px;background:var(--workspace-neutral-bg);border-radius:12px;}
+@container schedule-board (width < 700px){.schedule-board-wide{display:none;}.schedule-board-narrow{display:block;}}
+@media(pointer:coarse){.schedule-notion-link,.schedule-week-column>header>button,.schedule-empty-day>button{min-width:44px;min-height:44px;}.schedule-event-card:has(.schedule-notion-link) .schedule-event-bottom{padding-right:40px;}}
+.teacher-workspace.schedule-active {max-width:1440px;}
+.schedule-workspace-page {container-name:schedule-page;container-type:inline-size;}
+.schedule-view-header {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+.schedule-view-header>.primary-button {display:flex;align-items:center;gap:4px;}
+.schedule-calendar {container-name:schedule-calendar;container-type:inline-size;}
+.schedule-toolbar {display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-bottom:12px;}
+.schedule-toolbar>strong {font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.schedule-icon-button {display:grid;place-items:center;min-width:44px;min-height:44px;border:1px solid var(--workspace-neutral-border);border-radius:12px;color:var(--workspace-muted);}
+.schedule-desktop-filters {display:flex;align-items:center;gap:8px;margin-left:auto;}
+.teacher-workspace .schedule-desktop-filters select {width:auto;min-width:120px;min-height:44px;margin:0;}
+.schedule-cancel-toggle {display:flex;align-items:center;gap:8px;white-space:nowrap;}
+.schedule-cancel-toggle input {appearance:none!important;width:32px!important;height:20px!important;border-radius:999px;background:var(--workspace-neutral-border);position:relative;}
+.schedule-cancel-toggle input:before {content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:999px;background:var(--workspace-surface);}
+.schedule-cancel-toggle input:checked {background:var(--workspace-brand-dot);}
+.schedule-cancel-toggle input:checked:before {left:14px;}
+.schedule-date-picker {position:relative;}
+.schedule-date-picker>summary {display:grid;place-items:center;min-width:44px;min-height:44px;border:1px solid var(--workspace-neutral-border);border-radius:12px;list-style:none;cursor:pointer;}
+.schedule-date-picker>summary::-webkit-details-marker {display:none;}
+.schedule-date-picker>label {position:absolute;top:100%;left:0;z-index:20;background:var(--workspace-surface);padding:8px;width:220px;border:1px solid var(--workspace-neutral-border);border-radius:12px;box-shadow:var(--workspace-shadow-large);}
+.schedule-calendar .schedule-week-board {min-width:0;}
+[hidden].schedule-calendar,[hidden].regular-calendar,[hidden].schedule-class-panel {display:none!important;}
+.schedule-mobile-filters-button {display:none!important;}
+.schedule-filter-sheet {display:grid;gap:12px;}
+@container schedule-calendar (max-width:699.99px){.schedule-desktop-filters,.schedule-toolbar>.schedule-date-picker{display:none;}.schedule-mobile-filters-button{display:flex!important;align-items:center;gap:4px;margin-left:auto;}.schedule-toolbar{gap:4px;}.schedule-toolbar>strong{font-size:13px;}.schedule-week-strip{gap:2px;}.schedule-week-strip>button{min-height:72px;}}
+@container schedule-page (max-width:699.99px){.schedule-workspace-page>.schedule-calendar{padding:8px;}.schedule-view-header .lesson-mode-switch {max-width:100%;overflow:auto;}.schedule-view-header .lesson-mode-switch>button{padding-inline:8px;white-space:nowrap;}}
+.schedule-regular-help {font-size:12px;color:var(--workspace-muted);margin-bottom:12px;}
+.schedule-regular .schedule-week-board {margin-top:8px;}
+.schedule-class-list {container-name:schedule-classes;container-type:inline-size;}
+.schedule-class-toolbar {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+.schedule-class-toolbar>span {font-size:12px;color:var(--workspace-muted);}
+.schedule-class-search {display:flex;align-items:center;gap:8px;flex:1;min-width:180px;}
+.teacher-workspace .schedule-class-search input {margin:0;min-height:44px;}
+.schedule-class-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.schedule-class-open {display:flex;flex-direction:column;gap:12px;min-width:0;padding:12px;border:1px solid var(--workspace-neutral-border);border-radius:20px;text-align:left;background:var(--workspace-surface);}
+.schedule-class-title {display:flex;align-items:center;gap:8px;}
+.schedule-class-title>strong {font-size:16px;font-weight:700;flex:1;min-width:0;}
+.schedule-class-title>svg {flex:none;color:var(--workspace-muted);}
+.schedule-class-meta {display:flex;flex-wrap:wrap;gap:4px;}
+.schedule-class-meta>span {font-size:12px;padding:2px 6px;border-radius:999px;background:var(--workspace-neutral-bg);color:var(--workspace-muted);}
+.schedule-class-times {display:grid;gap:4px;font-size:12px;font-variant-numeric:tabular-nums;}
+.schedule-class-times>span {display:flex;align-items:center;flex-wrap:wrap;gap:6px;}
+.schedule-weekday-chip {min-width:24px;padding:2px 4px;border-radius:8px;background:var(--workspace-neutral-bg);text-align:center;}
+.schedule-class-open.is-stopped {background:var(--workspace-neutral-bg);color:var(--workspace-muted);}
+@container schedule-classes (max-width:899px){.schedule-class-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@container schedule-classes (max-width:599px){.schedule-class-grid{grid-template-columns:minmax(0,1fr);}}
+.schedule-editor {container-name:schedule-editor;container-type:inline-size;}
+.schedule-editor-body {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;}
+.schedule-editor fieldset {border:0;padding:0;min-width:0;}
+.schedule-form-row {display:grid;gap:12px;margin-bottom:12px;}
+.schedule-title-row {grid-template-columns:2fr 1fr 1fr;}
+.schedule-place-row {grid-template-columns:1fr 1fr;}
+.schedule-time-section {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px;}
+.schedule-time-section .lesson-time-presets,.schedule-time-section .lesson-time-direct-inputs {display:contents;}
+.schedule-time-section .lesson-time-preset-buttons {grid-column:1/-1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:0;}
+.teacher-workspace .schedule-editor :is(input:not([type=checkbox]),select) {min-height:44px;margin-top:4px;border-radius:12px;}
+.schedule-place-control {display:flex;align-items:center;gap:4px;}
+.schedule-place-control select {flex:1;min-width:0;}
+.schedule-place-control button {flex:none;margin-top:4px;}
+.schedule-place-help {font-size:12px;color:var(--workspace-muted);margin-bottom:12px;}
+.schedule-students-heading {display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;gap:8px;font-size:13px;}
+.schedule-students-heading>label {display:flex;align-items:center;gap:6px;}
+.teacher-workspace .schedule-students-heading select {width:150px;margin:0;}
+.schedule-selected-students {display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}
+.schedule-student-chip {display:flex;align-items:center;gap:4px;min-height:36px;border-radius:999px;padding:4px 8px 4px 12px;background:var(--workspace-brand-bg);border:1px solid var(--workspace-brand-border);color:var(--workspace-brand-fg);font-size:12px;}
+.schedule-student-chip>button {display:grid;place-items:center;min-height:32px;min-width:32px;border-radius:999px;}
+.schedule-note {display:block;margin-top:12px;}
+.teacher-workspace .schedule-note textarea {resize:none;line-height:1.5;}
+.schedule-saved-heading {display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.schedule-saved-heading h2 {margin:0;}
+.schedule-saved-date {font-size:12px;color:var(--workspace-muted);margin:12px 0 4px;}
+.schedule-saved-row {display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:60px;padding:8px;border-left:3px solid transparent;border-bottom:1px solid var(--workspace-neutral-border);text-align:left;border-radius:8px;}
+.schedule-saved-row>span:first-child {display:flex;flex-direction:column;gap:4px;min-width:0;}
+.schedule-saved-row strong {font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.schedule-saved-row>span>span {font-size:12px;color:var(--workspace-muted);font-variant-numeric:tabular-nums;}
+.schedule-saved-row.is-current {background:var(--workspace-brand-bg);border-left-color:var(--workspace-brand-dot);}
+.schedule-editor-switch {display:none;margin-bottom:12px;}
+.schedule-editor-footer {position:sticky;bottom:0;z-index:25;background:var(--workspace-surface);}
+.schedule-action-shell {position:sticky;bottom:0;background:var(--workspace-surface);}
+.schedule-action-shell .lesson-action-bar {bottom:0!important;background:var(--workspace-surface);}
+.schedule-action-shell.is-synced .workspace-status-badge {border:0;background:transparent;padding:0;}
+.schedule-action-shell.is-synced .workspace-status-badge>span {display:none;}
+.schedule-action-shell.is-synced .workspace-status-badge>svg {color:var(--workspace-success-fg);display:block;}
+.schedule-danger-menu {position:relative;}
+.schedule-danger-menu>summary {display:grid;place-items:center;min-height:44px;min-width:44px;list-style:none;cursor:pointer;border:1px solid var(--workspace-neutral-border);border-radius:12px;}
+.schedule-danger-menu>summary::-webkit-details-marker {display:none;}
+.schedule-danger-menu>div {position:absolute;bottom:100%;right:0;min-width:160px;padding:8px;background:var(--workspace-surface);border:1px solid var(--workspace-neutral-border);border-radius:12px;box-shadow:var(--workspace-shadow-large);}
+.teacher-workspace .schedule-danger-action {color:var(--workspace-danger-fg);background:var(--workspace-danger-bg);}
+.schedule-editor-notice {font-size:12px;color:var(--workspace-muted);padding:4px 8px;}
+.teacher-workspace .workspace-dialog:has(.schedule-editor)>.workspace-dialog-scroll {padding-top:4px;}
+@container schedule-editor (max-width:899.99px){.schedule-editor-body{grid-template-columns:1fr;}.schedule-editor-switch{display:flex;width:max-content;}.schedule-editor[data-pane=form] .schedule-saved-list,.schedule-editor[data-pane=saved] .schedule-editor-form{display:none;}.schedule-title-row{grid-template-columns:1fr 1fr;}.schedule-title-row>label:first-child{grid-column:1/-1;}.schedule-action-shell .lesson-action-buttons{flex-wrap:wrap;}.schedule-time-section{grid-template-columns:repeat(3,minmax(0,1fr));}}
+@container schedule-editor (max-width:499px){.schedule-time-section{grid-template-columns:repeat(2,minmax(0,1fr));}.schedule-time-section>label:first-child{grid-column:1/-1;}.schedule-students-heading>label{width:100%;}.schedule-action-shell .lesson-action-buttons {display:flex!important;grid-column:1/-1;}.schedule-action-shell .lesson-action-buttons>button {min-width:44px!important;}}
+@media(pointer:coarse){.schedule-student-chip{min-height:44px;}.schedule-student-chip>button{min-height:44px;min-width:44px;}}
+.class-editor {container-name:class-editor;container-type:inline-size;}
+.class-editor>fieldset {min-width:0;border:0;padding:0;}
+.class-basics {display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;}
+.teacher-workspace .class-editor :is(input:not([type=checkbox]),select) {min-height:44px;}
+.class-students-heading {display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:16px;font-size:13px;}
+.class-students-heading>span {color:var(--workspace-muted);font-size:12px;}
+.class-student-group {width:max-content;margin:8px 0;}
+.class-student-chips {display:flex;flex-wrap:wrap;gap:6px;margin:12px 0;}
+.class-student-chips>button {display:flex;align-items:center;gap:4px;min-height:44px;padding:6px 12px;border:1px solid var(--workspace-neutral-border);border-radius:999px;font-size:13px;color:var(--workspace-text);}
+.class-student-chips>button[aria-pressed=true] {background:var(--workspace-brand-dot);color:var(--workspace-brand-on-solid);border-color:var(--workspace-brand-dot);}
+.class-slot-row {display:grid;grid-template-columns:minmax(300px,2fr) minmax(104px,1fr) minmax(104px,1fr) minmax(100px,1fr) 44px;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--workspace-neutral-border);}
+.class-slot-row .lesson-chip-field {display:block;}
+.class-slot-row .lesson-chip-label {position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
+.class-slot-row .lesson-chip-options {gap:2px;flex-wrap:nowrap;}
+.teacher-workspace .class-slot-row .lesson-option-chip {min-height:44px;min-width:36px;padding:4px 8px;}
+.class-slot-row .lesson-option-chip[aria-checked=true] {background:var(--workspace-brand-bg);color:var(--workspace-brand-fg);border-color:var(--workspace-brand-dot);}
+.teacher-workspace .class-slot-row>button {display:grid;place-items:center;min-height:44px;min-width:44px;color:var(--workspace-danger-fg);}
+.teacher-workspace .class-slot-add {display:block;width:100%;border:1px dashed var(--workspace-neutral-border);margin-top:8px;background:transparent;color:var(--workspace-brand-fg);}
+.class-editor .schedule-action-shell {margin-top:12px;}
+.class-editor details>summary {min-height:44px;display:flex;align-items:center;gap:4px;font-size:13px;}
+@container class-editor (max-width:899px){.class-slot-row{grid-template-columns:minmax(104px,1fr) minmax(104px,1fr) 44px;}.class-slot-row .lesson-chip-field{grid-column:1/-1;}.class-slot-row>select{grid-column:1/3;}.class-slot-row>button{grid-column:3;}.class-basics{grid-template-columns:1fr 1fr;}.class-basics>label:first-child{grid-column:1/-1;}}
+.teacher-workspace .workspace-dialog:has(.class-editor)>.workspace-dialog-scroll {padding-top:4px;}
+/* Scope the one-scroll-owner frame to schedule/class dialogs only. */
+.teacher-workspace .workspace-dialog[open]:has(.schedule-editor),.teacher-workspace .workspace-dialog[open]:has(.class-editor) {display:flex;flex-direction:column;overflow:hidden;}
+.teacher-workspace .workspace-dialog:has(.schedule-editor)>.workspace-dialog-header,.teacher-workspace .workspace-dialog:has(.class-editor)>.workspace-dialog-header {position:relative;top:0;flex:none;margin:0;padding:12px 16px;background:var(--workspace-surface);}
+.teacher-workspace .workspace-dialog:has(.schedule-editor)>.workspace-dialog-scroll,.teacher-workspace .workspace-dialog:has(.class-editor)>.workspace-dialog-scroll {flex:1 1 auto;min-height:0;max-height:none;overflow:auto;margin:0 8px 8px;padding:4px 8px 8px;}
+.schedule-editor>.schedule-editor-switch {display:none;}
+@container schedule-editor (max-width:899.99px){.schedule-editor>.schedule-editor-switch{display:flex;}}
+.schedule-event-title {word-break:keep-all;overflow-wrap:normal;}
+.teacher-workspace .class-student-chips>button[aria-pressed=true]:hover {background:var(--workspace-brand-dot);color:var(--workspace-brand-on-solid);}
+.schedule-event-subtitle {display:flex;align-items:center;gap:3px;}
+.schedule-student-summary {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.schedule-event-subject {flex:none;white-space:nowrap;}
+.class-slot-row .lesson-chip-options {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;}
+.teacher-workspace .class-slot-row .lesson-option-chip {min-width:44px;padding:4px 2px;}
+.teacher-workspace .class-slot-row .lesson-option-chip[aria-checked=true],.teacher-workspace .class-slot-row .lesson-option-chip.tone-neutral[aria-checked=true]:not(:disabled):hover {background:var(--workspace-brand-bg);color:var(--workspace-brand-fg);border-color:var(--workspace-brand-dot);}

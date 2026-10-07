@@ -7,8 +7,8 @@ const data={uid:'teacher',admin:false,teachingScopes:[{studentKey:'current',subj
 const props={data,busy:false,request:async()=>({}),refresh:async()=>{},act:async()=>{}};
 test('regular timetable has Monday–Sunday columns and its own repeat schedule guide',()=>{
  const html=renderToStaticMarkup(<TeacherClassManager {...props} mode="schedule"/>);
- const headings=[...html.matchAll(/<header><strong>(.*?)<\/strong><\/header>/g)].map(m=>m[1]);
- assert.deepEqual(headings,['월','화','수','목','금','토','일']);assert.ok(html.includes('14:00'));assert.ok(html.includes('날짜별 변경·보강은 위 일정표에 따로 등록'));
+ const headings=[...html.matchAll(/<header><strong>(.*?)<\/strong>/g)].map(m=>m[1]);
+ assert.deepEqual(headings,['월','화','수','목','금','토','일']);assert.ok(html.includes('14:00'));assert.ok(html.includes('날짜별 변경·보강은 이번 주 일정에 등록'));
  assert.ok(html.includes('재원생'));assert.ok(html.includes('이외'));assert.ok(html.includes('재원 학생'));assert.equal(html.includes('중단 학생'),false);
 });
 test('curriculum screen shares class records and provides editable curriculum and textbook states',()=>{
@@ -19,6 +19,6 @@ test('curriculum screen shares class records and provides editable curriculum an
 test('regular timetable sorts times and hides stopped classes and individual slots',()=>{
  const mk=(name:string,start:string,status?:string,slotStatus?:string)=>({...data.classes[0],id:name,name,status,slots:[{weekday:1,start,end:'22:00',status:slotStatus}]});
  const html=renderToStaticMarkup(<TeacherClassManager {...props} data={{...data,classes:[mk('늦은반','20:00'),mk('중단반','13:00','중단'),mk('대기반','16:00','대기'),mk('시간중단','14:00',undefined,'중단')]}} mode="schedule"/>);
- const board=html.split('weekly-board')[2]?.split('</section>')[0]||html;
+ const board=html.split('class="schedule-board-wide"')[1]?.split('class="schedule-board-narrow"')[0]||'';
  assert.ok(board.indexOf('대기반')<board.indexOf('늦은반'));assert.equal(board.includes('중단반'),false);assert.equal(board.includes('시간중단'),false);
 });
