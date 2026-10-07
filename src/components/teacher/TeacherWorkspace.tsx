@@ -1,3 +1,13 @@
+import {autoSessionNumbers} from '../../lib/sessionNumbers';
+import WorkspaceRequestMetrics from './WorkspaceRequestMetrics';
+import {beginWorkspaceRequest,finishWorkspaceRequest,clearWorkspaceRequestMetrics} from '../../lib/workspaceRequestMetrics';
+import {regularLessonTime} from '../../lib/lessonTimePresets';
+import StudentCombobox from './StudentCombobox';
+import type {TodayLesson} from '../../lib/teacherTodayLessons';
+import ChipGroup from './ChipGroup';
+import {lessonOptionGroups} from '../../lib/lessonOptions';
+import LessonActionBar from './LessonActionBar';
+import {stageLabel,lessonRecordStatus} from '../../lib/lessonPresentation';
 import {submitLesson} from '../../lib/lessonSubmission';
 import {createWorkspaceOperations,type WorkspaceActionOptions,type WorkspaceOperation} from '../../lib/workspaceOperations';
 import {upsertWorkspaceRecord} from '../../lib/workspaceRecords';
@@ -23,7 +33,7 @@ import TeacherWeeklyCalendar from './TeacherWeeklyCalendar';
 import { lazy, Suspense, useCallback,useEffect, useRef, useState, type ReactNode } from 'react';
 import { auth } from '../../lib/firebase';
 import {onAuthStateChanged} from 'firebase/auth';
-import { BookOpen, CalendarDays, ClipboardList, Users, Settings } from 'lucide-react';
+import { BookOpen, CalendarDays, ClipboardList, Users, Settings, RefreshCw, LoaderCircle } from 'lucide-react';
 const TeacherIntegrityAudit = lazy(() => import('./TeacherIntegrityAudit'));
 const StudentEnrollmentEditor = lazy(() => import('./StudentEnrollmentEditor'));
 const TeacherMessageComposer = lazy(() => import('./TeacherMessageComposer'));
@@ -39,14 +49,15 @@ import TeacherScheduleEditor from './TeacherScheduleEditor';
 const subjects = ['영어', '수학', '국어', '과학', '한국사'];
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
 const emptyLesson = () => ({ studentKey: '', subject: '영어', date: today(), start: '14:00', end: '15:30', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', content: '', assignment: '', note: '', nextPlan: '', wrong:null as number | null,examWrong:null as number | null,correct: null, total: null, examCorrect: null, examTotal: null, round: null, classSession: '있음', selfStudy: '미확인', selfStudyStart: '', selfStudyEnd: '', selfStudyRound: null, attendanceNote: '', specialNote: '' });
-const stageLabel: any = { report_published_notion_pending:'리포트 반영 완료 · 노션 대기', reflection_pending:'노션 저장 완료 · 연동 대기', draft: '저장됨', publishing: '반영 준비 중', notion_saved: 'Notion 저장됨', processing: '반영 중', published: '반영 완료', failed: '반영 실패' };
 const errors: any = { UNAUTHORIZED: '로그인 인증이 만료되었습니다. 다시 로그인해 주세요.', SESSION_REVOKED: '로그인이 해제되었습니다. 다시 로그인해 주세요.', TEACHER_NOTION_LINK_REQUIRED: '관리자 설정에서 Notion 선생님 페이지를 연결해 주세요.', TEACHER_NOT_CONFIGURED: '관리자가 담당 학생과 과목을 연결하면 사용할 수 있습니다.', SOURCE_IDENTITY_LOCKED: '반영된 기록의 학생·과목은 바꿀 수 없습니다. 새 수업으로 작성해 주세요.', INVALID_INPUT: '입력한 날짜, 시간, 점수와 필수 항목을 확인해 주세요.', FORBIDDEN: '이 자료에 접근할 권한이 없습니다.', DRAFT_CONFLICT: '다른 화면에서 수정되었습니다. 새로고침 후 확인해 주세요.', PUBLISH_IN_PROGRESS: '반영 중입니다. 잠시 후 새로고침해 주세요.', NOTION_SCHEMA_SETUP_REQUIRED: '관리자 설정에서 수업 일지 연결을 준비해 주세요.', MAKE_SUBJECT_NOT_CONFIGURED: '이 과목은 아직 반영 연결이 준비되지 않았습니다.', MAKE_TRIGGER_NOT_CONFIGURED: '수업 일지의 반영 연결을 확인해야 합니다.' };
 export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     onNavigate?: (view: any) => void;
     onAccounts?: () => void;
 }) {
     const [lessonDay,setLessonDay]=useState(today);
-    const autoTouches=useRef(new Set<string>());const autoVersion=useRef(0);const [autoLoading,setAutoLoading]=useState(false);
+    const [todayStudents,setTodayStudents]=useState<{uid:string;date:string;keys:string[]}>({uid:"",date:"",keys:[]});
+    const receiveTodayLessons=useCallback((events:TodayLesson[],uid:string,date:string)=>setTodayStudents({uid,date,keys:[...new Set(events.flatMap(event=>event.students))]}),[]);
+    const sessionHistory=useRef<any[]>([]);const autoTouches=useRef(new Set<string>());const autoVersion=useRef(0);const [autoLoading,setAutoLoading]=useState(false);
     useEffect(()=>()=>{autoVersion.current++;},[]);
     const [draftPage,setDraftPage]=useState(1),[draftList,setDraftList]=useState<any>({records:[],page:1,pages:1,total:0}),[draftLoading,setDraftLoading]=useState(false);
     const [sectionLoading,setSectionLoading]=useState(false);
@@ -81,7 +92,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     const handleScheduleDirty=useCallback((dirty:boolean)=>{setScheduleDirty(dirty);if(dirty)dismissMessage();},[dismissMessage]);
     const [bootstrapError,setBootstrapError]=useState('');
     const [authEpoch,setAuthEpoch]=useState(0),accountRef=useRef(auth.currentUser?.uid);
-    useEffect(()=>onAuthStateChanged(auth,user=>{if(user?.uid===accountRef.current)return;accountRef.current=user?.uid;operations.reset();dismissMessage();dirtyResources.current.clear();autoVersion.current++;setData(null);setLesson(emptyLesson());setDraftId(null);setRevision(undefined);setScheduleSelection(undefined);setManagementStudentKey('');setBootstrapError('');setAuthEpoch(value=>value+1);}),[operations,dismissMessage]);
+    useEffect(()=>onAuthStateChanged(auth,user=>{if(user?.uid===accountRef.current)return;accountRef.current=user?.uid;if(import.meta.env.DEV)clearWorkspaceRequestMetrics();operations.reset();dismissMessage();dirtyResources.current.clear();autoVersion.current++;setData(null);sessionHistory.current=[];setLesson(emptyLesson());setDraftId(null);setRevision(undefined);setScheduleSelection(undefined);setManagementStudentKey('');setBootstrapError('');setAuthEpoch(value=>value+1);}),[operations,dismissMessage]);
     const studentListRef=useRef<HTMLElement>(null);
     const scheduleEditorRef = useRef<HTMLDivElement>(null), regularRef = useRef<HTMLDivElement>(null);
     function openSchedule(date: string, record?: any) { if (busy)
@@ -95,9 +106,11 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
         const query=new URLSearchParams(reading?{action:action!.slice(5)}:{action:'bootstrap',section:workspaceSection(activeTab.current)});
         if(reading)for(const [key,value] of Object.entries(body)){if(value!==undefined&&value!==null)query.set(key,String(value));}
         const endpoint='/api/teacher/workspace'+(!posting?'?'+query.toString():'');
-        const result = await teacherAuthenticatedRequest<any>(auth, endpoint, posting ? {
+        const metric=import.meta.env.DEV?beginWorkspaceRequest(action||'bootstrap'):undefined;
+        let result:any;try{result = await teacherAuthenticatedRequest<any>(auth, endpoint, posting ? {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }),
         } : {},requestAccount);
+        }finally{if(import.meta.env.DEV&&metric)finishWorkspaceRequest(metric,Boolean(result?.ok&&result?.data?.ok));}
         if(requestAccount&&auth.currentUser?.uid!==requestAccount)throw new Error('로그인 계정이 변경되었습니다.');
         if(!result.ok&&posting&&['publish','publish-schedule','publish-academic'].includes(action||'')&&body.id&&!['UNAUTHORIZED','SESSION_REVOKED','FORBIDDEN','FIRESTORE_RESOURCE_EXHAUSTED'].includes(result.data?.error||'')){
             try{const kind=action==='publish'?'lesson':action==='publish-schedule'?'schedule':'academic';const saved=await request('read:managed-record',{kind,id:body.id});if(kind!=='academic')setData((old:any)=>old?{...old,[kind==='lesson'?'drafts':'schedules']:upsertWorkspaceRecord(old[kind==='lesson'?'drafts':'schedules'],saved.record)}:old);}catch{/* Preserve the original error, never retry the mutation. */}
@@ -170,17 +183,17 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     }
     async function selectStudent(studentKey:string,patch:any={}) {
         const seed={...emptyLesson(),date:lesson.date,start:lesson.start,end:lesson.end,subject:lesson.subject,...patch,studentKey};
-        const touched=new Set<string>();autoTouches.current=touched;
+        const touched=new Set<string>();autoTouches.current=touched;sessionHistory.current=[];
         const version=++autoVersion.current;newLessonId.current=crypto.randomUUID();setLesson(seed);setDraftId(null);setRevision(undefined);setMessage('');
         if(!studentKey){setAutoLoading(false);return;}setAutoLoading(true);
         try{const previous=await request('previous-lesson',{studentKey,subject:seed.subject,date:seed.date});
-            if(version===autoVersion.current)setLesson((current:any)=>applyPreviousLesson(current,seed,previous.data,touched));
+            if(version===autoVersion.current){sessionHistory.current=previous.data.sessionRecords||[];setLesson((current:any)=>{const filled=applyPreviousLesson(current,seed,previous.data,touched);return Array.isArray(previous.data.sessionRecords)?autoSessionNumbers(filled,sessionHistory.current,touched).data:filled;});}
         }catch(e){if(version===autoVersion.current)setMessage(e instanceof Error?e.message:'직전 수업을 불러오지 못했습니다.');}
         finally{if(version===autoVersion.current)setAutoLoading(false);}
     }
-    function resetLesson(){autoVersion.current++;newLessonId.current=crypto.randomUUID();dismissMessage();setAutoLoading(false);setLesson(emptyLesson());setDraftId(null);setRevision(undefined);}
-    function setField(key: string, value: any) { dismissMessage();autoTouches.current.add(key);setLesson((d: any) => ({ ...d, [key]: value })); }
-    function openDraft(d: any) { autoVersion.current++;setAutoLoading(false); setData((old:any)=>({...old,drafts:[d,...old.drafts.filter((r:any)=>r.id!==d.id)]}));setLesson(compactLessonInput({ ...emptyLesson(), ...d.data })); setDraftId(d.id); setRevision(d.revision); setLessonMode('single'); setLessonDialogOpen(true); }
+    function resetLesson(){sessionHistory.current=[];autoVersion.current++;newLessonId.current=crypto.randomUUID();dismissMessage();setAutoLoading(false);setLesson(emptyLesson());setDraftId(null);setRevision(undefined);}
+    function setField(key: string, value: any,manual=true) { dismissMessage();if(manual)autoTouches.current.add(key);setLesson((d: any) => {const next={...d,[key]:value};return sessionHistory.current.length?autoSessionNumbers(next,sessionHistory.current,autoTouches.current,Boolean(draftId)).data:next;}); }
+    function openDraft(d: any) { sessionHistory.current=[];autoVersion.current++;setAutoLoading(false); setData((old:any)=>({...old,drafts:[d,...old.drafts.filter((r:any)=>r.id!==d.id)]}));setLesson(compactLessonInput({ ...emptyLesson(), ...d.data })); setDraftId(d.id); setRevision(d.revision); setLessonMode('single'); setLessonDialogOpen(true); }
     const students = data?.students || [];
     const filtered = students.filter((s: any) => {
         const active = s.subjects?.length ? s.subjects.some((x: any) => (!status || x.status === status) && (!subjectFilter || x.subject === subjectFilter)) : s.enrollmentStatus === status && !subjectFilter;
@@ -202,20 +215,21 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
             return outcome;
         }finally{await refresh();}
     }
-    const lessonEditor = <section className="panel"><h2>수업 일지</h2><div className="mb-3">    <label>학생<select disabled={Boolean(managementStudentKey)&&tab==='students'} value={lesson.studentKey} onChange={e => void selectStudent(e.target.value)}><option value="">학생 선택</option>{students.map((s: any) => <option key={s.studentKey} value={s.studentKey}>{s.studentDisplayName}</option>)}</select></label><button className="small-button mt-2" type="button" onClick={resetLesson}>+ 새 일지</button></div><fieldset disabled={busy}><label>날짜<input type="date" value={lesson.date} onChange={e=>setField('date',e.target.value)}/></label><div className="grid sm:grid-cols-2 gap-3">
+    const lessonEditor = <section className="panel lesson-editor-panel"><h2>수업 일지</h2><div className="mb-3">    <StudentCombobox students={students} value={lesson.studentKey} disabled={Boolean(managementStudentKey)&&tab==='students'} todayKeys={todayStudents.uid===data?.uid&&todayStudents.date===today()?todayStudents.keys:[]} onChange={key=>void selectStudent(key)}/><button className="small-button mt-2" type="button" onClick={resetLesson}>+ 새 일지</button></div><fieldset className="lesson-editor-fields" disabled={busy}><label>날짜<input type="date" value={lesson.date} onChange={e=>setField('date',e.target.value)}/></label><div className="grid sm:grid-cols-2 gap-3">
 
     <label>과목<select value={lesson.subject} onChange={e => void selectStudent(lesson.studentKey,{subject:e.target.value})}>{subjects.map(s => <option key={s}>{s}</option>)}</select></label>
    </div>
-   {autoLoading&&<p role="status" className="text-xs text-slate-500 my-2">직전 수업의 회차·내용·과제를 불러오는 중…</p>}<LessonAcademyFields value={lesson} onChange={setField}/>
-   <div className="flex flex-wrap gap-2 my-3"><button className="small-button" onClick={() => {autoTouches.current.add('attendance');setLesson((d: any) => ({ ...d, attendance: '출석', attitude: '상', homework: '상' }));}}>출석·태도·숙제 일괄 상</button></div>
-   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{[['attendance', '출결', ['미확인', '출석', '결석', '지각', '보강 출석', '보강 결석', '보강 지각']], ['attitude', '태도', ['미확인', '미참여', '하', '중하', '중', '중상', '상', '최상']], ['homework', '숙제', ['없는 날', '미확인', '미제출', '최하', '하', '중하', '중', '중상', '상', '최상']], ['test', '테스트', ['없는 날', '미확인', '미제출', '최하', '하', '중하', '중', '중상', '상', '최상']]].map(([key, label, options]: any) => <label key={key}>{label}<select value={lesson[key] || ''} onChange={e => setField(key, e.target.value)}>{options.map((x: string) => <option key={x}>{x}</option>)}</select></label>)}</div>
+   {autoLoading&&<p role="status" className="text-xs text-slate-500 my-2">직전 수업의 회차·내용·과제를 불러오는 중…</p>}<LessonAcademyFields value={lesson} roundHints={autoSessionNumbers(lesson,sessionHistory.current,autoTouches.current,Boolean(draftId)).hints} onChange={setField} regularTime={regularLessonTime(data,lesson.studentKey,lesson.subject,lesson.date,today())}/>
+   <div className="flex flex-wrap gap-2 my-3"><button className="small-button" onClick={() => {autoTouches.current.add('attendance');setLesson((d: any) => {const next={...d,attendance:'출석',attitude:'상',homework:'상'};return sessionHistory.current.length?autoSessionNumbers(next,sessionHistory.current,autoTouches.current,Boolean(draftId)).data:next;});}}>출석·태도·숙제 일괄 상</button></div>
+   <div className="lesson-evaluation-fields">{lessonOptionGroups.map(group=><div key={group.key}><ChipGroup label={group.label} options={group.options} value={lesson[group.key]||''} disabled={busy} splitAt={'splitAt' in group?group.splitAt:undefined} onChange={value=>setField(group.key,value)}/></div>)}</div>
    <LessonTests value={lesson} onChange={setField}/>
    {[['content', '수업 내용'], ['specialNote', '특이 사항'], ['assignment', '과제'],['examScope','시험범위']].map(([key, label]) => <label key={key} className="block mt-3">{label}{key === 'content' ? <span className="text-xs text-rose-600 ml-1">(필수)</span> : <OptionalMark/>}<textarea required={key === 'content'} aria-required={key === 'content'} rows={key === 'content' ? 4 : 2} value={lesson[key] || ''} onChange={e => setField(key, e.target.value)}/></label>)}
    {(lesson.note || lesson.nextPlan) && <details className="mt-3 text-xs text-slate-500"><summary>기존 기록 메모</summary>{lesson.note && <p className="whitespace-pre-wrap mt-2">기존 개인 피드백: {lesson.note}</p>}{lesson.nextPlan && <p className="whitespace-pre-wrap mt-2">기존 다음 수업 메모: {lesson.nextPlan}</p>}</details>}
-   <div className="flex flex-wrap gap-2 mt-4"><button disabled={busy||autoLoading} className="primary-button" onClick={() => act(()=>submitSingleLesson('save'))}>저장</button><button disabled={busy || autoLoading || !lesson.studentKey || !lesson.content?.trim() || ['publishing', 'processing', 'notion_saved'].includes(currentDraft?.stage) || (currentDraft?.stage==='published' && JSON.stringify(currentDraft?.data)===JSON.stringify(lesson))} className="small-button" onClick={() => act(()=>submitSingleLesson('publish'))}>반영</button><button disabled={busy} className="small-button" onClick={() => act(refresh)}>새로고침</button><span className="self-center text-xs text-slate-500">{stageLabel[currentDraft?.stage] || '작성 중'}</span></div>
-   </fieldset>{currentDraft&&<LessonConflictReview key={currentDraft.id+':'+currentDraft.revision} record={currentDraft} request={request} act={act} busy={busy} refresh={refresh}/>} {canRetryPublication(currentDraft) && <div className="mt-3"><p className="text-xs text-slate-500">저장한 요청의 반영 결과를 확인합니다. 이후 화면에서 바꾼 입력은 이 재시도에 포함하지 않습니다.</p><button className="small-button mt-2" disabled={busy} onClick={()=>act(async()=>{try{const result=await request('publish',{id:currentDraft.id});setMessage(result.warning || '저장한 수업일지 반영을 확인했습니다.');}finally{await refresh();}})}>저장 결과 확인·재시도</button></div>}{busy && <p role="status" className="text-xs mt-3">저장·반영 처리 중입니다. 창을 닫아도 처리는 계속됩니다.</p>}</section>;
+   
+   </fieldset>{currentDraft&&<LessonConflictReview key={currentDraft.id+':'+currentDraft.revision} record={currentDraft} request={request} act={act} busy={busy} refresh={refresh}/>} {canRetryPublication(currentDraft) && <div className="mt-3"><p className="text-xs text-slate-500">저장한 요청의 반영 결과를 확인합니다. 이후 화면에서 바꾼 입력은 이 재시도에 포함하지 않습니다.</p><button className="small-button mt-2" disabled={busy} onClick={()=>act(async()=>{try{const result=await request('publish',{id:currentDraft.id});setMessage(result.warning || '저장한 수업일지 반영을 확인했습니다.');}finally{await refresh();}})}>저장 결과 확인·재시도</button></div>}{busy && <p role="status" className="text-xs mt-3">저장·반영 처리 중입니다. 창을 닫아도 처리는 계속됩니다.</p>}<LessonActionBar status={lessonRecordStatus(currentDraft,busy,Boolean(currentDraft&&JSON.stringify(currentDraft.data)!==JSON.stringify(lesson)))} reason={busy?'현재 기록을 처리하고 있어요':autoLoading?'직전 수업을 불러오는 중이에요':!lesson.studentKey?'학생을 선택하면 반영할 수 있어요':!lesson.content?.trim()?'수업 내용을 입력하면 반영할 수 있어요':['publishing','processing','notion_saved'].includes(currentDraft?.stage)?'이미 반영 중인 기록이에요':currentDraft?.stage==='published'&&JSON.stringify(currentDraft.data)===JSON.stringify(lesson)?'이미 반영 완료된 기록이에요':undefined} refresh={<button type="button" disabled={busy} className="lesson-refresh-button" aria-label="새로고침" title="새로고침" onClick={() => act(refresh)}><RefreshCw size={16} aria-hidden="true"/></button>}><button disabled={busy||autoLoading} className="primary-button" onClick={() => act(()=>submitSingleLesson('save'))}>{busy&&<LoaderCircle size={14} className="lesson-button-spinner" aria-hidden="true"/>}이 학생 저장</button><button disabled={busy || autoLoading || !lesson.studentKey || !lesson.content?.trim() || ['publishing', 'processing', 'notion_saved'].includes(currentDraft?.stage) || (currentDraft?.stage==='published' && JSON.stringify(currentDraft?.data)===JSON.stringify(lesson))} className="small-button" onClick={() => act(()=>submitSingleLesson('publish'))}>{busy&&<LoaderCircle size={14} className="lesson-button-spinner" aria-hidden="true"/>}이 학생 반영</button></LessonActionBar></section>;
     return <div className="teacher-workspace max-w-6xl mx-auto px-4 py-5 md:p-8">
   <header className="mb-5"><p className="text-xs font-bold text-pastel-pink-500 mb-1">지원T · TEACHER ROOM</p><h1 className="text-2xl font-black text-slate-800">나의 선생님방</h1><p className="text-sm text-slate-500 mt-1">오늘 수업을 기록하고, 다음 수업을 준비해요.</p></header>
+  {import.meta.env.DEV&&<WorkspaceRequestMetrics/>}
   <nav aria-label="선생님방 메뉴" className="flex flex-wrap gap-2 mb-5">
    {[['lesson', '수업 일지 작성', ClipboardList], ['academy', '일지 조회', ClipboardList], ['schedule', '시간표·일정', CalendarDays], ['students', '학생 관리', Users], ['academic', '성적 관리', BookOpen], ['curriculum', '커리큘럼', BookOpen], ['word', '학습 세트', BookOpen], ...(data?.admin || data?.principal ? [['settings', '관리자 설정', Settings]] : [])].map(([id, label, Icon]: any) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)} className={`flex items-center gap-2 min-h-[44px] px-3 rounded-xl text-sm font-bold ${tab === id ? 'bg-pastel-pink-500 text-white' : 'bg-white border border-pastel-pink-100 text-slate-600'}`}><Icon size={16}/>{label}</button>)}
   </nav>
@@ -224,7 +238,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
   <div hidden={tab !== 'lesson'}><div className="flex gap-2 mb-3">{([['single', '한 학생 작성'], ['grid', '여러 학생 작성']] as const).map(([value, label]) => <button key={value} aria-pressed={lessonMode === value} className={lessonMode === value ? 'primary-button' : 'small-button'} onClick={() => setLessonMode(value)}>{label}</button>)}</div><div hidden={lessonMode !== 'grid'}><TeacherLessonGrid isRecordBusy={id=>operations.busy('lesson-record:'+id)} active={tab==='lesson'&&lessonMode==='grid'} data={data} busy={busy} request={request} refresh={refresh} act={act}/></div></div>
   
   {((tab === 'lesson' && lessonMode === 'single') || lessonDialogOpen) && <div className="grid lg:grid-cols-[240px_1fr] gap-4">
-   <aside hidden={lessonDialogOpen} className="space-y-3"><TeacherTodayLessons data={data} date={lessonDay} onDate={setLessonDay} active={tab==='lesson'&&lessonMode==='single'&&!lessonDialogOpen} request={request} disabled={false} onStudent={(key,event)=>void selectStudent(key,{date:event.date,subject:event.subject,start:event.start,end:event.end})}/>
+   <aside hidden={lessonDialogOpen} className="space-y-3"><TeacherTodayLessons data={data} date={lessonDay} onDate={setLessonDay} onEvents={receiveTodayLessons} active={tab==='lesson'&&lessonMode==='single'&&!lessonDialogOpen} request={request} disabled={false} onStudent={(key,event)=>void selectStudent(key,{date:event.date,subject:event.subject,start:event.start,end:event.end})}/>
 
     <section className="panel"><h2>저장한 기록</h2><button onClick={() => { resetLesson(); }} className="small-button">+ 새 수업</button>{draftLoading&&<p role="status" className="text-xs text-slate-500">저장한 기록을 불러오는 중…</p>}{savedDrafts.map((d: any) => <button key={d.id} className="block w-full text-left min-h-[44px] border-b border-pastel-pink-50 py-2 text-xs" onClick={() => openDraft(d)}>{students.find((s: any) => s.studentKey === d.data.studentKey)?.studentDisplayName} · {d.data.date}<span className="block text-pastel-pink-500">{stageLabel[d.stage]}</span></button>)}<div className="review-pagination"><button disabled={draftLoading||currentDraftPage===1} onClick={()=>setDraftPage(currentDraftPage-1)}>이전</button><span>{currentDraftPage} / {draftPages}</span><button disabled={draftLoading||currentDraftPage===draftPages} onClick={()=>setDraftPage(currentDraftPage+1)}>다음</button></div></section>
    </aside>
@@ -254,6 +268,8 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
 }
 
 function LessonEditorContainer({modal,onClose,children}:{modal:boolean;onClose:()=>void;children:ReactNode}) {return modal?<WorkspaceDialog open title="일지 수정" onClose={onClose}>{children}</WorkspaceDialog>:<>{children}</>;}
+
+
 
 
 

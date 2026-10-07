@@ -1,0 +1,99 @@
+From d9adf50ed99514240003a6544205ea168572948f Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Wed, 7 Oct 2026 02:04:32 +0900
+Subject: [PATCH 1/3] style(teacher): unify student name and remove chip
+
+---
+ src/components/teacher/TeacherLessonGrid.tsx |  4 ++-
+ src/components/teacher/teacherWorkspace.css  | 33 ++++++++++++++++++--
+ src/lib/lessonPresentation.ts                | 13 ++++++++
+ 3 files changed, 46 insertions(+), 4 deletions(-)
+ create mode 100644 src/lib/lessonPresentation.ts
+
+diff --git a/src/components/teacher/TeacherLessonGrid.tsx b/src/components/teacher/TeacherLessonGrid.tsx
+index 9214827..09cb147 100644
+--- a/src/components/teacher/TeacherLessonGrid.tsx
++++ b/src/components/teacher/TeacherLessonGrid.tsx
+@@ -1,3 +1,5 @@
++import {X} from 'lucide-react';
++import {lessonRecordStatus} from '../../lib/lessonPresentation';
+ import {canRetryPublication} from '../../lib/teacherPublicationRecovery';
+ import OptionalMark from './OptionalMark';
+ import TeacherTodayLessons from './TeacherTodayLessons';
+@@ -86,7 +88,7 @@ export default function TeacherLessonGrid({ data, busy, request, refresh, act,ac
+  <label className="block mt-3">반 학생 불러오기<OptionalMark/><select value={classId} onChange={e=>{setClassId(e.target.value);const c=data.classes.find((c:any)=>c.id===e.target.value);if(!c)return;setSubject(c.subject);setSelection(c.students);const weekday=new Date(`${date}T12:00:00+09:00`).getUTCDay();const slot=c.slots?.filter((s:any)=>s.status!=='중단'&&s.weekday===weekday).sort((a:any,b:any)=>a.start.localeCompare(b.start))[0];if(slot){setStart(slot.start);setEnd(slot.end);}}}><option value="">반 선택 → 학생 추가에서 확인 후 추가</option>{data.classes.filter((c:any)=>c.status!=='중단'&&(data.admin||c.ownerUid===data.uid||(c.assignedUids||[]).includes(data.uid))).map((c:any)=><option key={c.id} value={c.id}>{c.name} · {c.students.length}명</option>)}</select></label>
+  <details open={!rows.length} className="mt-3 rounded-xl border border-pink-100 p-3"><summary className="text-sm font-bold cursor-pointer">학생 추가 · {selection.length}명 선택</summary><input aria-label="추가할 학생 검색" placeholder="학생 이름 검색" value={search} onChange={e => setSearch(e.target.value)}/><div className="flex flex-wrap gap-x-4 gap-y-1 max-h-40 overflow-auto mt-2">{students.filter((s: any) => s.studentDisplayName.includes(search.trim())).map((s: any) => <label key={s.studentKey} className="flex items-center gap-2 min-h-[36px]"><input type="checkbox" checked={selection.includes(s.studentKey)} onChange={e => setSelection(e.target.checked ? [...selection, s.studentKey] : selection.filter(x => x !== s.studentKey))}/>{s.studentDisplayName}</label>)}</div><button className="small-button mt-2" disabled={!selection.length} onClick={()=>void addStudents()}>선택한 학생 추가</button></details>
+  {rows.length>0&&<button className="primary-button mt-3" onClick={()=>setEditorOpen(true)}>작성 팝업 열기 · {rows.length}명</button>}
+- </fieldset><WorkspaceDialog open={editorOpen&&active} title="여러 학생 수업 일지 작성" onClose={()=>setEditorOpen(false)}><fieldset><div className="flex flex-wrap gap-2 mb-3">{rows.map((r,i)=><span key={r.id} className="grid-student-chip"><button type="button" aria-pressed={i===activeStudent} className={i===activeStudent?'primary-button':'small-button'} onClick={()=>setActiveStudent(i)}>{data.students.find((s:any)=>s.studentKey===r.data.studentKey)?.studentDisplayName||'학생'}{r.pending&&' · 처리 중'}</button><button type="button" className="grid-student-remove" disabled={Boolean(r.pending||isRecordBusy(r.id))} aria-label={`${data.students.find((s:any)=>s.studentKey===r.data.studentKey)?.studentDisplayName||'학생'} 작성 목록에서 제외`} onClick={()=>removeStudent(r.id)}>×</button></span>)}</div><div className="review-pagination"><button disabled={activeStudent===0} onClick={()=>setActiveStudent(i=>i-1)}>이전 학생</button><span>{Math.min(activeStudent+1,rows.length)} / {rows.length}</span><button disabled={activeStudent>=rows.length-1} onClick={()=>setActiveStudent(i=>i+1)}>다음 학생</button></div>
++ </fieldset><WorkspaceDialog open={editorOpen&&active} title="여러 학생 수업 일지 작성" onClose={()=>setEditorOpen(false)}><fieldset><div className="grid-student-strip" aria-label="작성할 학생">{rows.map((r,i)=>{const name=data.students.find((s:any)=>s.studentKey===r.data.studentKey)?.studentDisplayName||'학생';const status=lessonRecordStatus(r,Boolean(r.pending),Boolean(r.savedData&&JSON.stringify(r.savedData)!==JSON.stringify(r.data)));return <div key={r.id} role="group" aria-label={name} className={`grid-student-chip ${i===activeStudent?'is-active':''}`}><button type="button" aria-pressed={i===activeStudent} aria-label={`${name} · ${status.text}`} className="grid-student-name" onClick={()=>setActiveStudent(i)}><span aria-hidden="true" className={`lesson-status-dot status-${status.tone}`}/><span className="grid-student-name-text" title={name}>{name}</span></button><button type="button" className="grid-student-remove" disabled={Boolean(r.pending||isRecordBusy(r.id))} aria-label={`${name} 제거`} onClick={()=>removeStudent(r.id)}><span><X size={12} aria-hidden="true"/></span></button></div>})}</div><div className="review-pagination"><button disabled={activeStudent===0} onClick={()=>setActiveStudent(i=>i-1)}>이전 학생</button><span>{Math.min(activeStudent+1,rows.length)} / {rows.length}</span><button disabled={activeStudent>=rows.length-1} onClick={()=>setActiveStudent(i=>i+1)}>다음 학생</button></div>
+  <details className="mt-3 rounded-xl border border-pink-100 p-3"><summary className="text-sm font-bold cursor-pointer">공통 수업 내용·특이 사항·과제·시험범위 입력</summary><div className="grid md:grid-cols-3 gap-2 mt-2">{([['content', '수업 내용'], ['specialNote', '특이 사항'], ['assignment', '과제'],['examScope','시험범위']] as const).map(([key, label]) => <label key={key}>{label}{key==='content'?<span className="text-xs text-rose-600 ml-1">(필수)</span>:<OptionalMark/>}<textarea rows={2} value={common[key]} onChange={e => setCommon(c => ({ ...c, [key]: e.target.value }))}/></label>)}</div><button className="small-button mt-2" disabled={!checked.length} onClick={() => { if (rows.some(r => checked.includes(r.id) && (r.data.content || r.data.assignment || r.data.specialNote)) && !window.confirm('선택한 학생의 수업 내용·특이 사항·과제·시험범위를 공통 입력 내용으로 바꿀까요?'))
+         return; setRows(previous => previous.map(r => checked.includes(r.id)&&!r.pending ? { ...r,touched:[...(r.touched||[]),'content','assignment'],data: applyCommonLesson(r.data, common) } : r)); }}>선택한 {checked.length}명에게 적용</button><button className="small-button ml-2 mt-2" disabled={!checked.length} onClick={() => setRows(previous => previous.map(r => checked.includes(r.id)&&!r.pending ? { ...r, data: { ...r.data, attendance: '출석', attitude: '상', homework: '상' } } : r))}>출석·태도·숙제 일괄 상</button></details>
+  <div className="flex flex-wrap items-center gap-2 my-3"><label className="flex items-center gap-2"><input type="checkbox" checked={rows.length > 0 && checked.length === rows.length} onChange={e => setChecked(e.target.checked ? rows.map(r => r.id) : [])}/>전체 선택</label><button className="primary-button" disabled={!checked.length||rows.some(r=>checked.includes(r.id)&&r.loading)} onClick={() => submitRows('save', checked)}>선택 저장</button><button className="small-button" disabled={!checked.length || rows.filter(r => checked.includes(r.id)).some(r => !gridCanSubmit(r))} onClick={() => { if (window.confirm(`${checked.length}명의 현재 입력 내용을 저장하고 반영할까요?`))
+diff --git a/src/components/teacher/teacherWorkspace.css b/src/components/teacher/teacherWorkspace.css
+index 770640b..16ec43a 100644
+--- a/src/components/teacher/teacherWorkspace.css
++++ b/src/components/teacher/teacherWorkspace.css
+@@ -228,11 +228,38 @@
+ @media(max-width:767px){.calendar-dialog-scroll {padding:10px;}}
+ 
+ 
+-.grid-student-chip {display:inline-flex;align-items:center;border:1px solid #fce1eb;border-radius:12px;overflow:hidden;background:#fff5f8;}
+-.grid-student-chip .primary-button,.grid-student-chip .small-button {border:0;border-radius:0;box-shadow:none;}
+-.teacher-workspace .grid-student-remove {width:28px;min-height:34px;padding:0;font-size:17px;color:#be416c;background:transparent;}
+ .workspace-toast {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;margin-bottom:12px;border:1px solid #fbcfe8;border-radius:14px;background:#fff5f8;color:#8d3555;font-size:13px;}
+ .workspace-toast button {flex:none;min-width:32px;min-height:32px;font-size:20px;}
+ .workspace-job-status,.workspace-job-history {font-size:12px;color:#64748b;margin-bottom:12px;}
+ .workspace-job-history summary {cursor:pointer;}
+ .workspace-job-history p {padding:4px 0;}
++
++/* Input design tokens are scoped to the teacher room, including its dialogs. */
++.teacher-workspace {
++ --lesson-pink:#f4729c; --lesson-soft:#fff5f8; --lesson-border:#fce7ef; --lesson-accent:#be416c;
++ --lesson-text:#334155; --lesson-muted:#64748b; --lesson-neutral:#e2e8f0; --lesson-white:#fff;
++ --lesson-focus:#ec4899; --lesson-radius:12px; --lesson-pill:999px;
++ --lesson-shadow:0 3px 10px #be416c18; --lesson-bar-shadow:0 -5px 20px #be416c0d;
++ --lesson-green:#15803d; --lesson-green-soft:#f0fdf4; --lesson-red:#be123c; --lesson-red-soft:#fff1f2;
++ --lesson-yellow:#a16207; --lesson-yellow-soft:#fefce8; --lesson-grey:#94a3b8;
++}
++.teacher-workspace .grid-student-strip {display:flex;flex-wrap:nowrap;gap:8px;overflow-x:auto;scroll-snap-type:x proximity;padding:4px;margin:-4px -4px 12px;scrollbar-width:thin;}
++.teacher-workspace .grid-student-chip {display:flex;flex:none;align-items:center;scroll-snap-align:start;height:36px;border-radius:var(--lesson-pill);border:1px solid var(--lesson-border);background:var(--lesson-soft);color:var(--lesson-accent);}
++.teacher-workspace .grid-student-chip.is-active {background:var(--lesson-pink);color:var(--lesson-white);border-color:var(--lesson-pink);box-shadow:var(--lesson-shadow);}
++.teacher-workspace .grid-student-name {display:flex;align-items:center;gap:7px;min-width:0;height:100%;padding:0 14px;border:0;border-radius:var(--lesson-pill);background:transparent;color:inherit;font-size:12px;font-weight:700;}
++.grid-student-name-text {max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
++.teacher-workspace .grid-student-remove {display:grid;place-items:center;flex:none;width:32px;height:32px;padding:0;margin-right:2px;border:0;border-radius:var(--lesson-pill);color:inherit;background:transparent;}
++.grid-student-remove>span {display:grid;place-items:center;width:20px;height:20px;border-radius:var(--lesson-pill);}
++.teacher-workspace .grid-student-chip button:not(:disabled):hover {background:transparent;box-shadow:none;}
++.teacher-workspace .grid-student-name:not(:disabled):hover {background:#be416c08;}
++.grid-student-remove:not(:disabled):hover>span {background:#be416c16;}
++.is-active .grid-student-remove:not(:disabled):hover>span {background:#ffffff40;}
++.teacher-workspace .grid-student-chip button:not(:disabled):active {opacity:.75;}
++.teacher-workspace .grid-student-chip button:disabled {opacity:.4;cursor:not-allowed;}
++.teacher-workspace .grid-student-chip button:focus-visible {outline:2px solid var(--lesson-focus);outline-offset:2px;}
++.lesson-status-dot {display:inline-block;flex:none;width:6px;height:6px;border-radius:var(--lesson-pill);background:var(--lesson-grey);box-shadow:0 0 0 1px #ffffff90;}
++.lesson-status-dot.status-pink {background:var(--lesson-pink);}
++.lesson-status-dot.status-green {background:var(--lesson-green);}
++.lesson-status-dot.status-red {background:var(--lesson-red);}
++.lesson-status-dot.status-yellow {background:var(--lesson-yellow);}
++@media(max-width:640px){.teacher-workspace .grid-student-chip{height:44px;}.teacher-workspace .grid-student-remove{width:44px;height:44px;margin-right:0;}}
+diff --git a/src/lib/lessonPresentation.ts b/src/lib/lessonPresentation.ts
+new file mode 100644
+index 0000000..bc143ed
+--- /dev/null
++++ b/src/lib/lessonPresentation.ts
+@@ -0,0 +1,13 @@
++/** Display-only labels; publication stages and stored values are unchanged. */
++export const stageLabel: Record<string,string> = {
++ report_published_notion_pending:'리포트 반영 완료 · 노션 대기', reflection_pending:'노션 저장 완료 · 연동 대기',
++ new:'작성 중', draft:'저장됨', publishing:'반영 준비 중', notion_saved:'Notion 저장됨',
++ processing:'반영 중', published:'반영 완료', failed:'반영 실패',
++};
++export function lessonRecordStatus(record?:{stage?:string;error?:string},pending=false,dirty=false){
++ if(pending)return {text:'저장·반영 처리 중',tone:'yellow'};
++ if(record?.error||record?.stage==='failed')return {text:stageLabel.failed,tone:'red'};
++ if(dirty)return {text:'수정됨',tone:'grey'};
++ const stage=record?.stage||'new';
++ return {text:stageLabel[stage]||stage,tone:stage==='published'?'green':stage==='draft'?'pink':['publishing','processing','notion_saved','report_published_notion_pending','reflection_pending'].includes(stage)?'yellow':'grey'};
++}
+-- 
+2.56.0.windows.1
+

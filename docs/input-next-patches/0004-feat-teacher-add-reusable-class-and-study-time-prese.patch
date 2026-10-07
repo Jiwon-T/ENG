@@ -1,0 +1,211 @@
+From 7cf54d7bf3e4c9008828742d09e1b23ccd92e16f Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Wed, 7 Oct 2026 12:06:04 +0900
+Subject: [PATCH 4/5] feat(teacher): add reusable class and study time presets
+
+---
+ .../teacher/LessonAcademyFields.tsx           | 33 +++++++++++++++++++
+ src/components/teacher/LessonTimePresets.tsx  | 13 ++++++++
+ src/components/teacher/TeacherLessonGrid.tsx  |  3 +-
+ src/components/teacher/TeacherWorkspace.tsx   |  3 +-
+ src/components/teacher/teacherWorkspace.css   | 14 ++++++++
+ src/lib/lessonTimePresets.ts                  | 13 ++++++++
+ tests/lessonTimeFields.test.tsx               | 26 +++++++++++++++
+ tests/lessonTimePresets.test.tsx              | 14 ++++++++
+ 8 files changed, 117 insertions(+), 2 deletions(-)
+ create mode 100644 src/components/teacher/LessonAcademyFields.tsx
+ create mode 100644 src/components/teacher/LessonTimePresets.tsx
+ create mode 100644 src/lib/lessonTimePresets.ts
+ create mode 100644 tests/lessonTimeFields.test.tsx
+ create mode 100644 tests/lessonTimePresets.test.tsx
+
+diff --git a/src/components/teacher/LessonAcademyFields.tsx b/src/components/teacher/LessonAcademyFields.tsx
+new file mode 100644
+index 0000000..f7dae14
+--- /dev/null
++++ b/src/components/teacher/LessonAcademyFields.tsx
+@@ -0,0 +1,33 @@
++import LessonTimePresets from './LessonTimePresets';
++export default function LessonAcademyFields({ value, onChange,regularTime }: { value: any; onChange: (key: string, value: any) => void;regularTime?:{start:string;end:string} }) {
++  const changeSession = (kind: 'classSession' | 'selfStudy', choice: string) => {
++    onChange(kind, choice);
++    if (kind==='selfStudy' && choice==='있음' && value.end && !value.selfStudyStart && !value.selfStudyEnd) {
++      const [hour,minute]=value.end.split(':').map(Number);
++      if(hour<23){onChange('selfStudyStart',value.end);onChange('selfStudyEnd',`${String(hour+1).padStart(2,'0')}:${String(minute).padStart(2,'0')}`);}
++    }
++    if (choice !== '있음') {
++      for (const key of kind === 'classSession' ? ['start', 'end', 'round'] : ['selfStudyStart', 'selfStudyEnd', 'selfStudyRound'])
++        onChange(key, key.endsWith('Round') || key === 'round' ? null : '');
++    }
++  };
++  return <div className="lesson-time-block" aria-label="수업·자습 시간과 회차">
++    {([
++      ['classSession', '수업', 'start', 'end', 'round'],
++      ['selfStudy', '자습', 'selfStudyStart', 'selfStudyEnd', 'selfStudyRound'],
++    ] as const).map(([kind, title, start, end, round]) => {
++      const choice = value[kind] || (kind === 'classSession' ? '있음' : '미확인');
++      const enabled = choice === '있음';
++      return <fieldset className="lesson-time-row" key={kind}>
++        <legend className="sr-only">{title} 시간·회차</legend>
++        <label>{title}<select aria-label={`${title} 여부`} value={choice} onChange={e => changeSession(kind, e.target.value)}>
++          {kind === 'selfStudy' && <option>미확인</option>}<option>있음</option><option>없음</option>
++        </select></label>
++        <label>회차<input aria-label={`${title} 회차`} type="number" step="any" min="0" disabled={!enabled} required={enabled} placeholder={enabled ? '필수' : '—'} value={value[round] ?? ''} onChange={e => onChange(round, e.target.value === '' ? null : Number(e.target.value))}/></label>
++        <LessonTimePresets title={title} start={value[start]||''} end={value[end]||''} enabled={enabled} normal={kind==='classSession'?regularTime:undefined} onChange={(newStart,newEnd)=>{if(newStart!==value[start])onChange(start,newStart);onChange(end,newEnd);}}><label>시작<input aria-label={`${title} 시작`} type="time" disabled={!enabled} required={enabled} value={value[start] || ''} onChange={e => onChange(start, e.target.value)}/></label>
++        <label>종료<input aria-label={`${title} 종료`} type="time" disabled={!enabled} required={enabled} value={value[end] || ''} onChange={e => onChange(end, e.target.value)}/></label></LessonTimePresets>
++
++      </fieldset>;
++    })}
++  </div>;
++}
+diff --git a/src/components/teacher/LessonTimePresets.tsx b/src/components/teacher/LessonTimePresets.tsx
+new file mode 100644
+index 0000000..65adcdb
+--- /dev/null
++++ b/src/components/teacher/LessonTimePresets.tsx
+@@ -0,0 +1,13 @@
++import {useState,type ReactNode} from 'react';
++import {lessonDurationMinutes,timeAfterMinutes} from '../../lib/lessonTimePresets';
++export default function LessonTimePresets({title,start,end,enabled,normal,onChange,children}:{title:string;start:string;end:string;enabled:boolean;normal?:{start:string;end:string};onChange:(start:string,end:string)=>void;children:ReactNode}){
++ const [notice,setNotice]=useState('');
++ return <div className="lesson-time-presets"><div role="group" aria-label={`${title} 시간 프리셋`} className="lesson-time-preset-buttons">
++  {normal&&<button type="button" className="lesson-time-preset" disabled={!enabled} onClick={()=>{setNotice('');onChange(normal.start,normal.end);}}>오늘 정규 {normal.start}–{normal.end}</button>}
++  {lessonDurationMinutes.map(minutes=><button key={minutes} type="button" disabled={!enabled} aria-pressed={Boolean(start)&&timeAfterMinutes(start,minutes)===end} className={`lesson-time-preset ${minutes===80?'is-recommended':''}`} onClick={()=>{
++   const next=timeAfterMinutes(start,minutes);if(!next){setNotice(start?'자정을 넘기는 시간은 선택할 수 없어요. 시작 시간을 확인해 주세요.':'시간 직접 입력에서 시작 시간을 먼저 입력해 주세요.');return;}
++   setNotice('');onChange(start,next);
++  }}>+{minutes}분{minutes===80&&<span className="sr-only"> · 기본 추천</span>}</button>)}
++ </div><p className="lesson-time-current">{title} {start||'시작 미입력'}–{end||'종료 미입력'}</p>{notice&&<p role="alert" className="lesson-time-notice">{notice}</p>}
++ <details className="lesson-time-direct"><summary>시간 직접 입력</summary><div className="lesson-time-direct-inputs">{children}</div></details></div>;
++}
+diff --git a/src/components/teacher/TeacherLessonGrid.tsx b/src/components/teacher/TeacherLessonGrid.tsx
+index 28c0864..2af1c31 100644
+--- a/src/components/teacher/TeacherLessonGrid.tsx
++++ b/src/components/teacher/TeacherLessonGrid.tsx
+@@ -1,3 +1,4 @@
++import {regularLessonTime} from '../../lib/lessonTimePresets';
+ import {matchesKoreanSearch} from '../../lib/koreanSearch';
+ import ChipGroup from './ChipGroup';
+ import {lessonOptionGroups} from '../../lib/lessonOptions';
+@@ -99,7 +100,7 @@ export default function TeacherLessonGrid({ data, busy, request, refresh, act,ac
+  {notice && <p role="status" className="text-xs text-slate-500 mb-3">{notice}</p>}
+  <div className="lesson-grid-scroll lesson-editor-fields" tabIndex={0} aria-label="학생별 수업 입력 표"><table><thead><tr><th>학생</th><th>수업·자습 시간과 회차</th><th>출결·평가·점수</th><th>수업 내용</th><th>특이 사항·과제</th><th>저장·반영</th></tr></thead><tbody>{rows.slice(activeStudent,activeStudent+1).map(row => <tr key={row.id}>
+  <td><fieldset className="min-w-0" disabled={Boolean(row.pending||row.loading||isRecordBusy(row.id))}><label className="flex gap-2 items-center"><input type="checkbox" checked={checked.includes(row.id)} onChange={e => setChecked(e.target.checked ? [...checked, row.id] : checked.filter(x => x !== row.id))}/><strong>{data.students.find((s: any) => s.studentKey === row.data.studentKey)?.studentDisplayName}</strong></label><span className="block text-xs text-slate-500 mt-1">{row.data.subject}</span>{row.loading&&<p role="status" className="text-xs text-slate-500">직전 수업의 회차·내용·과제를 불러오는 중…</p>}<input aria-label="수업 날짜" type="date" value={row.data.date} onChange={e => setField(row.id, 'date', e.target.value)}/></fieldset></td>
+- <td data-label="수업·자습"><fieldset className="min-w-0" disabled={Boolean(row.pending||row.loading||isRecordBusy(row.id))}><LessonAcademyFields value={row.data} onChange={(key, value) => setField(row.id, key, value)}/></fieldset></td>
++ <td data-label="수업·자습"><fieldset className="min-w-0" disabled={Boolean(row.pending||row.loading||isRecordBusy(row.id))}><LessonAcademyFields value={row.data} regularTime={regularLessonTime(data,row.data.studentKey,row.data.subject,row.data.date,new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date()))} onChange={(key, value) => setField(row.id, key, value)}/></fieldset></td>
+  <td data-label="출결·평가"><fieldset className="min-w-0" disabled={Boolean(row.pending||row.loading||isRecordBusy(row.id))}><div className="lesson-evaluation-fields">{lessonOptionGroups.map(group=><div key={group.key}><ChipGroup label={group.label} options={group.options} value={row.data[group.key]} disabled={Boolean(row.pending||row.loading||isRecordBusy(row.id))} splitAt={'splitAt' in group?group.splitAt:undefined} onChange={value=>setField(row.id,group.key,value)}/></div>)}</div><LessonTests value={row.data} onChange={(key, value) => setField(row.id, key, value)}/></fieldset></td>
+  <td data-label="수업 내용"><fieldset className="min-w-0" disabled={Boolean(row.pending||row.loading||isRecordBusy(row.id))}><label>수업 내용<span className="text-xs text-rose-600 ml-1">(필수)</span><textarea required aria-required="true" rows={5} value={row.data.content} onChange={e => setField(row.id, 'content', e.target.value)}/></label><div className="mt-2"><label>특이 사항<OptionalMark/><textarea rows={3} value={row.data.specialNote} onChange={e => setField(row.id, 'specialNote', e.target.value)}/></label><label className="block mt-2">과제<OptionalMark/><textarea rows={3} value={row.data.assignment} onChange={e => setField(row.id, 'assignment', e.target.value)}/></label><label className="block mt-2">시험범위<OptionalMark/><textarea rows={3} maxLength={5000} value={row.data.examScope||''} onChange={e=>setField(row.id,'examScope',e.target.value)}/></label>{(row.data.note || row.data.nextPlan) && <details className="text-xs text-slate-500 mt-2"><summary>기존 기록 메모</summary><p className="whitespace-pre-wrap">{row.data.note}</p><p className="whitespace-pre-wrap">{row.data.nextPlan}</p></details>}</div></fieldset></td>
+  <td data-label="저장·반영"><fieldset className="min-w-0" disabled={Boolean(row.pending||row.loading||isRecordBusy(row.id))}><div className="flex flex-col gap-2">{canRetryPublication(row) && <button className="small-button" onClick={()=>act(async()=>{try{const result=await request('publish',{id:row.id});if(result.record)setRow(row.id,{stage:result.record.stage,revision:result.record.revision,savedData:result.record.data,error:result.warning || ''});}finally{await refresh();}})}>저장 결과 확인·재시도</button>}{row.error && <p role="alert" className="text-xs text-rose-600">{row.error}</p>}</div></fieldset></td>
+diff --git a/src/components/teacher/TeacherWorkspace.tsx b/src/components/teacher/TeacherWorkspace.tsx
+index 76294b7..d2b8a17 100644
+--- a/src/components/teacher/TeacherWorkspace.tsx
++++ b/src/components/teacher/TeacherWorkspace.tsx
+@@ -1,3 +1,4 @@
++import {regularLessonTime} from '../../lib/lessonTimePresets';
+ import StudentCombobox from './StudentCombobox';
+ import type {TodayLesson} from '../../lib/teacherTodayLessons';
+ import ChipGroup from './ChipGroup';
+@@ -213,7 +214,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
+ 
+     <label>과목<select value={lesson.subject} onChange={e => void selectStudent(lesson.studentKey,{subject:e.target.value})}>{subjects.map(s => <option key={s}>{s}</option>)}</select></label>
+    </div>
+-   {autoLoading&&<p role="status" className="text-xs text-slate-500 my-2">직전 수업의 회차·내용·과제를 불러오는 중…</p>}<LessonAcademyFields value={lesson} onChange={setField}/>
++   {autoLoading&&<p role="status" className="text-xs text-slate-500 my-2">직전 수업의 회차·내용·과제를 불러오는 중…</p>}<LessonAcademyFields value={lesson} onChange={setField} regularTime={regularLessonTime(data,lesson.studentKey,lesson.subject,lesson.date,today())}/>
+    <div className="flex flex-wrap gap-2 my-3"><button className="small-button" onClick={() => {autoTouches.current.add('attendance');setLesson((d: any) => ({ ...d, attendance: '출석', attitude: '상', homework: '상' }));}}>출석·태도·숙제 일괄 상</button></div>
+    <div className="lesson-evaluation-fields">{lessonOptionGroups.map(group=><div key={group.key}><ChipGroup label={group.label} options={group.options} value={lesson[group.key]||''} disabled={busy} splitAt={'splitAt' in group?group.splitAt:undefined} onChange={value=>setField(group.key,value)}/></div>)}</div>
+    <LessonTests value={lesson} onChange={setField}/>
+diff --git a/src/components/teacher/teacherWorkspace.css b/src/components/teacher/teacherWorkspace.css
+index 486164b..17714d4 100644
+--- a/src/components/teacher/teacherWorkspace.css
++++ b/src/components/teacher/teacherWorkspace.css
+@@ -363,3 +363,17 @@
+ .today-lesson-group {flex-direction:column;align-items:flex-start!important;}
+ .today-lesson-group-progress,.today-lesson-group-hint {font-size:11px;color:var(--lesson-muted);}
+ .teacher-workspace .today-lesson-student:focus-visible {outline:2px solid var(--lesson-focus);outline-offset:2px;border-radius:var(--lesson-radius);}
++.lesson-time-presets {grid-column:1/-1;min-width:0;}
++.lesson-time-preset-buttons {display:flex;flex-wrap:wrap;gap:6px;}
++.teacher-workspace .lesson-time-preset {min-height:36px;padding:5px 10px;border-radius:var(--lesson-pill);border:1px solid var(--lesson-neutral);background:var(--lesson-white);color:var(--lesson-text);font-size:11px;font-weight:600;}
++.teacher-workspace .lesson-time-preset.is-recommended {border-color:var(--lesson-pink);}
++.teacher-workspace .lesson-time-preset[aria-pressed=true] {background:var(--lesson-soft);border-color:var(--lesson-pink);color:var(--lesson-accent);}
++.teacher-workspace .lesson-time-preset:not(:disabled):hover {background:var(--lesson-soft);box-shadow:var(--lesson-shadow);}
++.teacher-workspace .lesson-time-preset:not(:disabled):active {transform:translateY(1px);}
++.teacher-workspace .lesson-time-preset:focus-visible,.lesson-time-direct summary:focus-visible {outline:2px solid var(--lesson-focus);outline-offset:2px;}
++.lesson-time-current {font-size:12px;font-variant-numeric:tabular-nums;color:var(--lesson-muted);margin:8px 0;}
++.lesson-time-notice {font-size:11px;line-height:1.5;color:var(--lesson-red);margin:6px 0;}
++.lesson-time-direct summary {cursor:pointer;font-size:12px;color:var(--lesson-accent);padding:8px 0;min-height:36px;}
++.lesson-time-direct-inputs {display:grid;grid-template-columns:1fr 1fr;gap:8px;}
++.teacher-workspace .lesson-time-row .lesson-time-direct-inputs label {grid-column:auto;grid-row:auto;}
++@media(max-width:640px){.teacher-workspace .lesson-time-preset,.lesson-time-direct summary{min-height:44px;}}
+diff --git a/src/lib/lessonTimePresets.ts b/src/lib/lessonTimePresets.ts
+new file mode 100644
+index 0000000..ca28968
+--- /dev/null
++++ b/src/lib/lessonTimePresets.ts
+@@ -0,0 +1,13 @@
++import {todayLessons} from './teacherTodayLessons';
++export const lessonDurationMinutes=[60,80,90,120] as const;
++export function timeAfterMinutes(start:string,minutes:number){
++ if(!/^\d{2}:\d{2}$/.test(start))return null;
++ const [hour,minute]=start.split(':').map(Number);
++ if(hour>23||minute>59||minutes<0||!Number.isInteger(minutes))return null;
++ const total=hour*60+minute+minutes;if(total>=1440)return null;
++ return `${String(Math.floor(total/60)).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`;
++}
++export function regularLessonTime(data:any,studentKey:string,subject:string,date:string,today:string){
++ if(!data||date!==today)return undefined;
++ return todayLessons(data,date).find(event=>event.kind==='정규'&&event.subject===subject&&event.students.includes(studentKey));
++}
+diff --git a/tests/lessonTimeFields.test.tsx b/tests/lessonTimeFields.test.tsx
+new file mode 100644
+index 0000000..346688e
+--- /dev/null
++++ b/tests/lessonTimeFields.test.tsx
+@@ -0,0 +1,26 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import React from 'react';
++import { renderToStaticMarkup } from 'react-dom/server';
++import LessonAcademyFields from '../src/components/teacher/LessonAcademyFields';
++
++test('class and study each render start/end and decimal round inputs in the same row', () => {
++ const html = renderToStaticMarkup(<LessonAcademyFields value={{classSession:'있음',start:'14:00',end:'15:30',round:1.7,selfStudy:'있음',selfStudyStart:'15:30',selfStudyEnd:'16:30',selfStudyRound:1}} onChange={() => {}}/>);
++ const rows = html.split('class="lesson-time-row"').slice(1);
++ assert.equal(rows.length, 2);
++ for (const [row, prefix] of rows.map((row, index) => [row, index ? '자습' : '수업'])) {
++   assert.ok(row.includes(`aria-label="${prefix} 시작"`));
++   assert.ok(row.includes(`aria-label="${prefix} 종료"`));
++   assert.ok(row.includes(`aria-label="${prefix} 회차"`));
++   assert.ok(row.includes('step="any"'));
++ }
++ assert.ok(html.includes('value="1.7"'));
++ assert.equal(html.includes('<textarea'), false);
++});
++
++test('self-study-only records disable only the absent class inputs', () => {
++ const html = renderToStaticMarkup(<LessonAcademyFields value={{classSession:'없음',start:'',end:'',round:null,selfStudy:'있음',selfStudyStart:'15:30',selfStudyEnd:'16:30',selfStudyRound:1}} onChange={() => {}}/>);
++ const rows = html.split('class="lesson-time-row"').slice(1);
++ assert.equal((rows[0].match(/<input[^>]*disabled=""/g) || []).length, 3);
++ assert.equal((rows[1].match(/disabled=""/g) || []).length, 0);
++});
+diff --git a/tests/lessonTimePresets.test.tsx b/tests/lessonTimePresets.test.tsx
+new file mode 100644
+index 0000000..1729086
+--- /dev/null
++++ b/tests/lessonTimePresets.test.tsx
+@@ -0,0 +1,14 @@
++import React from 'react';import test from 'node:test';import assert from 'node:assert/strict';import {renderToStaticMarkup} from 'react-dom/server';
++import {timeAfterMinutes,lessonDurationMinutes,regularLessonTime} from '../src/lib/lessonTimePresets';import LessonAcademyFields from '../src/components/teacher/LessonAcademyFields';
++test('preset calculations keep HH:mm and refuse midnight or invalid input',()=>{
++ assert.deepEqual(lessonDurationMinutes,[60,80,90,120]);assert.equal(timeAfterMinutes('14:30',80),'15:50');assert.equal(timeAfterMinutes('22:00',119),'23:59');
++ for(const [start,duration]of [['23:00',60],['24:00',80],['14:60',60],['',80]] as const)assert.equal(timeAfterMinutes(start,duration),null);
++});
++test('regular preset only uses visible permitted classes on today, not past lesson dates',()=>{
++ const data={uid:'t',admin:false,scopes:[{studentKey:'a',subject:'영어'}],classes:[{id:'c',ownerUid:'t',subject:'영어',students:['a'],slots:[{weekday:3,start:'14:00',end:'15:20'}]}]};
++ assert.equal(regularLessonTime(data,'a','영어','2026-10-07','2026-10-07')?.start,'14:00');assert.equal(regularLessonTime(data,'foreign','영어','2026-10-07','2026-10-07'),undefined);assert.equal(regularLessonTime(data,'a','영어','2026-10-07','2026-10-08'),undefined);
++});
++test('class and study reuse preset groups, retain required native inputs and expose manual details',()=>{
++ const html=renderToStaticMarkup(<LessonAcademyFields value={{classSession:'있음',selfStudy:'있음',start:'14:00',end:'15:20',selfStudyStart:'15:20',selfStudyEnd:'16:40',round:1,selfStudyRound:2}} regularTime={{start:'14:00',end:'15:20'}} onChange={()=>{}}/>);
++ assert.ok(html.includes('오늘 정규 14:00–15:20'));assert.equal((html.match(/시간 직접 입력/g)||[]).length,2);assert.equal((html.match(/aria-pressed="true"/g)||[]).length,2);assert.ok(html.includes('aria-label="자습 시작"'));assert.ok(html.includes('value="15:20"'));assert.ok(html.includes('type="time"'));
++});
+-- 
+2.56.0.windows.1
+

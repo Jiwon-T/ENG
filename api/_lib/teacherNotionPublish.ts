@@ -78,22 +78,37 @@ export async function previousNotionLesson(studentKey: string, options?: {
     actor: any;
     subject: string;
     date?: string;
-}) {
+    includeSessionHistory?: boolean;
+}):Promise<any> {
     const source = options ? await lessonSource(options.db, options.actor.uid, options.subject) : undefined;
     if (options && options.subject !== '영어' && !source?.lessonDatabaseId)
         return {};
     const filters: any[] = [{ property: '학생', relation: { contains: studentKey } }];
-    if (options?.date)
+    if (options?.date&&!options.includeSessionHistory)
         filters.push({ property: '수업 날짜', date: { on_or_before: options.date } });
     if (source?.shared)
         filters.push(options?.subject === '영어' ? { or: [{ property: '과목', select: { equals: '영어' } }, { property: '과목', select: { is_empty: true } }] } : { property: '과목', select: { equals: options!.subject } });
-    const pages = await notion(`databases/${source?.lessonDatabaseId || LESSON_DATABASE}/query`, 'POST', { filter: filters.length === 1 ? filters[0] : { and: filters }, sorts: [{ property: '수업 날짜', direction: 'descending' }], page_size: 1 });
-    const properties = pages.results[0]?.properties;
-    const text = (p: any) => (p?.rich_text || []).map((t: any) => t.plain_text || t.text?.content || '').join('');
+    // History reads all pages and sorts actual date fields locally: layouts may use 타임 슬롯 instead.
+    const query={filter: filters.length === 1 ? filters[0] : { and: filters },...(!options?.includeSessionHistory?{sorts:[{property:'수업 날짜',direction:'descending'}]}:{}),page_size: options?.includeSessionHistory?100:1};
+    const pages = await notion(`databases/${source?.lessonDatabaseId || LESSON_DATABASE}/query`, 'POST',query);
+    if(options?.includeSessionHistory){
+        const results=[...pages.results];let page=pages;
+        const cursors=new Set<string>();
+        while(page.has_more&&page.next_cursor){if(cursors.has(page.next_cursor))throw Error('NOTION_PAGINATION_FAILED');cursors.add(page.next_cursor);page=await notion(`databases/${source?.lessonDatabaseId || LESSON_DATABASE}/query`,'POST',{...query,start_cursor:page.next_cursor});results.push(...page.results);}
+        pages.results=results.sort((a:any,b:any)=>String((b.properties?.['타임 슬롯']||b.properties?.['수업 날짜'])?.date?.start||'').localeCompare(String((a.properties?.['타임 슬롯']||a.properties?.['수업 날짜'])?.date?.start||'')));
+    }
+    const legacyPage=options?.includeSessionHistory&&options.date?pages.results.find((page:any)=>((page.properties?.['타임 슬롯']||page.properties?.['수업 날짜'])?.date?.start||'').slice(0,10)<=options.date!):pages.results[0];
+    const properties = legacyPage?.properties;
+    const text = (p: any) => (p?.rich_text || p?.title || []).map((t: any) => t.plain_text || t.text?.content || '').join('');
     const feedback = properties ? text(properties['수업 내용']) : '';
     const markers = [...feedback.matchAll(/(?:^|\n)[ \t]*과제[ \t]*[:：][ \t]*/g)];
     const last = markers.at(-1);
-    return { round: properties?.['회차']?.number ?? null, selfStudyRound: properties?.['자습회차']?.number ?? properties?.['자습 회차']?.number ?? null, content: last ? feedback.slice(0, last.index).trimEnd() : feedback, nextPlan: properties ? text(properties['메모']) : '', examScope:properties?text(properties['시험범위']):'', assignment: extractAssignmentFromFeedback(feedback) || '' };
+    const sessionRecords=options?.includeSessionHistory?pages.results.map((page:any)=>{
+        const p=page.properties||{},range=text(p['배정 시간']||p['수업']).match(/(\d{1,2}:\d{2})\s*[~–-]\s*(\d{1,2}:\d{2})/),study=text(p['자습시간']).match(/(\d{1,2}:\d{2})\s*[~–-]\s*(\d{1,2}:\d{2})/);
+        const slot=(p['타임 슬롯']||p['수업 날짜'])?.date;
+        return {id:page.id,archived:page.archived,updatedAt:Date.parse(page.last_edited_time)||0,data:{studentKey,subject:options.subject,date:slot?.start?.slice(0,10)||'',classSession:range?'있음':'없음',start:range?.[1]?.padStart(5,'0')||'',end:range?.[2]?.padStart(5,'0')||'',round:p['회차']?.number??null,attendance:p['출석']?.select?.name||'미확인',selfStudy:p['자습']?.checkbox||study?'있음':'없음',selfStudyStart:study?.[1]?.padStart(5,'0')||'',selfStudyEnd:study?.[2]?.padStart(5,'0')||'',selfStudyRound:(p['자습회차']||p['자습 회차'])?.number??null}};
+    }):undefined;
+    return { round: properties?.['회차']?.number ?? null, selfStudyRound: properties?.['자습회차']?.number ?? properties?.['자습 회차']?.number ?? null, content: last ? feedback.slice(0, last.index).trimEnd() : feedback, nextPlan: properties ? text(properties['메모']) : '', examScope:properties?text(properties['시험범위']):'', assignment: extractAssignmentFromFeedback(feedback) || '',...(sessionRecords?{sessionRecords}:{}) };
 }
 export async function publishTeacherSchedule(db: Firestore, id: string, record: any) {
     const profile = (await db.collection('teacherWorkspaceAccess').doc(record.ownerUid).get()).data();

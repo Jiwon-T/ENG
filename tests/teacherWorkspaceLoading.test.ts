@@ -80,3 +80,21 @@ test('class and curriculum refresh skips student directory, schedules and settin
  const {body,status}=await run('/api/teacher/workspace?action=bootstrap&section=curriculum&resourcesOnly=1',db);
  assert.equal(status,200);assert.deepEqual(reads.sort(),['teacherClasses','teacherCurricula']);assert.equal('students' in body,false);assert.equal('staff' in body,false);assert.equal('schedules' in body,false);teacherReadCache.clear();
 });
+
+test('reproduces missing today record outside the first draft page with eleven owned drafts',async()=>{
+ const {todayLessonState}=await import('../src/lib/todayLessonProgress');
+ teacherReadCache.clear();
+ const event={id:'today',date:'2026-10-07',subject:'영어',start:'17:00',end:'18:00',students:['s'],title:'정규',kind:'정규'};
+ const values=Array.from({length:11},(_,i)=>({id:`draft-${i}`,ownerUid:uid,updatedAt:11-i,stage:i===10?'published':'draft',data:{studentKey:'s',date:i===10?event.date:'2026-10-06',subject:'영어',start:event.start}}));
+ const query:any={where:(key:string,_op:string,value:string)=>{assert.equal(key,'ownerUid');assert.equal(value,uid);return query;},select:()=>query,get:async()=>({docs:values.map(v=>({id:v.id,data:()=>({updatedAt:v.updatedAt})}))}),doc:(id:string)=>({id})};
+ const db={collection:(name:string)=>{assert.equal(name,'teacherLessonDrafts');return query;},getAll:async(...refs:any[])=>refs.map(r=>({id:r.id,exists:true,data:()=>values.find(v=>v.id===r.id)}))};
+ try{
+  const first=await run('/api/teacher/workspace?action=drafts-page&page=1',db,{admin:false});
+  const second=await run('/api/teacher/workspace?action=drafts-page&page=2',db,{admin:false});
+  assert.equal(first.status,200);assert.equal(first.body.total,11);assert.equal(first.body.records.length,10);
+  assert.equal(second.body.records.length,1);assert.equal(second.body.records[0].id,'draft-10');
+  // Diagnostic reproduction of the existing bug, not the desired final state.
+  assert.equal(todayLessonState(event,'s',first.body.records),'미작성');
+  assert.equal(todayLessonState(event,'s',[...first.body.records,...second.body.records]),'반영 완료');
+ }finally{teacherReadCache.clear();}
+});

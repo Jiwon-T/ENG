@@ -1,0 +1,133 @@
+From 12894a235309954f0cc3612d48d8c06fdad2c066 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Wed, 7 Oct 2026 12:04:07 +0900
+Subject: [PATCH 3/5] feat(teacher): summarize today lessons from loaded
+ records
+
+---
+ src/components/teacher/TeacherLessonGrid.tsx   |  2 +-
+ src/components/teacher/TeacherTodayLessons.tsx | 15 +++++++++------
+ src/components/teacher/teacherWorkspace.css    | 15 +++++++++++++++
+ src/lib/todayLessonProgress.ts                 | 14 ++++++++++++++
+ tests/todayLessonProgress.test.tsx             | 14 ++++++++++++++
+ 5 files changed, 53 insertions(+), 7 deletions(-)
+ create mode 100644 src/lib/todayLessonProgress.ts
+ create mode 100644 tests/todayLessonProgress.test.tsx
+
+diff --git a/src/components/teacher/TeacherLessonGrid.tsx b/src/components/teacher/TeacherLessonGrid.tsx
+index be40198..28c0864 100644
+--- a/src/components/teacher/TeacherLessonGrid.tsx
++++ b/src/components/teacher/TeacherLessonGrid.tsx
+@@ -86,7 +86,7 @@ export default function TeacherLessonGrid({ data, busy, request, refresh, act,ac
+         setClassId('');setSubject(event.subject);setDate(event.date);setStart(event.start);setEnd(event.end);
+         void addStudents(event.students,{subject:event.subject,date:event.date,start:event.start,end:event.end});
+     }
+-    return <div className="grid lg:grid-cols-[240px_minmax(0,1fr)] gap-4"><aside className="min-w-0"><TeacherTodayLessons data={data} date={date} onDate={setDate} request={request} active={active} disabled={false} onGroup={chooseGroup}/></aside><section className="panel lesson-grid min-w-0"><div className="flex flex-wrap justify-between gap-2 mb-3"><h2 className="!mb-0">여러 학생 함께 작성</h2><span className="text-xs text-slate-500">학생마다 별도 기록으로 저장됩니다. 탭을 바꿔도 입력은 유지됩니다.</span></div><fieldset>
++    return <div className="grid lg:grid-cols-[240px_minmax(0,1fr)] gap-4"><aside className="min-w-0"><TeacherTodayLessons data={data} records={rows.filter(row=>row.savedData).map(row=>({...row,data:row.savedData}))} date={date} onDate={setDate} request={request} active={active} disabled={false} onGroup={chooseGroup}/></aside><section className="panel lesson-grid min-w-0"><div className="flex flex-wrap justify-between gap-2 mb-3"><h2 className="!mb-0">여러 학생 함께 작성</h2><span className="text-xs text-slate-500">학생마다 별도 기록으로 저장됩니다. 탭을 바꿔도 입력은 유지됩니다.</span></div><fieldset>
+  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2"><label>과목<select value={subject} onChange={e => { setSubject(e.target.value); setSelection([]); }}>{['영어', '수학', '국어', '과학', '한국사'].map(s => <option key={s}>{s}</option>)}</select></label><label>날짜<input type="date" value={date} onChange={e => setDate(e.target.value)}/></label><label>시작<input type="time" value={start} onChange={e => setStart(e.target.value)}/></label><label>종료<input type="time" value={end} onChange={e => setEnd(e.target.value)}/></label></div>
+  <label className="block mt-3">반 학생 불러오기<OptionalMark/><select value={classId} onChange={e=>{setClassId(e.target.value);const c=data.classes.find((c:any)=>c.id===e.target.value);if(!c)return;setSubject(c.subject);setSelection(c.students);const weekday=new Date(`${date}T12:00:00+09:00`).getUTCDay();const slot=c.slots?.filter((s:any)=>s.status!=='중단'&&s.weekday===weekday).sort((a:any,b:any)=>a.start.localeCompare(b.start))[0];if(slot){setStart(slot.start);setEnd(slot.end);}}}><option value="">반 선택 → 학생 추가에서 확인 후 추가</option>{data.classes.filter((c:any)=>c.status!=='중단'&&(data.admin||c.ownerUid===data.uid||(c.assignedUids||[]).includes(data.uid))).map((c:any)=><option key={c.id} value={c.id}>{c.name} · {c.students.length}명</option>)}</select></label>
+  <details open={!rows.length} className="mt-3 rounded-xl border border-pink-100 p-3"><summary className="text-sm font-bold cursor-pointer">학생 추가 · {selection.length}명 선택</summary><input aria-label="추가할 학생 검색" placeholder="학생 이름 검색" value={search} onChange={e => setSearch(e.target.value)}/><div className="flex flex-wrap gap-x-4 gap-y-1 max-h-40 overflow-auto mt-2">{students.filter((s: any) => matchesKoreanSearch(s.studentDisplayName,search)).map((s: any) => <label key={s.studentKey} className="flex items-center gap-2 min-h-[36px]"><input type="checkbox" checked={selection.includes(s.studentKey)} onChange={e => setSelection(e.target.checked ? [...selection, s.studentKey] : selection.filter(x => x !== s.studentKey))}/>{s.studentDisplayName}</label>)}</div><button className="small-button mt-2" disabled={!selection.length} onClick={()=>void addStudents()}>선택한 학생 추가</button></details>
+diff --git a/src/components/teacher/TeacherTodayLessons.tsx b/src/components/teacher/TeacherTodayLessons.tsx
+index 59bf366..4067beb 100644
+--- a/src/components/teacher/TeacherTodayLessons.tsx
++++ b/src/components/teacher/TeacherTodayLessons.tsx
+@@ -1,9 +1,11 @@
++import {todayLessonState,todayLessonProgress,todayStateTone} from '../../lib/todayLessonProgress';
+ import {useEffect,useRef,useState} from 'react';
+ import {todayLessons,type TodayLesson} from '../../lib/teacherTodayLessons';
+ import {koreanDay} from '../../lib/teacherWeekCalendar';
+-export default function TeacherTodayLessons({data,date,onDate,onStudent,onGroup,request,disabled=false,active=true,onEvents}:{
++export default function TeacherTodayLessons({data,date,onDate,onStudent,onGroup,request,disabled=false,active=true,onEvents,records=[]}:{
+  data:any;date:string;onDate:(date:string)=>void;
+  onStudent?:(key:string,event:TodayLesson)=>void;onGroup?:(event:TodayLesson)=>void;
++ records?:readonly any[];
+  onEvents?:(events:TodayLesson[],uid:string,date:string)=>void;
+  request:(action?:string,body?:any)=>Promise<any>;disabled?:boolean;active?:boolean;
+ }) {
+@@ -18,14 +20,15 @@ export default function TeacherTodayLessons({data,date,onDate,onStudent,onGroup,
+  const source=remote?.uid===data.uid&&remote.date===date?remote:data;
+  const events=todayLessons(data,date,source.schedules||[],source.reflectedSchedules||[]);
+  useEffect(()=>{onEvents?.(events,data.uid,date);},[source,data,date,onEvents]);
+- return <section className="panel"><div className="flex justify-between gap-2"><h2>{date===koreanDay()?'오늘 수업':'선택한 날짜의 수업'}</h2><button type="button" disabled={disabled} className="small-button" onClick={()=>onDate(koreanDay())}>오늘</button></div>
++ const loaded=[...records,...(data.drafts||[])];const progress=todayLessonProgress(events,loaded);
++ return <section className="panel today-lessons-panel"><div className="flex justify-between gap-2"><h2>{date===koreanDay()?'오늘 수업':'선택한 날짜의 수업'}</h2><button type="button" disabled={disabled} className="small-button" onClick={()=>onDate(koreanDay())}>오늘</button></div>
++ <p className="today-lesson-progress" role="status">{date===koreanDay()?'오늘':'선택 날짜'} {progress.total}개 중 반영 {progress.published} · 저장 {progress.saved} · 미작성 {progress.empty}</p><p className="today-progress-scope">현재 불러온 기록 기준</p>
+  <input aria-label="수업 목록 날짜" disabled={disabled} type="date" value={date} onChange={e=>{if(e.target.value)onDate(e.target.value);}}/>
+  {loading&&<p role="status" className="text-xs text-slate-500 mt-2">예정된 일정을 불러오는 중…</p>}
+  {error&&<p role="alert" className="text-xs text-rose-600 mt-2">{error}<button type="button" className="small-button ml-2" onClick={()=>setReload(value=>value+1)}>다시 불러오기</button></p>}
+- {events.map(event=><div key={event.id} className="mt-3"><p className="font-bold text-sm">{event.title}</p><p className="text-xs text-slate-500">{event.start}–{event.end} · {event.subject} · {event.kind}</p>
+- {onGroup&&<p className="text-xs text-slate-500 mt-1">{event.students.map(key=>data.students?.find((s:any)=>s.studentKey===key)?.studentDisplayName||'학생').join(' · ')}</p>}
+- {onGroup?<button type="button" disabled={disabled} className="small-button mt-2" onClick={()=>onGroup(event)}>학생 {event.students.length}명 불러오기</button>:event.students.map(key=><button type="button" key={key} disabled={disabled} className="w-full text-left text-sm min-h-[44px]" onClick={()=>onStudent?.(key,event)}>{data.students?.find((s:any)=>s.studentKey===key)?.studentDisplayName||'학생'}</button>)}
+- </div>)}
++ {events.map(event=>{const groupProgress=todayLessonProgress([event],loaded);return <div key={event.id} className="today-lesson-card"><div className="today-lesson-meta"><span className="today-lesson-time">{event.start}–{event.end}</span><span className="today-lesson-kind">{event.kind}</span></div><p className="today-lesson-title">{event.title} · {event.subject}</p>
++ {onGroup?<button type="button" disabled={disabled} className="today-lesson-student today-lesson-group" onClick={()=>onGroup(event)}><span className="today-lesson-name">{event.students.map(key=>data.students?.find((student:any)=>student.studentKey===key)?.studentDisplayName||'학생').join(' · ')}</span><span className="today-lesson-group-progress">반영 {groupProgress.published}/{groupProgress.total}명 · 저장 {groupProgress.saved}명</span><span className="today-lesson-group-hint">학생 {event.students.length}명 불러오기</span></button>:event.students.map(key=>{const state=todayLessonState(event,key,loaded);return <button type="button" key={key} disabled={disabled} className="today-lesson-student" onClick={()=>onStudent?.(key,event)}><span className="today-lesson-name">{data.students?.find((student:any)=>student.studentKey===key)?.studentDisplayName||'학생'}</span><span className={`today-lesson-state status-${todayStateTone(state)}`}><span aria-hidden="true" className={`lesson-status-dot status-${todayStateTone(state)}`}/>{state}</span></button>;})}
++ </div>;})}
+  {!events.length&&!loading&&<p className="text-xs text-slate-500 mt-2">선택한 날짜에 정규 수업 또는 예정된 일정이 없습니다.</p>}
+  </section>;
+ }
+diff --git a/src/components/teacher/teacherWorkspace.css b/src/components/teacher/teacherWorkspace.css
+index d59c43f..486164b 100644
+--- a/src/components/teacher/teacherWorkspace.css
++++ b/src/components/teacher/teacherWorkspace.css
+@@ -348,3 +348,18 @@
+ .student-combobox-empty {font-size:12px;padding:12px;color:var(--lesson-muted);}
+ .teacher-workspace .student-combobox input:focus-visible {outline:2px solid var(--lesson-focus);outline-offset:2px;}
+ @media(max-width:640px){.student-combobox-option{min-height:44px;}.student-combobox-popup{max-height:min(280px,var(--student-list-height,280px));}}
++.today-lesson-progress {font-size:12px;font-weight:700;line-height:1.6;color:var(--lesson-text);}
++.today-progress-scope {font-size:10px;color:var(--lesson-muted);margin:3px 0 8px;}
++.today-lesson-card {margin-top:12px;padding-top:12px;border-top:1px solid var(--lesson-border);}
++.today-lesson-meta {display:flex;flex-wrap:wrap;align-items:center;gap:6px;}
++.today-lesson-time {font-size:12px;font-variant-numeric:tabular-nums;color:var(--lesson-text);font-weight:600;}
++.today-lesson-kind {font-size:10px;padding:2px 6px;border-radius:var(--lesson-pill);background:var(--lesson-soft);color:var(--lesson-accent);}
++.today-lesson-title {font-size:11px;line-height:1.6;color:var(--lesson-muted);margin-top:3px;}
++.teacher-workspace .today-lesson-student {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;width:100%;text-align:left;padding:8px 0;min-height:44px;background:transparent;}
++.today-lesson-name {font-size:15px;font-weight:700;color:var(--lesson-text);overflow-wrap:anywhere;}
++.today-lesson-state {display:flex;align-items:center;gap:5px;font-size:11px;color:var(--lesson-muted);}
++.today-lesson-state.status-pink {color:var(--lesson-accent);}
++.today-lesson-state.status-green {color:var(--lesson-green);}
++.today-lesson-group {flex-direction:column;align-items:flex-start!important;}
++.today-lesson-group-progress,.today-lesson-group-hint {font-size:11px;color:var(--lesson-muted);}
++.teacher-workspace .today-lesson-student:focus-visible {outline:2px solid var(--lesson-focus);outline-offset:2px;border-radius:var(--lesson-radius);}
+diff --git a/src/lib/todayLessonProgress.ts b/src/lib/todayLessonProgress.ts
+new file mode 100644
+index 0000000..55de8fd
+--- /dev/null
++++ b/src/lib/todayLessonProgress.ts
+@@ -0,0 +1,14 @@
++import type {TodayLesson} from './teacherTodayLessons';
++export type TodayLessonState='미작성'|'저장됨'|'반영 완료';
++const timestamp=(value:any)=>typeof value==='number'?value:typeof value?.toMillis==='function'?value.toMillis():typeof value==='string'?Date.parse(value)||0:0;
++/** Never fetch: the supplied records are only those already available in memory. */
++export function todayLessonState(event:TodayLesson,studentKey:string,records:readonly any[]):TodayLessonState{
++ const matches=records.filter(record=>!record.archived&&!record.deleteRequested&&record.stage!=='new'&&record.data?.studentKey===studentKey&&record.data.date===event.date&&record.data.subject===event.subject&&record.data.start===event.start);
++ const record=matches.sort((a,b)=>timestamp(b.updatedAt)-timestamp(a.updatedAt))[0];
++ return !record?'미작성':record.stage==='published'?'반영 완료':'저장됨';
++}
++export function todayLessonProgress(events:readonly TodayLesson[],records:readonly any[]){
++ const states=events.flatMap(event=>event.students.map(key=>todayLessonState(event,key,records)));
++ return {total:states.length,published:states.filter(state=>state==='반영 완료').length,saved:states.filter(state=>state==='저장됨').length,empty:states.filter(state=>state==='미작성').length};
++}
++export const todayStateTone=(state:TodayLessonState)=>state==='반영 완료'?'green':state==='저장됨'?'pink':'grey';
+diff --git a/tests/todayLessonProgress.test.tsx b/tests/todayLessonProgress.test.tsx
+new file mode 100644
+index 0000000..b03143b
+--- /dev/null
++++ b/tests/todayLessonProgress.test.tsx
+@@ -0,0 +1,14 @@
++import React from 'react';import test from 'node:test';import assert from 'node:assert/strict';import {renderToStaticMarkup} from 'react-dom/server';
++import {todayLessonState,todayLessonProgress} from '../src/lib/todayLessonProgress';import TeacherTodayLessons from '../src/components/teacher/TeacherTodayLessons';
++const event={id:'e',title:'개인 보강',kind:'보강',date:'2026-10-07',subject:'영어',start:'17:00',end:'18:00',students:['a','b','c']};
++const record=(studentKey:string,stage:string)=>({id:studentKey,stage,data:{studentKey,date:event.date,subject:event.subject,start:event.start}});
++test('progress matches exact day student subject start and excludes deleted or unsaved records',()=>{
++ const rows=[record('a','published'),record('b','draft'),{...record('c','published'),archived:true},{...record('c','draft'),data:{...record('c','draft').data,start:'18:00'}},record('c','new')];
++ assert.deepEqual(todayLessonProgress([event],rows),{total:3,published:1,saved:1,empty:1});assert.equal(todayLessonState(event,'c',rows),'미작성');
++ assert.equal(todayLessonState(event,'a',[{...record('a','published'),updatedAt:1},{...record('a','draft'),updatedAt:2}]),'저장됨');
++});
++test('today cards display loaded-record progress and explicit group denominator without another request',()=>{
++ let calls=0;const props={data:{uid:'t',admin:true,classes:[],students:event.students.map(studentKey=>({studentKey,studentDisplayName:studentKey})),drafts:[record('a','published'),record('b','draft')],schedules:[{id:'e',data:{...event,status:'예정'}}]},date:event.date,onDate:()=>{},request:async()=>{calls++;return {};}};
++ const single=renderToStaticMarkup(<TeacherTodayLessons {...props} onStudent={()=>{}}/>);assert.ok(single.includes('반영 1 · 저장 1 · 미작성 1'));assert.ok(single.includes('반영 완료'));assert.ok(single.includes('현재 불러온 기록 기준'));assert.equal(calls,0);
++ const group=renderToStaticMarkup(<TeacherTodayLessons {...props} onGroup={()=>{}}/>);assert.ok(group.includes('반영 1/3명'));assert.ok(group.includes('학생 3명 불러오기'));assert.equal(calls,0);
++});
+-- 
+2.56.0.windows.1
+

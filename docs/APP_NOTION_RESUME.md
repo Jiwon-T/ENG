@@ -123,3 +123,15 @@ cd67247d 오류의 실제 원인은 workspace-account의 FIRESTORE_GRPC_8 자원
 ## 2026-10-07 B hotfix 1
 최신 누적 전달본: ENG-app-notion-checkpoint-10-B-hotfix-1.zip.
 핵심 세 가지(여러 학생 X, 일회성 알림, 대상별 잠금)와 저장 응답 재사용을 적용했습니다. 검증·배포 확인·남은 범위는 CHECKPOINT_10_B_HOTFIX_1.md를 참조합니다. Bati 규약 미확인과 실제 발송 차단을 유지하며 전달 후 멈춥니다.
+
+## 2026-10-07 입력 화면 디자인 / B hotfix 2
+최신 전달본: ENG-app-notion-checkpoint-10-B-hotfix-2.zip. 이름 칩·sticky 액션바·공용 평가 칩을 적용했으며 데이터/저장/반영 로직은 유지했습니다. 상세 파일·검증·미확인 범위는 CHECKPOINT_10_B_HOTFIX_2.md를 참조합니다. Bati 규약 미확인/발송 차단을 유지하고 전달 후 멈춥니다.
+
+## 최신 입력 화면 보정 (2026-10-07)
+전체 누적본: ENG-app-notion-checkpoint-10-B-hotfix-3.zip. 상세 검증과 한계는 CHECKPOINT_10_B_HOTFIX_3.md 참고. 0·4·5·6·7 순서의 개별 커밋. 테스트 502개 통과. Bati 실제 규약/발송 및 Make 작업은 미완료 상태를 유지한다.
+
+## 시간 입력 보정 및 A 조사 (2026-10-07)
+ENG-app-notion-checkpoint-10-B-hotfix-4.zip: 프리셋 축소 및 시간 입력 상시 노출. 오늘 기록이 11번째 초안이면 미작성 오표시되는 재현 테스트 추가. 상태 수정은 구현 전 보고 단계이며 아직 적용하지 않았다. 상세: CHECKPOINT_10_B_HOTFIX_4.md.
+
+## B 자동 회차 (2026-10-07)
+ENG-app-notion-checkpoint-10-B-hotfix-5.zip. 독립 수업·자습 회차, tenths/half up, 새 기록만 자동 입력, 기존 previous-lesson 응답 하위 호환 확장. 70분 수업=0.9. Make·운영 Notion 형식은 확인 불가/미확인이므로 CHECKPOINT_10_B_HOTFIX_5.md의 배포 전 시험 목록 참고. A 상태 오표시 수정은 아직 미구현.

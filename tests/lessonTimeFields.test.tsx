@@ -21,6 +21,6 @@ test('class and study each render start/end and decimal round inputs in the same
 test('self-study-only records disable only the absent class inputs', () => {
  const html = renderToStaticMarkup(<LessonAcademyFields value={{classSession:'없음',start:'',end:'',round:null,selfStudy:'있음',selfStudyStart:'15:30',selfStudyEnd:'16:30',selfStudyRound:1}} onChange={() => {}}/>);
  const rows = html.split('class="lesson-time-row"').slice(1);
- assert.equal((rows[0].match(/disabled=""/g) || []).length, 3);
+ assert.equal((rows[0].match(/<input[^>]*disabled=""/g) || []).length, 3);
  assert.equal((rows[1].match(/disabled=""/g) || []).length, 0);
 });

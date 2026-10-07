@@ -51,7 +51,7 @@ test('the same today list renders student buttons for single writing and group c
 });
 test('previous-lesson endpoint reuses owner snapshots, preserves rounds and rejects unauthorized students',async()=>{
  teacherReadCache.clear();let reads=0;
- const actor:any={uid:'teacher',admin:false,scopes:data.scopes};const db={collection:()=>({where:()=>({get:async()=>{reads++;return {docs:[a,b].map(studentKey=>({data:()=>({updatedAt:1,data:{studentKey,subject:'영어',date:'2026-10-04',round:1.7,selfStudyRound:0.5,content:studentKey,assignment:'과제'}})}))};}})})};
+ const actor:any={uid:'teacher',admin:false,scopes:data.scopes};const db={collection:()=>({where:()=>({get:async()=>{reads++;return {docs:[a,b].map(studentKey=>({data:()=>({updatedAt:1,data:{studentKey,subject:'영어',date:'2026-10-04',classSession:'있음',start:'14:00',end:'15:20',attendance:'출석',selfStudy:'있음',selfStudyStart:'15:20',selfStudyEnd:'15:50',round:1.7,selfStudyRound:0.5,content:studentKey,assignment:'과제'}})}))};}})})};
  const run=async(studentKey:string)=>{let body:any;const res:any={setHeader:()=>{},end:(v:string)=>body=JSON.parse(v)};await handleWorkspace({method:'POST',body:{action:'previous-lesson',studentKey,subject:'영어',date:day}} as any,res,async()=>({...actor,db}));return {status:res.statusCode,body};};
  const first=await run(a),second=await run(b);assert.equal(first.status,200);assert.equal(first.body.data.round,1.7);assert.equal(second.body.data.content,b);assert.equal(reads,1);
  assert.equal((await run('33333333-3333-4333-8333-333333333333')).status,403);
@@ -64,3 +64,4 @@ test('Notion fallback reads both round property spellings and excludes future le
  try{const result=await previousNotionLesson(a,{db,actor:{uid:'teacher'},subject:'영어',date:day});assert.equal(result.round,1.7);assert.equal(result.selfStudyRound,0.5);assert.equal(result.content,'관계대명사');assert.equal(result.assignment,'교재 10쪽');assert.equal(filter.and[1].date.on_or_before,day);}
  finally{globalThis.fetch=old;if(token===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=token;}
 });
+

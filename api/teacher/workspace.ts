@@ -18,6 +18,7 @@ import {writeDirectLessonReport} from '../_lib/teacherDirectReport.js';
 import {classStatusOnlyChange,changedStatusSlots} from '../_lib/teacherClassStatus.js';
 import {scheduleRange,readReflectedRange,readManagedScheduleRange} from '../_lib/teacherScheduleRange.js';
 import { latestPreviousLesson, previousLessonValues } from '../../src/lib/teacherTodayLessons.js';
+import {sessionBase,sessionRecordSummaries} from '../../src/lib/sessionNumbers.js';
 import { teacherReadCache, teacherReadKey, pageRows, pageNumber, invalidateTeacherMutation } from '../_lib/teacherReadCache.js';
 import { normalizeNotionPageId } from '../_lib/notionPageId.js';
 import {enableSharedWorkspace,sourcesFor,readNotionWorkspace,mergeNotionRows,syncManagedRecord,readSourceEnrollments,syncTeacherAssignments,readSourceLessons,readSourceSchedules} from '../_lib/teacherNotionWorkspace.js';
@@ -612,9 +613,18 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if (!canTeach(actor, key, subject))
                 throw new Error('FORBIDDEN');
             const date=body.date===undefined?undefined:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(body.date);
-            const records=await teacherReadCache.get(teacherReadKey(actor,'previous-lessons-local'),async()=>(await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).get()).docs.map(d=>d.data()));
-            const previous=latestPreviousLesson(records,key,subject,date) || await previousNotionLesson(key,{db,actor,subject,date});
-            return sendJson(res, 200, { ok: true, data: previousLessonValues(previous) });
+            const records=await teacherReadCache.get(teacherReadKey(actor,'previous-lessons-local'),async()=>(await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).get()).docs.map(d=>({id:d.id,...d.data()})));
+            const local=latestPreviousLesson(records,key,subject,date);
+            const localRecords=records.filter((r:any)=>!r.archived&&!r.deleteRequested&&r.data?.studentKey===key&&r.data.subject===subject);
+            const context={studentKey:key,subject,date};
+            const needLesson=Boolean(date)&&!sessionBase(localRecords,context,'lesson');
+            const needStudy=Boolean(date)&&!sessionBase(localRecords,context,'study');
+            const remote=!local||needLesson||needStudy?await previousNotionLesson(key,{db,actor,subject,date,includeSessionHistory:true}):undefined;
+            const previous=local||remote||{};
+            // Existing app history is authoritative per counter; fill only missing counters from Notion.
+            const remoteRecords=(remote?.sessionRecords||[]).filter((r:any)=>!records.some((saved:any)=>(saved.archived||saved.deleteRequested)&&saved.notionPageId&&normalizeNotionPageId(saved.notionPageId)===normalizeNotionPageId(r.id))).map((r:any)=>({...r,data:{...r.data,...(!needLesson&&local?{classSession:'없음',round:null}:{}),...(!needStudy&&local?{selfStudy:'없음',selfStudyRound:null}:{})}}));
+            const sessionRecords=[...localRecords,...remoteRecords];
+            return sendJson(res, 200, { ok: true, data: {...previousLessonValues(previous),sessionRecords:sessionRecordSummaries(sessionRecords),sessionContext:{studentKey:key,subject,date}} });
         }
         if (body.action === 'continue') {
             const id = z.string().uuid().parse(body.id);

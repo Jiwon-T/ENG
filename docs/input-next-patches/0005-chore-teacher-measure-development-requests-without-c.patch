@@ -1,0 +1,303 @@
+From 8028b041aad34b9b008732a9e987fe6ddd5e519c Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Wed, 7 Oct 2026 12:12:33 +0900
+Subject: [PATCH 5/5] chore(teacher): measure development requests without
+ cache changes
+
+---
+ docs/APP_NOTION_RESUME.md                     | 131 ++++++++++++++++++
+ docs/CHECKPOINT_10_B_HOTFIX_3.md              |  32 +++++
+ src/components/teacher/TeacherWorkspace.tsx   |   9 +-
+ .../teacher/WorkspaceRequestMetrics.tsx       |   6 +
+ src/components/teacher/teacherWorkspace.css   |   3 +
+ src/lib/workspaceRequestMetrics.ts            |  10 ++
+ src/vite-env.d.ts                             |   1 +
+ tests/workspaceRequestMetrics.test.ts         |  10 ++
+ 8 files changed, 200 insertions(+), 2 deletions(-)
+ create mode 100644 docs/APP_NOTION_RESUME.md
+ create mode 100644 docs/CHECKPOINT_10_B_HOTFIX_3.md
+ create mode 100644 src/components/teacher/WorkspaceRequestMetrics.tsx
+ create mode 100644 src/lib/workspaceRequestMetrics.ts
+ create mode 100644 src/vite-env.d.ts
+ create mode 100644 tests/workspaceRequestMetrics.test.ts
+
+diff --git a/docs/APP_NOTION_RESUME.md b/docs/APP_NOTION_RESUME.md
+new file mode 100644
+index 0000000..07da72c
+--- /dev/null
++++ b/docs/APP_NOTION_RESUME.md
+@@ -0,0 +1,131 @@
++# 앱–노션 전환 재개 기록: 체크포인트 8
++
++체크포인트 7 전체 코드에 누적 적용했다. 이전 기능·학생/리포트 ID·파스텔 핑크 UI를 유지한다. 이전 기록은 APP_NOTION_CHECKPOINT_7.md에 보관했다.
++
++## 완료 범위
++
++- 학생관리 카드 → 보호자 문자: 과목, DB_메시지 템플릿, 앱에서 반영 완료한 수업일지를 선택한다. 템플릿 없이 발송은 지원하지 않는다. 기존 개인 노션 일지는 이번 선택 목록에 포함하지 않는다.
++- 실제 노션 템플릿 DB와 학생 DB 속성을 읽기 전용으로 확인했다. 템플릿은 서버에서 현재 노션 값을 조회한다. 단체 유형도 선택한 학생 한 명 대상으로만 생성하며 단체 일괄 발송은 하지 않는다.
++- 학생 호칭/학생호칭, 보호자이름, 학교, 학년, 수강료, 납부기한, 출결, 태도, 숙제, 테스트, 단어·단어테스트 점수, 내신 대비 점수, 내용 및 피드백, 피드백, 문항, 오답, 틀린단어, 수업일, 과목, 수업·자습 시작/종료를 치환한다. 틀린단어는 단어 테스트의 오답 수를 뜻하며 개별 단어 목록은 저장되어 있지 않다. 점수는 정답/문항의 백분율로 반올림하며 실제 0을 보존한다.
++- 템플릿의 <br>와 이스케이프된 중괄호를 정규화한다. 값이 없는 변수는 {{변수}}로 남겨 사용자가 입력하거나 해당 항목을 지우게 한다. 미치환 변수가 있는 문자 저장·발송은 막는다. 생성 본문은 사용자가 수정할 수 있다.
++- 본문 저장은 teacherMessages에 불변 요청을 먼저 기록한 뒤, 기존 학생 페이지의 메시지템플릿선택·완성된 문자본문만 PATCH한다. 노션 저장 실패 시 같은 ID·본문으로 재시도한다. 이 저장은 문자를 보내지 않는다. 과거 실패한 저장도 이력에서 재시도할 수 있다.
++- 별도 발송 버튼을 누르기 전에 저장한 수신자·본문을 표시하고 확인 체크를 요구한다. 수업일지 반영과 문자 발송은 독립적이다. 보호자 번호가 바뀌면 기존 요청을 발송하지 않는다. 진행 중인 보호자 연락처 변경도 차단한다.
++- 기존 workspace API를 확장했다. 새 Vercel 함수는 추가하지 않았다. 관리자·원장은 같은 학원 학생, 일반 교사는 현재 담당 학생·과목만 조회·작성한다. 발송은 요청을 준비한 계정만 할 수 있다. 다른 학원 자료·다른 학생의 일지·다른 DB의 템플릿은 거절한다.
++- teacherMessages·teacherMessageSendLocks는 서버 전용이며 Firestore 규칙에서 클라이언트 직접 접근을 차단한다. 본문과 수신자는 발송 이력에 저장된다.
++
++## Bati 연결 설정과 결과 의미 (기존 기록; 최신 B 규약은 CHECKPOINT_10_B.md 우선)
++
++서버 전용 환경변수 2개를 .env.example와 환경변수 검사 목록에 추가했다.
++
++1. BATI_WEBHOOK_URL: 기존 https://app.bati.ai/webhook/... 주소를 서버에 설정한다. 비밀 주소는 코드·ZIP·브라우저에 넣지 않는다.
++2. BATI_MESSAGE_PARAM: 기존 Bati 웹훅이 실제 문자본문으로 받는 정확한 query 매개변수 이름을 설정한다. 보호자 번호 매개변수는 기존 구조의 보호자연락처를 사용한다. 본문 매개변수는 추측하지 않았다. 기존 노션 발송 수식 조회가 시간 초과되어 정확한 계약을 확인하지 못했다. 배포 전에 기존 수식 또는 Bati 웹훅 설정과 대조해야 한다. 이름을 확인하기 전 발송을 활성화하지 않는다.
++
++현재 어댑터는 기존 웹훅 형태의 GET + URLSearchParams를 사용한다. HTTPS app.bati.ai의 webhook 경로만 허용하고 리디렉션을 따르지 않는다. 본문·전화번호는 이 서버 호출의 URL에 들어가므로 Bati 측 로그에도 기록될 수 있다. 실제 Bati 계정으로 호출하거나 전송 결과를 검증하지 않았다.
++
++- 발송 전 거래에서 요청을 sending으로 저장하고 수신자+본문 해시 잠금을 만든다. 같은 요청 재호출·동시 클릭·새 ID로 동일 본문을 다시 요청해도 네트워크 전송은 한 번만 한다.
++- 최신 B에서는 임의 HTTP 2xx를 접수로 판정하지 않습니다. 실제 확인한 응답 규칙이 있어야 접수로 처리하며, 전달 성공은 Bati 발송 이력에서 별도 확인합니다.
++- 네트워크 오류·타임아웃·리디렉션·비2xx는 uncertain으로 잠근다. 외부 호출 후 Firestore 저장이 실패하면 sending 상태로 남아 재전송을 차단한다. 응답 유실 시 자동 재시도하지 않는다.
++- 이력의 결과 확인은 서버에 저장된 상태를 읽는다. Bati 영수증 조회·수동 잠금 해제 기능은 구현하지 않았다. uncertain/sending 또는 동일 본문을 의도적으로 재발송해야 하는 경우 Bati 기록을 확인한 후 별도 운영 절차가 필요하다. 자동 해제는 하지 않는다.
++- 발송 직전 학생 원본과 소속 및 연락처 변경 잠금을 다시 확인한다. Notion 조회와 외부 발송은 원자 거래가 아니므로 그 사이 Notion에서 직접 번호를 수정하는 경쟁을 완전히 제거할 수는 없다.
++- 학생 페이지의 문자본문은 마지막 준비된 문자의 백업이다. 발송은 해당 페이지의 현재 본문 대신 앱에 저장한 확인 대상 본문을 사용한다. 노션 문자 저장과 노션 수동 편집의 동시 경쟁을 조건부 PATCH로 막을 수는 없다.
++
++## 검증 및 사용자 확인
++
++전체 테스트 328개, TypeScript 검사, 프로덕션 빌드 검증. 기존 큰 번들 경고는 남아 있다. 신규 검증은 변수·0점, 권한·원본, 연락처 변경, 미완료 연락처 수정, 노션 저장 실패 복구, 동시 발송·동일 본문 중복, 응답 유실·타임아웃·HTTP 실패·리디렉션, 발송 전/후 거래 실패와 구성 검사를 모의 Firestore/Notion/HTTP로 확인한다.
++
++실제 문자 발송·배포·운영 노션 쓰기·Make 수정/중단은 하지 않았다. 배포 시 Firestore 규칙도 적용하고 BATI 설정 계약을 확인한다. 학생 카드에서 템플릿/과목/일지 선택, 부족한 변수 수정, 본문 저장, 번호 변경 후 기존 요청 차단을 먼저 확인한다. 실제 발송은 사용자가 검토한 테스트 수신자와 본문으로 별도 수행한다.
++
++## 다음 체크포인트 9
++
++기존 학생/수강/선생님/반/리포트 데이터 연결, 중복, 권한, 실패 복구를 읽기 전용으로 조사하고 필요한 정합성 검증을 구현한다. Bati 본문 매개변수와 실제 발송 접수 계약도 확인한다. 사용자 배포 확인 후에만 대체한 Make 시나리오를 중단하고 백업한다. 복제 수업일지 리셋은 계속 제외한다.
++
++ZIP에서 node_modules·dist·환경 비밀 파일을 제외한다. npm ci, npm test, npm run lint, npm run build로 확인한다.
++
++## 체크포인트 9 전 긴급 보완
++
++2026-10-05 수업일지 연동 조사를 진행하고 오류 진단을 보완했다. HOTFIX_LESSON_SYNC_1.md에 실제 배포·노션 스키마 조사와 한계를 기록했다. ADMISSION_FORM_PROPOSAL.md는 첨부 입학 원서 기반 신입생 폼 제안이며 아직 구현하지 않았다. 전체 테스트 331개 및 타입 검사·빌드를 확인한다.
++
++## 두 번째 긴급 보완
++
++HOTFIX_LESSON_SYNC_2.md에 이현준 앱 ID 기반 중복 표시 수정, 선택 시험범위 입력과 노션 연결, 신입생 등록의 입학·상담 폼 구현을 기록했다. 최신 전체 검증은 344개 테스트·타입 검사·빌드 통과다. 기존 ADMISSION_FORM_PROPOSAL.md는 설계 제안 기록이며 이번 구현의 상세 범위와 제한은 HOTFIX_LESSON_SYNC_2.md가 우선한다. 운영 데이터 변경이나 배포는 하지 않았다.
++
++## 체크포인트 9
++관리자 설정에 읽기 전용 연결 정합성 점검을 추가했습니다. 세부 범위·제약과 배포 후 확인은 CHECKPOINT_9.md에 있습니다. 최근 일지 중복·시험범위·입학 상담 핫픽스를 포함합니다. 문자 준비·발송 트랜잭션의 소속 검사를 보강하고 본문 매개변수의 수신번호 덮어쓰기를 차단했습니다. 운영 데이터 변경·배포·실제 발송·Make 중단은 수행하지 않았습니다. 다음 작업은 사용자 배포 후 실제 연결 점검 결과와 Bati 계약 확인입니다.
++
++## 체크포인트 9 긴급 수정 1
++배포된 선생님방 API의 ERR_MODULE_NOT_FOUND 원인을 수정했습니다. studentRegistration.ts → studentAdmission.js 공통 모듈 경로에 .js 확장자를 추가했습니다. 앞으로 npm run check:server-imports로 Node ESM import 검증도 실행합니다. 자세한 증거와 범위는 CHECKPOINT_9_HOTFIX_1.md에 있습니다.
++
++## 체크포인트 9 긴급 수정 2
++일지 조회 각 행에 일지 삭제를 추가했습니다. 선택된 초안만 보관 처리하고 연결 노션 일지를 휴지통으로 옮기며 해당 앱 리포트만 제거합니다. 미완료 요청도 저장 결과 확인 후 정리할 수 있습니다. 활성 반영과 원격 생성 결과 불명 상태는 별도로 검사합니다. 삭제 복구·지연 webhook 재생성 방지 포함. CHECKPOINT_9_HOTFIX_2.md 참조.
++
++## 체크포인트 9 긴급 수정 3
++연결 점검 결과에 학생 이름·작업 종류·일지 날짜/과목·저장 확인 상태·최근 오류 안내·다음 할 일을 추가했습니다. 반 담당과 학생 수강 담당도 비교 표시하며 조회 완료와 작업 완료를 구분합니다. 삭제된 초안은 경고에서 제외합니다. CHECKPOINT_9_HOTFIX_3.md 참조.
++
++## 체크포인트 9 긴급 수정 4
++NOTION_EDIT_CONFLICT 일지의 앱·노션 비교 및 유지할 내용 선택 반영을 추가했습니다. 최신 원격 스냅샷 토큰을 확인한 사용자 선택 후에만 기존 요청을 새 수정 차수로 전환합니다. 같은 페이지·리포트 연결 유지, 권한·동시 변경·활성 임대·정합성 검사 포함. CHECKPOINT_9_HOTFIX_4.md 참조.
++
++## 체크포인트 9 긴급 수정 5 — 요청의 1번 구간 완료
++첨부 서식으로 선택 날짜의 수업 일지를 XLSX로 내보냅니다. 일반 선생님은 본인 일지만 내보내며 원장·관리자만 작성자를 선택합니다. 날짜 내림차순·수업 시작 시간 오름차순을 페이지 분할 전에 적용합니다. 이미 가져온 노션 일지를 다시 가져와 기존 요청을 덮어쓰는 경로를 수정했습니다. 테스트 384개·타입 검사·빌드·native Node import 통과. CHECKPOINT_9_HOTFIX_5.md 참조.
++
++사용자 요청대로 전체 ZIP을 먼저 전달하고 멈춥니다. 다음 구간은 중단 학생/반의 점검 오탐 분류 및 담당 연결 진단·담당 범위 목록/수정이며, 이후 일정 장소 선택지를 실제 노션 속성과 맞춥니다. 다음 재개 요청 전에는 나머지 구간을 구현하지 않습니다.
++
++## 체크포인트 9 긴급 수정 6 — 중단 상태·담당 연결 구간 완료
++같은 과목 수강과 반이 모두 중단된 정상 이력의 배정 오탐을 제외합니다. 실제 노션 수강/선생님/반 속성을 읽어 확인했으며 담당 연동을 위한 속성 추가는 필요하지 않습니다. 선생님 담당 범위 목록·편집·현재 노션 담당 불러오기·실패 이유·원래 범위로 재반영을 추가했습니다. 부분 실패의 이전 범위 보존, 활성 임대와 수정 차수, 공동 담당 보존과 중복 계정 연결 차단을 보강했습니다. 최고 관리자도 설정의 선생님 목록에 포함하며 관리자 역할을 유지합니다. 상세는 CHECKPOINT_9_HOTFIX_6.md.
++
++테스트 398개·타입 검사·빌드·native Node import 통과. 이번 사용자 요청의 1번 구간만 구현해 전체 ZIP을 전달하고 멈춥니다. 다음 재개 요청은 2번 일정 장소, 이후 3번 입학 상담 속성/원서 화면/신입생 배정 목록, 4번 학생 카드 모달·탭입니다. 배포 및 운영 데이터 변경 없음.
++
++
++## 최신 재개 지점: checkpoint 9 hotfix 7
++새 요청 1번 완료. 중단 학생의 진행 중 반 연결은 정상 이력이며 반복 점검하지 않는다. 중단 저장 시 유일 학생인 진행 중 반만 일회성 확인하고 반 유지 선택 가능. 세부사항 CHECKPOINT_9_HOTFIX_7.md. 다음 요청은 일정 장소 옵션 구간부터.
++
++## 최신 재개 지점: checkpoint 9 hotfix 8
++일정 장소 구간 완료. 실제 DB_일정표의 장소 옵션 학원/이충/용죽/고덕/온라인/기타 확인. 앱에서 동적으로 읽고 저장·반영 시 최신 옵션 검증. 기존 장소 및 빈 값 보존, 기존 ID 유지 수정·응답 유실 복구 검증. 테스트 410개 및 타입/빌드/서버 import 통과. 자세한 내용 CHECKPOINT_9_HOTFIX_8.md. 다음 사용자 요청은 입학·상담 원서 통합과 지원T 선택 누락부터. 배포·운영 변경 없음.
++
++## 최신 재개 지점: checkpoint 9 hotfix 9
++입학·상담 원서 구간 완료. 상담 토글 제거 및 전체 원서 구성, 현재 수준 표, 상담 전체 구조화 속성 저장. 실제 DB_학생 관리에 날짜/선택/다중선택/숫자/텍스트/체크박스 속성 36개 추가 및 기존 26개 설정 보존 확인. 기존 관리자 접근 문서가 있으나 선생님 연결 ID가 없을 때 지원T 기본 연결을 누락하는 경로 수정. 담당 목록 새로고침/빈 목록 안내 추가. 테스트 416개 및 타입/빌드/네이티브 import 통과. 실제 학생 등록·기존 값 덮어쓰기·배포·Make 변경 없음. 다음 사용자 요청은 학생 카드와 상단 관리 탭 모달 구간. 상세 CHECKPOINT_9_HOTFIX_9.md.
++
++## 최신 재개 지점: checkpoint 9 hotfix 10
++학생 관리 카드 구간 완료. 카드 클릭 단일 모달, 관리자/원장은 정보 수정 기본 + 5개 상단 탭, 일반 선생님은 리포트 기본 + 기존 3개 기능. 전체 수업 폼도 같은 모달 안에서 사용. 기존 편집 닫기 확인·저장/노션 반영·문자 최종 확인·권한 유지. 테스트 421개 및 타입/빌드/native import 통과. 이번 구간 운영 변경 없음. 다음 사용자 요청은 시험기간 대비 단어장/개별 단어장/지난 시험 기간 카드 디자인부터. 본 체크포인트 10은 이후. 상세 CHECKPOINT_9_HOTFIX_10.md.
++
++## 최신 재개 지점: checkpoint 9 hotfix 11
++사용자 정정에 따라 시험기간/개별 단어장 카드, 필터, 지난 시험기간 디자인을 먼저 수정했습니다. CHECKPOINT_9_HOTFIX_11.md 참조. 본 체크포인트 10 A는 보류했으며 사용자 재개 후 진행합니다.
++
++## 최신 재개 지점: checkpoint 10 A
++연결·권한·중복·복구 코드 보강 및 운영 Notion 읽기 점검을 수행했습니다. CHECKPOINT_10_A.md와 CHECKPOINT_10_A_OPERATIONAL_READ.md 참조. 이전 디자인 hotfix 11 포함. 운영 Firebase 매핑/계정 및 실제 UI 확인은 사용자 배포 후 필요합니다. 다음 재개는 Bati 규약 확인·모의 발송 준비(B). 배포·문자 발송·운영 데이터 수정·Make 변경 없음.
++
++## 최신 재개 지점: checkpoint 10 A hotfix 1
++B 전 사용자 hotfix 요청으로 상담/등록 첫 달/추가 과목 상담 구분과 재원생 전환 후 목록 제외, 일지 조회 탭 위치·행 클릭 상세 모달, 일정의 저장+반영과 모달 조기 닫기를 수정했습니다. 테스트 450개 및 타입/서버 import/빌드 통과. 상세 CHECKPOINT_10_A_HOTFIX_1.md. 기존 A와 디자인 전체 포함. 다음 사용자 재개는 B, 운영 변경·배포·발송·Make 변경 없음.
++
++## 최신 재개 지점: checkpoint 10 A hotfix 2
++선생님방 authentication 단계 SERVER_CONFIG_ERROR에 대응해 Firebase Admin 계정 조회 권한 부족 시 서명 검증+공식 본인 계정 조회로 정지/취소 검증을 유지하는 호환 경로를 추가했습니다. 운영 로그 확인, 실제 토큰 없는 읽기 테스트 수행. 456 테스트 및 타입/서버 import/빌드 통과. CHECKPOINT_10_A_HOTFIX_2.md 참조. 직접 배포/운영 데이터 변경 없음. 재배포 후 실제 계정 화면 복구 확인 필요. B는 아직 진행하지 않았습니다.
++
++## 최신 재개 지점: checkpoint 10 A hotfix 3
++운영 공용 일지/일정 DB에 없는 학원 속성으로 조회하던 Notion400 오류 수정. 실제 스키마 조건 변환, 기존 main 원본 범위·권한 재검증 유지. 일지 엑셀 안내11px, 페이지/서버 병렬 조회, 동시 인증 dedup, 관계 없는 과거 일지 조회 제외. 461 테스트 및 타입/서버 import/빌드 통과. CHECKPOINT_10_A_HOTFIX_3.md 참조. 운영 로그/스키마만 읽었고 직접 배포·운영 데이터 변경 없음. B는 아직 미진행.
++
++## 최신 재개 지점: checkpoint 10 A hotfix 4
++반복 WORKSPACE_ERROR에 대해 실제 Firebase SDK로 중복 settings 초기화 오류 재현. 전역 연결 레지스트리와 전용 앱으로 다중 서버 번들 초기화 공유/DB·프로젝트 격리, 안전한 세부 실패 단계·원인 코드 기록 추가. 466 테스트 및 타입/서버 import/빌드 통과. CHECKPOINT_10_A_HOTFIX_4.md 참조. 운영 세 오류의 원래 예외는 로그에 없어 확정 불가, 사용자 재배포 후 확인 필요. 직접 배포/운영 데이터 변경 없음. B 보류.
++
++## 최신 재개 지점: checkpoint 10 A hotfix 5
++cd67247d 오류의 실제 원인은 workspace-account의 FIRESTORE_GRPC_8 자원 제한. 429/명확한 안내, 계정별 30초 요청 중지, 진행 중 계정/소속 읽기 공유, 기본 Notion 원본 JSON 캐시를 서버 메모리로 변경해 불필요한 Firestore 사용량 감소. 471 테스트 및 타입/서버 import/빌드 통과. CHECKPOINT_10_A_HOTFIX_5.md 참조. 사용자가 제시한 총읽기31만/작성14만은 기간·한도 미확인. 이미 소진된 외부 한도는 ZIP으로 해제할 수 없어 실제 할당량/결제 상태 확인 필요. 데이터·결제 변경 없음. B 미진행.
++
++## 최신 재개 지점: checkpoint 10 A hotfix 6
++공통 선생님방 모달과 일정 상세 모달의 스크롤을 안쪽으로 옮기고 외곽20px/안쪽12px 라운딩 및8px 여백으로 오른쪽 모서리 균형 수정. 471 테스트/타입/빌드 통과. CHECKPOINT_10_A_HOTFIX_6.md 참조. 기존 데이터와 hotfix 5 자원 제한 대응 보존. 실제 화면 확인은 사용자 재배포 후 필요. B 미진행.
++
++## 최신 재개 지점: checkpoint 10 A hotfix 7
++평여중2 직전 보강의 과목이 비어 공용 원본 읽기에서 제외되던 수정403 원인 확인. 알려진 main 공용DB/지원T 단독 영어 일정만 호환 보완, 편집 시 최신 Notion 시간19:10–21:00 불러오기, 기존ID와 미완료/삭제 보호. 475 테스트/타입/서버import/빌드 통과. CHECKPOINT_10_A_HOTFIX_7.md 참조. 실제 운영 과목/시간/리포트는 미변경. B 미진행.
++
++## 최신 재개 지점: checkpoint 10 A hotfix 8
++공통 모달 헤더/스크롤 분리와 둥근24px프레임·얇은핑크스크롤 통일. 별도 학습세트팝업13개/시험기간/고정주소/일정상세까지 적용. 475 테스트/타입/빌드 통과, 로컬브라우저 긴40개항목과끝스크롤 확인. CHECKPOINT_10_A_HOTFIX_8.md 참조. 운영 변경 없음, B 보류.
++
++## 최신 재개 지점: checkpoint 10 B 준비
++사용자 수식으로 GET/12개 query 키와 보호자연락처 확인. 실제 Bati 본문 매핑·보안 헤더·접수 응답은 미확인, 로그인된 작업 설정 접근 불가. 미확인 규약 발송 차단, 명시적 응답 규칙/legacy 12키/본문 새 초안 수정/미리보기와 모의 준비. 전체 483·모의 전용 24 테스트/타입/서버 import/빌드 통과. CHECKPOINT_10_B.md 참조. 실제 발송·웹훅 호출·환경변수·Make 변경 없음. 다음 C 준비 가능하지만 문자 대체 완료로 간주하면 안 됨. Bati 작업 설정 제공 시 남은 규약 확인 계속.
++
++## 2026-10-07 B hotfix 1
++최신 누적 전달본: ENG-app-notion-checkpoint-10-B-hotfix-1.zip.
++핵심 세 가지(여러 학생 X, 일회성 알림, 대상별 잠금)와 저장 응답 재사용을 적용했습니다. 검증·배포 확인·남은 범위는 CHECKPOINT_10_B_HOTFIX_1.md를 참조합니다. Bati 규약 미확인과 실제 발송 차단을 유지하며 전달 후 멈춥니다.
++
++## 2026-10-07 입력 화면 디자인 / B hotfix 2
++최신 전달본: ENG-app-notion-checkpoint-10-B-hotfix-2.zip. 이름 칩·sticky 액션바·공용 평가 칩을 적용했으며 데이터/저장/반영 로직은 유지했습니다. 상세 파일·검증·미확인 범위는 CHECKPOINT_10_B_HOTFIX_2.md를 참조합니다. Bati 규약 미확인/발송 차단을 유지하고 전달 후 멈춥니다.
++
++## 최신 입력 화면 보정 (2026-10-07)
++전체 누적본: ENG-app-notion-checkpoint-10-B-hotfix-3.zip. 상세 검증과 한계는 CHECKPOINT_10_B_HOTFIX_3.md 참고. 0·4·5·6·7 순서의 개별 커밋. 테스트 502개 통과. Bati 실제 규약/발송 및 Make 작업은 미완료 상태를 유지한다.
+diff --git a/docs/CHECKPOINT_10_B_HOTFIX_3.md b/docs/CHECKPOINT_10_B_HOTFIX_3.md
+new file mode 100644
+index 0000000..08a728e
+--- /dev/null
++++ b/docs/CHECKPOINT_10_B_HOTFIX_3.md
+@@ -0,0 +1,32 @@
++# 체크포인트 10 B hotfix 3 — 입력 화면 0·4·5·6·7
++
++## 구현
++- 0: 여러 학생 이름 줄을 스크롤 상단에 유지하고, 개별/선택 N명 저장·반영 라벨을 구분했다. 하단 바 배경은 흰색 98%이다.
++- 4: 허용된 학생 목록 안에서 이름·초성 검색한다. 단일 콤보박스는 오늘 그룹, 방향키/Enter/Esc, IME 조합 방어, 최대 280px 드롭다운을 지원한다.
++- 5: 날짜·학생·과목·시작 시간이 같은 이미 불러온 기록으로 오늘 진행률을 계산한다. 사용자 확인에 따라 일치하는 기록이 없으면 미작성이다. 목록은 부분 로드될 수 있으므로 ‘현재 불러온 기록 기준’을 표시한다. 추가 서버 요청은 없다.
++- 6: 수업·자습이 같은 시간 프리셋을 사용한다. 오늘 정규 시간과 +60/+80/+90/+120분을 제공하고 직접 입력도 유지한다. +80은 추천 표시이며 자동 변경하지 않는다. 자정 초과 계산은 거절한다.
++- 7: 개발용 요청 측정만 추가했다. 메모리에 작업 종류·시간·성공 여부만 최대 200건 보관하며 계정 변경 시 비운다. 프로덕션 JS에서는 제거된다. 기존 저장 응답 재사용이 이미 구현돼 있어 추가 최적화나 prefetch는 적용하지 않았다.
++
++## 요청 측정
++실제 request/load/submit 함수 코드를 추출한 모의 실행이다. fetch에 30ms 지연을 주었다. 실제 운영 지연이나 콜드 스타트 측정이 아니다. 요청은 인증 래퍼 호출 수이며 실패 시 인증 재시도 HTTP 횟수와 다를 수 있다.
++
++| 시나리오 | 전 요청/시간 | 후 요청/시간 |
++|---|---:|---:|
++| 첫 로드 | 4 / 109ms | 4 / 73.9ms |
++| 미캐시 커리큘럼 탭 | 2 / 36.9ms | 2 / 37.9ms |
++| 일지 저장 | 1 / 35.4ms | 1 / 32.9ms |
++| 동일 내용 반영 | 1 / 34.4ms | 1 / 35ms |
++| 학생 선택 | 1 / 33.5ms | 1 / 40ms |
++
++횟수는 동일하다. 시간 차이는 모의 실행 변동이며 성능 개선으로 해석하지 않는다. 저장 응답 계약이나 캐시 정책 변경 없이 측정 도구만 전달한다.
++
++## 검증
++- npm run lint(타입 검사), npm test 502/502, npm run build 통과.
++- 4·5·6에 검색/마크업/진행 상태/시간 계산 테스트 추가. 기존 시간 필드 테스트는 프리셋 버튼이 추가된 만큼 전체 disabled 속성 수 대신 input의 disabled 수를 확인하도록 수정했다. 필드의 동작 조건은 동일하다.
++- 로컬 모의 데이터 브라우저에서 검색·키보드 선택·이름 줄 고정·하단 바와 시간 프리셋을 확인했다. 1440/768/390px 전후 스크린샷은 전달 ZIP 옆 input-search-screenshots에 보관한다.
++- API 전체, 인증 요청 유틸, 캐시 모듈은 이전 ZIP과 파일 해시가 같다. 저장·반영·권한·autoTouches·기존 학생 연결·브라우저 저장소 정책을 변경하지 않았다.
++- 운영 로그인·Notion 반영·실제 모바일 키보드/IME·운영 요청 지연은 확인하지 않았다. Bati 실제 규약 확인/발송 및 Make 전환은 이번 범위 밖이다.
++
++## 바뀐 파일
++TeacherWorkspace.tsx, TeacherLessonGrid.tsx, TeacherTodayLessons.tsx, LessonAcademyFields.tsx, teacherWorkspace.css; StudentCombobox.tsx, LessonTimePresets.tsx, WorkspaceRequestMetrics.tsx; koreanSearch.ts, todayLessonProgress.ts, lessonTimePresets.ts, workspaceRequestMetrics.ts, vite-env.d.ts; 관련 테스트·재개 문서·번호별 패치.
++
+diff --git a/src/components/teacher/TeacherWorkspace.tsx b/src/components/teacher/TeacherWorkspace.tsx
+index d2b8a17..5ab4787 100644
+--- a/src/components/teacher/TeacherWorkspace.tsx
++++ b/src/components/teacher/TeacherWorkspace.tsx
+@@ -1,3 +1,5 @@
++import WorkspaceRequestMetrics from './WorkspaceRequestMetrics';
++import {beginWorkspaceRequest,finishWorkspaceRequest,clearWorkspaceRequestMetrics} from '../../lib/workspaceRequestMetrics';
+ import {regularLessonTime} from '../../lib/lessonTimePresets';
+ import StudentCombobox from './StudentCombobox';
+ import type {TodayLesson} from '../../lib/teacherTodayLessons';
+@@ -89,7 +91,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
+     const handleScheduleDirty=useCallback((dirty:boolean)=>{setScheduleDirty(dirty);if(dirty)dismissMessage();},[dismissMessage]);
+     const [bootstrapError,setBootstrapError]=useState('');
+     const [authEpoch,setAuthEpoch]=useState(0),accountRef=useRef(auth.currentUser?.uid);
+-    useEffect(()=>onAuthStateChanged(auth,user=>{if(user?.uid===accountRef.current)return;accountRef.current=user?.uid;operations.reset();dismissMessage();dirtyResources.current.clear();autoVersion.current++;setData(null);setLesson(emptyLesson());setDraftId(null);setRevision(undefined);setScheduleSelection(undefined);setManagementStudentKey('');setBootstrapError('');setAuthEpoch(value=>value+1);}),[operations,dismissMessage]);
++    useEffect(()=>onAuthStateChanged(auth,user=>{if(user?.uid===accountRef.current)return;accountRef.current=user?.uid;if(import.meta.env.DEV)clearWorkspaceRequestMetrics();operations.reset();dismissMessage();dirtyResources.current.clear();autoVersion.current++;setData(null);setLesson(emptyLesson());setDraftId(null);setRevision(undefined);setScheduleSelection(undefined);setManagementStudentKey('');setBootstrapError('');setAuthEpoch(value=>value+1);}),[operations,dismissMessage]);
+     const studentListRef=useRef<HTMLElement>(null);
+     const scheduleEditorRef = useRef<HTMLDivElement>(null), regularRef = useRef<HTMLDivElement>(null);
+     function openSchedule(date: string, record?: any) { if (busy)
+@@ -103,9 +105,11 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
+         const query=new URLSearchParams(reading?{action:action!.slice(5)}:{action:'bootstrap',section:workspaceSection(activeTab.current)});
+         if(reading)for(const [key,value] of Object.entries(body)){if(value!==undefined&&value!==null)query.set(key,String(value));}
+         const endpoint='/api/teacher/workspace'+(!posting?'?'+query.toString():'');
+-        const result = await teacherAuthenticatedRequest<any>(auth, endpoint, posting ? {
++        const metric=import.meta.env.DEV?beginWorkspaceRequest(action||'bootstrap'):undefined;
++        let result:any;try{result = await teacherAuthenticatedRequest<any>(auth, endpoint, posting ? {
+             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }),
+         } : {},requestAccount);
++        }finally{if(import.meta.env.DEV&&metric)finishWorkspaceRequest(metric,Boolean(result?.ok&&result?.data?.ok));}
+         if(requestAccount&&auth.currentUser?.uid!==requestAccount)throw new Error('로그인 계정이 변경되었습니다.');
+         if(!result.ok&&posting&&['publish','publish-schedule','publish-academic'].includes(action||'')&&body.id&&!['UNAUTHORIZED','SESSION_REVOKED','FORBIDDEN','FIRESTORE_RESOURCE_EXHAUSTED'].includes(result.data?.error||'')){
+             try{const kind=action==='publish'?'lesson':action==='publish-schedule'?'schedule':'academic';const saved=await request('read:managed-record',{kind,id:body.id});if(kind!=='academic')setData((old:any)=>old?{...old,[kind==='lesson'?'drafts':'schedules']:upsertWorkspaceRecord(old[kind==='lesson'?'drafts':'schedules'],saved.record)}:old);}catch{/* Preserve the original error, never retry the mutation. */}
+@@ -224,6 +228,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
+    </fieldset>{currentDraft&&<LessonConflictReview key={currentDraft.id+':'+currentDraft.revision} record={currentDraft} request={request} act={act} busy={busy} refresh={refresh}/>} {canRetryPublication(currentDraft) && <div className="mt-3"><p className="text-xs text-slate-500">저장한 요청의 반영 결과를 확인합니다. 이후 화면에서 바꾼 입력은 이 재시도에 포함하지 않습니다.</p><button className="small-button mt-2" disabled={busy} onClick={()=>act(async()=>{try{const result=await request('publish',{id:currentDraft.id});setMessage(result.warning || '저장한 수업일지 반영을 확인했습니다.');}finally{await refresh();}})}>저장 결과 확인·재시도</button></div>}{busy && <p role="status" className="text-xs mt-3">저장·반영 처리 중입니다. 창을 닫아도 처리는 계속됩니다.</p>}<LessonActionBar status={lessonRecordStatus(currentDraft,busy,Boolean(currentDraft&&JSON.stringify(currentDraft.data)!==JSON.stringify(lesson)))} reason={busy?'현재 기록을 처리하고 있어요':autoLoading?'직전 수업을 불러오는 중이에요':!lesson.studentKey?'학생을 선택하면 반영할 수 있어요':!lesson.content?.trim()?'수업 내용을 입력하면 반영할 수 있어요':['publishing','processing','notion_saved'].includes(currentDraft?.stage)?'이미 반영 중인 기록이에요':currentDraft?.stage==='published'&&JSON.stringify(currentDraft.data)===JSON.stringify(lesson)?'이미 반영 완료된 기록이에요':undefined} refresh={<button type="button" disabled={busy} className="lesson-refresh-button" aria-label="새로고침" title="새로고침" onClick={() => act(refresh)}><RefreshCw size={16} aria-hidden="true"/></button>}><button disabled={busy||autoLoading} className="primary-button" onClick={() => act(()=>submitSingleLesson('save'))}>{busy&&<LoaderCircle size={14} className="lesson-button-spinner" aria-hidden="true"/>}이 학생 저장</button><button disabled={busy || autoLoading || !lesson.studentKey || !lesson.content?.trim() || ['publishing', 'processing', 'notion_saved'].includes(currentDraft?.stage) || (currentDraft?.stage==='published' && JSON.stringify(currentDraft?.data)===JSON.stringify(lesson))} className="small-button" onClick={() => act(()=>submitSingleLesson('publish'))}>{busy&&<LoaderCircle size={14} className="lesson-button-spinner" aria-hidden="true"/>}이 학생 반영</button></LessonActionBar></section>;
+     return <div className="teacher-workspace max-w-6xl mx-auto px-4 py-5 md:p-8">
+   <header className="mb-5"><p className="text-xs font-bold text-pastel-pink-500 mb-1">지원T · TEACHER ROOM</p><h1 className="text-2xl font-black text-slate-800">나의 선생님방</h1><p className="text-sm text-slate-500 mt-1">오늘 수업을 기록하고, 다음 수업을 준비해요.</p></header>
++  {import.meta.env.DEV&&<WorkspaceRequestMetrics/>}
+   <nav aria-label="선생님방 메뉴" className="flex flex-wrap gap-2 mb-5">
+    {[['lesson', '수업 일지 작성', ClipboardList], ['academy', '일지 조회', ClipboardList], ['schedule', '시간표·일정', CalendarDays], ['students', '학생 관리', Users], ['academic', '성적 관리', BookOpen], ['curriculum', '커리큘럼', BookOpen], ['word', '학습 세트', BookOpen], ...(data?.admin || data?.principal ? [['settings', '관리자 설정', Settings]] : [])].map(([id, label, Icon]: any) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)} className={`flex items-center gap-2 min-h-[44px] px-3 rounded-xl text-sm font-bold ${tab === id ? 'bg-pastel-pink-500 text-white' : 'bg-white border border-pastel-pink-100 text-slate-600'}`}><Icon size={16}/>{label}</button>)}
+   </nav>
+diff --git a/src/components/teacher/WorkspaceRequestMetrics.tsx b/src/components/teacher/WorkspaceRequestMetrics.tsx
+new file mode 100644
+index 0000000..268b09b
+--- /dev/null
++++ b/src/components/teacher/WorkspaceRequestMetrics.tsx
+@@ -0,0 +1,6 @@
++import {useState} from 'react';
++import {clearWorkspaceRequestMetrics,workspaceRequestMetrics} from '../../lib/workspaceRequestMetrics';
++export default function WorkspaceRequestMetrics(){
++ const [items,setItems]=useState(workspaceRequestMetrics);
++ return <details className="workspace-request-metrics"><summary>개발용 요청 측정</summary><button type="button" className="small-button" onClick={()=>setItems(workspaceRequestMetrics())}>측정 갱신</button><button type="button" className="small-button" onClick={()=>{clearWorkspaceRequestMetrics();setItems([]);}}>측정 초기화</button><p>래퍼 호출 {items.length}회 · 완료 {items.filter(item=>item.elapsed!==undefined).length}회</p><ul>{items.map((item,index)=><li key={index}>{item.action} · {item.elapsed===undefined?'진행 중':`${item.elapsed.toFixed(1)}ms`} · {item.ok===undefined?'대기':item.ok?'응답 완료':'실패'}</li>)}</ul></details>;
++}
+diff --git a/src/components/teacher/teacherWorkspace.css b/src/components/teacher/teacherWorkspace.css
+index 17714d4..a6bfbe5 100644
+--- a/src/components/teacher/teacherWorkspace.css
++++ b/src/components/teacher/teacherWorkspace.css
+@@ -377,3 +377,6 @@
+ .lesson-time-direct-inputs {display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+ .teacher-workspace .lesson-time-row .lesson-time-direct-inputs label {grid-column:auto;grid-row:auto;}
+ @media(max-width:640px){.teacher-workspace .lesson-time-preset,.lesson-time-direct summary{min-height:44px;}}
++.workspace-request-metrics {margin-bottom:12px;font-size:11px;color:var(--lesson-muted);}
++.workspace-request-metrics summary {cursor:pointer;}
++.workspace-request-metrics ul {max-height:180px;overflow:auto;margin-top:6px;}
+diff --git a/src/lib/workspaceRequestMetrics.ts b/src/lib/workspaceRequestMetrics.ts
+new file mode 100644
+index 0000000..115bfde
+--- /dev/null
++++ b/src/lib/workspaceRequestMetrics.ts
+@@ -0,0 +1,10 @@
++/** Development only. No parameters, identities, student data or browser storage. */
++export interface WorkspaceRequestMetric {action:string;started:number;elapsed?:number;ok?:boolean}
++const measurements:WorkspaceRequestMetric[]=[];
++export function beginWorkspaceRequest(action:string){
++ const item:WorkspaceRequestMetric={action,started:performance.now()};
++ measurements.push(item);if(measurements.length>200)measurements.shift();return item;
++}
++export function finishWorkspaceRequest(item:WorkspaceRequestMetric,ok:boolean){item.elapsed=performance.now()-item.started;item.ok=ok;}
++export const workspaceRequestMetrics=()=>measurements.map(item=>({...item}));
++export const clearWorkspaceRequestMetrics=()=>{measurements.length=0;};
+diff --git a/src/vite-env.d.ts b/src/vite-env.d.ts
+new file mode 100644
+index 0000000..11f02fe
+--- /dev/null
++++ b/src/vite-env.d.ts
+@@ -0,0 +1 @@
++/// <reference types="vite/client" />
+diff --git a/tests/workspaceRequestMetrics.test.ts b/tests/workspaceRequestMetrics.test.ts
+new file mode 100644
+index 0000000..1a06ac8
+--- /dev/null
++++ b/tests/workspaceRequestMetrics.test.ts
+@@ -0,0 +1,10 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {beginWorkspaceRequest,finishWorkspaceRequest,workspaceRequestMetrics,clearWorkspaceRequestMetrics} from '../src/lib/workspaceRequestMetrics';
++test('development metrics keep bounded action-only snapshots and clear on account reset',()=>{
++ clearWorkspaceRequestMetrics();const item=beginWorkspaceRequest('save-draft');finishWorkspaceRequest(item,true);
++ const snapshot=workspaceRequestMetrics();assert.equal(snapshot[0].action,'save-draft');assert.equal(snapshot[0].ok,true);assert.ok(snapshot[0].elapsed!>=0);
++ snapshot[0].action='changed';assert.equal(workspaceRequestMetrics()[0].action,'save-draft');
++ assert.deepEqual(Object.keys(snapshot[0]).sort(),['action','elapsed','ok','started']);
++ for(let index=0;index<205;index++)beginWorkspaceRequest('read:bootstrap');assert.equal(workspaceRequestMetrics().length,200);
++ clearWorkspaceRequestMetrics();assert.deepEqual(workspaceRequestMetrics(),[]);
++});
+-- 
+2.56.0.windows.1
+

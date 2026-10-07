@@ -1,0 +1,236 @@
+From 134b2a641ca8f097c5c769c17496d0592131b770 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Wed, 7 Oct 2026 12:02:26 +0900
+Subject: [PATCH 2/5] feat(teacher): search authorized students by name and
+ initials
+
+---
+ src/components/teacher/StudentCombobox.tsx    | 36 +++++++++++++++++++
+ src/components/teacher/TeacherLessonGrid.tsx  |  3 +-
+ .../teacher/TeacherTodayLessons.tsx           | 31 ++++++++++++++++
+ src/components/teacher/TeacherWorkspace.tsx   |  8 +++--
+ src/components/teacher/teacherWorkspace.css   | 15 ++++++++
+ src/lib/koreanSearch.ts                       | 14 ++++++++
+ tests/koreanSearch.test.ts                    | 14 ++++++++
+ tests/studentCombobox.test.tsx                |  8 +++++
+ 8 files changed, 126 insertions(+), 3 deletions(-)
+ create mode 100644 src/components/teacher/StudentCombobox.tsx
+ create mode 100644 src/components/teacher/TeacherTodayLessons.tsx
+ create mode 100644 src/lib/koreanSearch.ts
+ create mode 100644 tests/koreanSearch.test.ts
+ create mode 100644 tests/studentCombobox.test.tsx
+
+diff --git a/src/components/teacher/StudentCombobox.tsx b/src/components/teacher/StudentCombobox.tsx
+new file mode 100644
+index 0000000..69abbe5
+--- /dev/null
++++ b/src/components/teacher/StudentCombobox.tsx
+@@ -0,0 +1,36 @@
++import {useEffect,useId,useRef,useState} from 'react';
++import {ChevronDown,Search} from 'lucide-react';
++import {studentSearchResults} from '../../lib/koreanSearch';
++interface Props {students:readonly {studentKey:string;studentDisplayName:string}[];value:string;onChange:(key:string)=>void;disabled?:boolean;todayKeys?:readonly string[]}
++export default function StudentCombobox({students,value,onChange,disabled=false,todayKeys=[]}:Props){
++ const id=useId(),input=useRef<HTMLInputElement>(null),composing=useRef(false);
++ const selected=students.find(student=>student.studentKey===value)?.studentDisplayName||'';
++ const [query,setQuery]=useState(''),[open,setOpen]=useState(false),[active,setActive]=useState(0),[space,setSpace]=useState({height:280,above:false});
++ const results=studentSearchResults(students,query,todayKeys),current=new Set(todayKeys),index=Math.min(active,Math.max(0,results.length-1));
++ useEffect(()=>{setOpen(false);setQuery('');setActive(0);},[value]);
++ useEffect(()=>{
++  if(!open)return;
++  const fit=()=>{const rect=input.current?.getBoundingClientRect();if(!rect)return;const viewport=window.visualViewport;const top=viewport?.offsetTop||0,bottom=top+(viewport?.height||window.innerHeight);const below=bottom-rect.bottom-12,above=rect.top-top-12;const useAbove=below<140&&above>below;setSpace({above:useAbove,height:Math.max(0,Math.min(280,useAbove?above:below))});};
++  fit();window.addEventListener('resize',fit);window.addEventListener('scroll',fit,true);window.visualViewport?.addEventListener('resize',fit);window.visualViewport?.addEventListener('scroll',fit);
++  return()=>{window.removeEventListener('resize',fit);window.removeEventListener('scroll',fit,true);window.visualViewport?.removeEventListener('resize',fit);window.visualViewport?.removeEventListener('scroll',fit);};
++ },[open]);
++ useEffect(()=>{if(open)document.getElementById(`${id}-option-${index}`)?.scrollIntoView({block:'nearest'});},[open,index,id]);
++ const choose=(key:string)=>{setOpen(false);setQuery('');onChange(key);};
++ return <div className="student-combobox" data-placement={space.above?'above':'below'}>
++  <label htmlFor={`${id}-input`}>학생</label><div className="student-combobox-input"><Search size={15} aria-hidden="true"/><input ref={input} id={`${id}-input`} role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={`${id}-list`} aria-activedescendant={open&&results.length?`${id}-option-${index}`:undefined} autoComplete="off" disabled={disabled} placeholder="학생 이름·초성 검색" value={open?query:selected}
++   onFocus={()=>{setQuery('');setActive(0);setOpen(true);}} onClick={()=>setOpen(true)} onBlur={()=>setOpen(false)}
++   onChange={event=>{setQuery(event.target.value);setActive(0);setOpen(true);}} onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}}
++   onKeyDown={event=>{
++    if(event.nativeEvent.isComposing||composing.current||event.nativeEvent.keyCode===229)return;
++    if(event.key==='Escape'){event.preventDefault();setOpen(false);return;}
++    if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();if(!open){setOpen(true);setActive(0);}else setActive((index+(event.key==='ArrowDown'?1:-1)+Math.max(1,results.length))%Math.max(1,results.length));}
++    if(event.key==='Enter'&&open){event.preventDefault();if(results[index])choose(results[index].studentKey);}
++   }}/><ChevronDown size={15} aria-hidden="true"/></div>
++  {open&&<div className="student-combobox-popup" style={{'--student-list-height':`${space.height}px`} as any}>
++   <div id={`${id}-list`} role="listbox" aria-label="학생 검색 결과">{results.map((student,i)=>{const isToday=current.has(student.studentKey);return <div key={student.studentKey}>
++    {(i===0||isToday!==current.has(results[i-1].studentKey))&&<div role="presentation" className="student-combobox-group">{isToday?'오늘':'학생'}</div>}
++    <div id={`${id}-option-${i}`} role="option" aria-selected={value===student.studentKey} className={`student-combobox-option ${i===index?'is-active':''}`} onMouseDown={event=>event.preventDefault()} onClick={()=>choose(student.studentKey)}>{student.studentDisplayName}{isToday&&<span className="student-today-tag">오늘</span>}</div>
++   </div>;})}</div>{!results.length&&<p role="status" className="student-combobox-empty">일치하는 학생이 없어요</p>}
++  </div>}
++ </div>;
++}
+diff --git a/src/components/teacher/TeacherLessonGrid.tsx b/src/components/teacher/TeacherLessonGrid.tsx
+index eb5c7ba..be40198 100644
+--- a/src/components/teacher/TeacherLessonGrid.tsx
++++ b/src/components/teacher/TeacherLessonGrid.tsx
+@@ -1,3 +1,4 @@
++import {matchesKoreanSearch} from '../../lib/koreanSearch';
+ import ChipGroup from './ChipGroup';
+ import {lessonOptionGroups} from '../../lib/lessonOptions';
+ import LessonActionBar from './LessonActionBar';
+@@ -88,7 +89,7 @@ export default function TeacherLessonGrid({ data, busy, request, refresh, act,ac
+     return <div className="grid lg:grid-cols-[240px_minmax(0,1fr)] gap-4"><aside className="min-w-0"><TeacherTodayLessons data={data} date={date} onDate={setDate} request={request} active={active} disabled={false} onGroup={chooseGroup}/></aside><section className="panel lesson-grid min-w-0"><div className="flex flex-wrap justify-between gap-2 mb-3"><h2 className="!mb-0">여러 학생 함께 작성</h2><span className="text-xs text-slate-500">학생마다 별도 기록으로 저장됩니다. 탭을 바꿔도 입력은 유지됩니다.</span></div><fieldset>
+  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2"><label>과목<select value={subject} onChange={e => { setSubject(e.target.value); setSelection([]); }}>{['영어', '수학', '국어', '과학', '한국사'].map(s => <option key={s}>{s}</option>)}</select></label><label>날짜<input type="date" value={date} onChange={e => setDate(e.target.value)}/></label><label>시작<input type="time" value={start} onChange={e => setStart(e.target.value)}/></label><label>종료<input type="time" value={end} onChange={e => setEnd(e.target.value)}/></label></div>
+  <label className="block mt-3">반 학생 불러오기<OptionalMark/><select value={classId} onChange={e=>{setClassId(e.target.value);const c=data.classes.find((c:any)=>c.id===e.target.value);if(!c)return;setSubject(c.subject);setSelection(c.students);const weekday=new Date(`${date}T12:00:00+09:00`).getUTCDay();const slot=c.slots?.filter((s:any)=>s.status!=='중단'&&s.weekday===weekday).sort((a:any,b:any)=>a.start.localeCompare(b.start))[0];if(slot){setStart(slot.start);setEnd(slot.end);}}}><option value="">반 선택 → 학생 추가에서 확인 후 추가</option>{data.classes.filter((c:any)=>c.status!=='중단'&&(data.admin||c.ownerUid===data.uid||(c.assignedUids||[]).includes(data.uid))).map((c:any)=><option key={c.id} value={c.id}>{c.name} · {c.students.length}명</option>)}</select></label>
+- <details open={!rows.length} className="mt-3 rounded-xl border border-pink-100 p-3"><summary className="text-sm font-bold cursor-pointer">학생 추가 · {selection.length}명 선택</summary><input aria-label="추가할 학생 검색" placeholder="학생 이름 검색" value={search} onChange={e => setSearch(e.target.value)}/><div className="flex flex-wrap gap-x-4 gap-y-1 max-h-40 overflow-auto mt-2">{students.filter((s: any) => s.studentDisplayName.includes(search.trim())).map((s: any) => <label key={s.studentKey} className="flex items-center gap-2 min-h-[36px]"><input type="checkbox" checked={selection.includes(s.studentKey)} onChange={e => setSelection(e.target.checked ? [...selection, s.studentKey] : selection.filter(x => x !== s.studentKey))}/>{s.studentDisplayName}</label>)}</div><button className="small-button mt-2" disabled={!selection.length} onClick={()=>void addStudents()}>선택한 학생 추가</button></details>
++ <details open={!rows.length} className="mt-3 rounded-xl border border-pink-100 p-3"><summary className="text-sm font-bold cursor-pointer">학생 추가 · {selection.length}명 선택</summary><input aria-label="추가할 학생 검색" placeholder="학생 이름 검색" value={search} onChange={e => setSearch(e.target.value)}/><div className="flex flex-wrap gap-x-4 gap-y-1 max-h-40 overflow-auto mt-2">{students.filter((s: any) => matchesKoreanSearch(s.studentDisplayName,search)).map((s: any) => <label key={s.studentKey} className="flex items-center gap-2 min-h-[36px]"><input type="checkbox" checked={selection.includes(s.studentKey)} onChange={e => setSelection(e.target.checked ? [...selection, s.studentKey] : selection.filter(x => x !== s.studentKey))}/>{s.studentDisplayName}</label>)}</div><button className="small-button mt-2" disabled={!selection.length} onClick={()=>void addStudents()}>선택한 학생 추가</button></details>
+  {rows.length>0&&<button className="primary-button mt-3" onClick={()=>setEditorOpen(true)}>작성 팝업 열기 · {rows.length}명</button>}
+  </fieldset><WorkspaceDialog open={editorOpen&&active} title="여러 학생 수업 일지 작성" onClose={()=>setEditorOpen(false)}><fieldset><div className="grid-student-strip" aria-label="작성할 학생">{rows.map((r,i)=>{const name=data.students.find((s:any)=>s.studentKey===r.data.studentKey)?.studentDisplayName||'학생';const status=lessonRecordStatus(r,Boolean(r.pending),Boolean(r.savedData&&JSON.stringify(r.savedData)!==JSON.stringify(r.data)));return <div key={r.id} role="group" aria-label={name} className={`grid-student-chip ${i===activeStudent?'is-active':''}`}><button type="button" aria-pressed={i===activeStudent} aria-label={`${name} · ${status.text}`} className="grid-student-name" onClick={()=>setActiveStudent(i)}><span aria-hidden="true" className={`lesson-status-dot status-${status.tone}`}/><span className="grid-student-name-text" title={name}>{name}</span></button><button type="button" className="grid-student-remove" disabled={Boolean(r.pending||isRecordBusy(r.id))} aria-label={`${name} 제거`} onClick={()=>removeStudent(r.id)}><span><X size={12} aria-hidden="true"/></span></button></div>})}</div><div className="review-pagination"><button disabled={activeStudent===0} onClick={()=>setActiveStudent(i=>i-1)}>이전 학생</button><span>{Math.min(activeStudent+1,rows.length)} / {rows.length}</span><button disabled={activeStudent>=rows.length-1} onClick={()=>setActiveStudent(i=>i+1)}>다음 학생</button></div>
+  <details className="mt-3 rounded-xl border border-pink-100 p-3"><summary className="text-sm font-bold cursor-pointer">공통 수업 내용·특이 사항·과제·시험범위 입력</summary><div className="grid md:grid-cols-3 gap-2 mt-2">{([['content', '수업 내용'], ['specialNote', '특이 사항'], ['assignment', '과제'],['examScope','시험범위']] as const).map(([key, label]) => <label key={key}>{label}{key==='content'?<span className="text-xs text-rose-600 ml-1">(필수)</span>:<OptionalMark/>}<textarea rows={2} value={common[key]} onChange={e => setCommon(c => ({ ...c, [key]: e.target.value }))}/></label>)}</div><button className="small-button mt-2" disabled={!checked.length} onClick={() => { if (rows.some(r => checked.includes(r.id) && (r.data.content || r.data.assignment || r.data.specialNote)) && !window.confirm('선택한 학생의 수업 내용·특이 사항·과제·시험범위를 공통 입력 내용으로 바꿀까요?'))
+diff --git a/src/components/teacher/TeacherTodayLessons.tsx b/src/components/teacher/TeacherTodayLessons.tsx
+new file mode 100644
+index 0000000..59bf366
+--- /dev/null
++++ b/src/components/teacher/TeacherTodayLessons.tsx
+@@ -0,0 +1,31 @@
++import {useEffect,useRef,useState} from 'react';
++import {todayLessons,type TodayLesson} from '../../lib/teacherTodayLessons';
++import {koreanDay} from '../../lib/teacherWeekCalendar';
++export default function TeacherTodayLessons({data,date,onDate,onStudent,onGroup,request,disabled=false,active=true,onEvents}:{
++ data:any;date:string;onDate:(date:string)=>void;
++ onStudent?:(key:string,event:TodayLesson)=>void;onGroup?:(event:TodayLesson)=>void;
++ onEvents?:(events:TodayLesson[],uid:string,date:string)=>void;
++ request:(action?:string,body?:any)=>Promise<any>;disabled?:boolean;active?:boolean;
++}) {
++ const [reload,setReload]=useState(0);
++ const [remote,setRemote]=useState<any>(null),[loading,setLoading]=useState(false),[error,setError]=useState('');
++ const requestRef=useRef(request);requestRef.current=request;
++ useEffect(()=>{
++  if(!active)return;let live=true;setLoading(true);setError('');
++  requestRef.current('read:schedule-records',{day:date}).then(value=>{if(live)setRemote({uid:data.uid,date,...value});}).catch(e=>{if(live)setError(e instanceof Error?e.message:'일정 조회 실패');}).finally(()=>{if(live)setLoading(false);});
++  return()=>{live=false;};
++ },[active,date,data.uid,reload]);
++ const source=remote?.uid===data.uid&&remote.date===date?remote:data;
++ const events=todayLessons(data,date,source.schedules||[],source.reflectedSchedules||[]);
++ useEffect(()=>{onEvents?.(events,data.uid,date);},[source,data,date,onEvents]);
++ return <section className="panel"><div className="flex justify-between gap-2"><h2>{date===koreanDay()?'오늘 수업':'선택한 날짜의 수업'}</h2><button type="button" disabled={disabled} className="small-button" onClick={()=>onDate(koreanDay())}>오늘</button></div>
++ <input aria-label="수업 목록 날짜" disabled={disabled} type="date" value={date} onChange={e=>{if(e.target.value)onDate(e.target.value);}}/>
++ {loading&&<p role="status" className="text-xs text-slate-500 mt-2">예정된 일정을 불러오는 중…</p>}
++ {error&&<p role="alert" className="text-xs text-rose-600 mt-2">{error}<button type="button" className="small-button ml-2" onClick={()=>setReload(value=>value+1)}>다시 불러오기</button></p>}
++ {events.map(event=><div key={event.id} className="mt-3"><p className="font-bold text-sm">{event.title}</p><p className="text-xs text-slate-500">{event.start}–{event.end} · {event.subject} · {event.kind}</p>
++ {onGroup&&<p className="text-xs text-slate-500 mt-1">{event.students.map(key=>data.students?.find((s:any)=>s.studentKey===key)?.studentDisplayName||'학생').join(' · ')}</p>}
++ {onGroup?<button type="button" disabled={disabled} className="small-button mt-2" onClick={()=>onGroup(event)}>학생 {event.students.length}명 불러오기</button>:event.students.map(key=><button type="button" key={key} disabled={disabled} className="w-full text-left text-sm min-h-[44px]" onClick={()=>onStudent?.(key,event)}>{data.students?.find((s:any)=>s.studentKey===key)?.studentDisplayName||'학생'}</button>)}
++ </div>)}
++ {!events.length&&!loading&&<p className="text-xs text-slate-500 mt-2">선택한 날짜에 정규 수업 또는 예정된 일정이 없습니다.</p>}
++ </section>;
++}
+diff --git a/src/components/teacher/TeacherWorkspace.tsx b/src/components/teacher/TeacherWorkspace.tsx
+index 83917d4..76294b7 100644
+--- a/src/components/teacher/TeacherWorkspace.tsx
++++ b/src/components/teacher/TeacherWorkspace.tsx
+@@ -1,3 +1,5 @@
++import StudentCombobox from './StudentCombobox';
++import type {TodayLesson} from '../../lib/teacherTodayLessons';
+ import ChipGroup from './ChipGroup';
+ import {lessonOptionGroups} from '../../lib/lessonOptions';
+ import LessonActionBar from './LessonActionBar';
+@@ -49,6 +51,8 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
+     onAccounts?: () => void;
+ }) {
+     const [lessonDay,setLessonDay]=useState(today);
++    const [todayStudents,setTodayStudents]=useState<{uid:string;date:string;keys:string[]}>({uid:"",date:"",keys:[]});
++    const receiveTodayLessons=useCallback((events:TodayLesson[],uid:string,date:string)=>setTodayStudents({uid,date,keys:[...new Set(events.flatMap(event=>event.students))]}),[]);
+     const autoTouches=useRef(new Set<string>());const autoVersion=useRef(0);const [autoLoading,setAutoLoading]=useState(false);
+     useEffect(()=>()=>{autoVersion.current++;},[]);
+     const [draftPage,setDraftPage]=useState(1),[draftList,setDraftList]=useState<any>({records:[],page:1,pages:1,total:0}),[draftLoading,setDraftLoading]=useState(false);
+@@ -205,7 +209,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
+             return outcome;
+         }finally{await refresh();}
+     }
+-    const lessonEditor = <section className="panel lesson-editor-panel"><h2>수업 일지</h2><div className="mb-3">    <label>학생<select disabled={Boolean(managementStudentKey)&&tab==='students'} value={lesson.studentKey} onChange={e => void selectStudent(e.target.value)}><option value="">학생 선택</option>{students.map((s: any) => <option key={s.studentKey} value={s.studentKey}>{s.studentDisplayName}</option>)}</select></label><button className="small-button mt-2" type="button" onClick={resetLesson}>+ 새 일지</button></div><fieldset className="lesson-editor-fields" disabled={busy}><label>날짜<input type="date" value={lesson.date} onChange={e=>setField('date',e.target.value)}/></label><div className="grid sm:grid-cols-2 gap-3">
++    const lessonEditor = <section className="panel lesson-editor-panel"><h2>수업 일지</h2><div className="mb-3">    <StudentCombobox students={students} value={lesson.studentKey} disabled={Boolean(managementStudentKey)&&tab==='students'} todayKeys={todayStudents.uid===data?.uid&&todayStudents.date===today()?todayStudents.keys:[]} onChange={key=>void selectStudent(key)}/><button className="small-button mt-2" type="button" onClick={resetLesson}>+ 새 일지</button></div><fieldset className="lesson-editor-fields" disabled={busy}><label>날짜<input type="date" value={lesson.date} onChange={e=>setField('date',e.target.value)}/></label><div className="grid sm:grid-cols-2 gap-3">
+ 
+     <label>과목<select value={lesson.subject} onChange={e => void selectStudent(lesson.studentKey,{subject:e.target.value})}>{subjects.map(s => <option key={s}>{s}</option>)}</select></label>
+    </div>
+@@ -227,7 +231,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
+   <div hidden={tab !== 'lesson'}><div className="flex gap-2 mb-3">{([['single', '한 학생 작성'], ['grid', '여러 학생 작성']] as const).map(([value, label]) => <button key={value} aria-pressed={lessonMode === value} className={lessonMode === value ? 'primary-button' : 'small-button'} onClick={() => setLessonMode(value)}>{label}</button>)}</div><div hidden={lessonMode !== 'grid'}><TeacherLessonGrid isRecordBusy={id=>operations.busy('lesson-record:'+id)} active={tab==='lesson'&&lessonMode==='grid'} data={data} busy={busy} request={request} refresh={refresh} act={act}/></div></div>
+   
+   {((tab === 'lesson' && lessonMode === 'single') || lessonDialogOpen) && <div className="grid lg:grid-cols-[240px_1fr] gap-4">
+-   <aside hidden={lessonDialogOpen} className="space-y-3"><TeacherTodayLessons data={data} date={lessonDay} onDate={setLessonDay} active={tab==='lesson'&&lessonMode==='single'&&!lessonDialogOpen} request={request} disabled={false} onStudent={(key,event)=>void selectStudent(key,{date:event.date,subject:event.subject,start:event.start,end:event.end})}/>
++   <aside hidden={lessonDialogOpen} className="space-y-3"><TeacherTodayLessons data={data} date={lessonDay} onDate={setLessonDay} onEvents={receiveTodayLessons} active={tab==='lesson'&&lessonMode==='single'&&!lessonDialogOpen} request={request} disabled={false} onStudent={(key,event)=>void selectStudent(key,{date:event.date,subject:event.subject,start:event.start,end:event.end})}/>
+ 
+     <section className="panel"><h2>저장한 기록</h2><button onClick={() => { resetLesson(); }} className="small-button">+ 새 수업</button>{draftLoading&&<p role="status" className="text-xs text-slate-500">저장한 기록을 불러오는 중…</p>}{savedDrafts.map((d: any) => <button key={d.id} className="block w-full text-left min-h-[44px] border-b border-pastel-pink-50 py-2 text-xs" onClick={() => openDraft(d)}>{students.find((s: any) => s.studentKey === d.data.studentKey)?.studentDisplayName} · {d.data.date}<span className="block text-pastel-pink-500">{stageLabel[d.stage]}</span></button>)}<div className="review-pagination"><button disabled={draftLoading||currentDraftPage===1} onClick={()=>setDraftPage(currentDraftPage-1)}>이전</button><span>{currentDraftPage} / {draftPages}</span><button disabled={draftLoading||currentDraftPage===draftPages} onClick={()=>setDraftPage(currentDraftPage+1)}>다음</button></div></section>
+    </aside>
+diff --git a/src/components/teacher/teacherWorkspace.css b/src/components/teacher/teacherWorkspace.css
+index 7cdb6d9..d59c43f 100644
+--- a/src/components/teacher/teacherWorkspace.css
++++ b/src/components/teacher/teacherWorkspace.css
+@@ -333,3 +333,18 @@
+ .teacher-workspace .lesson-action-bar .small-button:not(:disabled):hover {background:var(--lesson-soft);}
+ 
+ .teacher-workspace .grid-student-strip {position:sticky;top:0;z-index:4;background:var(--lesson-white);padding-top:8px;padding-bottom:8px;}
++.teacher-workspace .student-combobox {position:relative;min-width:0;}
++.student-combobox-input {position:relative;display:flex;align-items:center;}
++.student-combobox-input>svg {position:absolute;left:12px;pointer-events:none;color:var(--lesson-muted);}
++.student-combobox-input>svg:last-child {left:auto;right:12px;}
++.teacher-workspace .student-combobox input {padding-left:36px;padding-right:34px;}
++.student-combobox-popup {position:absolute;top:100%;left:0;right:0;z-index:6;max-height:min(280px,var(--student-list-height,280px));overflow:auto;background:var(--lesson-white);border:1px solid var(--lesson-border);border-radius:var(--lesson-radius);box-shadow:var(--lesson-shadow);padding:4px;overscroll-behavior:contain;}
++.student-combobox[data-placement=above] .student-combobox-popup {top:auto;bottom:calc(100% - 20px);}
++.student-combobox-group {font-size:11px;font-weight:700;color:var(--lesson-muted);padding:6px 10px;}
++.student-combobox-option {display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px;padding:8px 10px;border-radius:8px;font-size:13px;color:var(--lesson-text);cursor:pointer;}
++.student-combobox-option:hover,.student-combobox-option.is-active {background:var(--lesson-soft);color:var(--lesson-accent);}
++.student-combobox-option[aria-selected=true] {font-weight:700;}
++.student-today-tag {font-size:10px;padding:2px 6px;background:var(--lesson-soft);color:var(--lesson-accent);border-radius:var(--lesson-pill);}
++.student-combobox-empty {font-size:12px;padding:12px;color:var(--lesson-muted);}
++.teacher-workspace .student-combobox input:focus-visible {outline:2px solid var(--lesson-focus);outline-offset:2px;}
++@media(max-width:640px){.student-combobox-option{min-height:44px;}.student-combobox-popup{max-height:min(280px,var(--student-list-height,280px));}}
+diff --git a/src/lib/koreanSearch.ts b/src/lib/koreanSearch.ts
+new file mode 100644
+index 0000000..e94bca2
+--- /dev/null
++++ b/src/lib/koreanSearch.ts
+@@ -0,0 +1,14 @@
++const initials = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
++export const normalizeSearch=(value:string)=>value.normalize('NFKC').replace(/\s+/gu,'').toLowerCase();
++export function koreanInitials(value:string){
++ return [...value].map(char=>{const code=char.charCodeAt(0)-0xac00;return code>=0&&code<11172?initials[Math.floor(code/588)]:char;}).join('');
++}
++export function matchesKoreanSearch(name:string,query:string){
++ const term=normalizeSearch(query),normalized=normalizeSearch(name);
++ return !term||normalized.includes(term)||normalizeSearch(koreanInitials(name)).includes(term);
++}
++/** This function only filters/reorders the already authorized input list. */
++export function studentSearchResults<T extends {studentKey:string;studentDisplayName:string}>(students:readonly T[],query:string,todayKeys:readonly string[]=[]){
++ const current=new Set(todayKeys),matched=students.filter(student=>matchesKoreanSearch(student.studentDisplayName,query));
++ return [...matched.filter(student=>current.has(student.studentKey)),...matched.filter(student=>!current.has(student.studentKey))];
++}
+diff --git a/tests/koreanSearch.test.ts b/tests/koreanSearch.test.ts
+new file mode 100644
+index 0000000..e4466c4
+--- /dev/null
++++ b/tests/koreanSearch.test.ts
+@@ -0,0 +1,14 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {matchesKoreanSearch,koreanInitials,normalizeSearch,studentSearchResults} from '../src/lib/koreanSearch';
++test('initials, partial names, spaces, mixed English and empty queries',()=>{
++ assert.equal(koreanInitials('전수현'),'ㅈㅅㅎ');
++ for(const [name,query]of [['전수현','ㅈㅅㅎ'],['전수현','수현'],['전 수현',' ㅈ ㅅ ㅎ '],['Alex 김민수','aLEX'],['Alex 김민수','ㄱㅁㅅ'],['학생','']])assert.equal(matchesKoreanSearch(name,query),true);
++ assert.equal(matchesKoreanSearch('전수현','ㅈㅅㄴ'),false);
++ assert.equal(normalizeSearch(' A B '),'ab');
++});
++test('today grouping cannot add students outside the supplied authorized list',()=>{
++ const permitted=[{studentKey:'a',studentDisplayName:'전수현'},{studentKey:'b',studentDisplayName:'김민수'}];
++ assert.deepEqual(studentSearchResults(permitted,'',['b','forbidden']).map(s=>s.studentKey),['b','a']);
++ assert.deepEqual(studentSearchResults(permitted,'ㅈㅅㅎ',['forbidden']).map(s=>s.studentKey),['a']);
++});
+diff --git a/tests/studentCombobox.test.tsx b/tests/studentCombobox.test.tsx
+new file mode 100644
+index 0000000..d58bc37
+--- /dev/null
++++ b/tests/studentCombobox.test.tsx
+@@ -0,0 +1,8 @@
++import React from 'react';
++import test from 'node:test';import assert from 'node:assert/strict';
++import {renderToStaticMarkup} from 'react-dom/server';
++import StudentCombobox from '../src/components/teacher/StudentCombobox';
++test('combobox exposes its current authorized student, controlled list id and disabled state',()=>{
++ const html=renderToStaticMarkup(<StudentCombobox students={[{studentKey:'a',studentDisplayName:'전수현'}]} value="a" onChange={()=>{}} disabled/>);
++ assert.ok(html.includes('role="combobox"'));assert.ok(html.includes('aria-controls='));assert.ok(html.includes('value="전수현"'));assert.ok(html.includes('disabled=""'));assert.ok(!html.includes('<select'));
++});
+-- 
+2.56.0.windows.1
+

@@ -17,12 +17,13 @@ export function applyPreviousLesson<T extends Record<string,any>>(current:T,seed
  if(current.studentKey!==seed.studentKey||current.subject!==seed.subject||current.date!==seed.date)return current;
  const edited=new Set(touched);const next:any={...current};
  for(const field of previousLessonFields){
+  if(Array.isArray(previous.sessionRecords)&&(field==='round'||field==='selfStudyRound'))continue;
   if(edited.has(field))continue;
   if(field==='round'&&current.classSession==='없음'||field==='selfStudyRound'&&current.selfStudy==='없음')continue;
   if(Object.is(current[field],seed[field]))next[field]=previous[field]??(field==='content'||field==='assignment'||field==='examScope'?'':null);
  }
  // Show the carried study round; retain this session's dates, times and evaluations.
- if(previous.selfStudyRound!==null&&previous.selfStudyRound!==undefined&&!edited.has('selfStudy')&&current.selfStudy===seed.selfStudy&&current.selfStudy==='미확인')next.selfStudy='있음';
+ if(!Array.isArray(previous.sessionRecords)&&previous.selfStudyRound!==null&&previous.selfStudyRound!==undefined&&!edited.has('selfStudy')&&current.selfStudy===seed.selfStudy&&current.selfStudy==='미확인')next.selfStudy='있음';
  return next;
 }
 export function previousLessonValues(previous:any) {
