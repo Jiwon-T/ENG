@@ -1,0 +1,16 @@
+[
+  {
+    "cardHeight": 144.125,
+    "contentHeight": 274.3333435058594,
+    "phase": "before",
+    "scrollClient": 790,
+    "scrollHeight": 790
+  },
+  {
+    "cardHeight": 116.125,
+    "contentHeight": 218.33334350585935,
+    "phase": "after",
+    "scrollClient": 737,
+    "scrollHeight": 737
+  }
+]

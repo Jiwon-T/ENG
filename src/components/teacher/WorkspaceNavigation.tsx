@@ -1,0 +1,18 @@
+import {useEffect,useRef,useState} from 'react';
+import {History} from 'lucide-react';
+import {adjacentWorkspaceTab,visibleWorkspaceNav} from '../../lib/workspaceNavigation';
+import {shortLessonDate} from './DateStepper';
+import type {ReactNode} from 'react';
+import WorkspaceMobileNavigation from './WorkspaceMobileNavigation';
+import {useWorkspaceMobileBars} from '../../lib/useWorkspaceMobileBars';
+export default function WorkspaceNavigation({tab,onTab,admin,principal,date,history}:{tab:string;onTab:(id:string)=>void;admin?:boolean;principal?:boolean;date:string;history:ReactNode}){
+ const items=visibleWorkspaceNav(admin,principal),strip=useRef<HTMLDivElement>(null),bar=useRef<HTMLElement>(null);
+ const [historyOpen,setHistoryOpen]=useState(false),[scrolled,setScrolled]=useState(false);
+ const mobile=useWorkspaceMobileBars(bar);
+ useEffect(()=>{setHistoryOpen(false);},[tab]);
+ useEffect(()=>{if(!historyOpen)return;const close=(event:KeyboardEvent)=>{if(event.key==='Escape'){setHistoryOpen(false);bar.current?.querySelector<HTMLButtonElement>('[aria-label="이번 화면의 작업 내역"]')?.focus();}};const outside=(event:PointerEvent)=>{if(!(event.target instanceof Element)||event.target.closest('.workspace-history-control'))return;setHistoryOpen(false);};window.addEventListener('keydown',close);window.addEventListener('pointerdown',outside);return()=>{window.removeEventListener('keydown',close);window.removeEventListener('pointerdown',outside);};},[historyOpen]);
+ useEffect(()=>{strip.current?.querySelector<HTMLElement>('[aria-selected=true]')?.scrollIntoView({block:'nearest',inline:'nearest'});},[tab]);
+ useEffect(()=>{const update=()=>setScrolled(window.scrollY>8);update();window.addEventListener('scroll',update,{passive:true});return()=>window.removeEventListener('scroll',update);},[]);
+ useEffect(()=>{const header=document.querySelector<HTMLElement>('nav.sticky.no-print,header.sticky,header.fixed');if(!header)return;const update=()=>bar.current?.style.setProperty('--workspace-appbar-offset',`${header.getBoundingClientRect().height}px`);update();const observer=new ResizeObserver(update);observer.observe(header);return()=>observer.disconnect();},[]);
+ return <><nav ref={bar} aria-label="선생님방 메뉴" className={`workspace-navigation${scrolled?' is-scrolled':''}`}><div className="workspace-nav-title"><h1>나의 선생님방</h1><span>{shortLessonDate(date)}</span></div><div className="workspace-tab-fades"><div role="tablist" aria-label="선생님방 메뉴" className="workspace-tab-strip" ref={strip}>{items.map((item,index)=>{const Icon=item.icon;return <button type="button" role="tab" key={item.id} aria-selected={tab===item.id} tabIndex={tab===item.id?0:-1} data-group-start={index>0&&items[index-1].group!==item.group||undefined} onClick={()=>onTab(item.id)} onKeyDown={event=>{const next=adjacentWorkspaceTab(items,item.id,event.key);if(next){event.preventDefault();onTab(next);strip.current?.querySelector<HTMLButtonElement>(`[data-tab="${next}"]`)?.focus();}}} data-tab={item.id}><Icon size={16} aria-hidden="true"/>{item.label}</button>;})}</div></div><div className="workspace-history-control"><button type="button" aria-label="이번 화면의 작업 내역" aria-expanded={historyOpen} onClick={()=>setHistoryOpen(open=>!open)}><History size={16}/></button>{historyOpen&&<div className="workspace-history-popover" role="dialog" aria-label="이번 화면의 작업 내역"><div className="workspace-history-heading"><strong>이번 화면의 작업 내역</strong><button type="button" aria-label="작업 내역 닫기" onClick={()=>setHistoryOpen(false)}>×</button></div>{history}</div>}</div></nav>{mobile.mobile&&<WorkspaceMobileNavigation tab={tab} onTab={onTab} admin={admin} principal={principal} hidden={mobile.hidden}/>}</>;
+}

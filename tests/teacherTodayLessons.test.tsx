@@ -22,12 +22,12 @@ test('reflected schedule copies are deduplicated against source records, includi
  assert.equal(todayLessons({...data,classes:[]},day,[schedule('makeup','취소')],reflected).length,0);
  assert.equal(todayLessons({...data,classes:[]},day,[],reflected)[0].students.length,2);
 });
-test('automatic fill copies exact decimal rounds, content and assignment and preserves selected schedule times and clean evaluations',()=>{
+test('automatic fill copies previous evaluations and scores while preserving selected schedule times',()=>{
  const seed=newGridLesson(a,'영어',day,'15:00','16:00');
  const previous={round:1.7,selfStudyRound:0.5,content:'직전 수업',assignment:'직전 과제',start:'09:00',attendance:'결석',correct:30,total:30};
  const next=applyPreviousLesson(seed,seed,previous);
  assert.equal(next.round,1.7);assert.equal(next.selfStudyRound,0.5);assert.equal(next.selfStudy,'있음');assert.equal(next.content,'직전 수업');assert.equal(next.assignment,'직전 과제');
- assert.equal(next.start,'15:00');assert.equal(next.end,'16:00');assert.equal(next.attendance,'미확인');assert.equal(next.correct,null);
+ assert.equal(next.start,'15:00');assert.equal(next.end,'16:00');assert.equal(next.attendance,'결석');assert.equal(next.correct,30);assert.equal(next.total,30);
  assert.equal(previousLessonValues({round:0,selfStudyRound:0}).round,0);
 });
 test('late autofill respects manual edits, changed students/subjects/dates and explicitly absent sessions',()=>{

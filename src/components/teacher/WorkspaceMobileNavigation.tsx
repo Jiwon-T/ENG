@@ -1,0 +1,9 @@
+import {useState} from 'react';
+import {MoreHorizontal} from 'lucide-react';
+import {adjacentWorkspaceTab,visibleWorkspaceNav} from '../../lib/workspaceNavigation';
+import WorkspaceDialog from './WorkspaceDialog';
+export default function WorkspaceMobileNavigation({tab,onTab,admin,principal,hidden}:{tab:string;onTab:(id:string)=>void;admin?:boolean;principal?:boolean;hidden:boolean}){
+ const [more,setMore]=useState(false),items=visibleWorkspaceNav(admin,principal);
+ const primary=items.filter(item=>item.mobilePrimary).sort((a,b)=>a.mobileOrder-b.mobileOrder),secondary=items.filter(item=>!item.mobilePrimary);
+ return <><div className="workspace-mobile-tabs" role="tablist" aria-label="모바일 선생님방 메뉴" hidden={hidden}>{primary.map(item=>{const Icon=item.icon;return <button key={item.id} type="button" role="tab" data-mobile-tab={item.id} tabIndex={tab===item.id||!primary.some(item=>item.id===tab)&&item.id===primary[0].id?0:-1} aria-selected={tab===item.id} onClick={()=>onTab(item.id)} onKeyDown={event=>{const next=adjacentWorkspaceTab(primary,item.id,event.key);if(next){event.preventDefault();onTab(next);event.currentTarget.parentElement?.querySelector(`[data-mobile-tab="${next}"]`)?.focus();}}}><Icon size={20} aria-hidden="true"/><span>{item.id==='lesson'?'일지 작성':item.label}</span></button>;})}<button type="button" aria-label="더보기" aria-expanded={more} className={secondary.some(item=>item.id===tab)?'is-active':''} onClick={()=>setMore(true)}><MoreHorizontal size={20}/><span>더보기</span></button></div><WorkspaceDialog open={more} title="더보기" onClose={()=>setMore(false)}><div className="workspace-more-items">{secondary.map(item=>{const Icon=item.icon;return <button key={item.id} type="button" aria-pressed={tab===item.id} onClick={()=>{onTab(item.id);setMore(false);}}><Icon size={20}/>{item.label}</button>;})}</div></WorkspaceDialog></>;
+}

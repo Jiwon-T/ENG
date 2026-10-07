@@ -1,0 +1,17 @@
+{
+  "protectedFunctions": [
+    "request",
+    "workspaceSection",
+    "mergeData",
+    "loadDrafts",
+    "refresh",
+    "act",
+    "selectStudent",
+    "resetLesson",
+    "setField",
+    "openDraft",
+    "openSchedule"
+  ],
+  "unchangedSourceFiles": 87,
+  "noNewDataRequest": true
+}

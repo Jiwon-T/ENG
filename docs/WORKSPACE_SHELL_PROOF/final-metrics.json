@@ -1,0 +1,62 @@
+[
+  {
+    "cardHeight": 144.125,
+    "phase": "before",
+    "scrollY": 0,
+    "width": 1440,
+    "y": 192.33334350585935
+  },
+  {
+    "cardHeight": 144.125,
+    "phase": "before",
+    "scrollY": 0,
+    "width": 1024,
+    "y": 1041.197998046875
+  },
+  {
+    "cardHeight": 166.125,
+    "phase": "before",
+    "scrollY": 0,
+    "width": 768,
+    "y": 1041.197998046875
+  },
+  {
+    "cardHeight": 238.9166717529297,
+    "phase": "before",
+    "scrollY": 0,
+    "width": 390,
+    "y": 1127.197998046875
+  },
+  {
+    "cardHeight": 116.125,
+    "height": 900,
+    "phase": "after",
+    "scrollY": 0,
+    "width": 1440,
+    "y": 68
+  },
+  {
+    "cardHeight": 138.125,
+    "height": 900,
+    "phase": "after",
+    "scrollY": 0,
+    "width": 1024,
+    "y": 68
+  },
+  {
+    "cardHeight": 138.125,
+    "height": 900,
+    "phase": "after",
+    "scrollY": 0,
+    "width": 768,
+    "y": 919.6666870117188
+  },
+  {
+    "cardHeight": 210.9166717529297,
+    "height": 900,
+    "phase": "after",
+    "scrollY": 0,
+    "width": 390,
+    "y": 959
+  }
+]

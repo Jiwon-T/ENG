@@ -151,3 +151,9 @@ ENG-app-notion-checkpoint-10-B-hotfix-9.zip. 점수 접기 취소, 두 점수 �
 
 ## 2026-10-07 B hotfix 10
 최신 누적본: ENG-app-notion-checkpoint-10-B-hotfix-10.zip. 월별 수업/자습 회차와 저장 기록 재선택 복구를 수정했다. 상세 및 운영 확인 한계는 CHECKPOINT_10_B_HOTFIX_10.md 참고. Bati 실제 발송 규약 미확인과 이후 전환 단계는 기존 상태를 유지한다.
+
+## 2026-10-07 B hotfix 11
+최신 누적본: ENG-app-notion-checkpoint-10-B-hotfix-11.zip. 완료 수업 저장 기록 열기와 과거 출결·평가·일반/내신 점수 자동 입력을 보정했다. 검증 535개 및 상세 범위는 CHECKPOINT_10_B_HOTFIX_11.md 참고. 실제 운영 확인과 Bati/Make 후속 단계는 기존 상태를 유지한다.
+
+## 2026-10-07 B hotfix 12
+최신 누적본: ENG-app-notion-checkpoint-10-B-hotfix-12.zip. 폼 바깥 구조·상태색·오늘 수업·모바일 탭바를 개선하고 단일/여러 학생의 빈 시간 카드 여백을 함께 보정했다. 상세 검증, 미확인 범위, 전후 32장과 밀도 측정은 CHECKPOINT_10_B_HOTFIX_12.md 및 WORKSPACE_SHELL_PROOF/index.html 참고. 운영 배포와 실제 키보드 확인은 별도 필요하며 Bati/Make 후속 작업은 기존 상태다.

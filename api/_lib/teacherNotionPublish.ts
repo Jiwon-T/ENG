@@ -5,7 +5,7 @@ import { notionPropertiesMatch, writeTeacherNotionRecord,updatePublicationRevisi
 import { projectSchedule, schedulePayloadFromPage } from './scheduleProjection.js';
 import { lessonSpecialNoteProperties } from './lessonSpecialNote.js';
 import { lessonSource } from './teacherNotionWorkspace.js';
-import { teacherTestProperties } from './teacherTestProperties.js';
+import { teacherTestProperties,teacherTestValues } from './teacherTestProperties.js';
 import { extractAssignmentFromFeedback } from './assignmentExtractor.js';
 import { lookupStudentByPageId } from './notion.js';
 import type { Firestore } from 'firebase-admin/firestore';
@@ -108,7 +108,8 @@ export async function previousNotionLesson(studentKey: string, options?: {
         const slot=(p['타임 슬롯']||p['수업 날짜'])?.date;
         return {id:page.id,archived:page.archived,updatedAt:Date.parse(page.last_edited_time)||0,data:{studentKey,subject:options.subject,date:slot?.start?.slice(0,10)||'',classSession:range?'있음':'없음',start:range?.[1]?.padStart(5,'0')||'',end:range?.[2]?.padStart(5,'0')||'',round:p['회차']?.number??null,attendance:p['출석']?.select?.name||'미확인',selfStudy:p['자습']?.checkbox||study?'있음':'없음',selfStudyStart:study?.[1]?.padStart(5,'0')||'',selfStudyEnd:study?.[2]?.padStart(5,'0')||'',selfStudyRound:(p['자습회차']||p['자습 회차'])?.number??null}};
     }):undefined;
-    return { round: properties?.['회차']?.number ?? null, selfStudyRound: properties?.['자습회차']?.number ?? properties?.['자습 회차']?.number ?? null, content: last ? feedback.slice(0, last.index).trimEnd() : feedback, nextPlan: properties ? text(properties['메모']) : '', examScope:properties?text(properties['시험범위']):'', assignment: extractAssignmentFromFeedback(feedback) || '',...(sessionRecords?{sessionRecords}:{}) };
+    const selection=(name:string)=>properties?.[name]?.status?.name||properties?.[name]?.select?.name||'미확인';
+    return { round: properties?.['회차']?.number ?? null, selfStudyRound: properties?.['자습회차']?.number ?? properties?.['자습 회차']?.number ?? null, content: last ? feedback.slice(0, last.index).trimEnd() : feedback, nextPlan: properties ? text(properties['메모']) : '', examScope:properties?text(properties['시험범위']):'', assignment: extractAssignmentFromFeedback(feedback) || '',attendance:selection('출석'),attitude:selection('태도'),homework:selection('숙제'),test:selection('테스트'),...teacherTestValues(properties),...(sessionRecords?{sessionRecords}:{}) };
 }
 export async function publishTeacherSchedule(db: Firestore, id: string, record: any) {
     const profile = (await db.collection('teacherWorkspaceAccess').doc(record.ownerUid).get()).data();

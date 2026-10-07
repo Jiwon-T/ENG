@@ -12,22 +12,27 @@ export function todayLessons(data:any,date:string,schedules:any[]=[],reflected:a
  const copies=reflected.filter(r=>r.date===date&&r.status==='예정'&&!sources.has((r.notionPageId||'').replace(/-/g,''))).map(r=>({id:`reflected:${r.id}`,title:r.title||'예정 수업',kind:r.kind||'일정',subject:r.subject,date,start:r.start,end:r.end,students:visible(r.students,r.subject)}));
  return [...regular,...events,...copies].filter(r=>r.students.length&&r.start&&r.end).sort((a,b)=>a.start.localeCompare(b.start)||a.title.localeCompare(b.title));
 }
-export const previousLessonFields=['round','selfStudyRound','content','assignment','examScope'] as const;
+export const previousLessonAssessmentFields=['attendance','attitude','homework','test','correct','total','wrong','examCorrect','examTotal','examWrong'] as const;
+export const previousLessonFields=['round','selfStudyRound','content','assignment','examScope',...previousLessonAssessmentFields] as const;
 export function applyPreviousLesson<T extends Record<string,any>>(current:T,seed:T,previous:any,touched:Iterable<string>=[]):T {
  if(current.studentKey!==seed.studentKey||current.subject!==seed.subject||current.date!==seed.date)return current;
  const edited=new Set(touched);const next:any={...current};
  for(const field of previousLessonFields){
   if(Array.isArray(previous.sessionRecords)&&(field==='round'||field==='selfStudyRound'))continue;
   if(edited.has(field))continue;
+  if(previousLessonAssessmentFields.includes(field as any)&&previous[field]===undefined)continue;
+  const scoreGroup=['correct','total','wrong'].includes(field)?['correct','total','wrong']:['examCorrect','examTotal','examWrong'].includes(field)?['examCorrect','examTotal','examWrong']:[];
+  if(scoreGroup.some(key=>edited.has(key)||!Object.is(current[key],seed[key])))continue;
   if(field==='round'&&current.classSession==='없음'||field==='selfStudyRound'&&current.selfStudy==='없음')continue;
   if(Object.is(current[field],seed[field]))next[field]=previous[field]??(field==='content'||field==='assignment'||field==='examScope'?'':null);
  }
- // Show the carried study round; retain this session's dates, times and evaluations.
+ // Retain this session's dates and times; never overwrite manually edited fields.
  if(!Array.isArray(previous.sessionRecords)&&previous.selfStudyRound!==null&&previous.selfStudyRound!==undefined&&!edited.has('selfStudy')&&current.selfStudy===seed.selfStudy&&current.selfStudy==='미확인')next.selfStudy='있음';
  return next;
 }
 export function previousLessonValues(previous:any) {
- return {round:previous.round??null,selfStudyRound:previous.selfStudyRound??null,content:previous.content||'',assignment:previous.assignment||'',examScope:previous.examScope||''};
+ const assessment:Partial<Record<(typeof previousLessonAssessmentFields)[number],any>>=Object.fromEntries(previousLessonAssessmentFields.filter(key=>previous[key]!==undefined).map(key=>[key,previous[key]]));
+ return {round:previous.round??null,selfStudyRound:previous.selfStudyRound??null,content:previous.content||'',assignment:previous.assignment||'',examScope:previous.examScope||'',...assessment};
 }
 export function latestPreviousLesson(records:any[],studentKey:string,subject:string,date?:string) {
  return records.filter(r=>!r.archived&&!r.deleteRequested&&r.data?.studentKey===studentKey&&r.data.subject===subject&&(!date||r.data.date<=date))

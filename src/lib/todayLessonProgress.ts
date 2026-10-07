@@ -12,3 +12,11 @@ export function todayLessonProgress(events:readonly TodayLesson[],records:readon
  return {total:states.length,published:states.filter(state=>state==='반영 완료').length,saved:states.filter(state=>state==='저장됨').length,empty:states.filter(state=>state==='미작성').length};
 }
 export const todayStateTone=(state:TodayLessonState)=>state==='반영 완료'?'green':state==='저장됨'?'pink':'grey';
+export function todayProgressRatios(progress:{total:number;published:number;saved:number;empty:number}){
+ const part=(count:number)=>progress.total?count/progress.total*100:0;
+ return {done:part(progress.published),saved:part(progress.saved),unwritten:part(progress.empty)};
+}
+export function nextUnwrittenLesson(events:readonly TodayLesson[],records:readonly any[]){
+ for(const event of [...events].sort((a,b)=>a.start.localeCompare(b.start)))for(const key of event.students)if(todayLessonState(event,key,records)==='미작성')return {event,key};
+ return undefined;
+}
