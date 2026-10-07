@@ -813,3 +813,6 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 .teacher-workspace .workspace-dialog:has(.lesson-review-summary)>.workspace-dialog-header{position:relative;top:0;flex:none;padding:12px 16px;background:var(--workspace-surface);}
 .teacher-workspace .workspace-dialog:has(.lesson-review-summary)>.workspace-dialog-scroll{flex:1 1 auto;min-height:0;max-height:none;overflow:auto;margin:0 8px 8px;padding:4px 8px 8px;}
 .lesson-review-actions{display:flex;gap:8px;position:sticky;top:0;background:var(--workspace-surface);padding:8px 0;border-bottom:1px solid var(--workspace-neutral-border);z-index:2;}
+
+.teacher-workspace .lesson-delete-button{display:inline-flex;align-items:center;justify-content:center;gap:4px;color:var(--workspace-danger-fg);border-color:var(--workspace-danger-border);background:var(--workspace-danger-bg);}
+

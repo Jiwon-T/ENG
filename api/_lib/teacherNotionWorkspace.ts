@@ -131,8 +131,9 @@ export async function syncManagedRecord(db:any,collection:string,id:string){
  const ref=db.collection(collection).doc(id),record=(await ref.get()).data();if(!record)throw new Error('FORBIDDEN');if(record.notionPageId&&!record.notionEditedAt)throw new Error('NOTION_EDIT_CONFLICT');
  const source=await currentSource(db,record.ownerUid,record.subject);if(source.shared&&!source.teacherPageId)throw new Error('TEACHER_NOTION_LINK_REQUIRED');const isClass=collection==='teacherClasses';const database=isClass?source.classDatabaseId:source.curriculumDatabaseId;
 
+ let phase=isClass?'반 상태 반영':'교재·계획 반영';
  // Lock local revision while making remote writes. No untrusted page ID is accepted here.
- await db.runTransaction(async(t:any)=>{const fresh=(await t.get(ref)).data();if(fresh.revision!==record.revision||fresh.notionSyncStage==='syncing'&&Date.now()-(fresh.notionSyncStartedAt||0)<900000)throw new Error('DRAFT_CONFLICT');t.update(ref,{notionSyncStage:'syncing',notionSyncStartedAt:Date.now()});});
+ await db.runTransaction(async(t:any)=>{const fresh=(await t.get(ref)).data();if(fresh.revision!==record.revision||fresh.notionSyncStage==='syncing'&&Date.now()-(fresh.notionSyncStartedAt||0)<900000)throw new Error('DRAFT_CONFLICT');t.update(ref,{notionSyncStage:'syncing',notionSyncStartedAt:Date.now(),notionSyncDiagnostic:null});});
  try{
  if(isClass&&record.notionStatusOnly&&!record.deleteRequested){
   const parent=await notion(`pages/${record.notionPageId}`);
@@ -153,6 +154,7 @@ export async function syncManagedRecord(db:any,collection:string,id:string){
   const final=await notion(`pages/${record.notionPageId}`);await ref.update({notionEditedAt:final.last_edited_time,notionSyncStage:'synced',notionStatusOnly:false,notionStatusSlotIds:[]});return;
  }
  if(isClass){record.slots=(record.slots||[]).map((s:any)=>({...s,id:s.id||randomUUID()}));record.books=(record.books||[]).map((b:any)=>({...b,id:b.id||randomUUID()}));await ref.update({slots:record.slots,books:record.books});}
+ phase=isClass?'반 DB 준비':'교재 DB 준비';
  await prepare(database,{...(isClass?{}:{'수업 계획':{rich_text:{}},'공통 계획':{checkbox:{}}}),...(source.shared?{'작성자 선생님':{relation:{database_id:TEACHERS}}}:{})});
  if(record.deleteRequested){if(record.notionPageId){const page=await notion(`pages/${record.notionPageId}`);if(uuid(page.parent.database_id)!==uuid(database))throw new Error('NOTION_SOURCE_MISMATCH');await notion(`pages/${record.notionPageId}`,'PATCH',{archived:true});}if(isClass){const times=await allPages(source.timetableDatabaseId,{property:'반',relation:{contains:record.notionPageId||id}});for(const page of times){const linked=await ids(page,'반');const remaining=linked.filter(key=>key!==uuid(record.notionPageId||id));await notion(`pages/${page.id}`,'PATCH',remaining.length?{properties:{'반':relation(remaining)}}:{archived:true});}}await ref.update({archived:true,notionSyncStage:'synced'});return;}
  if(!isClass){let classPage:string|undefined;if(record.classId){const linked=(await db.collection('teacherClasses').doc(record.classId).get()).data();classPage=linked?.notionPageId||record.classId;const page=await notion(`pages/${classPage}`);if(uuid(page.parent.database_id)!==uuid(source.classDatabaseId))throw new Error('NOTION_SOURCE_MISMATCH');}
@@ -167,12 +169,15 @@ export async function syncManagedRecord(db:any,collection:string,id:string){
   }
  }
  const page=await upsert(database,id,record.notionPageId,props,record.notionEditedAt);await ref.update({notionPageId:uuid(page.id),notionEditedAt:page.last_edited_time,notionSyncStage:'synced',previousClassPageId:classPage||null});return;}
+ phase='반 정보 반영';
  const page=await upsert(database,id,record.notionPageId,{...(source.shared?{'작성자 선생님':relation([source.teacherPageId]),'담당 선생님':relation(record.notionPageId? [...new Set([...(await ids(await notion(`pages/${record.notionPageId}`),'담당 선생님')),source.teacherPageId])] : [source.teacherPageId]),'과목':{select:{name:record.subject}},'학원':rich(source.academyId)}:{}),'상태':{status:{name:record.status||'진행 중'}},'수업명':title(record.name),'대상 학생':relation(record.students),'요일':{multi_select:[...new Set(record.slots.map((s:any)=>days[s.weekday]))].map(name=>({name}))}},record.notionEditedAt);
  // Persist parent identity before child writes so retry cannot duplicate the class.
  await ref.update({notionPageId:uuid(page.id),notionEditedAt:page.last_edited_time});
+ phase='시간표·교재 DB 준비';
  await prepare(source.timetableDatabaseId,{});await prepare(source.curriculumDatabaseId,{'공통 계획':{checkbox:{}}});
  const existingTimes=await allPages(source.timetableDatabaseId,{property:'반',relation:{contains:page.id}});
  const savedSlots:any[]=[];
+ phase='정규 시간표 반영';
  for(const [index,slot] of record.slots.entries()){
   const old=slot.id?existingTimes.find(t=>uuid(t.id)===uuid(slot.id)):null;
   const links=old?await ids(old,'반'):[];
@@ -182,6 +187,7 @@ export async function syncManagedRecord(db:any,collection:string,id:string){
   await ref.update({slots:[...savedSlots,...record.slots.slice(index+1)]});
  }
  for(const old of existingTimes)if(!savedSlots.some(s=>s.id===uuid(old.id))){const remain=(await ids(old,'반')).filter(key=>key!==uuid(page.id));await notion(`pages/${old.id}`,'PATCH',remain.length?{properties:{'반':relation(remain)}}:{archived:true});}
+ phase='교재 반영';
  const oldClass=await notion(`pages/${page.id}`),oldBookIds=await ids(oldClass,'커리큘럼');const savedBooks:any[]=[];
  for(const [index,book] of (record.books||[]).entries()){
   if(book.linkedPlanId){
@@ -209,10 +215,11 @@ export async function syncManagedRecord(db:any,collection:string,id:string){
   await notion(`pages/${page.id}`,'PATCH',{properties:{'커리큘럼':relation([...new Set([...oldBookIds,...savedBooks.map(b=>b.id)])])}});await ref.update({books:[...savedBooks,...record.books.slice(index+1)]});
  }
  // Removing a book detaches the class relation, preserving its historical page and other classes.
+ phase='교재 연결 정리';
  for(const removed of oldBookIds.filter(id=>!savedBooks.some(b=>b.id===id))){const book=await notion(`pages/${removed}`);const links=(await ids(book,'반 관리')).filter(key=>key!==uuid(page.id));await notion(`pages/${removed}`,'PATCH',{properties:{'반 관리':relation(links)}});}
  await notion(`pages/${page.id}`,'PATCH',{properties:{'커리큘럼':relation(savedBooks.map(b=>b.id))}});
  const final=await notion(`pages/${page.id}`);await ref.update({slots:savedSlots,books:savedBooks,notionEditedAt:final.last_edited_time,notionSyncStage:'synced'});
- }catch(e:any){if(record.notionPageId&&e.message!=='NOTION_EDIT_CONFLICT'){const latest=await notion(`pages/${record.notionPageId}`).catch(()=>null);if(latest)await ref.update({notionEditedAt:latest.last_edited_time});}await ref.update({notionSyncStage:'failed',notionSyncError:e.message});throw e;}
+ }catch(e:any){if(record.notionPageId&&e.message!=='NOTION_EDIT_CONFLICT'){const latest=await notion(`pages/${record.notionPageId}`).catch(()=>null);if(latest)await ref.update({notionEditedAt:latest.last_edited_time});}await ref.update({notionSyncStage:'failed',notionSyncError:e.message,notionSyncDiagnostic:{phase,...(e.notionDiagnostic||{})}});throw e;}
 }
 export async function readSourceEnrollments(db?:any,actor?:any,force=false){
  const keys=[...new Set((actor?.scopes||[]).map((s:any)=>s.studentKey))];

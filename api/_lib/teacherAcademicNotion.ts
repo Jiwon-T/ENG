@@ -1,3 +1,4 @@
+import {notionFailureDiagnostic} from './notionFailure.js';
 import {writeTeacherNotionRecord,notionPropertiesMatch,updatePublicationRevision} from './teacherNotionWrite.js';
 import {readMirroredPages} from './teacherNotionMirror.js';
 import {ids} from './teacherNotionWorkspace.js';
@@ -15,7 +16,11 @@ export async function gradeNotion(path:string, method='GET', body?:unknown) {
   if(response.status!==429||attempt===3)break;
   const delay=Math.min(10000,Math.max(1000,Number(response.headers?.get('retry-after')||1)*1000));await new Promise(resolve=>setTimeout(resolve,delay));
  }
- if(!response!.ok) throw new Error(`NOTION_${response!.status}`);
+ if(!response!.ok){
+  const detail=await response!.json().catch(()=>null);
+  const error=Object.assign(new Error(`NOTION_${response!.status}`),{notionDiagnostic:notionFailureDiagnostic(path,method,body,detail)});
+  throw error;
+ }
  return response.json();
 }
 const rich=(text:string)=>({rich_text:text.match(/[\s\S]{1,1900}/g)?.map(content=>({text:{content}}))||[]});
