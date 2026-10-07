@@ -148,3 +148,6 @@ ENG-app-notion-checkpoint-10-B-hotfix-8.zip. 넓은 컨테이너의 시간/내�
 
 ## 점수 상시 표시 및 툴바 보정 (2026-10-07)
 ENG-app-notion-checkpoint-10-B-hotfix-9.zip. 점수 접기 취소, 두 점수 상시 입력, 헤더 여백 축소/공통 입력 스타일 통일/일괄 상 축소. 테스트527개 통과. 최신 docs/hotfix-9-proof, 상세 CHECKPOINT_10_B_HOTFIX_9.md.
+
+## 2026-10-07 B hotfix 10
+최신 누적본: ENG-app-notion-checkpoint-10-B-hotfix-10.zip. 월별 수업/자습 회차와 저장 기록 재선택 복구를 수정했다. 상세 및 운영 확인 한계는 CHECKPOINT_10_B_HOTFIX_10.md 참고. Bati 실제 발송 규약 미확인과 이후 전환 단계는 기존 상태를 유지한다.

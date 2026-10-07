@@ -20,7 +20,7 @@ import { useEffect, useRef,useState } from 'react';
 import {removeGridSelection} from '../../lib/workspaceRecords';
 import {useWorkspaceNotice} from '../../lib/useWorkspaceNotice';
 import type {WorkspaceAction} from '../../lib/workspaceOperations';
-import { applyCommonLesson, gridCanSubmit, gridScore, newGridLesson, processLessonRows } from '../../lib/teacherLessonGrid';
+import { matchingSavedLesson, applyCommonLesson, gridCanSubmit, gridScore, newGridLesson, processLessonRows } from '../../lib/teacherLessonGrid';
 interface Props {
     isRecordBusy?:(id:string)=>boolean;
     active?:boolean;
@@ -50,6 +50,8 @@ export default function TeacherLessonGrid({ data, busy, request, refresh, act,ac
     const [subject, setSubject] = useState(data.scopes?.[0]?.subject || '영어'), [date, setDate] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date())), [start, setStart] = useState('14:00'), [end, setEnd] = useState('15:30');
     const [common, setCommon] = useState({ content: '', specialNote: '', assignment: '',examScope:'' }), [search, setSearch] = useState('');
     const pendingRows=useRef(new Set<string>());
+    const removedSavedRows=useRef(new Map<string,any>());
+    useEffect(()=>{removedSavedRows.current.clear();},[data.uid]);
     const {message:notice,show:setNotice,dismiss:dismissNotice}=useWorkspaceNotice(`${data.uid}:${active}:${editorOpen}:${rows[activeStudent]?.id||'selection'}`);
     useEffect(()=>{const c=data.classes.find((c:any)=>c.id===classId);const slot=c?.slots?.filter((s:any)=>s.status!=='중단'&&s.weekday===new Date(`${date}T12:00:00+09:00`).getUTCDay()).sort((a:any,b:any)=>a.start.localeCompare(b.start))[0];if(slot){setStart(slot.start);setEnd(slot.end);}},[classId,date,data.classes]);
     const students = data.students.filter((s: any) => data.admin || (data.teachingScopes||data.scopes).some((x: any) => x.studentKey === s.studentKey && x.subject === subject));
@@ -73,16 +75,17 @@ export default function TeacherLessonGrid({ data, busy, request, refresh, act,ac
         const row=rows.find(r=>r.id===id);if(!row||pendingRows.current.has(id)||isRecordBusy(id))return;
         const dirty=row.savedData?JSON.stringify(row.data)!==JSON.stringify(row.savedData):Boolean(row.touched?.length);
         if(dirty&&!window.confirm('이 학생을 작성 목록에서 제외할까요? 저장하지 않은 입력은 사라지고, 이미 저장한 일지는 유지됩니다.'))return;
+        if(row.savedData)removedSavedRows.current.set(id,{...row,ownerUid:data.uid,data:row.savedData});
         const next=removeGridSelection(rows,id,activeStudent);if(!next.removed)return;
         setRows(next.rows);setActiveStudent(next.index);setChecked(previous=>previous.filter(key=>key!==id));setSelection(previous=>previous.filter(key=>key!==row.data.studentKey));dismissNotice();if(!next.rows.length)setEditorOpen(false);
     }
     async function addStudents(keys=selection,settings={subject,date,start,end}) {
         const added = keys.filter(key => !rows.some(r => r.data.studentKey === key && r.data.subject === settings.subject && r.data.date === settings.date&&r.data.start===settings.start&&r.data.end===settings.end));
-        const next:Row[] = added.map(key => ({ id: crypto.randomUUID(), stage: 'new', loading:true,data: newGridLesson(key, settings.subject, settings.date, settings.start, settings.end) }));
+        const next:Row[] = added.map(key => {const seed=newGridLesson(key,settings.subject,settings.date,settings.start,settings.end);const saved=matchingSavedLesson([...(data.drafts||[]),...removedSavedRows.current.values()],seed,data.uid);return saved?{...saved,data:structuredClone(saved.data),savedData:structuredClone(saved.data),loading:false,touched:[]}: {id:crypto.randomUUID(),stage:'new',loading:true,data:seed};});
         setRows(previous => [...previous, ...next]);
         setChecked(previous => [...previous, ...next.map(r => r.id)]);
         setSelection([]);setActiveStudent(next.length?rows.length:Math.max(0,rows.findIndex(r=>keys.includes(r.data.studentKey)&&r.data.subject===settings.subject&&r.data.date===settings.date&&r.data.start===settings.start&&r.data.end===settings.end)));setEditorOpen(true);
-        await Promise.all(next.map(async row=>{
+        await Promise.all(next.filter(row=>row.loading).map(async row=>{
             try{const result=await request('previous-lesson',{studentKey:row.data.studentKey,subject:row.data.subject,date:row.data.date});
                 setRows(previous=>previous.map(r=>r.id===row.id?{...r,loading:false,sessionRecords:result.data.sessionRecords,data:Array.isArray(result.data.sessionRecords)?autoSessionNumbers(applyPreviousLesson(r.data,row.data,result.data,r.touched),result.data.sessionRecords,r.touched,Boolean(r.savedData)||r.stage!=='new').data:applyPreviousLesson(r.data,row.data,result.data,r.touched),error:undefined}:r));
             }catch(e){setRow(row.id,{loading:false,error:e instanceof Error?e.message:'직전 수업 조회 실패'});}

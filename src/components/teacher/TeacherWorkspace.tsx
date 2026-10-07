@@ -47,6 +47,7 @@ const WordbookManager = lazy(() => import('./WordbookManager'));
 import './teacherWorkspace.css';
 import TeacherReportReview from './TeacherReportReview';
 import TeacherLessonGrid from './TeacherLessonGrid';
+import {matchingSavedLesson} from '../../lib/teacherLessonGrid';
 import TeacherScheduleEditor from './TeacherScheduleEditor';
 const subjects = ['영어', '수학', '국어', '과학', '한국사'];
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
@@ -187,7 +188,10 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
         const seed={...emptyLesson(),date:lesson.date,start:lesson.start,end:lesson.end,subject:lesson.subject,...patch,studentKey};
         const touched=new Set<string>();autoTouches.current=touched;sessionHistory.current=[];
         const version=++autoVersion.current;newLessonId.current=crypto.randomUUID();setLesson(seed);setDraftId(null);setRevision(undefined);setMessage('');
-        if(!studentKey){setAutoLoading(false);return;}setAutoLoading(true);
+        if(!studentKey){setAutoLoading(false);return;}
+        const saved=matchingSavedLesson(data?.drafts||[],seed,data?.uid);
+        if(saved){setLesson(compactLessonInput({...emptyLesson(),...saved.data}));setDraftId(saved.id);setRevision(saved.revision);setAutoLoading(false);return;}
+        setAutoLoading(true);
         try{const previous=await request('previous-lesson',{studentKey,subject:seed.subject,date:seed.date});
             if(version===autoVersion.current){sessionHistory.current=previous.data.sessionRecords||[];setLesson((current:any)=>{const filled=applyPreviousLesson(current,seed,previous.data,touched);return Array.isArray(previous.data.sessionRecords)?autoSessionNumbers(filled,sessionHistory.current,touched).data:filled;});}
         }catch(e){if(version===autoVersion.current)setMessage(e instanceof Error?e.message:'직전 수업을 불러오지 못했습니다.');}

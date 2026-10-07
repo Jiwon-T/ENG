@@ -30,16 +30,20 @@ export function sessionHasIncrement(d:any,kind:SessionKind):boolean {
  const minutes=sessionMinutes(kind==='lesson'?d.start:d.selfStudyStart,kind==='lesson'?d.end:d.selfStudyEnd);
  return enabled&&!absent(d)&&minutes!==null&&(sessionIncrement(kind,minutes)||0)>0;
 }
-export function sessionBase(records:readonly any[],input:any,kind:SessionKind):any {
+function latestSessionRecord(records:readonly any[],input:any,kind:SessionKind,sameMonth:boolean):any {
  return records.filter(r=>!r.archived&&!r.deleteRequested&&r.stage!=='new').map(r=>({... (r.data??r),_updatedAt:r.updatedAt??r._updatedAt??0,_id:r.id??r._id??''}))
- .filter(d=>d.studentKey===input.studentKey&&d.subject===input.subject&&d.date<input.date&&sessionHasIncrement(d,kind)&&numberTenths(kind==='lesson'?d.round:d.selfStudyRound)!==null)
+ .filter(d=>d.studentKey===input.studentKey&&d.subject===input.subject&&d.date<input.date&&(!sameMonth||d.date.slice(0,7)===input.date.slice(0,7))&&sessionHasIncrement(d,kind)&&numberTenths(kind==='lesson'?d.round:d.selfStudyRound)!==null)
  .sort((a,b)=>b.date.localeCompare(a.date)||(kind==='lesson'?b.start:b.selfStudyStart).localeCompare(kind==='lesson'?a.start:a.selfStudyStart)||Number(b._updatedAt)-Number(a._updatedAt)||String(b._id).localeCompare(String(a._id)))[0];
+}
+/** Monthly counters only accumulate within the same year and month. */
+export function sessionBase(records:readonly any[],input:any,kind:SessionKind):any {
+ return latestSessionRecord(records,input,kind,true);
 }
 export function nextSessionNumbers(records:readonly any[],input:any):{lesson:number|null;study:number|null} {
  const next=(kind:SessionKind)=>{if((kind==='lesson'?input.classSession:input.selfStudy)!=='있음')return null;
   const minutes=sessionMinutes(kind==='lesson'?input.start:input.selfStudyStart,kind==='lesson'?input.end:input.selfStudyEnd);if(minutes===null)return null;
-  const base=sessionBase(records,input,kind);if(!base)return null;
-  const tenths=numberTenths(kind==='lesson'?base.round:base.selfStudyRound)!+(absent(input)?0:sessionIncrement(kind,minutes)!);return tenths/10;
+  const base=sessionBase(records,input,kind);if(!base&&!latestSessionRecord(records,input,kind,false))return null;
+  const tenths=(base?numberTenths(kind==='lesson'?base.round:base.selfStudyRound)!:0)+(absent(input)?0:sessionIncrement(kind,minutes)!);return tenths/10;
  };return {lesson:next('lesson'),study:next('study')};
 }
 export function autoSessionNumbers<T extends Record<string,any>>(data:T,records:readonly any[],touched:Iterable<string>=[],saved=false):{data:T;hints:Record<string,string>} {
@@ -48,7 +52,8 @@ export function autoSessionNumbers<T extends Record<string,any>>(data:T,records:
  for(const [kind,key] of [['lesson','round'],['study','selfStudyRound']] as const){
   if(edited.has(key))continue;
   if(result[kind]!==null){next[key]=result[kind];const base=sessionBase(records,data,kind);const minutes=sessionMinutes(kind==='lesson'?data.start:data.selfStudyStart,kind==='lesson'?data.end:data.selfStudyEnd)!;
-   hints[key]=`자동 입력 · 직전 ${formatSessionNumber(kind==='lesson'?base.round:base.selfStudyRound)}회차(${base.date.slice(5).replace('-','/')}) +${formatSessionNumber(absent(data)?0:sessionIncrement(kind,minutes)!/10)}`;
+   const increment=formatSessionNumber(absent(data)?0:sessionIncrement(kind,minutes)!/10);
+   hints[key]=base?`자동 입력 · 직전 ${formatSessionNumber(kind==='lesson'?base.round:base.selfStudyRound)}회차(${base.date.slice(5).replace('-','/')}) +${increment}`:`자동 입력 · ${data.date.slice(0,7)} 월별 시작 0 +${increment}`;
   }else next[key]=null;
  }return {data:next,hints};
 }

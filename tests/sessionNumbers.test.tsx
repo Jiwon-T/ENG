@@ -5,9 +5,43 @@ import LessonAcademyFields from '../src/components/teacher/LessonAcademyFields';
 import {applyPreviousLesson} from '../src/lib/teacherTodayLessons';
 import {handleWorkspace} from '../api/teacher/workspace';
 import {teacherReadCache} from '../api/_lib/teacherReadCache';
+import {matchingSavedLesson} from '../src/lib/teacherLessonGrid';
 const studentKey='11111111-1111-4111-8111-111111111111';
 const input={studentKey,subject:'영어',date:'2026-10-07',start:'14:00',end:'15:20',classSession:'있음',attendance:'보강 출석',round:null,selfStudy:'있음',selfStudyStart:'15:20',selfStudyEnd:'16:20',selfStudyRound:null};
 const row=(patch:any={})=>({id:'r',stage:'published',updatedAt:1,data:{...input,date:'2026-10-03',round:12,selfStudyRound:7,...patch}});
+test('reselecting a saved current lesson preserves its identity, content and counters without recalculation',()=>{
+ const saved={...row({date:input.date,round:3.9,selfStudyRound:2.5,content:'오늘 저장한 수업'}),ownerUid:'teacher',revision:4};
+ const found=matchingSavedLesson([saved],input,'teacher');assert.equal(found,saved);
+ assert.equal(autoSessionNumbers(found.data,[row()],[],true).data.round,3.9);
+ assert.equal(found.id,'r');assert.equal(found.revision,4);assert.equal(found.data.content,'오늘 저장한 수업');
+ for(const patch of [{date:'2026-10-08'},{start:'15:00'},{end:'16:30'},{subject:'수학'},{studentKey:'other'}])assert.equal(matchingSavedLesson([saved],{...input,...patch},'teacher'),undefined);
+ assert.equal(matchingSavedLesson([saved],input,'another-teacher'),undefined);
+ assert.equal(matchingSavedLesson([{...saved,archived:true}],input,'teacher'),undefined);
+ assert.equal(matchingSavedLesson([{...saved,deleteRequested:true}],input,'teacher'),undefined);
+ assert.equal(matchingSavedLesson([saved,{...saved,revision:5,data:{...saved.data,round:4}}],input,'teacher').data.round,4);
+});
+test('monthly counters restart at zero across months, years and the same month in another year',()=>{
+ for(const [previous,date] of [['2026-09-30','2026-10-01'],['2026-12-31','2027-01-01'],['2025-10-03','2026-10-07']]){
+  const records=[row({date:previous,round:12.9,selfStudyRound:8.5})];
+  assert.deepEqual(nextSessionNumbers(records,{...input,date,selfStudyEnd:'15:50'}),{lesson:1,study:0.5});
+  assert.equal(sessionBase(records,{...input,date},'lesson'),undefined);
+  assert.equal(records[0].data.round,12.9);
+ }
+});
+test('monthly lesson and study bases reset independently and skip non-incrementing records',()=>{
+ const records=[row({date:'2026-09-30'}),row({date:'2026-10-03',round:2,selfStudy:'없음',selfStudyRound:null}),row({date:'2026-10-06',attendance:'보강 결석',round:90,selfStudyRound:90})];
+ assert.deepEqual(nextSessionNumbers(records,input),{lesson:3,study:1});
+ assert.deepEqual(nextSessionNumbers([row({date:'2026-09-30'})],{...input,attendance:'결석'}),{lesson:0,study:0});
+});
+test('monthly reset hints preserve manual and saved counters and reject invalid times',()=>{
+ const records=[row({date:'2026-09-30'})];
+ const result=autoSessionNumbers({...input,end:'15:10'},records);
+ assert.equal(result.data.round,0.9);assert.equal(result.hints.round,'자동 입력 · 2026-10 월별 시작 0 +0.9');
+ assert.equal(autoSessionNumbers({...input,round:22.7},records,['round']).data.round,22.7);
+ const saved={...input,round:12.9};assert.equal(autoSessionNumbers(saved,records,[],true).data,saved);
+ assert.equal(nextSessionNumbers(records,{...input,end:'13:00'}).lesson,null);
+ assert.deepEqual(nextSessionNumbers([],input),{lesson:null,study:null});
+});
 test('integer tenths increments use half up without a minimum correction',()=>{
  for(const [minutes,tenths] of [[70,9],[80,10],[160,20],[60,8],[4,1],[3,0]])assert.equal(sessionIncrement('lesson',minutes),tenths);
  for(const [minutes,tenths] of [[60,10],[30,5],[90,15]])assert.equal(sessionIncrement('study',minutes),tenths);
