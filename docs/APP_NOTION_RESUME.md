@@ -135,3 +135,16 @@ ENG-app-notion-checkpoint-10-B-hotfix-4.zip: 프리셋 축소 및 시간 입력 
 
 ## B 자동 회차 (2026-10-07)
 ENG-app-notion-checkpoint-10-B-hotfix-5.zip. 독립 수업·자습 회차, tenths/half up, 새 기록만 자동 입력, 기존 previous-lesson 응답 하위 호환 확장. 70분 수업=0.9. Make·운영 Notion 형식은 확인 불가/미확인이므로 CHECKPOINT_10_B_HOTFIX_5.md의 배포 전 시험 목록 참고. A 상태 오표시 수정은 아직 미구현.
+
+## 일지 입력 화면 밀도 (2026-10-07)
+ENG-app-notion-checkpoint-10-B-hotfix-6.zip. 0→1→2→3·4→5→6→7 개별 커밋. 기본 단일 1831→805px, 팝업 1455→722px. 테스트 523개 통과. 스크린샷 48장과 측정/상호작용 기록: docs/density-proof/index.html. 상세 CHECKPOINT_10_B_HOTFIX_6.md. 저장/반영/API/자동 회차는 변경하지 않았다.
+
+
+## 자습·상단 배치 보정 (2026-10-07)
+ENG-app-notion-checkpoint-10-B-hotfix-7.zip. 자습 상시 표시 및 수업 카드와 같은 높이, 팝업 선택/날짜/과목 라벨·값 한 줄 정렬. 기존 로직 유지. 테스트 523개 통과. 최신 화면 docs/hotfix-7-proof, 상세 CHECKPOINT_10_B_HOTFIX_7.md.
+
+## 두 띠 레이아웃 (2026-10-07)
+ENG-app-notion-checkpoint-10-B-hotfix-8.zip. 넓은 컨테이너의 시간/내용 + 평가/extras 구조, 자습 상시 표시·무점프. 테스트527개. 최신 화면 docs/hotfix-8-proof. 상세 CHECKPOINT_10_B_HOTFIX_8.md.
+
+## 점수 상시 표시 및 툴바 보정 (2026-10-07)
+ENG-app-notion-checkpoint-10-B-hotfix-9.zip. 점수 접기 취소, 두 점수 상시 입력, 헤더 여백 축소/공통 입력 스타일 통일/일괄 상 축소. 테스트527개 통과. 최신 docs/hotfix-9-proof, 상세 CHECKPOINT_10_B_HOTFIX_9.md.

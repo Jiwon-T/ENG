@@ -1,0 +1,631 @@
+{
+  "scores": {
+    "open": true,
+    "removedFields": "0",
+    "total": "20",
+    "wrong": "3"
+  },
+  "cleared": {
+    "mountedScoreInputs": 4,
+    "open": false,
+    "removedFields": "0"
+  },
+  "study": {
+    "enabled": true,
+    "hidden": false,
+    "removedFields": "0"
+  },
+  "growth": {
+    "height": 168,
+    "overflow": "auto",
+    "resize": "none",
+    "scrollHeight": 500
+  },
+  "tabOrder": [
+    {
+      "name": "학생",
+      "tag": "INPUT",
+      "type": null
+    },
+    {
+      "name": "날짜",
+      "tag": "INPUT",
+      "type": "date"
+    },
+    {
+      "name": "날짜",
+      "tag": "INPUT",
+      "type": "date"
+    },
+    {
+      "name": "날짜",
+      "tag": "INPUT",
+      "type": "date"
+    },
+    {
+      "name": "날짜",
+      "tag": "INPUT",
+      "type": "date"
+    },
+    {
+      "name": "과목영어",
+      "tag": "SELECT",
+      "type": null
+    },
+    {
+      "name": "+ 새 일지",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "수업 여부",
+      "tag": "SELECT",
+      "type": null
+    },
+    {
+      "name": "수업 회차",
+      "tag": "INPUT",
+      "type": "number"
+    },
+    {
+      "name": "수업 시작",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "수업 시작",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "수업 시작",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "수업 시작",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "수업 종료",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "수업 종료",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "수업 종료",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "수업 종료",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "+60분",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "+80분 · 기본 추천",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "+90분",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "+120분",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "자습 여부",
+      "tag": "SELECT",
+      "type": null
+    },
+    {
+      "name": "자습 회차",
+      "tag": "INPUT",
+      "type": "number"
+    },
+    {
+      "name": "자습 시작",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "자습 시작",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "자습 시작",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "자습 시작",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "자습 종료",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "자습 종료",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "자습 종료",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "자습 종료",
+      "tag": "INPUT",
+      "type": "time"
+    },
+    {
+      "name": "+60분",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "+80분 · 기본 추천",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "+90분",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "+120분",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "출석·태도·숙제 일괄 상",
+      "tag": "BUTTON",
+      "type": null
+    },
+    {
+      "name": "출결:미확인",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "태도:미확인",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "숙제:미확인",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "테스트:미확인",
+      "tag": "BUTTON",
+      "type": "button"
+    },
+    {
+      "name": "시험 점수 (선택)일반 — · 내신 —",
+      "tag": "SUMMARY",
+      "type": null
+    },
+    {
+      "name": "일반 테스트 오답 수",
+      "tag": "INPUT",
+      "type": "number"
+    },
+    {
+      "name": "일반 테스트 문항 수",
+      "tag": "INPUT",
+      "type": "number"
+    },
+    {
+      "name": "내신 대비 테스트 오답 수",
+      "tag": "INPUT",
+      "type": "number"
+    },
+    {
+      "name": "내신 대비 테스트 문항 수",
+      "tag": "INPUT",
+      "type": "number"
+    },
+    {
+      "name": "수업 내용(필수)모의 수업 내용",
+      "tag": "TEXTAREA",
+      "type": null
+    },
+    {
+      "name": "특이 사항(선택)",
+      "tag": "TEXTAREA",
+      "type": null
+    },
+    {
+      "name": "과제(선택)",
+      "tag": "TEXTAREA",
+      "type": null
+    },
+    {
+      "name": "시험범위(선택)",
+      "tag": "TEXTAREA",
+      "type": null
+    }
+  ],
+  "popupTabOrder": [
+    {
+      "name": "수업 날짜",
+      "tag": "INPUT"
+    },
+    {
+      "name": "수업 날짜",
+      "tag": "INPUT"
+    },
+    {
+      "name": "수업 여부",
+      "tag": "SELECT"
+    },
+    {
+      "name": "수업 회차",
+      "tag": "INPUT"
+    },
+    {
+      "name": "수업 시작",
+      "tag": "INPUT"
+    },
+    {
+      "name": "수업 시작",
+      "tag": "INPUT"
+    },
+    {
+      "name": "수업 시작",
+      "tag": "INPUT"
+    },
+    {
+      "name": "수업 시작",
+      "tag": "INPUT"
+    },
+    {
+      "name": "수업 종료",
+      "tag": "INPUT"
+    },
+    {
+      "name": "수업 종료",
+      "tag": "INPUT"
+    },
+    {
+      "name": "수업 종료",
+      "tag": "INPUT"
+    },
+    {
+      "name": "수업 종료",
+      "tag": "INPUT"
+    },
+    {
+      "name": "오늘 정규 15:30–16:50",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "+60분",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "+80분 · 기본 추천",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "+90분",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "+120분",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "자습 여부",
+      "tag": "SELECT"
+    },
+    {
+      "name": "자습 회차",
+      "tag": "INPUT"
+    },
+    {
+      "name": "자습 시작",
+      "tag": "INPUT"
+    },
+    {
+      "name": "자습 시작",
+      "tag": "INPUT"
+    },
+    {
+      "name": "자습 시작",
+      "tag": "INPUT"
+    },
+    {
+      "name": "자습 시작",
+      "tag": "INPUT"
+    },
+    {
+      "name": "자습 종료",
+      "tag": "INPUT"
+    },
+    {
+      "name": "자습 종료",
+      "tag": "INPUT"
+    },
+    {
+      "name": "자습 종료",
+      "tag": "INPUT"
+    },
+    {
+      "name": "자습 종료",
+      "tag": "INPUT"
+    },
+    {
+      "name": "+60분",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "+80분 · 기본 추천",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "+90분",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "+120분",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "출석·태도·숙제 일괄 상",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "출결:미확인",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "태도:미확인",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "숙제:미확인",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "테스트:미확인",
+      "tag": "BUTTON"
+    },
+    {
+      "name": "시험 점수 (선택)일반 — · 내신 —",
+      "tag": "SUMMARY"
+    },
+    {
+      "name": "일반 테스트 오답 수",
+      "tag": "INPUT"
+    },
+    {
+      "name": "일반 테스트 문항 수",
+      "tag": "INPUT"
+    },
+    {
+      "name": "내신 대비 테스트 오답 수",
+      "tag": "INPUT"
+    },
+    {
+      "name": "내신 대비 테스트 문항 수",
+      "tag": "INPUT"
+    },
+    {
+      "name": "수업 내용(필수)모의 수업 내용",
+      "tag": "TEXTAREA"
+    },
+    {
+      "name": "특이 사항(선택)",
+      "tag": "TEXTAREA"
+    },
+    {
+      "name": "과제(선택)",
+      "tag": "TEXTAREA"
+    },
+    {
+      "name": "시험범위(선택)",
+      "tag": "TEXTAREA"
+    }
+  ],
+  "layers": {
+    "barBottom": 883.3333358764648,
+    "barColor": "rgb(255, 255, 255)",
+    "containerBottom": 883.3333587646484,
+    "dialogOpen": true,
+    "toolbarColor": "rgb(255, 255, 255)"
+  },
+  "oneScroll": {
+    "barTop": 800.125,
+    "examScopeBottom": 778.1250228881836,
+    "scrollY": 246,
+    "viewportHeight": 900
+  },
+  "popupOneScroll": {
+    "barTop": 647.7083740234375,
+    "client": 617,
+    "examScopeBottom": 625.0417098999023,
+    "scrollHeight": 804,
+    "scrollTop": 187.3333282470703
+  },
+  "narrowTargets": {
+    "chips": [
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      },
+      {
+        "h": 44,
+        "w": 59
+      }
+    ],
+    "inputs": [
+      44,
+      44,
+      44,
+      44,
+      44,
+      44,
+      44,
+      44,
+      44,
+      44,
+      44,
+      44
+    ]
+  }
+}

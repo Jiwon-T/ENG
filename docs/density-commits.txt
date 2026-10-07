@@ -1,0 +1,7 @@
+d8a7c89 style(teacher): consolidate multi-student toolbar and popup form
+be4d586 style(teacher): compact today cards and sticky lesson context
+1e8fb6c style(teacher): arrange persistent text fields with bounded auto growth
+62ce840 style(teacher): compact evaluation rows and disclose optional scores
+4200483 style(teacher): align top and session inputs without changing handlers
+28a4a7d style(teacher): define pointer-aware form density tokens
+418beb7 fix(teacher): make sticky editor layers opaque

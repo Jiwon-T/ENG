@@ -1,0 +1,11 @@
+{
+  "bodyHeight": 790,
+  "bodyScrollHeight": 790,
+  "bulkHeight": 26,
+  "commonColor": "rgb(190, 65, 108)",
+  "commonFont": "700",
+  "header": 48,
+  "headerTitleMargin": "0px",
+  "scoreColumns": "316px 316px",
+  "scoreInputs": 4
+}

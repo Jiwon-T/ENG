@@ -1,0 +1,386 @@
+[
+  {
+    "phase": "before",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "single",
+    "state": "basic",
+    "formHeight": 1831
+  },
+  {
+    "phase": "before",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "single",
+    "state": "study",
+    "formHeight": 1831
+  },
+  {
+    "phase": "before",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "single",
+    "state": "scores",
+    "formHeight": 1831
+  },
+  {
+    "phase": "before",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "single",
+    "state": "error",
+    "formHeight": 1831
+  },
+  {
+    "phase": "before",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "grid",
+    "state": "basic",
+    "formHeight": 1455
+  },
+  {
+    "phase": "before",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "grid",
+    "state": "study",
+    "formHeight": 1455
+  },
+  {
+    "phase": "before",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "grid",
+    "state": "scores",
+    "formHeight": 1455
+  },
+  {
+    "phase": "before",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "grid",
+    "state": "error",
+    "formHeight": 1483
+  },
+  {
+    "phase": "before",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "single",
+    "state": "basic",
+    "formHeight": 1831
+  },
+  {
+    "phase": "before",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "single",
+    "state": "study",
+    "formHeight": 1831
+  },
+  {
+    "phase": "before",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "single",
+    "state": "scores",
+    "formHeight": 1831
+  },
+  {
+    "phase": "before",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "single",
+    "state": "error",
+    "formHeight": 1831
+  },
+  {
+    "phase": "before",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "grid",
+    "state": "basic",
+    "formHeight": 1455
+  },
+  {
+    "phase": "before",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "grid",
+    "state": "study",
+    "formHeight": 1455
+  },
+  {
+    "phase": "before",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "grid",
+    "state": "scores",
+    "formHeight": 1455
+  },
+  {
+    "phase": "before",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "grid",
+    "state": "error",
+    "formHeight": 1483
+  },
+  {
+    "phase": "before",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "single",
+    "state": "basic",
+    "formHeight": 2159
+  },
+  {
+    "phase": "before",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "single",
+    "state": "study",
+    "formHeight": 2159
+  },
+  {
+    "phase": "before",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "single",
+    "state": "scores",
+    "formHeight": 2159
+  },
+  {
+    "phase": "before",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "single",
+    "state": "error",
+    "formHeight": 2159
+  },
+  {
+    "phase": "before",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "grid",
+    "state": "basic",
+    "formHeight": 2294
+  },
+  {
+    "phase": "before",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "grid",
+    "state": "study",
+    "formHeight": 2294
+  },
+  {
+    "phase": "before",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "grid",
+    "state": "scores",
+    "formHeight": 2294
+  },
+  {
+    "phase": "before",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "grid",
+    "state": "error",
+    "formHeight": 2322
+  },
+  {
+    "phase": "after",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "single",
+    "state": "basic",
+    "formHeight": 805
+  },
+  {
+    "phase": "after",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "single",
+    "state": "study",
+    "formHeight": 847
+  },
+  {
+    "phase": "after",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "single",
+    "state": "scores",
+    "formHeight": 914
+  },
+  {
+    "phase": "after",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "single",
+    "state": "error",
+    "formHeight": 914
+  },
+  {
+    "phase": "after",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "grid",
+    "state": "basic",
+    "formHeight": 722
+  },
+  {
+    "phase": "after",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "grid",
+    "state": "study",
+    "formHeight": 728
+  },
+  {
+    "phase": "after",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "grid",
+    "state": "scores",
+    "formHeight": 831
+  },
+  {
+    "phase": "after",
+    "width": 1440,
+    "viewportHeight": 900,
+    "screen": "grid",
+    "state": "error",
+    "formHeight": 859
+  },
+  {
+    "phase": "after",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "single",
+    "state": "basic",
+    "formHeight": 805
+  },
+  {
+    "phase": "after",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "single",
+    "state": "study",
+    "formHeight": 847
+  },
+  {
+    "phase": "after",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "single",
+    "state": "scores",
+    "formHeight": 914
+  },
+  {
+    "phase": "after",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "single",
+    "state": "error",
+    "formHeight": 914
+  },
+  {
+    "phase": "after",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "grid",
+    "state": "basic",
+    "formHeight": 722
+  },
+  {
+    "phase": "after",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "grid",
+    "state": "study",
+    "formHeight": 728
+  },
+  {
+    "phase": "after",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "grid",
+    "state": "scores",
+    "formHeight": 831
+  },
+  {
+    "phase": "after",
+    "width": 1280,
+    "viewportHeight": 720,
+    "screen": "grid",
+    "state": "error",
+    "formHeight": 859
+  },
+  {
+    "phase": "after",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "single",
+    "state": "basic",
+    "formHeight": 1632
+  },
+  {
+    "phase": "after",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "single",
+    "state": "study",
+    "formHeight": 1811
+  },
+  {
+    "phase": "after",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "single",
+    "state": "scores",
+    "formHeight": 1865
+  },
+  {
+    "phase": "after",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "single",
+    "state": "error",
+    "formHeight": 1865
+  },
+  {
+    "phase": "after",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "grid",
+    "state": "basic",
+    "formHeight": 1671
+  },
+  {
+    "phase": "after",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "grid",
+    "state": "study",
+    "formHeight": 1796
+  },
+  {
+    "phase": "after",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "grid",
+    "state": "scores",
+    "formHeight": 1904
+  },
+  {
+    "phase": "after",
+    "width": 390,
+    "viewportHeight": 844,
+    "screen": "grid",
+    "state": "error",
+    "formHeight": 1932
+  }
+]

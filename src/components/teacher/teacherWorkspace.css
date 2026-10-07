@@ -381,3 +381,206 @@
 .workspace-request-metrics ul {max-height:180px;overflow:auto;margin-top:6px;}
 
 .lesson-round-hint {display:block;margin-top:4px;font-size:10px;font-weight:400;line-height:1.45;color:var(--lesson-muted);}
+/* 0: opaque layers; no form content may show through the sticky controls. */
+.teacher-workspace {--lesson-bar-background:#fff;}
+.teacher-workspace .grid-student-strip {background:#fff;border-top:1px solid var(--lesson-border);border-bottom:1px solid var(--lesson-border);z-index:20;}
+.teacher-workspace .lesson-action-fieldset {background:#fff;z-index:30;bottom:0;margin-bottom:0;}
+.teacher-workspace .lesson-action-bar {background:#fff;backdrop-filter:none;border-bottom:1px solid var(--lesson-border);z-index:30;margin-bottom:0;}
+.lesson-grid .workspace-dialog>.workspace-dialog-scroll {padding-bottom:0;margin-bottom:0;}
+.teacher-workspace .lesson-grid td[data-label="수업 내용"]::before {content:none;}
+/* 1: touch defaults, fine-pointer density, and independent editor containers. */
+.teacher-workspace {--field-h:44px;--gap:10px;--card-pad:12px;--label-size:12px;--chip-h:44px;}
+@media(pointer:fine) and (hover:hover){.teacher-workspace{--field-h:38px;--chip-h:32px;}}
+.lesson-editor-panel,.lesson-grid .workspace-dialog-scroll {container-name:lesson-input;container-type:inline-size;}
+.teacher-workspace :is(.lesson-editor-panel,.lesson-grid) label {font-size:var(--label-size);line-height:1.4;}
+.teacher-workspace :is(.lesson-editor-panel,.lesson-grid) :is(input:not([type=checkbox]),select) {min-height:var(--field-h);height:var(--field-h);margin-top:4px;padding:6px 8px;font-size:13px;box-sizing:border-box;min-width:0;}
+.teacher-workspace :is(.lesson-editor-panel,.lesson-grid) :is(.small-button,.primary-button,.lesson-refresh-button) {min-height:var(--field-h);height:var(--field-h);padding:5px 10px;}
+.teacher-workspace :is(.lesson-editor-panel,.lesson-grid) :is(.lesson-option-chip,.lesson-time-preset) {min-height:var(--chip-h);height:var(--chip-h);padding:4px 8px;}
+.teacher-workspace .lesson-editor-panel {padding:var(--card-pad);}
+.teacher-workspace .lesson-editor-panel h2 {margin-bottom:var(--gap);}
+.teacher-workspace .lesson-editor-fields {padding-bottom:var(--gap);}
+.teacher-workspace .lesson-time-row {gap:var(--gap);padding:var(--card-pad);}
+.teacher-workspace .lesson-action-bar {padding:8px var(--card-pad);gap:var(--gap);}
+@container lesson-input (max-width:480px){.lesson-editor-panel>*,.grid-editor-form{--field-h:44px;--chip-h:44px;}}
+@media(pointer:coarse){.teacher-workspace :is(.grid-student-name,.grid-student-remove,.lesson-refresh-button){min-height:44px;min-width:44px;}.teacher-workspace .lesson-option-chip{min-height:44px;}}
+/* 2: DOM order is student/date/subject, then session/round/start/end/presets. */
+.lesson-top-fields {display:grid;grid-template-columns:1fr;gap:var(--gap);align-items:start;margin-bottom:var(--gap);}
+.lesson-top-fields fieldset {min-width:0;}
+.teacher-workspace .lesson-top-fields .lesson-new-button {align-self:end;margin:0;}
+.teacher-workspace .lesson-time-row {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin:0;}
+.teacher-workspace .lesson-time-row label {grid-column:auto!important;grid-row:auto!important;}
+.lesson-session-controls,.lesson-time-presets,.lesson-time-direct-inputs {display:contents;}
+.teacher-workspace [hidden] {display:none!important;}
+.lesson-time-preset-buttons {grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px;}
+.lesson-preset-label,.lesson-session-hint {font-size:11px;color:var(--lesson-muted);}
+.lesson-session-hint {align-self:center;line-height:1.4;margin:0;}
+.teacher-workspace .lesson-time-row.is-collapsed {grid-template-columns:minmax(90px,1fr) minmax(0,3fr);}
+.lesson-round-hint {font-size:11px;}
+@container lesson-input (min-width:520px){.lesson-top-fields{grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) auto;}.teacher-workspace .lesson-time-row{grid-template-columns:repeat(4,minmax(0,1fr));}}
+@container lesson-input (min-width:320px) and (max-width:519px){.lesson-top-fields{grid-template-columns:repeat(2,minmax(0,1fr));}}
+/* 3 + 4: four compact evaluation rows and mounted, automatically exposed scores. */
+.lesson-evaluation-heading {display:flex;align-items:center;justify-content:space-between;gap:var(--gap);margin:var(--gap) 0 6px;}
+.lesson-evaluation-heading h3 {font-size:12px;font-weight:700;color:var(--lesson-text);}
+.teacher-workspace .lesson-chip-field,.teacher-workspace .lesson-grid .lesson-chip-field {grid-template-columns:56px minmax(0,1fr);gap:6px;align-items:center;}
+.lesson-chip-options {gap:6px;}
+.teacher-workspace .lesson-option-chip {min-height:var(--chip-h);height:var(--chip-h);padding:4px 8px;font-size:12px;}
+.lesson-evaluation-fields {display:grid;gap:6px;}
+.lesson-score-disclosure {margin:var(--gap) 0;border:1px solid var(--lesson-border);border-radius:var(--lesson-radius);padding:var(--card-pad);}
+.lesson-score-disclosure>summary {font-size:12px;font-weight:700;color:var(--lesson-text);cursor:pointer;min-height:var(--chip-h);line-height:var(--chip-h);}
+.lesson-score-summary {font-size:11px;font-weight:400;color:var(--lesson-muted);margin-left:10px;}
+.teacher-workspace .lesson-tests {display:grid;grid-template-columns:1fr;gap:var(--gap);margin-top:8px;}
+.teacher-workspace .lesson-test {padding:var(--card-pad);border:1px solid var(--lesson-border);border-radius:var(--lesson-radius);min-width:0;}
+.lesson-test legend {font-size:12px;}
+.lesson-test-inline {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:6px;align-items:end;}
+.lesson-test-converted {font-size:11px;color:var(--lesson-accent);line-height:var(--field-h);white-space:nowrap;margin:0;}
+@container lesson-input (min-width:620px){.teacher-workspace .lesson-tests{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@container lesson-input (max-width:480px){.lesson-score-summary{display:block;margin-left:0;line-height:1.5;}.teacher-workspace .lesson-option-chip{min-height:44px;height:44px;}}
+/* 5: text stays mounted, grows from two to eight rows, then scrolls internally. */
+.lesson-text-fields {display:grid;grid-template-columns:1fr;gap:var(--gap);margin-top:var(--gap);}
+.lesson-text-fields>label:first-child {grid-column:1/-1;}
+.lesson-text-fields>div {display:contents;}
+.teacher-workspace .lesson-text-fields label {display:block;margin:0!important;min-width:0;}
+.lesson-text-fields details {grid-column:1/-1;}
+.teacher-workspace :is(.lesson-editor-panel,.lesson-grid) textarea.auto-lesson-textarea {resize:none;min-height:0;line-height:1.5;padding:6px 8px;font-size:13px;box-sizing:border-box;}
+@container lesson-input (min-width:520px){.lesson-text-fields{grid-template-columns:repeat(2,minmax(0,1fr));}}
+/* 6: compact surrounding context without changing records or matching rules. */
+.teacher-workspace.lesson-writing {container-name:workspace-shell;container-type:inline-size;}
+.lesson-writing-layout {display:grid;grid-template-columns:minmax(0,1fr);gap:var(--gap);align-items:start;}
+.lesson-writing-sidebar {min-width:0;}
+.workspace-hero-date {display:none;}
+.teacher-workspace.lesson-writing .workspace-hero {display:flex;align-items:baseline;gap:12px;margin-bottom:10px;}
+.teacher-workspace.lesson-writing .workspace-hero p {display:none;}
+.teacher-workspace.lesson-writing .workspace-hero h1 {font-size:18px;line-height:1.5;}
+.teacher-workspace.lesson-writing .workspace-hero-date {display:inline;font-size:12px;color:var(--lesson-muted);}
+.teacher-workspace .today-lesson-card {padding-top:6px;margin-top:6px;}
+.teacher-workspace .today-lesson-entry {display:grid;grid-template-columns:1fr;gap:3px;padding:5px 0;width:100%;min-height:44px;text-align:left;}
+.teacher-workspace .today-lesson-entry .today-lesson-meta {display:flex;align-items:center;flex-wrap:nowrap;gap:4px;min-width:0;}
+.today-lesson-entry .today-lesson-state,.today-lesson-entry .today-lesson-group-progress {margin-left:auto;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.today-lesson-entry .today-lesson-name {display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;line-height:20px;}
+.today-lesson-entry .today-lesson-time {font-size:11px;flex:none;}
+.today-lesson-entry .today-lesson-kind {font-size:10px;padding:1px 4px;flex:none;}
+.teacher-workspace .saved-lesson-row {display:flex;align-items:center;gap:6px;width:100%;min-height:var(--field-h);border-bottom:1px solid var(--lesson-border);text-align:left;font-size:11px;padding:4px 0;}
+.saved-lesson-name {overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0;}
+.saved-lesson-state {margin-left:auto;white-space:nowrap;color:var(--lesson-accent);font-size:10px;background:var(--lesson-soft);padding:2px 4px;border-radius:6px;}
+@container workspace-shell (min-width:960px){.lesson-writing-layout{grid-template-columns:240px minmax(0,1fr);}.lesson-writing-sidebar{position:sticky;top:12px;max-height:calc(100dvh - 24px);overflow:auto;}}
+/* 7: two-row popup toolbar; the form follows DOM order with one scroll owner. */
+.grid-editor-toolbar {position:sticky;top:0;z-index:20;background:#fff;border-top:1px solid var(--lesson-border);border-bottom:1px solid var(--lesson-border);padding:6px 0;}
+.grid-toolbar-students {display:flex;align-items:center;gap:6px;min-width:0;}
+.teacher-workspace .grid-editor-toolbar .grid-student-strip {position:static;flex:1;min-width:0;margin:0;padding:2px 0;border:none;}
+.grid-student-navigation {flex:none;gap:2px;margin:0;}
+.grid-student-navigation button {min-height:var(--chip-h);min-width:var(--chip-h);padding:4px;}
+.grid-toolbar-actions,.grid-bulk-actions {display:flex;align-items:center;flex-wrap:wrap;gap:6px;}
+.grid-toolbar-actions {margin-top:6px;}
+.grid-common-input {padding:0;margin:0;min-width:110px;}
+.grid-common-input>summary {cursor:pointer;background:var(--lesson-soft);border:1px solid var(--lesson-border);border-radius:8px;font-size:12px;min-height:var(--field-h);padding:6px 10px;}
+.grid-common-input[open] {flex-basis:100%;}
+.teacher-workspace .grid-editor-form .lesson-grid-scroll {max-height:none;overflow:visible;border:none;}
+.teacher-workspace .grid-editor-form table {min-width:0;display:block;}
+.teacher-workspace .grid-editor-form thead {display:none;}
+.teacher-workspace .grid-editor-form tbody {display:block;}
+.teacher-workspace .grid-editor-form tr {display:grid;grid-template-columns:minmax(0,1fr);gap:var(--gap);}
+.teacher-workspace .grid-editor-form td {display:block;width:auto!important;position:static!important;box-shadow:none;background:#fff;padding:0;border:none;min-width:0;grid-column:1/-1!important;}
+.teacher-workspace .grid-editor-form td[data-label]::before {content:none;}
+.grid-lesson-top .lesson-top-fields {grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);margin-top:var(--gap);margin-bottom:0;}
+.grid-row-selection {display:flex!important;align-items:center;gap:5px;align-self:end;min-height:var(--field-h);font-size:11px!important;}
+.lesson-readonly-field {display:block;line-height:var(--field-h);margin-top:4px;padding:0 8px;border:1px solid var(--lesson-border);border-radius:8px;font-size:13px;}
+.lesson-readonly-subject>span:first-child {font-size:var(--label-size);font-weight:600;color:var(--lesson-muted);}
+.teacher-workspace .grid-student-name,.teacher-workspace .grid-student-remove {min-height:var(--chip-h);height:var(--chip-h);}
+.teacher-workspace .grid-student-remove {min-width:var(--chip-h);}
+@container lesson-input (min-width:800px){.teacher-workspace .grid-editor-form tr{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}.teacher-workspace .grid-editor-form td[data-label="수업·자습"]{grid-column:1!important;}.teacher-workspace .grid-editor-form td[data-label="출결·평가"]{grid-column:2!important;}}
+@container lesson-input (max-width:480px){.grid-editor-form{--field-h:44px;--chip-h:44px;}.grid-lesson-top .lesson-top-fields{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}.grid-row-selection{grid-column:1/-1;}}
+.teacher-workspace .lesson-top-fields .student-combobox input {padding-left:30px;padding-right:28px;}
+/* Resolve older grid-specific rules without reordering fields. */
+@container lesson-input (min-width:520px){.teacher-workspace :is(.lesson-editor-panel,.lesson-grid) .lesson-time-row{grid-template-columns:repeat(4,minmax(0,1fr));}.teacher-workspace :is(.lesson-editor-panel,.lesson-grid) .lesson-time-row.is-collapsed{grid-template-columns:minmax(90px,1fr) minmax(0,3fr);}}
+@media(pointer:fine) and (hover:hover){.teacher-workspace .lesson-grid .lesson-option-chip{min-width:0;padding:4px 6px;font-size:11px;}}
+@media(pointer:coarse){.teacher-workspace .lesson-option-chip{min-width:44px;}}
+@container lesson-input (max-width:480px){.teacher-workspace .lesson-grid .lesson-option-chip{min-width:44px;}}
+.teacher-workspace .grid-student-chip {height:var(--chip-h);min-height:var(--chip-h);}
+@container lesson-input (max-width:480px){.teacher-workspace .lesson-option-chip{min-width:44px;}}
+
+.grid-common-fields {display:grid;grid-template-columns:1fr;gap:var(--gap);margin-top:var(--gap);}
+@container lesson-input (min-width:620px){.grid-common-fields{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@container lesson-input (max-width:480px){.grid-toolbar-actions{flex-wrap:nowrap;overflow-x:auto;align-items:start;}.grid-bulk-actions{flex:none;flex-wrap:nowrap;}.grid-common-input{flex:none;}.grid-common-input[open]{min-width:260px;}}
+@container lesson-input (max-width:480px){.teacher-workspace .lesson-chip-field,.teacher-workspace .lesson-grid .lesson-chip-field{grid-template-columns:1fr;gap:4px;}.lesson-chip-options{flex-wrap:wrap;}}
+@media(pointer:coarse){.teacher-workspace .grid-bulk-actions label,.teacher-workspace .lesson-grid label:has(input[type=checkbox]){min-height:44px;}}
+@container lesson-input (max-width:480px){.grid-bulk-actions label{min-height:44px;}}
+.saved-lesson-date {flex:none;white-space:nowrap;font-size:10px;font-variant-numeric:tabular-nums;color:var(--lesson-muted);}
+
+.teacher-workspace.lesson-writing .today-lessons-panel,.teacher-workspace.lesson-writing .lesson-writing-sidebar>.panel {padding:var(--card-pad);}
+/* Hotfix 7: equal always-visible session cards and a compact inline record header. */
+.teacher-workspace :is(.lesson-editor-panel,.lesson-grid) .lesson-time-block {grid-auto-rows:1fr;}
+.teacher-workspace :is(.lesson-editor-panel,.lesson-grid) .lesson-time-row {align-content:start;}
+.teacher-workspace .grid-editor-form .grid-lesson-top .lesson-top-fields {display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:8px 0 0;}
+.teacher-workspace .grid-editor-form .grid-lesson-top .grid-row-selection {align-self:center;flex:none;min-height:var(--field-h);}
+.teacher-workspace .grid-editor-form .grid-lesson-top .lesson-top-fields>label:not(.grid-row-selection),.teacher-workspace .grid-editor-form .grid-lesson-top .lesson-readonly-subject {display:inline-flex;align-items:center;gap:8px;flex:none;}
+.teacher-workspace .grid-editor-form .grid-lesson-top input[type=date] {width:170px;margin-top:0;}
+.teacher-workspace .grid-editor-form .grid-lesson-top .lesson-readonly-field {width:120px;height:var(--field-h);line-height:calc(var(--field-h) - 2px);box-sizing:border-box;margin:0;}
+/* Shared five-area skeleton. Native fieldsets retain every original disabled scope. */
+.teacher-workspace .lesson-form-layout {display:grid!important;grid-template-columns:minmax(0,1fr)!important;grid-template-areas:'basics' 'first' 'second';gap:8px;}
+.lesson-form-fields {display:contents;}
+.lesson-area-basics,.grid-lesson-top {grid-area:basics;}
+.lesson-first-band {grid-area:first;}
+.lesson-second-band {grid-area:second;}
+.lesson-first-band {display:grid!important;grid-template-areas:'schedule' 'content';grid-template-columns:minmax(0,1fr);gap:8px;align-items:stretch;}
+.lesson-second-band {display:grid!important;grid-template-areas:'assessment' 'extras';grid-template-columns:minmax(0,1fr);gap:8px;align-items:stretch;}
+.lesson-area-schedule {grid-area:schedule;min-width:0;}
+.lesson-area-content {grid-area:content;min-width:0;}
+.lesson-area-assessment {grid-area:assessment;min-width:0;}
+.lesson-area-extras {grid-area:extras;min-width:0;}
+.teacher-workspace .grid-editor-form .lesson-first-band,.teacher-workspace .grid-editor-form .lesson-second-band {display:grid!important;}
+.teacher-workspace .lesson-form-fields {padding:0;}
+.teacher-workspace .grid-editor-form .lesson-form-layout>td {grid-column:1!important;}
+.teacher-workspace .lesson-form-layout :is(.lesson-area-content,.lesson-area-extras)>fieldset {padding:0;margin:0;min-width:0;}
+.teacher-workspace .lesson-form-layout .lesson-area-content label,.teacher-workspace .lesson-form-layout .lesson-area-extras label {display:block;margin:0!important;}
+.teacher-workspace .lesson-form-layout .lesson-top-fields {margin:0;}
+.teacher-workspace .lesson-form-layout .lesson-action-bar,.teacher-workspace .grid-editor-toolbar {background:#fff;}
+/* First band: fixed card geometry, no jump when presence or hints change. */
+.lesson-area-schedule {container-name:lesson-schedule;container-type:inline-size;}
+.teacher-workspace .lesson-form-layout .lesson-time-block {margin:0;gap:8px;grid-auto-rows:1fr;}
+.teacher-workspace .lesson-form-layout .lesson-time-row {padding:10px;gap:8px;grid-template-columns:repeat(2,minmax(104px,1fr));align-content:start;}
+.teacher-workspace .lesson-form-layout .lesson-round-hint {display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;min-height:24px;height:24px;line-height:12px;font-size:11px;margin-top:4px;}
+.teacher-workspace .lesson-form-layout .lesson-time-preset {height:28px;min-height:28px;padding:3px 6px;font-size:11px;flex:none;}
+.lesson-form-layout .lesson-time-preset-buttons {min-height:28px;flex-wrap:nowrap;overflow-x:auto;gap:6px;scrollbar-width:none;}
+.lesson-form-layout .lesson-preset-label {flex:none;font-size:10px;}
+.lesson-area-content {display:flex;flex-direction:column;}
+.lesson-area-content>fieldset {display:flex;flex:1;flex-direction:column;}
+.teacher-workspace .lesson-form-layout .lesson-area-content label {display:flex;flex:1;flex-direction:column;min-height:0;}
+.teacher-workspace .lesson-area-content textarea.auto-lesson-textarea {--textarea-min-rows:3;--textarea-max-rows:14;flex:1 0 auto;min-height:72px;max-height:287px;}
+@container lesson-schedule (min-width:410px){.teacher-workspace .lesson-form-layout .lesson-time-row{grid-template-columns:minmax(64px,.8fr) minmax(64px,.8fr) minmax(104px,1fr) minmax(104px,1fr);}}
+@container lesson-input (min-width:900px){.lesson-first-band{grid-template-columns:clamp(440px,44%,520px) minmax(0,1fr);grid-template-areas:'schedule content';}.teacher-workspace .lesson-area-content textarea.auto-lesson-textarea{--textarea-min-rows:8;min-height:160px;}}
+.lesson-label-line {display:flex;align-items:center;gap:4px;flex:none;min-height:17px;}
+/* Second band: assessment on the left, stacked optional writing on the right. */
+.teacher-workspace .lesson-form-layout .lesson-evaluation-heading {margin:0 0 6px;min-height:32px;}
+.teacher-workspace .lesson-form-layout .lesson-evaluation-heading .small-button {min-height:32px;height:32px;}
+.teacher-workspace .lesson-form-layout .lesson-chip-field {grid-template-columns:56px minmax(0,1fr);gap:6px;}
+.teacher-workspace .lesson-form-layout .lesson-option-chip {min-height:32px;height:32px;min-width:0;padding:4px 6px;font-size:11px;}
+.teacher-workspace .lesson-form-layout .lesson-score-disclosure {margin:6px 0 0;padding:8px 10px;}
+.lesson-area-extras {display:grid;grid-template-columns:1fr;gap:8px;align-content:stretch;}
+.lesson-area-extras>fieldset,.lesson-area-extras>fieldset>div {display:contents;}
+.teacher-workspace .lesson-form-layout .lesson-area-extras label {display:flex;flex-direction:column;min-height:0;}
+.teacher-workspace .lesson-area-extras textarea.auto-lesson-textarea {--textarea-min-rows:2;--textarea-max-rows:6;flex:1 0 auto;max-height:131px;}
+@container lesson-input (min-width:1000px){.lesson-second-band{grid-template-columns:minmax(640px,1fr) minmax(320px,1fr);grid-template-areas:'assessment extras';}.lesson-area-extras{grid-template-rows:repeat(3,minmax(0,1fr));}}
+/* Mid and narrow widths: one DOM order, independent container branches. */
+@container lesson-input (min-width:900px) and (max-width:999.99px){.lesson-second-band{grid-template-columns:minmax(0,1fr);grid-template-areas:'assessment' 'extras';}.lesson-area-extras{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:1fr;}}
+@container lesson-input (max-width:899.99px){.lesson-first-band{grid-template-columns:minmax(0,1fr);grid-template-areas:'schedule' 'content';}.lesson-second-band{grid-template-columns:minmax(0,1fr);grid-template-areas:'assessment' 'extras';}.lesson-area-extras{grid-template-columns:1fr;grid-template-rows:none;}.lesson-form-layout{--field-h:44px;--chip-h:44px;}.teacher-workspace .lesson-form-layout :is(input:not([type=checkbox]),select){min-height:44px;height:44px;}.teacher-workspace .lesson-form-layout :is(.lesson-option-chip,.lesson-time-preset){min-height:44px;height:44px;min-width:44px;}.teacher-workspace .lesson-form-layout .lesson-evaluation-heading .small-button{min-height:44px;height:44px;}.teacher-workspace .lesson-form-layout .lesson-area-content textarea{--textarea-min-rows:3;min-height:72px;}.lesson-form-layout .lesson-time-preset-buttons{min-height:44px;}}
+@media(pointer:coarse){.teacher-workspace .lesson-form-layout :is(input:not([type=checkbox]),select){min-height:44px;height:44px;}.teacher-workspace .lesson-form-layout :is(.lesson-option-chip,.lesson-time-preset){min-height:44px;height:44px;min-width:44px;}}
+@container lesson-input (max-width:480px){.teacher-workspace .lesson-form-layout .lesson-chip-field{grid-template-columns:1fr;}}
+.teacher-workspace.lesson-writing {max-width:1440px;}
+/* Hotfix 9: always-visible paired scores and a unified compact toolbar. */
+.teacher-workspace .lesson-scores-panel {margin-top:6px;}
+.teacher-workspace .lesson-scores-panel .lesson-tests {margin:0;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr));}
+.teacher-workspace .lesson-scores-panel .lesson-test {padding:6px 8px;}
+.teacher-workspace .lesson-scores-panel .lesson-test legend {font-size:11px;}
+.teacher-workspace .lesson-scores-panel .lesson-test-inline {grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:6px;align-items:center;}
+.teacher-workspace .lesson-scores-panel .lesson-test-inline label {display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:10px;}
+.teacher-workspace .lesson-scores-panel .lesson-test-inline input {width:52px;min-width:0;margin-top:0;font-size:12px;padding:4px;}
+.teacher-workspace .workspace-dialog:has(.lesson-form-layout)>.workspace-dialog-header {padding:8px 16px;gap:8px;}
+.teacher-workspace .workspace-dialog:has(.lesson-form-layout)>.workspace-dialog-header h2 {margin:0;line-height:1.4;}
+.teacher-workspace .workspace-dialog:has(.lesson-form-layout)>.workspace-dialog-header .small-button {min-height:32px;height:32px;padding:4px 10px;font-size:12px;}
+.teacher-workspace .workspace-dialog:has(.lesson-form-layout)>.workspace-dialog-scroll {padding-top:0;}
+.teacher-workspace .grid-editor-toolbar {padding-top:4px;}
+.teacher-workspace .grid-common-input>summary {font-family:inherit;font-size:12px;font-weight:700;color:var(--lesson-accent);height:var(--field-h);min-height:var(--field-h);box-sizing:border-box;line-height:calc(var(--field-h) - 12px);padding:5px 10px;border-radius:10px;}
+.teacher-workspace .lesson-form-layout .lesson-evaluation-heading .small-button {min-height:26px;height:26px;padding:3px 7px;font-size:10px;}
+@container lesson-input (max-width:619px){.teacher-workspace .lesson-scores-panel .lesson-tests{grid-template-columns:1fr;}.teacher-workspace .lesson-scores-panel .lesson-test-inline input{width:60px;}}
+@container lesson-input (max-width:899.99px){.teacher-workspace .lesson-form-layout .lesson-evaluation-heading .small-button{min-height:44px;height:44px;}}
+@media(pointer:coarse){.teacher-workspace .workspace-dialog:has(.lesson-form-layout)>.workspace-dialog-header .small-button,.teacher-workspace .lesson-form-layout .lesson-evaluation-heading .small-button{min-height:44px;height:44px;}}
