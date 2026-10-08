@@ -7,13 +7,13 @@ import StudentManagementDialog from '../src/components/teacher/StudentManagement
 import WorkspaceDialog from '../src/components/teacher/WorkspaceDialog';
 import {createStudentDialogNavigation} from '../src/lib/studentDialogNavigation';
 
-test('student card is one native keyboard-accessible action without scattered inner buttons',()=>{
+test('student card offers separate native report and management actions without nested buttons',()=>{
  const html=renderToStaticMarkup(<StudentManagementCard student={{studentDisplayName:'학생(학교 고1)',subjects:[{subject:'영어',status:'중단'}],hasGuardianContact:true}} onOpen={()=>{}}/>);
- assert.equal((html.match(/<button/g)||[]).length,1);assert.match(html,/type="button"/);assert.match(html,/학생 관리 열기/);assert.match(html,/영어 · 중단/);assert.match(html,/보호자 연락처 등록됨/);assert.equal(html.includes('정보 수정'),false);
+ assert.equal((html.match(/<button/g)||[]).length,3);assert.match(html,/type="button"/);assert.match(html,/리포트 확인/);assert.match(html,/영어 · 중단/);assert.match(html,/보호자 연락처 등록됨/);assert.equal(html.includes('정보 수정'),false);
 });
-test('administrator defaults to profile and five tabs share exactly one native dialog',()=>{
+test('administrator defaults to report and five tabs share exactly one native dialog',()=>{
  const html=renderToStaticMarkup(<StudentManagementDialog name="학생" canManage onClose={()=>{}} onSelect={()=>{}} render={(tab,leave)=><WorkspaceDialog open title="정보 수정" onClose={leave}><p>{tab}</p></WorkspaceDialog>}/>);
- assert.equal((html.match(/<dialog/g)||[]).length,1);assert.equal((html.match(/role="tab"/g)||[]).length,5);assert.match(html,/role="tabpanel"/);assert.match(html,/aria-selected="true"[^>]*>정보 수정/);assert.match(html,/<p>profile<\/p>/);assert.equal((html.match(/닫기<\/button>/g)||[]).length,1);
+ assert.equal((html.match(/<dialog/g)||[]).length,1);assert.equal((html.match(/role="tab"/g)||[]).length,5);assert.match(html,/role="tabpanel"/);assert.match(html,/aria-selected="true"[^>]*>리포트 확인/);assert.match(html,/<p>review<\/p>/);assert.equal((html.match(/닫기<\/button>/g)||[]).length,1);
 });
 test('ordinary teacher only sees existing three authorized functions and opens report',()=>{
  const html=renderToStaticMarkup(<StudentManagementDialog name="학생" canManage={false} onClose={()=>{}} onSelect={()=>{}} render={(tab)=><p>{tab}</p>}/>);

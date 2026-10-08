@@ -130,6 +130,7 @@ export default function StudentRegistrationManager({onSynced,students=[]}:{onSyn
     }
     return <section className="student-registration-manager mb-5" aria-label="상담·신입생 관리">
         <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-bold text-slate-600">상담·신입생 관리</h3><button type="button" className="small-button" disabled={busy} onClick={start}>+ 상담·신입생 추가</button></div>
+        <details open={loading||Boolean(listError)||Boolean(list.counts?.all)}><summary className="report-intake-summary">상담·신입생 {list.counts?.all??list.total??0}건</summary>
         <p className="text-xs text-slate-500 my-2">상담만 저장한 학생은 별도로 관리합니다. 등록 첫 달은 신입생 목록에 두고, 재원생으로 전환하면 이 목록에서 빠져 아래 학생 관리 카드에서 관리합니다.</p>
         <div role="group" aria-label="상담·등록 구분" className="flex flex-wrap gap-2 my-3">{[["all","전체"],["consultation","상담만 진행"],["new","등록 첫 달"],["additional","추가 과목 상담"]].map(([id,label])=><button key={id} type="button" className={intake===id?"primary-button":"small-button"} aria-pressed={intake===id} onClick={()=>{setIntake(id);setPage(1);}}>{label} {list.counts?.[id]??""}</button>)}</div>{loading ? <p role="status" className="text-xs text-slate-500 py-2">불러오는 중…</p> : null}
         {listError ? <div role="alert" className="text-xs text-rose-600 py-2">{listError}<button type="button" className="small-button ml-2" onClick={()=>setReload(old=>old+1)}>다시 불러오기</button></div> : null}
@@ -146,6 +147,7 @@ export default function StudentRegistrationManager({onSynced,students=[]}:{onSyn
         {!loading && !listError && !list.total ? <p className="text-xs text-slate-400 py-3">이 구분에 저장한 상담·신입생 내용이 없습니다.</p> : null}
         {list.pages>1 ? <div className="review-pagination"><button disabled={loading || list.page===1} onClick={()=>setPage(list.page-1)}>이전</button><span>{list.page} / {list.pages}</span><button disabled={loading || list.page===list.pages} onClick={()=>setPage(list.page+1)}>다음</button></div> : null}
         {feedback && !open ? <p role="status" className="text-xs text-slate-600 py-2">{feedback}</p> : null}
+        </details>
         <WorkspaceDialog open={open} title={revision===undefined?'입학·상담 원서 작성':'입학·상담 원서 조회·수정'} onClose={close}>
             {feedback ? <p role="status" className="text-sm text-slate-600 mb-3">{feedback}</p> : null}
             {retrying ? <p className="text-xs text-rose-600 mb-3">저장 결과가 불명확합니다. 입력을 유지한 채 같은 요청으로 다시 확인합니다.</p> : null}

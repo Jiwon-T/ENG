@@ -1,0 +1,2 @@
+import React from 'react';
+export default function LessonRecordCard({date,subject,attendance,time,summary,selected,onSelect}:{date:string;subject:string;attendance:string;time?:string;summary:string;selected:boolean;onSelect:()=>void}){return <button type="button" className={`report-lesson-card${selected?' is-selected':''}`} aria-pressed={selected} onClick={onSelect}><strong>{date}</strong><span>{subject} · 수업</span><span>{attendance}</span>{time&&<span>수업 시간 {time}</span>}<small>{summary}</small></button>;}

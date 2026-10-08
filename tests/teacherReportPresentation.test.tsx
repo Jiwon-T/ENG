@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {testPercentage,reportScoreTone,sessionMatches} from '../src/lib/teacherReportPresentation';
+import AcademicPanel from '../src/components/reports/AcademicPanel';
+import LessonDetailPane from '../src/components/reports/LessonDetailPane';
+import {readFileSync} from 'node:fs';
+test('percentage preserves zero, rejects absent and zero denominators, rounds first decimal',()=>{assert.equal(testPercentage(0,10),0);assert.equal(testPercentage(1,3),33.3);assert.equal(testPercentage(2,3),66.7);for(const total of [0,null,NaN,Infinity])assert.equal(testPercentage(1,total),null);assert.equal(testPercentage(null,10),null);assert.equal(reportScoreTone(90),'success');assert.equal(reportScoreTone(70),'neutral');assert.equal(reportScoreTone(69.9),'pending');});
+test('page filter separates activity type from grammar and exam category',()=>{const s={type:'test',category:'grammar'};assert.equal(sessionMatches(s,'all'),true);assert.equal(sessionMatches(s,'test'),true);assert.equal(sessionMatches(s,'grammar'),true);assert.equal(sessionMatches(s,'quiz'),false);assert.equal(sessionMatches(s,'exam'),false);});
+test('public AcademicPanel default and explicit public variant render identically',()=>{const load=async()=>({records:[],subjects:[],academyScores:[]});assert.equal(renderToStaticMarkup(<AcademicPanel load={load}/>),renderToStaticMarkup(<AcademicPanel load={load} variant="public"/>));assert.equal(renderToStaticMarkup(<AcademicPanel load={load}/>).includes('현재 불러온 자료 기준'),false);});
+test('lesson pane is purely presentational and exposes no write actions',()=>{const html=renderToStaticMarkup(<LessonDetailPane date="10월 7일" subject="영어" attendance="출석"><p>과제</p></LessonDetailPane>);assert.match(html,/과제/);assert.ok(!html.includes('<button'));});
+test('report UI keeps request body/cache distinction and guards private feedback by audience',()=>{const source=readFileSync(new URL('../src/components/teacher/TeacherReportReview.tsx',import.meta.url),'utf8');assert.match(source,/useState<'parent' \| 'student'>\('student'\)/);assert.match(source,/section==='online'\?null:teacherCachedRead/);assert.match(source,/if\(section!=='online'\)teacherCacheRead/);assert.match(source,/audience==='parent'\?selectedLesson.feedback/);assert.match(source,/role="tablist"/);assert.match(source,/ArrowLeft/);assert.match(source,/ArrowRight/);assert.ok(source.indexOf("['lessons','수업 기록']")<source.indexOf("['schedule','일정']"));});

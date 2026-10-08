@@ -3,15 +3,15 @@ import { useCallback, useId, useRef, useState, type ReactNode } from 'react';
 import WorkspaceDialog from './WorkspaceDialog';
 import { WorkspaceDialogEmbedding } from './WorkspaceDialogEmbedding';
 export const studentManagementTabs = (canManage: boolean) => [
- ...(canManage ? [{ id: 'profile', label: '정보 수정' }, { id: 'enrollment', label: '수강·담당·반 관리' }] : []),
  { id: 'review', label: '리포트 확인' }, { id: 'lesson', label: '수업 작성' }, { id: 'message', label: '보호자 문자' },
+ ...(canManage ? [{ id: 'profile', label: '정보 수정' }, { id: 'enrollment', label: '수강·담당·반 관리' }] : []),
 ];
-export default function StudentManagementDialog({ name, canManage, onClose, onSelect, render, notice, busy = false }: {
+export default function StudentManagementDialog({ name, canManage, onClose, onSelect, render, notice, busy = false, initialTab = 'review' }: {
  name: string; canManage: boolean; onClose: () => void; onSelect: (tab: string) => void;
- render: (tab: string, leave: () => void) => ReactNode; notice?: string; busy?: boolean;
+ render: (tab: string, leave: () => void) => ReactNode; notice?: string; busy?: boolean; initialTab?: string;
 }) {
  const id = useId(), tabs = studentManagementTabs(canManage);
- const [selected, setSelected] = useState(canManage ? 'profile' : 'review');
+ const [selected, setSelected] = useState(initialTab);
  const active = tabs.some(t => t.id === selected) ? selected : 'review';
  const onCloseRef = useRef(onClose); onCloseRef.current = onClose;
  const navigationRef = useRef<ReturnType<typeof createStudentDialogNavigation> | null>(null);

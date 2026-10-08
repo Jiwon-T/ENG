@@ -3,7 +3,7 @@ import type { AcademicData } from '../../types/academic';
 import { SCORE_VIEWS, scoreRows, chartValue, inScorePeriod, type ScorePeriod, type ScoreView } from '../../lib/academicChart';
 
 const COLORS: Record<string, string> = { 영어: '#e65d80', 수학: '#219b71', 국어: '#9364ce', 과학: '#db8a30', 한국사: '#3887ce' };
-export default function AcademicPanel({ load, subject = '' }: { load: () => Promise<AcademicData>; subject?: string }) {
+export default function AcademicPanel({ load, subject = '', variant = 'public' }: { load: () => Promise<AcademicData>; subject?: string; variant?: 'public'|'teacher' }) {
   const [data, setData] = useState<AcademicData | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -45,7 +45,7 @@ export default function AcademicPanel({ load, subject = '' }: { load: () => Prom
   const timeMax = dates.length ? Date.parse(dates.at(-1)!) : 0;
   const x = (date: string) => timeMax === timeMin ? 310 : 50 + (Date.parse(date) - timeMin) / (timeMax - timeMin) * 520;
   const y = (value: number) => 215 - value / maximum * 165;
-  return <section className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 space-y-4 min-w-0">
+  return <section className={variant==='teacher'?'teacher-academic space-y-4 min-w-0':'bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 space-y-4 min-w-0'}>
     <div className="flex justify-between gap-2"><h3 className="font-black text-slate-900">성적 변화</h3><button type="button" onClick={refresh} disabled={loading} className="text-sm text-indigo-600">새로고침</button></div>
     <div role="tablist" aria-label="시험 종류" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">{SCORE_VIEWS.map(v => <button type="button" key={v} role="tab" aria-selected={view === v} onClick={() => { setView(v); setMetric('score'); setSelectedPoint(null); }} className={`px-3 py-2 rounded-xl text-sm ${view === v ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{v === '모의고사' ? '학력평가' : v}</button>)}</div>
     <label className="flex items-center gap-2 text-sm text-slate-600">조회 기간
@@ -55,6 +55,7 @@ export default function AcademicPanel({ load, subject = '' }: { load: () => Prom
     </label>
     {view === '모의고사' && <label className="text-sm">표시 기준 <select value={metric} onChange={e => { setMetric(e.target.value as 'score' | 'percentile'); setSelectedPoint(null); }} className="border rounded-lg p-2"><option value="score">원점수</option><option value="percentile">백분위</option></select></label>}
     <div className="flex flex-wrap gap-2">{subjects.map(s => <button key={s} type="button" aria-pressed={!hidden.includes(s)} onClick={() => setHidden(prev => prev.includes(s) ? prev.filter(v => v !== s) : [...prev, s])} className={`px-3 py-1 rounded-full border text-sm ${hidden.includes(s) ? 'opacity-40' : ''}`} style={{ color: COLORS[s] || '#64748b' }}>{s}</button>)}</div>
+    {variant==='teacher'&&<div className="report-stats">{[['최근',sortedRows.length?chartValue(sortedRows[0],metric):null],['평균',values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length*10)/10:null],['최고',values.length?Math.max(...values):null],['응시 횟수',values.length]].map(([label,value])=><div className="report-stat" key={label}><span>{label}</span><strong>{value??'—'}</strong><small>현재 불러온 자료 기준</small></div>)}</div>}
     {loading ? <p role="status" className="py-8 text-center text-slate-500">성적을 불러오는 중입니다…</p> : error ? <p role="alert" className="text-rose-600">{error}</p> : <>
       {values.length ? <svg viewBox="0 0 620 255" role="img" aria-label={`${viewLabel} ${metric === 'score' ? '원점수' : '백분위'} 변화 그래프`} className="w-full max-h-[320px]" preserveAspectRatio="xMidYMid meet">
         {[0, maximum / 2, maximum].map(v => <g key={v}><line x1="45" x2="575" y1={y(v)} y2={y(v)} stroke="#e2e8f0"/><text x="38" y={y(v) + 4} textAnchor="end" className="text-[22px] sm:text-[12px]" fill="#64748b">{v}</text></g>)}

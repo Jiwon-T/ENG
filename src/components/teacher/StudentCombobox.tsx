@@ -1,12 +1,14 @@
 import {useEffect,useId,useRef,useState} from 'react';
 import {ChevronDown,Search} from 'lucide-react';
 import {studentSearchResults} from '../../lib/koreanSearch';
-interface Props {students:readonly {studentKey:string;studentDisplayName:string}[];value:string;onChange:(key:string)=>void;disabled?:boolean;todayKeys?:readonly string[]}
-export default function StudentCombobox({students,value,onChange,disabled=false,todayKeys=[]}:Props){
+interface Props {students:readonly {studentKey:string;studentDisplayName:string}[];value:string;onChange:(key:string)=>void;disabled?:boolean;todayKeys?:readonly string[];filters?:{label:string;keys:readonly string[]}[]}
+export default function StudentCombobox({students,value,onChange,disabled=false,todayKeys=[],filters}:Props){
  const id=useId(),input=useRef<HTMLInputElement>(null),composing=useRef(false);
  const selected=students.find(student=>student.studentKey===value)?.studentDisplayName||'';
  const [query,setQuery]=useState(''),[open,setOpen]=useState(false),[active,setActive]=useState(0),[space,setSpace]=useState({height:280,above:false});
- const results=studentSearchResults(students,query,todayKeys),current=new Set(todayKeys),index=Math.min(active,Math.max(0,results.length-1));
+ const [filterIndex,setFilterIndex]=useState(0);
+ const filtered=filters?students.filter(s=>filters[filterIndex]?.keys.includes(s.studentKey)):students;
+ const results=studentSearchResults(filtered,query,todayKeys),current=new Set(todayKeys),index=Math.min(active,Math.max(0,results.length-1));
  useEffect(()=>{setOpen(false);setQuery('');setActive(0);},[value]);
  useEffect(()=>{
   if(!open)return;
@@ -27,6 +29,7 @@ export default function StudentCombobox({students,value,onChange,disabled=false,
     if(event.key==='Enter'&&open){event.preventDefault();if(results[index])choose(results[index].studentKey);}
    }}/><ChevronDown size={15} aria-hidden="true"/></div>
   {open&&<div className="student-combobox-popup" style={{'--student-list-height':`${space.height}px`} as any}>
+   {filters&&<div className="report-picker-filters" role="group" aria-label="학생 수강 상태">{filters?.map((filter,i)=><button type="button" key={filter.label} aria-pressed={i===filterIndex} onMouseDown={e=>e.preventDefault()} onClick={()=>{setFilterIndex(i);setActive(0);}}>{filter.label}</button>)}</div>}
    <div id={`${id}-list`} role="listbox" aria-label="학생 검색 결과">{results.map((student,i)=>{const isToday=current.has(student.studentKey);return <div key={student.studentKey}>
     {(i===0||isToday!==current.has(results[i-1].studentKey))&&<div role="presentation" className="student-combobox-group">{isToday?'오늘':'학생'}</div>}
     <div id={`${id}-option-${i}`} role="option" aria-selected={value===student.studentKey} className={`student-combobox-option ${i===index?'is-active':''}`} onMouseDown={event=>event.preventDefault()} onClick={()=>choose(student.studentKey)}>{student.studentDisplayName}{isToday&&<span className="student-today-tag">오늘</span>}</div>
