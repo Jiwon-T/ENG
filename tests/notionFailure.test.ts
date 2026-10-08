@@ -6,6 +6,28 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import WorkspaceSyncPanel from '../src/components/teacher/WorkspaceSyncPanel';
 import {syncManagedRecord,DEFAULT_SOURCE} from '../api/_lib/teacherNotionWorkspace';
+test('shared class preparation creates a complete one-way author relation without changing existing relations',async()=>{
+ const fetcher=globalThis.fetch,token=process.env.NOTION_INTEGRATION_TOKEN,admin=process.env.ADMIN_UID;
+ process.env.NOTION_INTEGRATION_TOKEN='mock-token';process.env.ADMIN_UID='owner';
+ const profile={academyId:'main',notionTeacherPageId:'3ec0d0f1-c79a-8108-b714-c1d6fc390ba2'};
+ const record:any={ownerUid:'owner',academyId:'main',subject:'영어',name:'모의 반',students:[],slots:[],books:[],revision:1};
+ const ref={get:async()=>({data:()=>record}),update:async(p:any)=>Object.assign(record,p)};
+ const profiles={get:async()=>({docs:[{id:'owner',exists:true,data:()=>profile}]})};
+ const db:any={collection:(name:string)=>({doc:()=>name==='teacherClasses'?ref:{get:async()=>({data:()=>name==='academyNotionConfig'?{mode:'shared',...DEFAULT_SOURCE}:profile})},where:()=>profiles}),runTransaction:async(fn:any)=>fn({get:(r:any)=>r.get(),update:(r:any,p:any)=>r.update(p)})};
+ let schemaPatches=0;
+ globalThis.fetch=(async(url:any,options:any)=>{
+  const path=String(url).split('/v1/')[1],body=options.body?JSON.parse(options.body):{};
+  if(path==='databases/'+DEFAULT_SOURCE.classDatabaseId&&options.method==='PATCH'){
+   schemaPatches++;assert.deepEqual(body.properties['작성자 선생님'].relation,{database_id:'3d274aff-32ce-4a33-870d-2689259113a6',type:'single_property',single_property:{}});
+   assert.deepEqual(Object.keys(body.properties),['작성자 선생님']);return Response.json({});
+  }
+  if(path.endsWith('/query'))return Response.json({results:[],has_more:false});
+  if(path.startsWith('databases/'))return Response.json({properties:{'앱 기록 ID':{rich_text:{}},'담당 선생님':{relation:{database_id:'unchanged'}}}});
+  return Response.json({code:'validation_error',message:'상태 invalid'},{status:400});
+ }) as any;
+ try{await assert.rejects(syncManagedRecord(db,'teacherClasses','44444444-4444-4444-8444-444444444444'),/NOTION_400/);assert.equal(schemaPatches,1);assert.equal(record.notionSyncDiagnostic.phase,'반 정보 반영');}
+ finally{globalThis.fetch=fetcher;if(token===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=token;if(admin===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=admin;}
+});
 test('Notion diagnostics retain property hints but exclude raw field values, page IDs and secrets',()=>{
  const diagnostic=notionFailureDiagnostic('pages/private-page-id','PATCH',{properties:{'상태':{status:{name:'PRIVATE_VALUE'}},'수업명':{title:[]}}},{code:'validation_error',request_id:'request-123',message:'상태 invalid PRIVATE_STUDENT PRIVATE_VALUE token-secret'});
  assert.deepEqual(diagnostic.fields,[{name:'상태',type:'status'}]);

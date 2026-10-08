@@ -1,3 +1,11 @@
+.teacher-workspace .message-template-manager {container-type:inline-size;}
+.teacher-workspace .message-template-toolbar {display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0;}
+.teacher-workspace .message-template-grid {display:grid;grid-template-columns:1fr;gap:16px;margin-top:12px;}
+.teacher-workspace .message-template-row {display:flex;width:100%;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:12px;border-bottom:1px solid var(--workspace-neutral-border);text-align:left;}
+.teacher-workspace .message-template-row[aria-pressed=true] {background:var(--workspace-brand-bg);border-left:3px solid var(--workspace-brand-dot);}
+.teacher-workspace .message-template-conflict {padding:12px;background:var(--workspace-danger-bg);border:1px solid var(--workspace-danger-border);border-radius:12px;}
+.teacher-workspace .message-template-conflict pre {white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;}
+@container (min-width:800px) {.teacher-workspace .message-template-grid {grid-template-columns:minmax(220px,1fr) minmax(320px,2fr);}}
 .teacher-workspace {
  --workspace-neutral-border:#e2e8f0;
  --workspace-palette-0f172a05:#0f172a05;

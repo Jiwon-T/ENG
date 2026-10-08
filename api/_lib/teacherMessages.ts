@@ -1,4 +1,6 @@
 import {batiConfig,batiRequest,batiAccepted,batiReadiness} from './batiTransport.js';
+import {templateFirestoreReads,storedMessageTemplates,storedMessageTemplatePage} from './messageTemplateStore.js';
+import {coreActive,coreStudentPage} from './academyCore.js';
 export {batiConfig} from './batiTransport.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
@@ -19,7 +21,7 @@ async function access(db:any,actor:any,key:string,subject:string){
  if(!actor.admin&&!actor.principal&&!(actor.scopes||[]).some((s:any)=>uuid(s.studentKey)===key&&s.subject===subject))throw Error('FORBIDDEN');
 }
 async function source(db:any,actor:any,key:string,subject:string,notion:RegistrationNotion){
- await access(db,actor,key,subject);const page=await notion(`pages/${key}`);assertPage(page,key);
+ await access(db,actor,key,subject);const page=await coreActive(db,actor)?await coreStudentPage(db,key):await notion(`pages/${key}`);assertPage(page,key);
  const edit=(await db.collection('teacherStudentEdits').doc(hashStudentKey(key)).get()).data();assertContactEditAllowsIssuance(edit,page.last_edited_time);
  return page;
 }
@@ -30,8 +32,10 @@ function messageContext(page:any,template:any){
 }
 export async function readTeacherMessages(db:any,actor:any,keyInput:unknown,subjectInput:unknown,notion:RegistrationNotion=registrationNotion){
  const key=uuid(z.string().uuid().parse(keyInput)),subject=z.string().min(1).max(100).parse(subjectInput);const page=await source(db,actor,key,subject,notion);
- const templates:any[]=[];let cursor:string|undefined;
+ const templates:any[]=templateFirestoreReads()?await storedMessageTemplates(db,actor):[];let cursor:string|undefined;
+ if(!templateFirestoreReads()){
  do{const result=await notion(`databases/${TEMPLATE_DB}/query`,'POST',{page_size:100,...(cursor?{start_cursor:cursor}:{})});for(const p of result.results){assertPage(p,uuid(p.id),TEMPLATE_DB);templates.push({id:uuid(p.id),title:(p.properties['유형']?.title||[]).map((t:any)=>t.plain_text??t.text?.content??'').join(''),body:registrationText(p.properties['내용(문자본문)']),target:p.properties['대상']?.select?.name||''});}cursor=result.has_more?result.next_cursor:undefined;if(result.has_more&&!cursor)throw Error('NOTION_SOURCE_MISMATCH');}while(cursor&&templates.length<500);
+ }
  const records=await db.collection('teacherLessonDrafts').where('academyId','==',actor.academyId).get();
  const lessons=records.docs.map((d:any)=>({id:d.id,...d.data()})).filter((r:any)=>r.stage==='published'&&!r.archived&&r.data?.studentKey?.replace(/-/g,'')===key.replace(/-/g,'')&&r.data?.subject===subject).sort((a:any,b:any)=>b.data.date.localeCompare(a.data.date)).slice(0,30).map((r:any)=>({id:r.id,data:r.data}));
  const drafts=await db.collection('teacherMessages').where('studentKey','==',key).get();
@@ -40,7 +44,7 @@ export async function readTeacherMessages(db:any,actor:any,keyInput:unknown,subj
 export const messagePrepareSchema=z.object({action:z.literal('prepare-message'),id:z.string().uuid(),studentKey:z.string().uuid(),subject:z.string().min(1).max(100),templateId:z.string().uuid(),lessonId:z.string().uuid().nullable(),body:z.string().trim().min(1).max(5000)}).strict();
 export async function prepareTeacherMessage(db:any,actor:any,input:unknown,notion:RegistrationNotion=registrationNotion){
  const v=messagePrepareSchema.parse(input),key=uuid(v.studentKey);if(unresolvedMessage(v.body))throw Error('MESSAGE_VARIABLE_REQUIRED');
- const page=await source(db,actor,key,v.subject,notion),template=await notion(`pages/${uuid(v.templateId)}`);assertPage(template,uuid(v.templateId),TEMPLATE_DB);
+ const page=await source(db,actor,key,v.subject,notion),template=templateFirestoreReads()?await storedMessageTemplatePage(db,actor,v.templateId):await notion(`pages/${uuid(v.templateId)}`);assertPage(template,uuid(v.templateId),TEMPLATE_DB);
  const recipient=profileFromPage(page).guardianPhone;if(!/^0\d{8,10}$/.test(recipient))throw Error('MESSAGE_CONTACT_REQUIRED');
  if(v.lessonId){const lesson=(await db.collection('teacherLessonDrafts').doc(v.lessonId).get()).data();if(!lesson||lesson.academyId!==actor.academyId||lesson.stage!=='published'||lesson.archived||uuid(lesson.data.studentKey)!==key||lesson.data.subject!==v.subject)throw Error('FORBIDDEN');}
  const ref=db.collection('teacherMessages').doc(v.id),context=messageContext(page,template),fingerprint=digest(JSON.stringify([actor.uid,key,v.subject,v.templateId,v.lessonId,v.body]));

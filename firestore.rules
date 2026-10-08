@@ -374,6 +374,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /teacherCurricula/{id} { allow read, write: if false; }
+    // Pilot source, journals and checkpoints are available only through authorized server APIs.
+    match /messageTemplateSources/{id} { allow read, write: if false; }
+    match /academyDirectorySources/{id} { allow read, write: if false; }
+    match /academyDirectorySync/{id} { allow read, write: if false; }
+    match /academyDirectoryHistory/{id} { allow read, write: if false; }
+    match /academyCoreAuthority/{id} { allow read, write: if false; }
+    match /academyCoreCommands/{id} { allow read, write: if false; }
+    match /academyClassAuthority/{id} { allow read, write: if false; }
+    match /academyManagedMigration/{id} { allow read, write: if false; }
+    match /academyManagedSources/{id} { allow read, write: if false; }
+    match /academyManagedHistory/{id} { allow read, write: if false; }
+    match /messageTemplateJobs/{id} { allow read, write: if false; }
+    match /messageTemplateSync/{id} { allow read, write: if false; }
+    match /messageTemplateHistory/{id} { allow read, write: if false; }
     match /teacherLessonDrafts/{id} { allow read, write: if false; }
     match /teacherSchedules/{id} { allow read, write: if false; }
     match /teacherClasses/{id} { allow read, write: if false; }

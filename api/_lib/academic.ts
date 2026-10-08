@@ -4,9 +4,11 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { normalizeNotionPageId } from './notionPageId.js';
 import { lookupStudentByPageId } from './notion.js';
 import { migrateStudentMapping } from './studentIdentity.js';
+import {coreActive,coreStudentIdentity} from './academyCore.js';
 
 export const GRADE_DATABASE = 'fa6ce5a8-9572-4f4d-80d9-4d1485d44e6f';
-export const ENROLLMENT_DATABASE = '3ec0d0f1-c79a-80b2-bb52-ea162888fe9a';
+import {ENROLLMENT_DATABASE} from './notionAcademicSources.js';
+export {ENROLLMENT_DATABASE};
 export const SUBJECTS = ['영어', '수학', '국어', '과학', '한국사'];
 const text = (p: any) => (p?.title || p?.rich_text || []).map((x: any) => x.plain_text ?? x.text?.content ?? '').join('');
 const choice = (p: any) => p?.select?.name || p?.status?.name || '';
@@ -67,6 +69,7 @@ async function resolveAcademicStudent(studentPageId: string) {
 export async function syncAcademicPage(db: Firestore, page: any, resolveStudent = resolveAcademicStudent, mapStudent = migrateStudentMapping, app?:{draftId:string;revision:number;academyId:string}) {
   const parsed = parseAcademicPage(page);
   const ref = db.collection(parsed.collection).doc(parsed.id);
+  if(parsed.collection==='studentEnrollments'&&(await ref.get()).data()?.appSource==='firestore')return {applied:false,reason:'APP_OWNED',kind:parsed.collection};
   if(parsed.collection==='academicRecords'&&!app){
     const saved=(await ref.get()).data();
     if(saved?.teacherDraftId)return {applied:false,reason:'APP_OWNED',kind:parsed.collection};
@@ -78,7 +81,7 @@ export async function syncAcademicPage(db: Firestore, page: any, resolveStudent 
   }
   let internalStudentId: string | null = null;
   if (!parsed.data.removed) {
-    const student = await resolveStudent(parsed.studentPageId!);
+    const student = await coreActive(db,{academyId:'main'})?await coreStudentIdentity(db,parsed.studentPageId!,false):await resolveStudent(parsed.studentPageId!);
     internalStudentId = (await mapStudent(db, student.notionStudentPageId, student.studentDisplayName)).internalStudentId;
   }
   return db.runTransaction(async tx => {

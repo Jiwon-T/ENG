@@ -11,3 +11,4 @@ jiwont-full-production.zip
 jiwont-vercel-report-changes.tar.gz
 
 .work-checkpoints/
+.template-worker-context/

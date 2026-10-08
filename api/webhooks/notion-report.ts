@@ -5,6 +5,7 @@ import {
   NotionReportWebhookSchema,
 } from '../_lib/reportSchemas.js';
 import { lookupStudentByPageId } from '../_lib/notion.js';
+import {coreActive,coreStudentIdentity} from '../_lib/academyCore.js';
 import { getSecretOrThrow } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 import { migrateStudentMapping } from '../_lib/studentIdentity.js';
@@ -51,7 +52,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     // The student's relation page ID is the only identity; legacy display keys are ignored.
     let notionLookup;
     try {
-      notionLookup = await lookupStudentByPageId(data.notionStudentPageId, '', false);
+      notionLookup = await coreActive(db,{academyId:'main'})?await coreStudentIdentity(db,data.notionStudentPageId,false):await lookupStudentByPageId(data.notionStudentPageId, '', false);
     } catch {
       return sendJson(res, 422, { ok: false, error: 'STUDENT_NOT_FOUND_IN_NOTION' });
     }

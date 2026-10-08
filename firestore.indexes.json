@@ -1,5 +1,14 @@
 {
   "indexes": [
+    {"collectionGroup":"studySessions","queryScope":"COLLECTION","fields":[{"fieldPath":"uid","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}]},
+    {"collectionGroup":"wordProgress","queryScope":"COLLECTION","fields":[{"fieldPath":"uid","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]},
+    {"collectionGroup":"assignments","queryScope":"COLLECTION","fields":[{"fieldPath":"studentUid","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}]},
+    {"collectionGroup":"academyDirectorySources","queryScope":"COLLECTION","fields":[{"fieldPath":"sourceKey","order":"ASCENDING"},{"fieldPath":"notionPageId","order":"ASCENDING"}]},
+    {"collectionGroup":"academyDirectorySources","queryScope":"COLLECTION","fields":[{"fieldPath":"sourceKey","order":"ASCENDING"},{"fieldPath":"studentKey","order":"ASCENDING"}]},
+    {"collectionGroup":"academyDirectorySources","queryScope":"COLLECTION","fields":[{"fieldPath":"sourceKey","order":"ASCENDING"},{"fieldPath":"verified","order":"ASCENDING"}]},
+    {"collectionGroup":"messageTemplateSources","queryScope":"COLLECTION","fields":[{"fieldPath":"sourceKey","order":"ASCENDING"},{"fieldPath":"notionPageId","order":"ASCENDING"}]},
+    {"collectionGroup":"messageTemplateJobs","queryScope":"COLLECTION","fields":[{"fieldPath":"sourceKey","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"nextAttemptAt","order":"ASCENDING"}]},
+    {"collectionGroup":"messageTemplateHistory","queryScope":"COLLECTION","fields":[{"fieldPath":"entityKey","order":"ASCENDING"},{"fieldPath":"revision","order":"DESCENDING"}]},
     {
       "collectionGroup": "studentSchedules",
       "queryScope": "COLLECTION",
@@ -43,5 +52,17 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {"collectionGroup":"academyManagedHistory","fieldPath":"before","indexes":[]},
+    {"collectionGroup":"academyManagedHistory","fieldPath":"after","indexes":[]},
+    {"collectionGroup":"academyDirectorySources","fieldPath":"fields","indexes":[]},
+    {"collectionGroup":"academyDirectoryHistory","fieldPath":"before","indexes":[]},
+    {"collectionGroup":"academyDirectoryHistory","fieldPath":"after","indexes":[]},
+    {"collectionGroup":"messageTemplateSources","fieldPath":"data","indexes":[]},
+    {"collectionGroup":"messageTemplateSources","fieldPath":"conflict","indexes":[]},
+    {"collectionGroup":"messageTemplateJobs","fieldPath":"desired","indexes":[]},
+    {"collectionGroup":"messageTemplateHistory","fieldPath":"before","indexes":[]},
+    {"collectionGroup":"messageTemplateHistory","fieldPath":"after","indexes":[]},
+    {"collectionGroup":"messageTemplateHistory","fieldPath":"remote","indexes":[]}
+  ]
 }

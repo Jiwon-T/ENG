@@ -23,7 +23,9 @@ test('simultaneous teacher room requests share account documents and later disab
  const before=process.env.ADMIN_UID;process.env.ADMIN_UID='admin';let reads=0,disabled=false;
  const db:any={collection:(name:string)=>({doc:()=>({get:async()=>{reads++;await new Promise(r=>setTimeout(r,5));return {data:()=>name==='users'?{role:'teacher'}:{academyId:'main',scopes:[],disabled}};}})})};
  const initialize:any=()=>({db,auth:{verifyIdToken:async()=>({uid:'teacher'})}}),req:any={headers:{authorization:'Bearer token'}};
- try{await Promise.all([teacherActor(req,initialize),teacherActor(req,initialize),teacherActor(req,initialize)]);assert.equal(reads,2);disabled=true;await assert.rejects(teacherActor(req,initialize),/TEACHER_NOT_CONFIGURED/);assert.equal(reads,4);}finally{if(before===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=before;}
+ // Account pair remains shared; the authoritative cutover checkpoint adds one
+ // shared read, never a persisted permission cache. Disabled profiles stop first.
+ try{await Promise.all([teacherActor(req,initialize),teacherActor(req,initialize),teacherActor(req,initialize)]);assert.equal(reads,3);disabled=true;await assert.rejects(teacherActor(req,initialize),/TEACHER_NOT_CONFIGURED/);assert.equal(reads,5);}finally{if(before===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=before;}
 });
 test('Firestore resource exhausted has explicit 429 guidance without leaking raw details',()=>{
  for(const code of [8,'resource-exhausted','firestore/resource-exhausted']){const result=workspaceError(Object.assign(Error('private raw details'),{code}),'workspace-account');assert.equal(result.status,429);assert.equal(result.body.error,'FIRESTORE_RESOURCE_EXHAUSTED');assert.match(result.body.message,/사용량/);assert.ok(!JSON.stringify(result).includes('private raw details'));}

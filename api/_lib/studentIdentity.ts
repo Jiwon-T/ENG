@@ -3,6 +3,7 @@ import type { StoredNotionStudentMapping } from './reportSchemas.js';
 import { generateInternalStudentId, hashStudentKey } from './security.js';
 import { normalizeNotionPageId, isNotionPageId } from './notionPageId.js';
 import { lookupStudentByPageId } from './notion.js';
+import {coreActive,coreStudentIdentity} from './academyCore.js';
 
 /** Read-only bridge for previously linked accounts. Never claims an account. */
 export async function readStudentMapping(db: Firestore, key: string): Promise<StoredNotionStudentMapping | null> {
@@ -26,6 +27,7 @@ export async function resolveStudentPageId(db: Firestore, key: string): Promise<
 }
 
 export async function lookupStudentIdentity(db: Firestore, key: string, requireGuardianContact = true) {
+  if(await coreActive(db,{academyId:'main'}))return coreStudentIdentity(db,await resolveStudentPageId(db,key),requireGuardianContact);
   return lookupStudentByPageId(await resolveStudentPageId(db, key), '', requireGuardianContact);
 }
 

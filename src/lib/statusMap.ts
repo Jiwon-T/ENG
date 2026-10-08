@@ -1,4 +1,5 @@
 export function syncStatusMap(status?:string){
+ if(status==='app_saved')return {kind:'editing' as const,text:'앱 저장 완료',quiet:false};
  if(status==='published'||status==='synced')return {kind:'done' as const,text:'Notion 반영 완료',quiet:true};
  if(status==='failed')return {kind:'failed' as const,text:'반영 실패',quiet:false};
  if(!status)return null;

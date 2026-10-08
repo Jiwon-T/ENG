@@ -2,8 +2,8 @@ import {emptyAdmission} from '../../src/lib/studentAdmission.js';
 import {admissionNotionProperties} from './studentAdmission.js';
 import { studentRegistrationTitle, type StudentRegistration } from './teacherStudentRegistration.js';
 import { normalizeNotionPageId } from './notionPageId.js';
-import { ENROLLMENT_DATABASE } from './academic.js';
-export const REGISTRATION_STUDENT_DATABASE='e2b0d0f1-c79a-8262-a208-8116c9201cfc';
+import { ENROLLMENT_DATABASE,STUDENT_DATABASE } from './notionAcademicSources.js';
+export const REGISTRATION_STUDENT_DATABASE=STUDENT_DATABASE;
 const rich=(value:string)=>({rich_text:value ? [{text:{content:value}}] : []});
 const title=(value:string)=>({title:[{text:{content:value}}]});
 export function registrationStudentProperties(id:string, value:StudentRegistration, classIds:string[]=[]) {

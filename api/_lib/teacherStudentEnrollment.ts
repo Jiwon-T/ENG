@@ -10,6 +10,7 @@ import { hashStudentKey } from './security.js';
 import { migrateStudentMapping } from './studentIdentity.js';
 import { syncAcademicPage } from './academic.js';
 import { invalidateTeacherMutation } from './teacherReadCache.js';
+import {coreActive,readCoreEnrollment,saveCoreEnrollment} from './academyCore.js';
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => Number.isFinite(Date.parse(v + 'T00:00:00Z')) && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v);
 const ids = z.array(z.string().uuid().transform(uuid)).max(100).refine(v => new Set(v).size === v.length);
 export const enrollmentEditSchema = z.object({ subject: z.enum(registrationSubjects), status: z.enum(['등록', '대기', '중단']), startDate: date, endDate: date.nullable(), addTeacherUid: z.string().min(1).max(128).nullable(), removeTeacherIds: ids, classIds: ids }).strict().superRefine((v, c) => {
@@ -51,6 +52,7 @@ async function sources(notion: RegistrationNotion, key: string) {
 async function classPages(notion: RegistrationNotion, student: any) { return Promise.all(relations(student.properties?.['소속반']).map(async (id) => { const p = await notion(`pages/${id}`); if (uuid(p.parent?.database_id || '') !== CLASSES || uuid(p.id) !== id)
     throw Error('NOTION_SOURCE_MISMATCH'); return p; })); }
 export async function readStudentEnrollment(db: any, actor: RegistrationActor, id: unknown, notion: RegistrationNotion = registrationNotion): Promise<EnrollmentRecord> {
+    if(await coreActive(db,actor))return readCoreEnrollment(db,actor,id);
     const key = uuid(z.string().uuid().parse(id));
     await access(db, actor, key);
     const [{ student, enrollment }, saved] = await Promise.all([sources(notion, key), refFor(db, key).get()]);
@@ -114,6 +116,7 @@ async function plan(db: any, actor: RegistrationActor, key: string, data: Enroll
     return [{ id: uuid(enrollment.id), database: ENROLLMENTS, editedAt: enrollment.last_edited_time, properties: ep, attempted: false, done: false }, { id: key, database: STUDENTS, editedAt: student.last_edited_time, properties: sp, attempted: false, done: false }];
 }
 export async function saveStudentEnrollment(db: any, actor: RegistrationActor, id: unknown, request: any, notion: RegistrationNotion = registrationNotion, sync = syncAcademicPage) {
+    if(await coreActive(db,actor)){const result=await saveCoreEnrollment(db,actor,id,request,v=>enrollmentEditSchema.parse(v));invalidateTeacherMutation('save-student-enrollment');return result;}
     const key = uuid(z.string().uuid().parse(id)), operationId = z.string().uuid().parse(request.operationId), data = enrollmentEditSchema.parse(request.data) as EnrollmentInput;
     const studentEditedAt = z.string().datetime().parse(request.studentEditedAt), enrollmentEditedAt = z.string().datetime().parse(request.enrollmentEditedAt);
     await access(db, actor, key);

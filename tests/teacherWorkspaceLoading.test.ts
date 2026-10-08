@@ -47,7 +47,7 @@ test('lesson bootstrap omits schedules, settings, all draft bodies and curriculu
  teacherReadCache.clear();const previous=globalThis.fetch,token=process.env.NOTION_INTEGRATION_TOKEN,database=process.env.NOTION_STUDENT_DATABASE_ID;
  process.env.NOTION_INTEGRATION_TOKEN='test';process.env.NOTION_STUDENT_DATABASE_ID='test';
  globalThis.fetch=async()=>new Response(JSON.stringify({results:[],has_more:false}),{status:200});
- const reads:string[]=[];const db:any={collection:(name:string)=>{reads.push(name);const q:any={where:()=>q,get:async()=>({docs:[]})};return q;}};
+ const reads:string[]=[];const db:any={collection:(name:string)=>{reads.push(name);const q:any={where:()=>q,get:async()=>({docs:[]}),doc:()=>({get:async()=>({data:()=>undefined})})};return q;}};
  try{const {body,status}=await run('/api/teacher/workspace?action=bootstrap-fast&section=lesson',db);assert.equal(status,200);assert.deepEqual(body.classes,[]);
   for(const name of ['teacherSchedules','studentSchedules','teacherLessonDrafts','teacherCurricula','teacherWorkspaceAccess','users'])assert.equal(reads.includes(name),false,name);
   for(const key of ['drafts','schedules','reflectedSchedules','access','staff','curricula'])assert.equal(key in body,false,key);
@@ -76,9 +76,9 @@ test('class and curriculum refresh skips student directory, schedules and settin
  const {teacherReadKey}=await import('../api/_lib/teacherReadCache.ts');teacherReadCache.clear();
  const actor={uid,admin:true,principal:false,academyId:'main',scopes:[],teachingScopes:[]};
  await teacherReadCache.get(teacherReadKey(actor,'workspace-curriculum'),async()=>({classes:[],curricula:[],issues:[],sources:[]}));
- const reads:string[]=[];const db:any={collection:(name:string)=>{reads.push(name);return {get:async()=>({docs:[]})};}};
+ const reads:string[]=[];const db:any={collection:(name:string)=>{reads.push(name);return {get:async()=>({docs:[]}),doc:()=>({get:async()=>({data:()=>undefined})})};}};
  const {body,status}=await run('/api/teacher/workspace?action=bootstrap&section=curriculum&resourcesOnly=1',db);
- assert.equal(status,200);assert.deepEqual(reads.sort(),['teacherClasses','teacherCurricula']);assert.equal('students' in body,false);assert.equal('staff' in body,false);assert.equal('schedules' in body,false);teacherReadCache.clear();
+ assert.equal(status,200);assert.deepEqual(reads.sort(),['academyClassAuthority','teacherClasses','teacherCurricula']);assert.equal('students' in body,false);assert.equal('staff' in body,false);assert.equal('schedules' in body,false);teacherReadCache.clear();
 });
 
 test('reproduces missing today record outside the first draft page with eleven owned drafts',async()=>{

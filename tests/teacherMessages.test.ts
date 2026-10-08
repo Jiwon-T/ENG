@@ -5,6 +5,8 @@ import {registrationFirestore} from './helpers/registrationFirestore.js';
 import {prepareTeacherMessage,sendTeacherMessage,batiConfig,readTeacherMessages} from '../api/_lib/teacherMessages.js';
 import {renderTeacherMessage,messageVariables} from '../src/lib/teacherMessage.js';
 import {hashStudentKey} from '../api/_lib/security.js';
+import {templateFirestore} from './helpers/templateFirestore.js';
+import {TEMPLATE_COLLECTION,TEMPLATE_STATE,TEMPLATE_SOURCE,TEMPLATE_DATABASE,templateKey,templatePage} from '../api/_lib/messageTemplateStore.js';
 const key='11111111-1111-4111-8111-111111111111',templateId='22222222-2222-4222-8222-222222222222',studentDB='e2b0d0f1-c79a-8262-a208-8116c9201cfc';
 process.env.NOTION_STUDENT_DATABASE_ID=studentDB;process.env.BATI_WEBHOOK_URL='https://app.bati.ai/webhook/test_only';process.env.BATI_MESSAGE_PARAM='본문';process.env.BATI_RECIPIENT_PARAM='보호자연락처';process.env.BATI_WEBHOOK_METHOD='GET';process.env.BATI_PAYLOAD_MODE='body-only';process.env.BATI_RESPONSE_RULE=JSON.stringify({kind:'status',status:200});
 function fixture(){const f=registrationFirestore(),actor={uid:'teacher',admin:false,principal:false,academyId:'main',scopes:[{studentKey:key,subject:'영어'}]};f.rows.set('academyStudentMemberships/'+key,{academyId:'main'});let patches=0,fail=false;
@@ -34,4 +36,19 @@ test('HTML 200 does not count as confirmed JSON acceptance or permit resend',asy
  try{const transport:any=async()=>{calls++;return new Response('<html>완료 페이지</html>',{status:200});};const result=await sendTeacherMessage(f.db,f.actor,f.input.id,true,f.notion,transport);assert.equal(result?.status,'uncertain');assert.equal(result?.httpStatus,200);assert.equal(result?.outcomeCode,'response-unconfirmed');await sendTeacherMessage(f.db,f.actor,f.input.id,true,f.notion,transport);assert.equal(calls,1);}finally{process.env.BATI_RESPONSE_RULE=prior;}
 });
 test('contact edit begins during source lookup blocks preparation transaction',async()=>{const f=fixture();const n:any=async(path:string,method?:string,body?:any)=>{const value=await f.notion(path,method,body);if(path===`pages/${templateId}`)f.rows.set('teacherStudentEdits/'+hashStudentKey(key),{contactChanged:true,status:'uncertain'});return value;};await assert.rejects(prepareTeacherMessage(f.db,f.actor,f.input,n),/STUDENT_PROFILE_CONTACT_PENDING/);assert.equal(f.patches,0);});
+test('Firestore template cutover removes only template Notion reads; existing preparation/recipient checks stay intact',async()=>{
+ const previous=process.env.MESSAGE_TEMPLATE_READ_MODE,f=fixture(),t=templateFirestore();
+ const page={id:templateId,parent:{database_id:TEMPLATE_DATABASE},last_edited_time:'2026-10-07T00:00:00Z',properties:{'유형':{title:[{plain_text:'앱 템플릿'}]},'내용(문자본문)':{rich_text:[{plain_text:'{{학생 호칭}} 앱 본문'}]},'대상':{select:{name:'보호자'}}}};
+ const p=templatePage(page);t.rows.set(TEMPLATE_STATE+'/'+TEMPLATE_SOURCE,{ready:true});t.rows.set(TEMPLATE_COLLECTION+'/'+templateKey(templateId),{sourceKey:TEMPLATE_SOURCE,academyId:'main',databaseId:TEMPLATE_DATABASE,notionPageId:templateId,data:p.data,dataHash:p.hash,revision:1,status:'synced'});
+ const db={...f.db,collection:(name:string)=>name.startsWith('messageTemplate')?t.db.collection(name):f.db.collection(name)};
+ const paths:string[]=[];const notion:any=async(path:string,method?:string,body?:any)=>{paths.push(path);return f.notion(path,method,body);};
+ try{
+  process.env.MESSAGE_TEMPLATE_READ_MODE='notion';await readTeacherMessages(db,f.actor,key,'영어',notion);assert.equal(paths.filter(p=>p.endsWith('/query')).length,1);
+  const legacy=fixture();await prepareTeacherMessage(legacy.db,legacy.actor,legacy.input,legacy.notion);const before=legacy.rows.get('teacherMessages/'+legacy.input.id);
+  paths.length=0;process.env.MESSAGE_TEMPLATE_READ_MODE='firestore';const r=await readTeacherMessages(db,f.actor,key,'영어',notion);assert.equal(r.templates[0].title,'앱 템플릿');assert.equal(paths.filter(p=>p.endsWith('/query')).length,0);assert.ok(paths.includes('pages/'+key));
+  paths.length=0;await prepareTeacherMessage(db,f.actor,f.input,notion);assert.equal(paths.filter(p=>p==='pages/'+templateId).length,0);assert.equal(f.rows.get('teacherMessages/'+f.input.id).context['메시지템플릿선택'],'');assert.equal(f.patches,1); // Preserve the existing title-property context contract.
+  const after=f.rows.get('teacherMessages/'+f.input.id);assert.deepEqual({body:after.body,recipient:after.recipient,context:after.context},{body:before.body,recipient:before.recipient,context:before.context});
+  await assert.rejects(readTeacherMessages(db,{...f.actor,scopes:[]},key,'영어',notion),/FORBIDDEN/);
+ }finally{previous===undefined?delete process.env.MESSAGE_TEMPLATE_READ_MODE:process.env.MESSAGE_TEMPLATE_READ_MODE=previous;}
+});
 

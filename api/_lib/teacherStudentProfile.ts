@@ -8,6 +8,7 @@ import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {migrateStudentMapping} from './studentIdentity.js';
 import {generateInternalStudentId,hashPin,hashStudentKey} from './security.js';
 import {invalidateTeacherMutation} from './teacherReadCache.js';
+import {coreActive,readCoreProfile,saveCoreProfile} from './academyCore.js';
 const phone=z.string().trim().max(30).transform(v=>v.replace(/[\s()-]/g,'')).refine(v=>!v || /^0\d{8,10}$/.test(v));
 export const studentProfileSchema=z.object({
     displayName:z.string().trim().min(1).max(200),school:z.string().trim().max(80),grade:z.enum(['',...registrationGrades]),
@@ -44,6 +45,7 @@ function assertMember(actor:RegistrationActor,member:any) {
 const editRef=(db:any,key:string)=>db.collection('teacherStudentEdits').doc(hashStudentKey(key));
 const unfinished=(r:any)=>r && !['synced','discarded'].includes(r.status);
 export async function readStudentProfile(db:any,actor:RegistrationActor,id:unknown,notion:RegistrationNotion=registrationNotion):Promise<StudentProfileRecord> {
+    if(await coreActive(db,actor))return readCoreProfile(db,actor,id,profileFromPage);
     const key=uuid(z.string().uuid().parse(id));await access(db,actor,key);
     const [page,saved]=await Promise.all([notion(`pages/${key}`),editRef(db,key).get()]);assertPage(page,key);
     const r=saved.data();if(r && r.academyId!==actor.academyId)throw Error('FORBIDDEN');
@@ -52,6 +54,7 @@ export async function readStudentProfile(db:any,actor:RegistrationActor,id:unkno
 // A changed contact locks every existing PIN and revokes all existing sessions
 // in the same transaction that durably saves the edit. The URL stays intact.
 export async function saveStudentProfile(db:any,actor:RegistrationActor,id:unknown,operation:unknown,expected:unknown,input:unknown,notion:RegistrationNotion=registrationNotion) {
+    if(await coreActive(db,actor)){const result=await saveCoreProfile(db,actor,id,operation,expected,input,v=>studentProfileSchema.parse(v),profileFromPage,profileProperties);invalidateTeacherMutation('save-student-profile');return result;}
     const key=uuid(z.string().uuid().parse(id)),operationId=z.string().uuid().parse(operation),expectedEditedAt=z.string().datetime().parse(expected),data=studentProfileSchema.parse(input) as StudentProfileInput;
     await access(db,actor,key);
     const ref=editRef(db,key),lease=randomUUID();

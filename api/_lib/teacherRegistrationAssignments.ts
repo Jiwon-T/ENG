@@ -1,6 +1,7 @@
 import {assertRegistrationAccess, type RegistrationActor, type StudentRegistration} from './teacherStudentRegistration.js';
 import {registrationNotion, registrationText, type RegistrationNotion} from './teacherStudentRegistrationNotion.js';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
+import {coreActive,coreRegistrationOptions} from './academyCore.js';
 import type {RegistrationOptions} from '../../src/lib/studentRegistration.js';
 export const REGISTRATION_CLASS_DATABASE='1a554024-20f2-42c5-8837-983bd1a4f61e';
 export const REGISTRATION_TEACHER_DATABASE='3d274aff-32ce-4a33-870d-2689259113a6';
@@ -45,6 +46,7 @@ function classOption(page:any,academyId:string,teachers:any[]) {
     return {id:uuid(page.id),name:(page.properties['수업명']?.title || []).map((p:any)=>p.plain_text ?? p.text?.content ?? '').join('') || '반',subject,teacherUids};
 }
 export async function registrationAssignmentOptions(db:any,actor:RegistrationActor,notion:RegistrationNotion=registrationNotion):Promise<RegistrationOptions> {
+    if(await coreActive(db,actor))return coreRegistrationOptions(db,actor);
     assertRegistrationAccess(actor);
     if(actor.academyId!=='main')throw Error('NOTION_REGISTRATION_SOURCE_REQUIRED');
     const profiles=await teacherProfiles(db,actor);

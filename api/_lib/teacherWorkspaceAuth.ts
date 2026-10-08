@@ -4,6 +4,7 @@ import {notionTeachingScopes} from './teacherNotionWorkspace.js';
 import type { IncomingMessage } from 'http';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
 import { subjects } from './teacherWorkspacePolicy.js';
+import {coreActive,readCoreScopes} from './academyCore.js';
 export async function teacherActor(req: IncomingMessage, initialize = getFirebaseAdmin) {
     let workspaceStage='firebase-initialize';
     try{
@@ -38,7 +39,8 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     const academyId = profile?.academyId || (admin ? 'main' : null);
     if(!academyId)throw new Error('TEACHER_NOT_CONFIGURED');
     workspaceStage='workspace-scope';
-    let teachingScopes = profile?.notionTeacherPageId ? await notionTeachingScopes(db,profile) : profile?.scopes || [];
+    const coreMode=await coreActive(db,{academyId});
+    let teachingScopes = coreMode ? await readCoreScopes(db,{...profile,uid,academyId,scopes:profile?.scopes||[]}) : profile?.notionTeacherPageId ? await notionTeachingScopes(db,profile) : profile?.scopes || [];
     if(!profile?.notionTeacherPageId&&teachingScopes.length){
         const checked=await Promise.all(teachingScopes.map(async(s:any)=>{const m=(await db.collection('academyStudentMemberships').doc(s.studentKey).get()).data();return m&&!m.disabled&&m.academyId===academyId?s:null;}));
         teachingScopes=checked.filter(Boolean);
@@ -48,7 +50,7 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
         const members = await db.collection('academyStudentMemberships').where('academyId', '==', academyId).get();
         scopes = members.docs.filter(d => !d.data().disabled).flatMap(d => subjects.map(subject => ({studentKey: d.id, subject})));
     }
-    return { uid, admin, principal, academyId, scopes, teachingScopes, db, workspaceProfile:profile, readAccessKey:JSON.stringify([profile?.notionTeacherPageId,profile?.notionSources,profile?.workspaceRole]) };
+    return { uid, admin, principal, academyId, scopes, teachingScopes, coreMode, db, workspaceProfile:profile, readAccessKey:JSON.stringify([profile?.notionTeacherPageId,profile?.notionSources,profile?.workspaceRole,profile?.assignmentRevision,coreMode]) };
     }catch(error:any){const failure=error instanceof Error?error:new Error('WORKSPACE_ERROR');Object.assign(failure,{workspaceStage});throw failure;}
 }
 
