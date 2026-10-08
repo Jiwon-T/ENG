@@ -29,7 +29,9 @@ export async function syncStudentRegistration(db:any,actor:RegistrationActor,id:
     if(actor.academyId!=='main' || configuredDatabase!==REGISTRATION_STUDENT_DATABASE)throw Error('NOTION_REGISTRATION_SOURCE_REQUIRED');
     const ref=db.collection('teacherStudentRegistrations').doc(key),lease=randomUUID();
     let record:any=await db.runTransaction(async(tx:any)=>{
+        if((await tx.get(db.collection('academyCoreAuthority').doc('main'))).data()?.active)throw Error('CORE_NOT_READY');
         const previous=(await tx.get(ref)).data();if(!previous)throw Error('REGISTRATION_NOT_FOUND');assertRegistrationAccess(actor,previous);
+        if(previous.sourceMode==='firestore')throw Error('CORE_NOT_READY');
         if(previous.revision!==version)throw Error('REGISTRATION_CONFLICT');
         if(previous.data?.purpose==='additional'||previous.data?.intakeStage==='consultation')throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
         if(previous.syncStatus==='synced')return {...previous,alreadySynced:true};

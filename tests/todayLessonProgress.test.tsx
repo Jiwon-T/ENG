@@ -1,5 +1,5 @@
 import React from 'react';import test from 'node:test';import assert from 'node:assert/strict';import {renderToStaticMarkup} from 'react-dom/server';
-import {todayLessonState,todayLessonProgress} from '../src/lib/todayLessonProgress';import TeacherTodayLessons from '../src/components/teacher/TeacherTodayLessons';
+import {todayLessonState,todayLessonProgress,nextUnwrittenLesson} from '../src/lib/todayLessonProgress';import TeacherTodayLessons from '../src/components/teacher/TeacherTodayLessons';
 const event={id:'e',title:'개인 보강',kind:'보강',date:'2026-10-07',subject:'영어',start:'17:00',end:'18:00',students:['a','b','c']};
 const record=(studentKey:string,stage:string)=>({id:studentKey,stage,data:{studentKey,date:event.date,subject:event.subject,start:event.start}});
 test('progress matches exact day student subject start and excludes deleted or unsaved records',()=>{
@@ -12,3 +12,5 @@ test('today cards display loaded-record progress and explicit group denominator 
  const single=renderToStaticMarkup(<TeacherTodayLessons {...props} onStudent={()=>{}}/>);assert.ok(single.includes('반영 1 · 저장 1 · 미작성 1'));assert.ok(single.includes('반영 완료'));assert.ok(single.includes('현재 불러온 기록 기준'));assert.equal(calls,0);
  const group=renderToStaticMarkup(<TeacherTodayLessons {...props} onGroup={()=>{}}/>);assert.ok(group.includes('반영 1/3명'));assert.ok(group.includes('학생 3명 불러오기'));assert.equal(calls,0);
 });
+
+test('next unwritten starts after selection, skips completed entries, wraps and excludes itself',()=>{const events=[{...event,id:'first',start:'17:00',students:['a']},{...event,id:'second',start:'18:00',students:['b']},{...event,id:'third',start:'19:00',students:['c']}];const selection={date:event.date,subject:event.subject,start:'18:00',studentKey:'b'};assert.equal(nextUnwrittenLesson(events,[],selection)?.key,'c');assert.equal(nextUnwrittenLesson(events,[],{...selection,start:'19:00',studentKey:'c'})?.key,'a');assert.equal(nextUnwrittenLesson([events[1]],[],selection),undefined);assert.equal(nextUnwrittenLesson(events,[])?.key,'a');const done={stage:'published',data:{studentKey:'c',date:event.date,subject:event.subject,start:'19:00'}};assert.equal(nextUnwrittenLesson(events,[done],selection)?.key,'a');});

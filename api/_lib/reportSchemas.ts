@@ -148,7 +148,9 @@ export interface StoredNotionStudentMapping {
   internalStudentId: string;
   studentKey: string;
   studentDisplayName: string;
-  notionStudentPageId: string;
+  notionStudentPageId: string | null;
+  origin?:'app'|'notion';
+  sourceMode?:'firestore';
   firebaseUid: string | null;
   linkedByAdminUid?: string;
   linkedAt?: string;

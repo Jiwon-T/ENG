@@ -29,6 +29,7 @@ export interface RegistrationInput {
 }
 export type RegistrationSyncStatus = 'pending' | 'syncing' | 'synced' | 'failed' | 'uncertain';
 export interface RegistrationSummary {
+    sourceMode?:'notion'|'firestore';
     purpose?: 'new' | 'additional';
     intakeStage?: 'consultation' | 'new';
     existingStudentKey?: string | null;

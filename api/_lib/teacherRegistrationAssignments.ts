@@ -66,6 +66,12 @@ export async function resolveRegistrationAssignments(db:any,actor:RegistrationAc
     if(!selected.length)return {teachers:{},classIds:[]};
     assertRegistrationAccess(actor);
     if(actor.academyId!=='main')throw Error('NOTION_REGISTRATION_SOURCE_REQUIRED');
+    if(await coreActive(db,actor)){
+        const options=await coreRegistrationOptions(db,actor),result:ResolvedAssignments={teachers:{},classIds:[]};
+        for(const row of selected){const teacher=options.teachers.find(t=>t.uid===row.teacherUid);if(!teacher||!teacher.subjects.includes(row.subject))throw Error('INVALID_TEACHER');const profile=(await db.collection('teacherWorkspaceAccess').doc(teacher.uid).get()).data();result.teachers[row.subject]=profile.notionTeacherPageId;
+            for(const id of row.classIds){const klass=options.classes.find(c=>c.id===id);if(!klass||klass.subject!==row.subject||!klass.teacherUids.includes(teacher.uid)||row.status!=='등록')throw Error('FORBIDDEN');result.classIds.push(id);}
+        }return result;
+    }
     const profiles=await teacherProfiles(db,actor);
     const teachers=(await Promise.all([...new Set(selected.map(row=>row.teacherUid))].filter(Boolean).map(async uid=>{
         const profile=profiles.find((p:any)=>p.uid===uid);if(!profile)throw Error('NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');

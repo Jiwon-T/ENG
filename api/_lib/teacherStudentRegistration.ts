@@ -55,7 +55,7 @@ export function registrationDocumentId(academyId:string, requestId:string) {
 }
 // Server-only input storage; the sync worker consumes an immutable revision.
 // Store the input and pending sync state atomically; never claim Notion completion here.
-export async function saveStudentRegistration(db:any, actor:RegistrationActor, input:unknown, requestId:unknown, expectedRevision?:number, writeId?:unknown) {
+export async function saveStudentRegistration(db:any, actor:RegistrationActor, input:unknown, requestId:unknown, expectedRevision?:number, writeId?:unknown, sourceMode?:'firestore') {
     assertRegistrationAccess(actor);
     const key = z.string().uuid().parse(requestId);
     const value = studentRegistrationSchema.parse(input);
@@ -65,6 +65,8 @@ export async function saveStudentRegistration(db:any, actor:RegistrationActor, i
     return db.runTransaction(async (transaction:any) => {
         const previous = (await transaction.get(ref)).data();
         assertRegistrationAccess(actor,previous);
+        if(previous?.sourceMode==='firestore'&&sourceMode!=='firestore')throw Error('CORE_NOT_READY');
+        if(sourceMode==='firestore'&&!(await transaction.get(db.collection('academyCoreAuthority').doc('main'))).data()?.active)throw Error('CORE_NOT_READY');
         if(previous?.residentAt)throw Error('REGISTRATION_ALREADY_RESIDENT');
         if(value.existingStudentKey){const member=(await transaction.get(db.collection('academyStudentMemberships').doc(value.existingStudentKey))).data();if(!member||member.disabled||member.academyId!==actor.academyId)throw Error('FORBIDDEN');}
         if (previous?.lastWriteId === operation) {
@@ -84,7 +86,7 @@ export async function saveStudentRegistration(db:any, actor:RegistrationActor, i
             data:value, title:studentRegistrationTitle(value), revision,
             createdAt:previous?.createdAt || Date.now(), updatedAt:Date.now(),
             notionStudentPageId:previous?.notionStudentPageId || null,
-            syncStatus:'pending', syncError:null,
+            syncStatus:'pending', syncError:null,...(sourceMode?{sourceMode}:{}),
         });
         return {id:ref.id, revision, syncStatus:'pending', alreadySaved:false};
     });
@@ -92,7 +94,7 @@ export async function saveStudentRegistration(db:any, actor:RegistrationActor, i
 
 export function registrationSummary(id:string, record:any): RegistrationSummary {
     return {id, title:record.title, revision:record.revision, syncStatus:record.syncStatus, updatedAt:record.updatedAt,
-        purpose:record.data?.purpose||'new',intakeStage:record.data?.intakeStage||'new',existingStudentKey:record.data?.existingStudentKey||null,studentKey:record.notionStudentPageId||record.data?.existingStudentKey||null,
+        purpose:record.data?.purpose||'new',intakeStage:record.data?.intakeStage||'new',existingStudentKey:record.data?.existingStudentKey||null,sourceMode:record.sourceMode||'notion',studentKey:record.studentKey||record.notionStudentPageId||record.data?.existingStudentKey||null,
         canEdit:!(['syncing','uncertain','synced'].includes(record.syncStatus) || record.notionStudentPageId || record.studentCreateAttempted || record.enrollmentCreateAttempted),
         studentSaved:Boolean(record.studentSaved),enrollmentSaved:Boolean(record.enrollmentSaved),
         enrollments:(record.data?.enrollments || []).map((item:any)=>({subject:item.subject, status:item.status,startDate:item.startDate}))};
@@ -109,7 +111,7 @@ export async function convertRegistrationToResident(db:any,actor:RegistrationAct
     assertRegistrationAccess(actor);
     const key=z.string().regex(/^[a-f0-9]{64}$/).parse(id),version=z.number().int().positive().parse(revision),ref=db.collection('teacherStudentRegistrations').doc(key);
     const initial=(await ref.get()).data();if(!initial)throw Error('REGISTRATION_NOT_FOUND');assertRegistrationAccess(actor,initial);
-    if(initial.residentAt)return {id:key,studentKey:initial.notionStudentPageId||initial.data.existingStudentKey,alreadyConverted:true};
+    if(initial.residentAt)return {id:key,studentKey:initial.studentKey||initial.notionStudentPageId||initial.data.existingStudentKey,alreadyConverted:true};
     const data=studentRegistrationSchema.parse(initial.data);
     if(data.purpose==='additional'){
         if(!verifyAdditional)throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
@@ -118,10 +120,10 @@ export async function convertRegistrationToResident(db:any,actor:RegistrationAct
     }
     return db.runTransaction(async(tx:any)=>{
         const current=(await tx.get(ref)).data();if(!current)throw Error('REGISTRATION_NOT_FOUND');assertRegistrationAccess(actor,current);
-        if(current.residentAt)return {id:key,studentKey:current.notionStudentPageId||current.data.existingStudentKey,alreadyConverted:true};
+        if(current.residentAt)return {id:key,studentKey:current.studentKey||current.notionStudentPageId||current.data.existingStudentKey,alreadyConverted:true};
         if(current.revision!==version||JSON.stringify(current.data)!==JSON.stringify(initial.data))throw Error('REGISTRATION_CONFLICT');
         if(data.purpose==='new'&&(data.intakeStage==='consultation'||current.syncStatus!=='synced'||!data.enrollments.some(e=>e.status==='등록')))throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
-        const studentKey=current.notionStudentPageId||data.existingStudentKey;
+        const studentKey=current.studentKey||current.notionStudentPageId||data.existingStudentKey;
         if(!studentKey)throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
         const member=(await tx.get(db.collection('academyStudentMemberships').doc(studentKey))).data();
         if(!member||member.disabled||member.academyId!==actor.academyId)throw Error('FORBIDDEN');

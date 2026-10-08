@@ -12,7 +12,7 @@ export async function readStudentMapping(db: Firestore, key: string): Promise<St
   if (!old.exists && storedKey !== key) old = await db.collection('notionStudentMappings').doc(hashStudentKey(key)).get();
   if (!old.exists) return null;
   const mapping = old.data() as StoredNotionStudentMapping;
-  const canonicalKey = normalizeNotionPageId(mapping.notionStudentPageId);
+  const canonicalKey = normalizeNotionPageId(mapping.sourceMode==='firestore'?mapping.studentKey:mapping.notionStudentPageId);
   if (storedKey === canonicalKey) return mapping;
   const canonical = await db.collection('notionStudentMappings').doc(hashStudentKey(canonicalKey)).get();
   return canonical.exists ? canonical.data() as StoredNotionStudentMapping : mapping;
@@ -23,11 +23,12 @@ export async function resolveStudentPageId(db: Firestore, key: string): Promise<
   if (isNotionPageId(key)) return normalizeNotionPageId(key);
   const mapping = await readStudentMapping(db, key);
   if (!mapping) throw new Error('STUDENT_NOT_FOUND');
-  return normalizeNotionPageId(mapping.notionStudentPageId);
+  return normalizeNotionPageId(mapping.sourceMode==='firestore'?mapping.studentKey:mapping.notionStudentPageId);
 }
 
 export async function lookupStudentIdentity(db: Firestore, key: string, requireGuardianContact = true) {
   if(await coreActive(db,{academyId:'main'}))return coreStudentIdentity(db,await resolveStudentPageId(db,key),requireGuardianContact);
+  const mapping=await readStudentMapping(db,key);if(mapping?.origin==='app')throw Error('CORE_NOT_READY');
   return lookupStudentByPageId(await resolveStudentPageId(db, key), '', requireGuardianContact);
 }
 
@@ -43,6 +44,7 @@ export async function migrateStudentMapping(db: Firestore, pageId: string, displ
   const legacyQuery = collection.where('notionStudentPageId', 'in', [studentKey, studentKey.replace(/-/g, '')]);
   return db.runTransaction(async t => {
     const canonical = await t.get(canonicalRef);
+    if(canonical.exists&&canonical.data()?.origin==='app'){const saved=canonical.data() as StoredNotionStudentMapping;if(saved.studentKey!==studentKey||saved.notionStudentPageId!==null)throw Error('STUDENT_MAPPING_CONFLICT');return saved;}
     const legacy = await t.get(legacyQuery);
     const documents = legacy.docs.filter(doc => doc.id !== canonicalRef.id);
     const records = [ ...(canonical.exists ? [canonical.data() as StoredNotionStudentMapping] : []),

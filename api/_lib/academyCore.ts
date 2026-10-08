@@ -27,7 +27,7 @@ async function guard(tx:any,db:any){if(!(await tx.get(stateRef(db))).data()?.act
 function changed(tx:any,db:any,ref:any,old:any,properties:any,by:string,at:number){
  const when=new Date(Math.max(at,Date.parse(stamp(old))+1)).toISOString(),fields={...old.fields,properties};
  const next={...old,fields,revision:old.revision+1,appEditedAt:when,hash:digest(fields),summaryOverride:null,updatedAt:at};
- tx.set(ref,next);tx.set(db.collection(DIRECTORY_HISTORY).doc(`${ref.id}:${next.revision}`),{sourceKey:old.sourceKey,notionPageId:old.notionPageId,revision:next.revision,before:old.fields,after:fields,pointer:old.pointer,by,at,reason:'app-edit'});return next;
+ tx.set(ref,next);tx.set(db.collection(DIRECTORY_HISTORY).doc(`${ref.id}:${next.revision}`),{sourceKey:old.sourceKey,notionPageId:old.notionPageId,entityId:old.entityId||old.notionPageId,revision:next.revision,before:old.fields,after:fields,pointer:old.pointer,by,at,reason:'app-edit'});return next;
 }
 export async function readCoreScopes(db:any,profile:any){
  if(profile.academyId!=='main')throw Error('FORBIDDEN');await guard({get:(r:any)=>r.get()},db);
@@ -43,12 +43,12 @@ export async function readCoreProfile(db:any,actor:any,keyInput:any,decode:(page
 }
 // Trusted server bridge used by existing report/contact consumers. It creates no
 // account and changes no authorization; callers retain their existing checks.
-export async function coreStudentPage(db:any,key:string){const id=uuid(key),r=valid((await refFor(db,'students',id).get()).data(),'students');return {id,parent:{database_id:r.databaseId},last_edited_time:stamp(r),properties:r.fields.properties};}
+export async function coreStudentPage(db:any,key:string){const id=uuid(key),r=valid((await refFor(db,'students',id).get()).data(),'students');return {id,parent:{database_id:r.databaseId},last_edited_time:stamp(r),properties:r.fields.properties,origin:r.origin||'notion'};}
 export async function coreStudentIdentity(db:any,key:string,requireContact=true){
  const page=await coreStudentPage(db,key),digits=String(page.properties['보호자연락처']?.phone_number||'').replace(/\D/g,'');
  if(requireContact&&digits.length<9)throw Error('GUARDIAN_CONTACT_MISSING_OR_INVALID');
  const display=Object.values(page.properties).filter((p:any)=>p.title).map(text).join('')||'학생';
- return {notionStudentPageId:page.id,studentKey:page.id,studentDisplayName:display,sourceUpdatedAt:page.last_edited_time,parentPhonePinHash:digits.length>=9?hashPin(digits.slice(-4)):''};
+ return {notionStudentPageId:page.origin==='app'?null:page.id,studentKey:page.id,studentDisplayName:display,sourceUpdatedAt:page.last_edited_time,parentPhonePinHash:digits.length>=9?hashPin(digits.slice(-4)):''};
 }
 export async function saveCoreProfile(db:any,actor:any,keyInput:any,operation:any,expected:any,input:any,parse:(v:any)=>any,decode:(p:any)=>any,makeProperties:(data:any,base:any)=>any){
  manage(actor);const key=uuid(z.string().uuid().parse(keyInput)),op=z.string().uuid().parse(operation),time=z.string().datetime().parse(expected),data=parse(input);
@@ -59,7 +59,7 @@ export async function saveCoreProfile(db:any,actor:any,keyInput:any,operation:an
   if(stamp(old)!==time)throw Error('NOTION_EDIT_CONFLICT');
   const base=decode({properties:old.fields.properties}),properties={...old.fields.properties,...makeProperties(data,base)};
   const mappingRef=db.collection('notionStudentMappings').doc(old.pointer.mappingId),mapping=(await tx.get(mappingRef)).data();
-  if(!mapping||mapping.internalStudentId!==old.pointer.internalStudentId||uuid(mapping.notionStudentPageId)!==key)throw Error('STUDENT_MAPPING_CONFLICT');
+  if(!mapping||mapping.internalStudentId!==old.pointer.internalStudentId||uuid(mapping.sourceMode==='firestore'?mapping.studentKey:mapping.notionStudentPageId)!==key)throw Error('STUDENT_MAPPING_CONFLICT');
   const slugs=await tx.get(db.collection('reportSlugs').where('internalStudentId','==',mapping.internalStudentId));
   const reportRef=db.collection('studentReportMappings').doc(mapping.internalStudentId),report=(await tx.get(reportRef)).data();
   const contactChanged=data.guardianPhone!==base.guardianPhone,pin=contactChanged&&data.guardianPhone?hashPin(data.guardianPhone.slice(-4)):null,at=Date.now();
@@ -84,7 +84,7 @@ export async function readCoreEnrollment(db:any,actor:any,keyInput:any){
   for(const id of members(p[subject+' 담당'])){const t=valid((await refFor(db,'teachers',id).get()).data(),'teachers');teachers.push({id,name:name(t)});}
   entries.push({subject,status:choice(p[subject]),startDate:p[subject+' 시작일']?.date?.start||null,endDate:p[subject+' 중단일']?.date?.start||null,teachers,
    classes:classes.filter(c=>c.row.subject===subject).map(c=>({id:c.id,name:c.row.name,withdrawalReview:!c.row.archived&&c.row.status==='진행 중'&&c.row.students?.length===1&&uuid(c.row.students[0])===key}))});
- }return {studentKey:key,enrollmentId:e.notionPageId,studentEditedAt:stamp(s),enrollmentEditedAt:stamp(e),subjects:entries,pending:null};
+ }return {studentKey:key,enrollmentId:e.entityId||e.notionPageId,studentEditedAt:stamp(s),enrollmentEditedAt:stamp(e),subjects:entries,pending:null};
 }
 export async function readCoreEnrollmentSummaries(db:any,actor:any){
  const q=await db.collection(DIRECTORY_ROWS).where('sourceKey','==',directorySourceKey('enrollments')).limit(501).get();if(q.docs.length>500)throw Error('DIRECTORY_PAGE_LIMIT');
@@ -120,7 +120,7 @@ export async function saveCoreEnrollment(db:any,actor:any,keyInput:any,request:a
   const teacherUids=[];for(const id of teachers){const teacher=valid((await tx.get(refFor(db,'teachers',id))).data(),'teachers');if(['중단','휴직'].includes(choice(teacher.fields.properties['상태'])))throw Error('INVALID_TEACHER');
    if(input.addTeacherUid===teacher.pointer.teacherUid&&(choice(teacher.fields.properties['상태'])!=='재직'||!(teacher.fields.properties['담당 과목']?.multi_select||[]).some((v:any)=>v.name===input.subject)))throw Error('NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');teacherUids.push(teacher.pointer.teacherUid);}
   if(input.status!=='중단'&&input.classIds.some((id:string)=>{const r=classes.find(c=>c.id===id)!.row;return r.status!=='진행 중'||!(r.teacherUids||[r.ownerUid]).some((uid:string)=>teacherUids.includes(uid));}))throw Error('NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');
-  const projectedRef=db.collection('studentEnrollments').doc(e.notionPageId),projected=(await tx.get(projectedRef)).data();
+  const projectedRef=db.collection('studentEnrollments').doc(e.entityId||e.notionPageId),projected=(await tx.get(projectedRef)).data();
   if(projected?.internalStudentId&&projected.internalStudentId!==s.pointer.internalStudentId)throw Error('STUDENT_MAPPING_CONFLICT');
   const retained=classes.filter(c=>classIds.includes(c.id)&&c.row.subject!==input.subject).map(c=>c.id),at=Date.now(),p={...e.fields.properties,[input.subject]:{status:{name:input.status}},[input.subject+' 시작일']:{date:{start:input.startDate}},[input.subject+' 중단일']:{date:input.endDate?{start:input.endDate}:null},[input.subject+' 담당']:{relation:teachers.map(id=>({id}))}};
   const next=changed(tx,db,enrollment.ref,e,p,actor.uid,at);
@@ -140,6 +140,8 @@ export async function cutoverCore(db:any,actor:any){
  if(Buffer.byteLength(JSON.stringify(rows.map(d=>d.data())))>6000000)throw Error('CORE_CUTOVER_LIMIT');
  return db.runTransaction(async(tx:any)=>{
   const active=(await tx.get(stateRef(db))).data();if(active?.active)return {active:true,alreadyDone:true};
+  const registrations=await tx.get(db.collection('teacherStudentRegistrations').where('academyId','==','main').limit(101));if(registrations.docs.length>100)throw Error('CORE_CUTOVER_LIMIT');
+  if(registrations.docs.some((d:any)=>{const r=d.data();return r.syncStatus!=='synced'&&(r.syncStatus==='syncing'||r.syncStatus==='uncertain'||r.studentCreateAttempted||r.enrollmentCreateAttempted||r.notionStudentPageId||r.notionEnrollmentPageId||r.studentSaved||r.enrollmentSaved);}))throw Error('CORE_REGISTRATION_IN_PROGRESS');
   for(const kind of directoryKinds){const state=(await tx.get(db.collection(DIRECTORY_STATE).doc(directorySourceKey(kind)))).data();if(!state?.ready||!state.approved||state.phase!=='idle'||state.leaseUntil>Date.now()||Date.now()-state.lastSuccessAt>900000)throw Error('CORE_NOT_READY');}
   const current=[];for(const d of rows){const r=(await tx.get(d.ref)).data();if(r?.revision!==d.data().revision||r.issue||!r.fields)throw Error('CORE_LINK_REQUIRED');current.push(r);}
   const profiles=(await tx.get(db.collection('teacherWorkspaceAccess').where('academyId','==','main'))).docs;if(profiles.length>100)throw Error('CORE_CUTOVER_LIMIT');
@@ -171,7 +173,7 @@ export async function restoreCoreProfile(db:any,actor:any,input:any,parse:(v:any
  if(!actor.admin||actor.academyId!=='main')throw Error('FORBIDDEN');
  const v=z.object({id:z.string().uuid(),revision:z.number().int().positive(),historyRevision:z.number().int().positive(),operationId:z.string().uuid(),confirmed:z.literal(true)}).strict().parse(input);
  const row=valid((await refFor(db,'students',v.id).get()).data(),'students'),history=(await db.collection(DIRECTORY_HISTORY).doc(`${directoryRowKey('students',v.id)}:${v.historyRevision}`).get()).data();
- if(history?.sourceKey!==directorySourceKey('students')||history?.notionPageId!==uuid(v.id)||!history.after||history.after.archived)throw Error('CORE_LINK_REQUIRED');
+ if(history?.sourceKey!==directorySourceKey('students')||(history?.entityId||history?.notionPageId)!==uuid(v.id)||!history.after||history.after.archived)throw Error('CORE_LINK_REQUIRED');
  const desired=decode({properties:history.after.properties}),receipt=(await db.collection(CORE_COMMANDS).doc(digest(['profile',actor.uid,v.operationId])).get()).data();
  if(receipt){if(receipt.targetKey!==uuid(v.id)||receipt.originRevision!==v.revision||JSON.stringify(receipt.result.profile)!==JSON.stringify(desired))throw Error('STUDENT_PROFILE_REQUEST_CONFLICT');return {...receipt.result,alreadySaved:true,profile:decode({properties:row.fields.properties})};}
  if(row.revision!==v.revision)throw Error('DRAFT_CONFLICT');

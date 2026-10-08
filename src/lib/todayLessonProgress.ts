@@ -16,7 +16,10 @@ export function todayProgressRatios(progress:{total:number;published:number;save
  const part=(count:number)=>progress.total?count/progress.total*100:0;
  return {done:part(progress.published),saved:part(progress.saved),unwritten:part(progress.empty)};
 }
-export function nextUnwrittenLesson(events:readonly TodayLesson[],records:readonly any[]){
- for(const event of [...events].sort((a,b)=>a.start.localeCompare(b.start)))for(const key of event.students)if(todayLessonState(event,key,records)==='미작성')return {event,key};
- return undefined;
+export function nextUnwrittenLesson(events:readonly TodayLesson[],records:readonly any[],selection?:{studentKey?:string;subject?:string;date?:string;start?:string}){
+ const ordered=[...events].sort((a,b)=>a.start.localeCompare(b.start)).flatMap(event=>event.students.map(key=>({event,key})));
+ const current=ordered.findIndex(({event,key})=>selection?.date===event.date&&selection.subject===event.subject&&selection.start===event.start&&(!selection.studentKey||selection.studentKey===key));
+ // Search after the selected lesson, then wrap once; never select the same lesson.
+ const candidates=current<0?ordered:[...ordered.slice(current+1),...ordered.slice(0,current)];
+ return candidates.find(({event,key})=>todayLessonState(event,key,records)==='미작성');
 }

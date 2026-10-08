@@ -1,3 +1,6 @@
+import {previewAcademicMigration,importAcademicMigrationStep,resetAcademicMigration} from '../_lib/academicMigration.js';
+import {saveAppAcademic,publishAppAcademic,archiveAppAcademic,listAppAcademicSources,appAcademicStudents} from '../_lib/appAcademic.js';
+import {commitAppStudentRegistration} from '../_lib/appStudentRegistration.js';
 import {lessonImportPublicationPatch} from '../_lib/teacherLessonImport.js';
 import {templateAction} from '../_lib/messageTemplateActions.js';
 import {directoryAction,directoryStudentReads,readDirectoryStudents,applyDirectoryStudentSummary} from '../_lib/academyDirectorySource.js';
@@ -115,14 +118,15 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 failureStage = 'student-registration-read';
                 return sendJson(res,200,{ok:true,record:await readStudentRegistration(db,actor,params.get('id'))});
             }
+            if(action==='academic-migration-preview')return sendJson(res,200,{ok:true,...await previewAcademicMigration(db,actor)});
             if (action === 'academic-records'||action==='academic-records-fast') {
                 const localPromise=teacherReadCache.get(teacherReadKey(actor,'academic-local'),async()=>{const saved=actor.admin ? await db.collection('teacherAcademicDrafts').get() : actor.principal ? await db.collection('teacherAcademicDrafts').where('academyId','==',actor.academyId).get() : await db.collection('teacherAcademicDrafts').where('ownerUid','==',actor.uid).get();return saved.docs.map(d=>({id:d.id,...d.data()})).filter((r:any)=>canViewAcademyRecord(actor,r));},force);
-                const sourcePromise=action==='academic-records-fast'?Promise.resolve([]):teacherReadCache.get(teacherReadKey(actor,'academic-source'),()=>listTeacherNotionGrades(db,actor,force),force);
+                const sourcePromise=action==='academic-records-fast'?Promise.resolve([]):teacherReadCache.get(teacherReadKey(actor,'academic-firestore-source:'+JSON.stringify([params.get('student'),params.get('subject')])),()=>listAppAcademicSources(db,actor,{studentKey:params.get('student')||undefined,subject:params.get('subject')||undefined}),force);
                 const [appRecords,source]=await Promise.all([localPromise,sourcePromise]);
                 const records=(action==='academic-records-fast'?appRecords:mergeNotionRows(appRecords,source)).filter((r:any)=>!r.archived);
                 if (!params.has('page')) return sendJson(res,200,{ok:true,records});
                 const {examPeriod}=await import('../../src/lib/academicExamPeriod.js');
-                const students=await workspaceStudents(db,actor,force);const names=new Map(students.map(s=>[s.studentKey,s.studentDisplayName]));
+                const students=await teacherReadCache.get(teacherReadKey(actor,'academic-firestore-students'),()=>appAcademicStudents(db,actor),force);const names=new Map(students.map(s=>[s.studentKey,s.studentDisplayName]));
                 const filtered=records.filter((r:any)=>(!params.get('teacher')||r.ownerUid===params.get('teacher')||r.teacherUids?.includes(params.get('teacher')))&&(!params.get('student')||r.data.studentKey===params.get('student'))&&(!params.get('kind')||r.data.examType===params.get('kind'))&&(!params.get('subject')||r.data.subject===params.get('subject'))&&(!params.get('period')||examPeriod(r.data)?.key===params.get('period'))&&(!params.get('search')||[names.get(r.data.studentKey),r.data.title,r.data.subject,r.data.note].join(' ').toLowerCase().includes(params.get('search')!.toLowerCase()))).sort((a:any,b:any)=>b.data.examDate.localeCompare(a.data.examDate)||a.id.localeCompare(b.id));
                 return sendJson(res,200,{ok:true,...pageRows(filtered,pageNumber(params.get('page')),12),teachers:[...new Set(records.flatMap((r:any)=>r.teacherUids?.length?r.teacherUids:[r.ownerUid]).filter(Boolean))],periods:[...new Map(records.map((r:any)=>examPeriod(r.data)).filter(Boolean).map((p:any)=>[p.key,p])).values()]});
             }
@@ -283,10 +287,9 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         if(body.action!=='report-review'&&body.action!=='previous-lesson'){mutation=body.action;invalidateTeacherMutation(body.action);}
         if(body.action==='convert-registration-resident'){const v=z.object({action:z.literal('convert-registration-resident'),id:z.string().regex(/^[a-f0-9]{64}$/),revision:z.number().int().positive()}).strict().parse(body);return sendJson(res,200,{ok:true,...await convertRegistrationToResident(db,actor,v.id,v.revision,key=>readStudentEnrollment(db,actor,key))});}
         if (body.action === 'sync-student-registration') {
-            if(await coreActive(db,actor))throw Error('CORE_REGISTRATION_MIGRATION_REQUIRED');
             failureStage = 'student-registration-sync';
             const value=z.object({action:z.literal('sync-student-registration'),id:z.string().regex(/^[a-f0-9]{64}$/),revision:z.number().int().positive()}).strict().parse(body);
-            return sendJson(res,200,{ok:true,...await syncStudentRegistration(db,actor,value.id,value.revision)});
+            return sendJson(res,200,{ok:true,...await (await coreActive(db,actor)?commitAppStudentRegistration(db,actor,value.id,value.revision):syncStudentRegistration(db,actor,value.id,value.revision))});
         }
         if(body.action==='save-student-enrollment') {
             failureStage='student-enrollment-save';
@@ -315,7 +318,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             failureStage = 'student-registration-save';
             const value = z.object({action:z.literal('save-student-registration'), requestId:z.string().uuid(), writeId:z.string().uuid(), revision:z.number().int().positive().optional(), data:z.unknown()}).strict().parse(body);
             await resolveRegistrationAssignments(db,actor,studentRegistrationSchema.parse(value.data));
-            const saved = await saveStudentRegistration(db,actor,value.data,value.requestId,value.revision,value.writeId);
+            const saved = await saveStudentRegistration(db,actor,value.data,value.requestId,value.revision,value.writeId,await coreActive(db,actor)?'firestore':undefined);
             return sendJson(res,200,{ok:true,...saved});
         }
         if (body.action === 'report-review') {
@@ -416,48 +419,19 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 throw new Error('FORBIDDEN');
             return sendJson(res, 200, { ok: true, ...await prepareNotionWorkspace(db) });
         }
-        if (body.action === 'save-academic') {
-            const value = academicDraftSchema.parse(body.data);
-            if(!canTeach(actor,value.studentKey,value.subject)) throw new Error('FORBIDDEN');
-            if(!actor.academyId) throw new Error('ACADEMY_REQUIRED');
-            const id=body.id ? z.string().uuid().parse(body.id) : randomUUID();
-            const existingAcademic=(await db.collection('teacherAcademicDrafts').doc(id).get()).data();
-            let importedPageId: string | undefined;let importedEditedAt:string|undefined;
-            if(body.notionPageId&&existingAcademic&&body.notionPageId!==existingAcademic.notionPageId)throw Error('SOURCE_IDENTITY_LOCKED');
-            if(body.notionPageId&&!existingAcademic) {
-                importedPageId=z.string().uuid().parse(body.notionPageId);
-                const page=await gradeNotion(`pages/${importedPageId}`);importedEditedAt=page.last_edited_time;
-                if(body.notionEditedAt&&body.notionEditedAt!==importedEditedAt)throw Error('NOTION_EDIT_CONFLICT');
-                const profile=(await db.collection('teacherWorkspaceAccess').doc(actor.uid).get()).data();
-                if(actor.principal || !canReadNotionGrade(actor,profile,page)) throw new Error('FORBIDDEN');
-                if(page.properties['학생']?.relation?.[0]?.id.replace(/-/g,'') !== value.studentKey.replace(/-/g,'')) throw new Error('SOURCE_IDENTITY_LOCKED');
-                if(id !== importedPageId || page.properties['과목']?.select?.name !== value.subject) throw new Error('SOURCE_IDENTITY_LOCKED');
-            }
-            const record=await db.runTransaction(async t=>{
-                const ref=db.collection('teacherAcademicDrafts').doc(id), old=(await t.get(ref)).data();
-                if(old?.archived||old?.deleteRequested)throw Error('FORBIDDEN');
-                if(old && !canAccessOwned(actor,old.ownerUid,old.academyId)) throw new Error('FORBIDDEN');
-                assertDraftEditable(old,body.revision,value);
-                const next={...old,data:value,ownerUid:old?.ownerUid||actor.uid,academyId:old?.academyId||actor.academyId,revision:(old?.revision||0)+1,stage:'draft',updatedAt:Date.now(),...(importedPageId?{notionPageId:importedPageId,notionEditedAt:importedEditedAt}:{})}; t.set(ref,next);return {id,...next};
-            });
-            return sendJson(res,200,{ok:true,id,record});
+        if(body.action==='academic-migration-reset')return sendJson(res,200,{ok:true,...await resetAcademicMigration(db,actor,body.confirmed)});
+        if(body.action==='academic-migration-next')return sendJson(res,200,{ok:true,...await importAcademicMigrationStep(db,actor,body.confirmed,body.reviewToken)});
+        if(body.action==='academic-batch'){
+            failureStage='academic-batch';
+            const batch=z.object({action:z.literal('academic-batch'),reflect:z.boolean(),rows:z.array(z.object({id:z.string().uuid(),revision:z.number().int().positive().optional(),saveFirst:z.boolean(),data:academicDraftSchema}).strict()).min(1).max(20)}).strict().parse(body);
+            if(new Set(batch.rows.map(row=>row.id)).size!==batch.rows.length||batch.rows.some(row=>!row.saveFirst&&(!batch.reflect||!row.revision)))throw Error('INVALID_INPUT');
+            const rows=[];for(const row of batch.rows){let record:any;let stored=!row.saveFirst;try{if(row.saveFirst){record=(await saveAppAcademic(db,actor,row,true)).record;stored=true;}if(batch.reflect)record=(await publishAppAcademic(db,actor,row.id,record?.revision??row.revision)).record;rows.push({id:row.id,ok:true,record,phase:batch.reflect?'published':'saved'});}catch(error){const problem=workspaceError(error,'academic-batch');rows.push({id:row.id,ok:false,revision:record?.revision,phase:batch.reflect&&stored?'failed-publish':'failed-save',message:problem.body.message});}}
+            return sendJson(res,200,{ok:true,rows});
         }
-        if(body.action==='archive-academic'){failureStage='academic-archive';return sendJson(res,200,{ok:true,...await archiveTeacherAcademic(db,actor,body.id,body.revision)});}
+        if(body.action==='save-academic'){failureStage='academic-save';return sendJson(res,200,{ok:true,...await saveAppAcademic(db,actor,body)});}
+        if(body.action==='publish-academic'){failureStage='academic-reflection';return sendJson(res,200,{ok:true,...await publishAppAcademic(db,actor,body.id,body.revision)});}
+        if(body.action==='archive-academic'){failureStage='academic-archive';return sendJson(res,200,{ok:true,...await archiveAppAcademic(db,actor,body.id,body.revision,body)});}
         if(body.action==='cancel-academic-delete'){failureStage='academic-archive-cancel';return sendJson(res,200,{ok:true,...await cancelAcademicArchive(db,actor,body.id,body.revision)});}
-        if(body.action === 'publish-academic') {
-            failureStage='academic-reflection';
-            const id=z.string().uuid().parse(body.id),ref=db.collection('teacherAcademicDrafts').doc(id);
-            const record=await db.runTransaction(async t=>{
-                const old=(await t.get(ref)).data();
-                if(!old || old.archived || old.deleteRequested || !canAccessOwned(actor,old.ownerUid,old.academyId) || !canTeach(actor,old.data.studentKey,old.data.subject)) throw new Error('FORBIDDEN');
-                if(publishDecision(old)==='already-published') return {...old,alreadyPublished:true};
-                academicDraftSchema.parse(old.data);
-                t.update(ref,{stage:'publishing',publishStartedAt:Date.now()});return old;
-            });
-            if(record.alreadyPublished) return sendJson(res,200,{ok:true,stage:'published',record:{id,...record}});
-            try {return sendJson(res,200,{ok:true,stage:'published',pageId:await publishTeacherGrade(db,id,record),record:{id,...(await ref.get()).data()}});}
-            catch(e:any) {await updatePublicationRevision(db,'teacherAcademicDrafts',id,record.revision,{stage:'failed',failureCode:e.message}).catch(()=>{});throw e;}
-        }
         if (body.action === 'save-curriculum') {
             const value = z.object({ title: z.string().min(1).max(200), subject: z.enum(['영어', '수학', '국어', '과학', '한국사']), content: z.string().max(30000), classId: z.string().uuid().nullable().optional() }).parse(body.data);
             const id = body.id ? z.string().uuid().parse(body.id) : randomUUID();

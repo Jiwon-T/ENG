@@ -68,6 +68,8 @@ async function resolveAcademicStudent(studentPageId: string) {
 }
 export async function syncAcademicPage(db: Firestore, page: any, resolveStudent = resolveAcademicStudent, mapStudent = migrateStudentMapping, app?:{draftId:string;revision:number;academyId:string}) {
   const parsed = parseAcademicPage(page);
+  const marker=text(page.properties?.['앱 기록 ID']);const nativeDraft=marker&&/^[a-f0-9-]{36}$/i.test(marker)?(await db.collection('teacherAcademicDrafts').doc(marker).get()).data():null;
+  if(parsed.collection==='academicRecords'&&(nativeDraft?.sourceMode==='firestore'||nativeDraft?.archived))return {applied:false,reason:'APP_OWNED',kind:parsed.collection};
   const ref = db.collection(parsed.collection).doc(parsed.id);
   if(parsed.collection==='studentEnrollments'&&(await ref.get()).data()?.appSource==='firestore')return {applied:false,reason:'APP_OWNED',kind:parsed.collection};
   if(parsed.collection==='academicRecords'&&!app){
@@ -86,11 +88,13 @@ export async function syncAcademicPage(db: Firestore, page: any, resolveStudent 
   }
   return db.runTransaction(async tx => {
     const previous = await tx.get(ref);
+    if(marker&&/^[a-f0-9-]{36}$/i.test(marker)){const guarded=(await tx.get(db.collection('teacherAcademicDrafts').doc(marker))).data();if(guarded?.sourceMode==='firestore'||guarded?.archived)return {applied:false,reason:'APP_OWNED',kind:parsed.collection};}
     const draftRef=app?db.collection('teacherAcademicDrafts').doc(app.draftId):null;
     const draft=app?(await tx.get(draftRef!)).data():null;
     const membership=app&&parsed.studentPageId?(await tx.get(db.collection('academyStudentMemberships').doc(parsed.studentPageId))).data():null;
     if(parsed.collection==='academicRecords'&&!app&&previous.data()?.teacherDraftId)return {applied:false,reason:'APP_OWNED',kind:parsed.collection};
     if(app){
+      if(draft?.sourceMode==='firestore')throw Error('SOURCE_IDENTITY_LOCKED');
       if(!draft||draft.archived||draft.deleteRequested||draft.revision!==app.revision)throw Error('DRAFT_CONFLICT');
       if(!membership||membership.disabled||membership.academyId!==app.academyId)throw Error('ACADEMY_MEMBERSHIP_CONFLICT');
       if(previous.data()?.teacherDraftId&&previous.data()?.teacherDraftId!==app.draftId)throw Error('SOURCE_IDENTITY_LOCKED');

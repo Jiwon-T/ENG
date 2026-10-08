@@ -154,7 +154,7 @@ export async function reconcileDirectoryStep(db:any,actor:any,kindInput:unknown,
   const more=rows.docs.length>3;await db.runTransaction(async(tx:any)=>{const s=(await tx.get(sr)).data();if(s?.leaseOwner!==owner||s.leaseUntil<=clock())throw Error('DIRECTORY_BUSY');tx.set(sr,{...s,reconcileCursor:more?docs.at(-1)?.data().notionPageId:null,leaseOwner:null,leaseUntil:0,...(counts.review?{approved:false}:{}),...(!more?{lastReconcileAt:at}:{})});});return {kind,counts,continue:more};
  }catch(e){await db.runTransaction(async(tx:any)=>{const s=(await tx.get(sr)).data();if(s?.leaseOwner===owner)tx.set(sr,{...s,leaseOwner:null,leaseUntil:0,error:failure(e)});}).catch(()=>{});throw e;}
 }
-function studentDTO(r:any){const p=r.fields.properties;return {studentKey:r.notionPageId,studentDisplayName:r.summaryOverride?.studentDisplayName||title(p)||'학생',hasGuardianContact:r.summaryOverride?.hasGuardianContact??String(p['보호자연락처']?.phone_number||'').replace(/\D/g,'').length>=9,enrollmentStatus:p['등록상태']?.status?.name||''};}
+function studentDTO(r:any){const p=r.fields.properties;return {studentKey:r.entityId||r.notionPageId,studentDisplayName:r.summaryOverride?.studentDisplayName||title(p)||'학생',hasGuardianContact:r.summaryOverride?.hasGuardianContact??String(p['보호자연락처']?.phone_number||'').replace(/\D/g,'').length>=9,enrollmentStatus:p['등록상태']?.status?.name||''};}
 export async function readDirectoryStudents(db:any,actor:any){
  if(actor.academyId!=='main')throw Error('FORBIDDEN');if(!actor.coreMode)sourceReady('students');const ready=(await db.collection(DIRECTORY_STATE).doc(directorySourceKey('students')).get()).data();if(!ready?.ready||!ready.approved)throw Error('DIRECTORY_NOT_READY');
  if(ready.leaseUntil>Date.now())throw Error('DIRECTORY_BUSY');
@@ -164,9 +164,9 @@ export async function readDirectoryStudents(db:any,actor:any){
  const out=[];for(const r of rows){
   if(r.sourceKey!==directorySourceKey('students')||r.academyId!=='main')throw Error('DIRECTORY_SOURCE_MISMATCH');
   if(r.issue||!r.fields||r.fields.archived)continue;
-  const member=(await db.collection('academyStudentMemberships').doc(r.notionPageId).get()).data();
+  const member=(await db.collection('academyStudentMemberships').doc(r.entityId||r.notionPageId).get()).data();
   if(!member||member.academyId!==actor.academyId||!actor.admin&&member.disabled)continue;
-  if(!actor.admin&&!actor.principal&&!actor.scopes.some((s:any)=>uuid(s.studentKey)===r.notionPageId))continue;
+  if(!actor.admin&&!actor.principal&&!actor.scopes.some((s:any)=>uuid(s.studentKey)===(r.entityId||r.notionPageId)))continue;
   out.push(studentDTO(r));
  }
  const latest=(await db.collection(DIRECTORY_STATE).doc(directorySourceKey('students')).get()).data();if(!latest?.approved||latest.runVersion!==ready.runVersion||latest.leaseUntil>Date.now())throw Error('DIRECTORY_BUSY');
