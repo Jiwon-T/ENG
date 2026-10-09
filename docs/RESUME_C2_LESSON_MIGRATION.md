@@ -2,13 +2,14 @@
 
 저장소 파일: `C:\Users\lizzi\Downloads\지원t-english\ENG-repo` — `.git`이 없어 GitHub 저장소 폴더에 그대로 복사·덮어쓰기할 수 있습니다(사용법: `ENG-repo-사용법.txt`).
 변경 기록: `ENG-repo.git` (`git --git-dir=ENG-repo.git --work-tree=ENG-repo log --oneline`)
-- 태그 `c2-auto-import` → `c2-lesson-migration` → `c2-lesson-cutover-switch` → `c2-lesson-app-paths` → `c2-notion-dependency-audit` → `c2-template-cutover` → `c2-lesson-read-scope` → `c2-lesson-restore` → `c2-lesson-review-period` → `c2-design-rosy-peach` → `c2-notion-disconnect-readiness` → `c2-app-only-notion-gaps` → `c2-grade-cutover` → `c2-first-load-verified` → `c2-review-grade-redesign` → `c2-managed-app-first`
+- 태그 `c2-auto-import` → `c2-lesson-migration` → `c2-lesson-cutover-switch` → `c2-lesson-app-paths` → `c2-notion-dependency-audit` → `c2-template-cutover` → `c2-lesson-read-scope` → `c2-lesson-restore` → `c2-lesson-review-period` → `c2-design-rosy-peach` → `c2-notion-disconnect-readiness` → `c2-app-only-notion-gaps` → `c2-grade-cutover` → `c2-first-load-verified` → `c2-review-grade-redesign` → `c2-managed-app-first` → `c2-lesson-cutoff`
 - 작업 폴더 `checkpoint-10-a\ENG`에서 고친 뒤 `python -I sync-eng-repo.py`로 저장소에 반영하고 커밋합니다. ENG-repo에 커밋 안 된 변경이 있으면 동기화가 멈춥니다(ENG-repo에서 직접 고치지 말고 작업 폴더에서 고칠 것).
 - 전역 git 설정 `core.autocrlf=true`와 달리, 이 저장소만 `false`로 두어 파일 바이트를 그대로 보존합니다.
 
-상세 문서(docs/): C2_LESSON_MIGRATION · C2_LESSON_CUTOVER · C2_LESSON_APP_PATHS · C2_NOTION_DEPENDENCY_AUDIT · C2_TEMPLATE_CUTOVER · C2_LESSON_READ_SCOPE · C2_LESSON_RESTORE · C2_LESSON_REVIEW_PERIOD · C2_NOTION_DISCONNECT · C2_APP_ONLY_NOTION_GAPS · C2_GRADE_CUTOVER · C2_REVIEW_GRADE_REDESIGN · C2_MANAGED_PENDING_WRITE
+상세 문서(docs/): C2_LESSON_MIGRATION · C2_LESSON_CUTOVER · C2_LESSON_APP_PATHS · C2_NOTION_DEPENDENCY_AUDIT · C2_TEMPLATE_CUTOVER · C2_LESSON_READ_SCOPE · C2_LESSON_RESTORE · C2_LESSON_REVIEW_PERIOD · C2_NOTION_DISCONNECT · C2_APP_ONLY_NOTION_GAPS · C2_GRADE_CUTOVER · C2_REVIEW_GRADE_REDESIGN · C2_MANAGED_PENDING_WRITE · C2_LESSON_MIGRATION_CUTOFF
 
-## 현재 상태 (`c2-managed-app-first`)
+## 현재 상태 (`c2-lesson-cutoff`)
+- 일지 이전은 2026-09-20 이후 수업만 옮깁니다. "Notion에만 보관"은 누르는 즉시 확정됩니다.
 - 영역별 검증 기반 앱 전용 스위치가 모두 있습니다: 학생·선생님(C1) · 반·교재·시간표(C1) · 일정 · 일지 · 문자 템플릿 · 성적.
 - 모든 스위치를 켜면 앱 화면(첫 화면 포함)의 Notion 호출이 0회입니다(테스트로 확인). 남은 Notion 사용은 관리자 진단·설정·이전 도구뿐입니다.
 - 전환 후 Make 수신(일지·일정·성적·수강)은 반영하지 않습니다.

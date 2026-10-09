@@ -1,3 +1,4 @@
+import {migrationBatchSize} from './migrationTransport.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { gradeNotion } from './teacherAcademicNotion.js';
 import { sourcesFor, sourceLessonData, text, DEFAULT_SOURCE } from './teacherNotionWorkspace.js';
@@ -30,6 +31,12 @@ export const ACKNOWLEDGEABLE: Record<string, string> = {
     AUTHOR_UNKNOWN: 'stage-unlinked', MARKER_ORPHAN: 'stage', PUBLIC_REPORT_MISSING: 'stage',
     PUBLIC_VALUES_DIFFER: 'stage', SOURCE_REMOVED: 'mark-removed',
 };
+/** Lessons before this date stay in Notion only: student relations were reliable from here (2026-09-20, decided by the academy). */
+export const LESSON_MIGRATION_SINCE = '2026-09-20';
+/** Tests with older fixture dates lower this; production always uses LESSON_MIGRATION_SINCE. */
+export const lessonMigrationCutoff = { since: LESSON_MIGRATION_SINCE };
+const lessonDay = (p: any) => String((p?.['타임 슬롯']?.date || p?.['수업 날짜']?.date)?.start || '').slice(0, 10);
+export const beforeMigrationCutoff = (day: string | null | undefined) => !day || day < lessonMigrationCutoff.since;
 const choice = (p: any) => p?.status?.name || p?.select?.name || '';
 const norm = (v: any) => String(v ?? '').replace(/\s+/g, ' ').trim();
 const kstDate = (iso: string) => { const t = Date.parse(iso || ''); return Number.isFinite(t) ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(t)) : ''; };
@@ -96,6 +103,8 @@ async function classifyPage(db: any, notion: any, ctx: any, databaseId: string, 
     const base = { sourceKey, pageId, databaseId, editedAt: page.last_edited_time };
     if (uuid(page.parent?.database_id || '') !== databaseId) throw holdError('SOURCE_IDENTITY');
     const p = page.properties || {}, sources = ctx.byDb.get(databaseId) || [];
+    // Checked before any relation read, so old rows cost no extra Notion calls.
+    if (beforeMigrationCutoff(lessonDay(p))) return { ...base, outcome: 'excluded', beforeCutoff: true };
     const students = await relationIds(notion, page, '학생');
     const factsVersion = hash([page.last_edited_time, students]);
     const academyText = text(p['학원']), rawSubject = choice(p['과목']);
@@ -247,8 +256,20 @@ function tally(counts: any, outcome: string, result: any, revisit = false) {
     return next;
 }
 
+/** Notion filter for lessons on/after the cutoff, using only the date properties this database really has. */
+const schemaCache = new WeakMap<object, Map<string, any>>();
+async function cutoffFilter(notion: any, databaseId: string) {
+    const cache = schemaCache.get(notion) || new Map<string, any>(); schemaCache.set(notion, cache);
+    if (!cache.has(databaseId)) { let schema: any = null; try { schema = await notion(`databases/${databaseId}`); } catch (error: any) { if (!/^(NOTION_40[04]|UNEXPECTED_)/.test(error?.message || '')) throw error; /* no readable schema: fall back to the per-row date check */ } cache.set(databaseId, schema); }
+    const schema = cache.get(databaseId);
+    const names = ['타임 슬롯', '수업 날짜'].filter(name => schema?.properties?.[name]?.type === 'date');
+    const parts = names.map(name => ({ property: name, date: { on_or_after: lessonMigrationCutoff.since } }));
+    return parts.length > 1 ? { or: parts } : parts[0] || null;
+}
 async function querySource(notion: any, databaseId: string, cursor: string | null, since?: string) {
-    const page = await notion(`databases/${databaseId}/query`, 'POST', { page_size: PAGE_SIZE, sorts: [{ timestamp: 'last_edited_time', direction: 'ascending' }], ...(since ? { filter: { timestamp: 'last_edited_time', last_edited_time: { on_or_after: since } } } : {}), ...(cursor ? { start_cursor: cursor } : {}) });
+    // Rows before the cutoff are never read; classifyPage still checks the date in case a filter could not be built.
+    const filters = [await cutoffFilter(notion, databaseId), since ? { timestamp: 'last_edited_time', last_edited_time: { on_or_after: since } } : null].filter(Boolean);
+    const page = await notion(`databases/${databaseId}/query`, 'POST', { page_size: Math.min(50,migrationBatchSize(notion,PAGE_SIZE)), sorts: [{ timestamp: 'last_edited_time', direction: 'ascending' }], ...(filters.length ? { filter: filters.length > 1 ? { and: filters } : filters[0] } : {}), ...(cursor ? { start_cursor: cursor } : {}) });
     if (!Array.isArray(page.results) || page.has_more && (!page.next_cursor || page.next_cursor === cursor)) throw Error('LESSON_MIGRATION_PAGINATION');
     return page;
 }
@@ -343,6 +364,14 @@ async function runBatch(db: any, notion: any, ctx: any, job: any, lease: string,
                     if ((await tx.get(jobRef(db))).data()?.leaseOwner !== lease) throw Error('PUBLISH_IN_PROGRESS');
                     const old = (await tx.get(doc.ref)).data(); await saveHold(tx, db, job, old, hold.sourceKey, { status: 'resolved', code: old.code, version: old.version }, now);
                 });
+                continue;
+            }
+            if (hold.date && beforeMigrationCutoff(hold.date)) {
+                await db.runTransaction(async (tx: any) => {
+                    if ((await tx.get(jobRef(db))).data()?.leaseOwner !== lease) throw Error('PUBLISH_IN_PROGRESS');
+                    const old = (await tx.get(doc.ref)).data(); if (old?.status === 'open') await saveHold(tx, db, job, old, hold.sourceKey, { status: 'resolved', code: old.code, version: old.version, evidence: 'before-cutoff' }, now);
+                });
+                counts = { ...counts, rechecked: (counts.rechecked || 0) + 1 };
                 continue;
             }
             let page: any;
@@ -497,6 +526,9 @@ export async function lessonMigrationStatus(db: any, actor: any) {
     return { job: publicJob(job.data()), holds, holdGroups: groups, openHolds: Math.min(open.docs.length, 500), moreHolds: open.docs.length > 50, cronConfigured: Boolean(process.env.CRON_SECRET) };
 }
 
+/** "Keep in Notion only" needs no new Notion read, so it is settled at once; staging decisions still wait for the next recheck.
+ * If the row is edited later its version changes and a scan opens the hold again. */
+const settledNow = (code: string) => ACKNOWLEDGEABLE[code] === 'exclude' ? { status: 'acknowledged', recheckRequested: false, settledBy: 'decision' } : { recheckRequested: true };
 /** Record an admin decision. Acknowledgement is bound to the exact source version that was reviewed. */
 export async function decideLessonMigrationHold(db: any, actor: any, input: { sourceKey?: unknown, decision?: unknown, confirmed?: unknown }) {
     assertAdmin(actor);
@@ -508,7 +540,7 @@ export async function decideLessonMigrationHold(db: any, actor: any, input: { so
         const now = Date.now();
         if (input.decision === 'acknowledge') {
             if (!ACKNOWLEDGEABLE[hold.code] || !hold.version) throw Error('FORBIDDEN');
-            tx.set(ref, { ...hold, acknowledged: { ...hold.acknowledged, [hold.code]: hold.version }, recheckRequested: true, decisions: [...(hold.decisions || []), { code: hold.code, version: hold.version, decision: 'acknowledge', by: actor.uid, at: now }], updatedAt: now });
+            tx.set(ref, { ...hold, acknowledged: { ...hold.acknowledged, [hold.code]: hold.version }, ...settledNow(hold.code), decisions: [...(hold.decisions || []), { code: hold.code, version: hold.version, decision: 'acknowledge', by: actor.uid, at: now }], updatedAt: now });
         } else tx.set(ref, { ...hold, recheckRequested: true, updatedAt: now });
         return { sourceKey: input.sourceKey, decision: input.decision, effect: input.decision === 'acknowledge' ? ACKNOWLEDGEABLE[hold.code] : 'recheck' };
     });
@@ -529,7 +561,7 @@ export async function acknowledgeLessonMigrationHoldGroup(db: any, actor: any, i
             const hold = row.data();
             // Skip anything that changed since it was listed.
             if (!hold || hold.status !== 'open' || hold.code !== input.code || !hold.version) continue;
-            tx.set(row.ref, { ...hold, acknowledged: { ...hold.acknowledged, [hold.code]: hold.version }, recheckRequested: true, decisions: [...(hold.decisions || []), { code: hold.code, version: hold.version, decision: 'acknowledge', by: actor.uid, at: now, group: true }], updatedAt: now });
+            tx.set(row.ref, { ...hold, acknowledged: { ...hold.acknowledged, [hold.code]: hold.version }, ...settledNow(hold.code), decisions: [...(hold.decisions || []), { code: hold.code, version: hold.version, decision: 'acknowledge', by: actor.uid, at: now, group: true }], updatedAt: now });
             n++;
         }
         return n;
@@ -542,4 +574,18 @@ export async function runLessonMigrationCron(db: any, deps: { notion?: any, budg
     const job = (await jobRef(db).get()).data();
     if (!job || !RUNNABLE.includes(job.status) || (job.nextRunAt || 0) > Date.now()) return { idle: true, status: job?.status || 'none' };
     return runLessonMigration(db, { system: true, uid: job.startedBy, academyId: 'main' }, deps);
+}
+
+/** Read-only offline preview. No job/checkpoint/hold/source documents are written. */
+export async function dryRunLessonPage(db:any,actor:any,input:{databaseId?:string,cursor?:string}={},notion:any=gradeNotion){
+ assertAdmin(actor);const ctx=await migrationContext(db,{startedBy:actor.uid}),databases=[...ctx.byDb.keys()];
+ const databaseId=input.databaseId||databases[0];if(!databaseId||!ctx.byDb.has(databaseId))throw Error('NOTION_SOURCE_NOT_CONFIGURED');
+ const page=await querySource(notion,databaseId,input.cursor||null),counts:Record<string,number>={};
+ for(const row of page.results){if(beforeMigrationCutoff(lessonDay(row.properties))){counts.excluded=(counts.excluded||0)+1;continue;}
+  // Decisions already recorded (e.g. "keep in Notion only") count as decided, exactly as a real run would treat them. Read-only.
+  const hold=(await db.collection('lessonMigrationHolds').doc(hash(['main',databaseId,uuid(row.id)])).get()).data()||{};
+  try{const r=await classifyPage(db,notion,ctx,databaseId,row,hold);counts[r.outcome]=(counts[r.outcome]||0)+1;}
+  catch(e:any){if(!e.hold)throw e;counts[e.hold]=(counts[e.hold]||0)+1;}
+ }
+ return {databases,databaseId,cursor:page.has_more?page.next_cursor:null,counts,writes:0,since:LESSON_MIGRATION_SINCE};
 }

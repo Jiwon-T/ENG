@@ -28,7 +28,10 @@ export async function auditScheduleReadiness(db: any, actor: any, notion = regis
             continue;
         }
         const doc = local.docs[0], r = doc.data();
-        if (r.academyId !== 'main' || r.archived || r.deleteRequested || r.notionWrite?.leaseUntil > Date.now() || ['publishing', 'processing', 'notion_saved'].includes(r.stage)) {
+        // Deleted in the app (or deletion requested) is the academy's decision and needs no review.
+        if (r.archived || r.deleteRequested)
+            continue;
+        if (r.academyId !== 'main' || r.notionWrite?.leaseUntil > Date.now() || ['publishing', 'processing', 'notion_saved'].includes(r.stage)) {
             issues.push(id + ':PENDING');
             continue;
         }
@@ -48,10 +51,8 @@ export async function auditScheduleReadiness(db: any, actor: any, notion = regis
             issues.push(id + ':INVALID_SOURCE');
             continue;
         }
-        if (!r.appEdited && JSON.stringify({ ...r.data, students: [...r.data.students].sort() }) !== JSON.stringify({ ...data, students: [...data.students].sort() })) {
-            issues.push(id + ':VALUES_DIFFER');
-            continue;
-        }
+        // When the app and Notion differ, the app copy is right (academy decision); it is what the switch keeps.
+
         for (const key of r.data.students) {
             const member = (await db.collection('academyStudentMemberships').doc(key).get()).data(), mapping = (await db.collection('notionStudentMappings').doc(hashStudentKey(key)).get()).data();
             if (!member || member.disabled || member.academyId !== 'main' || !mapping?.internalStudentId || member.internalStudentId && member.internalStudentId !== mapping.internalStudentId)

@@ -28,7 +28,7 @@ export async function notionDisconnectStatus(db: any, actor: any, now = Date.now
     const hooks = [...webhooks].map(([k, count]) => { const [kind, outcome] = k.split('|'); return { kind, outcome, count }; }).sort((a, b) => b.count - a.count);
     const hookCount = (kind: string, pred: (o: string) => boolean = () => true) => hooks.filter(h => h.kind === kind && pred(h.outcome)).reduce((s, h) => s + h.count, 0);
     const areas = [
-        { key: 'core', appOnly: core }, { key: 'class', appOnly: classes }, { key: 'schedule', appOnly: schedule },
+        { key: 'class', appOnly: classes }, { key: 'core', appOnly: core }, { key: 'schedule', appOnly: schedule },
         { key: 'lesson', appOnly: lesson }, { key: 'template', appOnly: template }, { key: 'grade', appOnly: grade, notionEditsApplied: hookCount('academic', o => o === 'applied') },
     ];
     const allApp = areas.every(a => a.appOnly);

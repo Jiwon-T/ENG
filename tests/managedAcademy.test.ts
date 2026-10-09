@@ -57,14 +57,13 @@ test('an unfinished Notion write keeps the app copy, resumes, and can be confirm
  const before=f.calls;await activateManaged(f.db,f.actor);assert.equal(f.calls,before,'activation never writes to Notion');
  const done=f.rows.get('teacherClasses/'+cls);assert.equal(done.name,'앱에서 고친 반');assert.equal(done.notionSyncStage,'app_saved');
 });
-test('a running Notion write or deletion stops with the class name; the message is no longer a server-connection error',async()=>{
+test('a running Notion write stops with the class name; the message is no longer a server-connection error',async()=>{
  const f=fixture();await importAll(f);
  const row=f.rows.get('teacherClasses/'+cls);row.notionSyncStage='syncing';
  let failure:any;try{await importAll(f,['classes']);}catch(e){failure=e;}
  assert.equal(failure.message,'MANAGED_PENDING_WRITE');assert.deepEqual({title:failure.managedBlocker.title,reason:failure.managedBlocker.reason},{title:'반',reason:'running'});
  const response=workspaceError(failure,'managed-import');assert.equal(response.status,409);assert.match(response.body.message!,/‘반’ 반·시간표: Notion 반영이 진행 중/);assert.deepEqual(response.body.blocker,{kind:'classes',title:'반',reason:'running'});
  assert.equal(f.rows.get('teacherClasses/'+cls).notionSyncStage,'syncing','nothing changed');
- row.notionSyncStage='synced';row.deleteRequested=true;await assert.rejects(importAll(f,['classes']),(e:any)=>e.managedBlocker?.reason==='deletion');
  for(const code of ['MANAGED_LINK_REQUIRED','MANAGED_BOOKS_FIRST','MANAGED_IMPORT_FAILED'])assert.notEqual(workspaceError(Error(code),'managed-import').body.error,'WORKSPACE_ERROR');
 });
 test('activation still refuses an unfinished Notion write the import has not confirmed',async()=>{
@@ -80,4 +79,15 @@ test('the runner retries temporary failures and a running write, but stops on re
  const r:any=await confirmManagedMigration(request,()=>false,()=>{},async ms=>{waits.push(ms);});
  assert.deepEqual(waits,[3000,10000]);assert.equal(r.activated,true);assert.equal(r.preserved,2);assert.equal(seen.at(-1),'activate');
  let tries=0;await assert.rejects(runManagedMigration(async a=>{if(a==='managed-migration-plan')return plan;tries++;throw err('MANAGED_LINK_REQUIRED');},()=>false,()=>{},async()=>{}),/MANAGED_LINK_REQUIRED/);assert.equal(tries,1);
+});
+
+test('classes deleted in the app are normal: skipped without revival, and a pending deletion completes at activation',async()=>{
+ const f=fixture();await importAll(f);
+ const row=f.rows.get('teacherClasses/'+cls);Object.assign(row,{deleteRequested:true,notionSyncStage:'failed',name:'지운 반'});const before=JSON.stringify(row);
+ const [step]=await importAll(f,['classes']);assert.equal(step.decision,'app-deleted');assert.equal(JSON.stringify(f.rows.get('teacherClasses/'+cls)),before,'never overwritten or revived');
+ await activateManaged(f.db,f.actor);
+ const done=f.rows.get('teacherClasses/'+cls);assert.equal(done.archived,true);assert.equal(done.name,'지운 반');
+ assert.ok([...f.rows.values()].some((v:any)=>v.reason==='delete-request-completed-at-activation'));
+ // An already archived class stays archived and is skipped too.
+ const g=fixture();await importAll(g);Object.assign(g.rows.get('teacherClasses/'+cls),{archived:true});const [again]=await importAll(g,['classes']);assert.equal(again.decision,'app-deleted');
 });

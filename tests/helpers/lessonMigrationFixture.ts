@@ -1,3 +1,6 @@
+import { lessonMigrationCutoff } from '../../api/_lib/lessonMigration.js';
+// These fixtures predate the 2026-09-20 cutoff; the cutoff itself is covered in lessonMigrationCutoff.test.ts.
+lessonMigrationCutoff.since = '2000-01-01';
 import { templateFirestore } from './templateFirestore.js';
 import { hashStudentKey } from '../../api/_lib/security.js';
 import { DEFAULT_SOURCE } from '../../api/_lib/teacherNotionWorkspace.js';

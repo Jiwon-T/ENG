@@ -1,3 +1,4 @@
+import {migrationBatchSize} from './migrationTransport.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {subjects,timetableSlotSchema,canAccessOwned,canTeach} from './teacherWorkspacePolicy.js';
@@ -47,10 +48,12 @@ export async function importManagedStep(db:any,actor:any,input:any,notion:Regist
  const state=v.dryRun?(await ref.get()).data()||{}:await db.runTransaction(async(tx:any)=>{const old=(await tx.get(ref)).data()||{};if(old.leaseUntil>at)throw Error('DIRECTORY_BUSY');if((await tx.get(db.collection(CLASS_AUTHORITY).doc('main'))).data()?.active)throw Error('CORE_FROZEN');const next={...old,key:v.key,kind:v.kind,final:v.final,ready:false,verifiedAt:null,startedAt:old.cursor?old.startedAt:at,leaseOwner:owner,leaseUntil:at+180000};if(old.cursor&&Boolean(old.final)!==v.final)throw Error('DIRECTORY_BUSY');tx.set(ref,next);return next;});
  try{
   const database=v.kind==='classes'?s.classDatabaseId:s.curriculumDatabaseId;
-  const cursor=v.dryRun?v.cursor:state.cursor;const r=await notion(`databases/${database}/query`,'POST',{page_size:1,...(cursor?{start_cursor:cursor}:{})});if(!Array.isArray(r.results)||r.results.length>1||r.has_more&&(!r.next_cursor||r.next_cursor===cursor))throw Error('MANAGED_LINK_REQUIRED');
+  const cursor=v.dryRun?v.cursor:state.cursor,size=Math.min(10,migrationBatchSize(notion,1));const r=await notion(`databases/${database}/query`,'POST',{page_size:size,...(cursor?{start_cursor:cursor}:{})});if(!Array.isArray(r.results)||r.results.length>size||r.has_more&&(!r.next_cursor||r.next_cursor===cursor))throw Error('MANAGED_LINK_REQUIRED');
   let decision='empty',id:null|string=null;for(const page of r.results){const value=await parsed(db,actor,v.kind,s,page,notion);if(!value){decision='excluded';continue;}const marker=text(page.properties?.['앱 기록 ID']),found=await target(db,collection(v.kind),value.notionPageId,/^[a-f0-9-]{36}$/i.test(marker)?uuid(marker):undefined),old=found.data();id=found.id;
    // Only a running Notion write or a deletion stops the import; a pending/failed Notion write keeps the app copy (it is the newer value).
-   if(old&&(old.archived||old.deleteRequested||old.notionSyncStage==='syncing'))throw managedBlocker(v.kind,found.id,old,old.notionSyncStage==='syncing'?'running':'deletion');
+   // Deleted in the app (or deletion requested) is the academy's decision: skip it as normal, never revive or overwrite it.
+   if(old&&(old.archived||old.deleteRequested)){decision='app-deleted';continue;}
+   if(old&&old.notionSyncStage==='syncing')throw managedBlocker(v.kind,found.id,old,'running');
    if(old&&(old.ownerUid!==value.ownerUid||old.academyId!=='main'||old.subject!==value.subject||old.notionPageId&&uuid(old.notionPageId)!==value.notionPageId))throw Error('MANAGED_LINK_REQUIRED');
    const preserveApp=Boolean(old&&(old.migrationAppAuthoritative||['pending','failed'].includes(old.notionSyncStage)));
    const comparable=old?Object.fromEntries(Object.keys(value).map(k=>[k,old[k]])):null,same=preserveApp?Boolean(old.migrationAppAuthoritative):Boolean(old)&&JSON.stringify(comparable)===JSON.stringify(value);decision=preserveApp?'app-preserved':same?'unchanged':old?'update':'new';if(!v.dryRun)await db.runTransaction(async(tx:any)=>{const current=(await tx.get(found.ref)).data(),lease=(await tx.get(ref)).data(),active=(await tx.get(db.collection(CLASS_AUTHORITY).doc('main'))).data();if(active?.active||lease?.leaseOwner!==owner||lease.leaseUntil<=clock())throw Error('DIRECTORY_BUSY');if(JSON.stringify(current)!==JSON.stringify(old))throw Error('DRAFT_CONFLICT');
@@ -68,10 +71,12 @@ export async function activateManaged(db:any,actor:any){
  const docs=[];for(const c of ['teacherClasses','teacherCurricula']){const q=await db.collection(c).where('academyId','==','main').limit(101).get();if(q.docs.length>100)throw Error('CORE_CUTOVER_LIMIT');docs.push(...q.docs);}
  return db.runTransaction(async(tx:any)=>{const active=(await tx.get(db.collection(CLASS_AUTHORITY).doc('main'))).data();if(active?.active)return {active:true,alreadyDone:true};
   for(const r of states){const s=(await tx.get(r)).data();if(!s?.ready||s.cursor||!s.final||!s.verifiedAt||Date.now()-s.verifiedAt>900000||s.leaseUntil>Date.now()||s.error)throw Error('CORE_NOT_READY');}
-  const rows=[];for(const d of docs){const r=(await tx.get(d.ref)).data();if(JSON.stringify(r)!==JSON.stringify(d.data())||r.deleteRequested||r.notionSyncStage==='syncing'||!r.migrationAppAuthoritative&&['pending','failed'].includes(r.notionSyncStage))throw managedBlocker(d.ref.path.startsWith('teacherClasses/')?'classes':'curricula',d.ref.id,r,r.deleteRequested?'deletion':r.notionSyncStage==='syncing'?'running':'unconfirmed');rows.push({ref:d.ref,row:r});}
+  const rows=[];for(const d of docs){const r=(await tx.get(d.ref)).data();if(JSON.stringify(r)!==JSON.stringify(d.data())||!r.archived&&!r.deleteRequested&&(r.notionSyncStage==='syncing'||!r.migrationAppAuthoritative&&['pending','failed'].includes(r.notionSyncStage)))throw managedBlocker(d.ref.path.startsWith('teacherClasses/')?'classes':'curricula',d.ref.id,r,r.notionSyncStage==='syncing'?'running':'unconfirmed');rows.push({ref:d.ref,row:r});}
   const classIds=new Map(rows.filter(r=>r.ref.path.startsWith('teacherClasses/')).flatMap(r=>[[r.ref.id,r.ref.id],[r.row.notionPageId,r.ref.id]])),planIds=new Set(rows.filter(r=>r.ref.path.startsWith('teacherCurricula/')).map(r=>r.ref.id));
-  for(const r of rows){if(r.row.archived)continue;if(r.ref.path.startsWith('teacherClasses/')){for(const b of r.row.books||[])if(b.linkedPlanId&&!planIds.has(b.linkedPlanId))throw Error('MANAGED_LINK_REQUIRED');}else if(r.row.classId&&!classIds.has(r.row.classId))throw Error('MANAGED_LINK_REQUIRED');}
-  for(const r of rows){const row={...r.row,sourceMode:'firestore',notionSyncStage:'app_saved',notionSyncRequired:false,...(r.row.classId?{classId:classIds.get(r.row.classId)}:{})};tx.set(r.ref,row);}
+  for(const r of rows){if(r.row.archived||r.row.deleteRequested)continue;if(r.ref.path.startsWith('teacherClasses/')){for(const b of r.row.books||[])if(b.linkedPlanId&&!planIds.has(b.linkedPlanId))throw Error('MANAGED_LINK_REQUIRED');}else if(r.row.classId&&!classIds.has(r.row.classId))throw Error('MANAGED_LINK_REQUIRED');}
+  // A requested deletion is completed here (the app is the only store from now on); the row is kept, hidden, with history.
+  for(const r of rows){const finishing=Boolean(r.row.deleteRequested&&!r.row.archived);const row={...r.row,sourceMode:'firestore',notionSyncStage:'app_saved',notionSyncRequired:false,...(r.row.classId&&classIds.has(r.row.classId)?{classId:classIds.get(r.row.classId)}:{}),...(finishing?{archived:true,archivedAt:Date.now()}:{})};tx.set(r.ref,row);
+   if(finishing)tx.set(db.collection(MANAGED_HISTORY).doc(`${r.ref.path.replace('/',':')}:activation-delete`),{before:r.row,after:row,by:actor.uid,at:Date.now(),reason:'delete-request-completed-at-activation'});}
   tx.set(db.collection(CLASS_AUTHORITY).doc('main'),{active:true,by:actor.uid,at:Date.now(),sources:plan.sources.map(s=>s.key)});return {active:true};
  });
 }

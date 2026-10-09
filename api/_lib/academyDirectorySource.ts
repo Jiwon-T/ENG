@@ -1,3 +1,4 @@
+import {migrationBatchSize} from './migrationTransport.js';
 import {createHash,randomUUID,timingSafeEqual} from 'node:crypto';
 import {z} from 'zod';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
@@ -96,6 +97,8 @@ async function ingest(db:any,p:Projected,by:string,at:number,lease?:{ref:any;own
   if((await tx.get(db.collection(DIRECTORY_CORE_AUTHORITY).doc('main'))).data()?.active)throw Error('CORE_FROZEN');
   const old=(await tx.get(ref)).data();
   if(lease){const s=(await tx.get(lease.ref)).data();if(s?.leaseOwner!==lease.owner||s.leaseUntil<=at)throw Error('DIRECTORY_BUSY');}
+  // Rows the admin chose not to migrate (e.g. a test teacher page) stay out on every later sync.
+  if(old?.excluded)return 'excluded';
   const checked=await inspect(tx,db,p,links);
   if(old?.pointer&&old.studentKey&&old.studentKey!==p.studentKey)checked.issue='SOURCE_RELATION_REVIEW';
   if(old&&Date.parse(old.remoteEditedAt)>Date.parse(p.remoteEditedAt))return 'unchanged';
@@ -111,8 +114,9 @@ async function ingest(db:any,p:Projected,by:string,at:number,lease?:{ref:any;own
  });
 }
 async function remotePage(kind:DirectoryKind,notion:RegistrationNotion,cursor?:string,since?:number){
- const r=await notion(`databases/${databases[kind]}/query`,'POST',{page_size:LIMIT,sorts:[{timestamp:'last_edited_time',direction:'ascending'}],...(cursor?{start_cursor:cursor}:{}),...(since?{filter:{timestamp:'last_edited_time',last_edited_time:{on_or_after:new Date(since-2000).toISOString()}}}:{})});
- if(!Array.isArray(r.results)||r.results.length>LIMIT||r.has_more&&(!r.next_cursor||r.next_cursor===cursor))throw Error('DIRECTORY_FIELD_INCOMPLETE');
+ const size=migrationBatchSize(notion,LIMIT);
+ const r=await notion(`databases/${databases[kind]}/query`,'POST',{page_size:size,sorts:[{timestamp:'last_edited_time',direction:'ascending'}],...(cursor?{start_cursor:cursor}:{}),...(since?{filter:{timestamp:'last_edited_time',last_edited_time:{on_or_after:new Date(since-2000).toISOString()}}}:{})});
+ if(!Array.isArray(r.results)||r.results.length>size||r.has_more&&(!r.next_cursor||r.next_cursor===cursor))throw Error('DIRECTORY_FIELD_INCOMPLETE');
  const pages=[];for(const p of r.results)pages.push(await projection(kind,p,notion));return {pages,cursor:r.has_more?r.next_cursor:null};
 }
 export async function dryRunDirectory(db:any,actor:any,kindInput:unknown,cursor?:string,notion:RegistrationNotion=registrationNotion){
@@ -130,7 +134,7 @@ export async function importDirectoryStep(db:any,actor:any,kindInput:unknown,not
   const next={...s,sourceKey:directorySourceKey(kind),kind,runVersion:(s.runVersion||0)+1,phase:['initial','catchup'].includes(s.phase)?s.phase:'delta',runStartedAt:s.cursor?s.runStartedAt:at,leaseOwner:owner,leaseUntil:at+LEASE,error:null};if(!s.phase){next.phase='initial';next.t0=at;}tx.set(ref,next);return next;});
  try{
   const batch=await remotePage(kind,notion,state.cursor||undefined,state.phase==='initial'?undefined:state.phase==='catchup'?state.t0:state.lastSuccessAt);
-  const counts={created:0,updated:0,unchanged:0,review:0};for(const p of batch.pages)counts[await ingest(db,p,actor.uid,clock(),{ref,owner})]++;
+  const counts:Record<string,number>={created:0,updated:0,unchanged:0,review:0,excluded:0};for(const p of batch.pages)counts[await ingest(db,p,actor.uid,clock(),{ref,owner})]++;
   const next=await db.runTransaction(async(tx:any)=>{const s=(await tx.get(ref)).data();if(s?.leaseOwner!==owner||s.leaseUntil<=clock())throw Error('DIRECTORY_BUSY');const n={...s,cursor:batch.cursor,leaseOwner:null,leaseUntil:0};
    if(counts.review)n.approved=false;
    if(!batch.cursor){if(state.phase==='initial')n.phase='catchup';else{n.phase='idle';n.ready=true;n.lastSuccessAt=state.runStartedAt;}}tx.set(ref,n);return n;});
@@ -140,7 +144,7 @@ export async function importDirectoryStep(db:any,actor:any,kindInput:unknown,not
 function rowsQuery(db:any,kind:DirectoryKind,cursor?:string,limit=21){let q=db.collection(DIRECTORY_ROWS).where('sourceKey','==',directorySourceKey(kind)).orderBy('notionPageId');if(cursor)q=q.startAfter(uuid(cursor));return q.limit(limit);}
 export async function directoryManagement(db:any,actor:any,kindInput:unknown,cursor?:string){
  assertAdmin(actor);const kind=kindSchema.parse(kindInput);sourceReady(kind);const [state,rows]=await Promise.all([db.collection(DIRECTORY_STATE).doc(directorySourceKey(kind)).get(),rowsQuery(db,kind,cursor).get()]);
- const records=rows.docs.slice(0,20).map((d:any)=>{const r=d.data();return {id:r.notionPageId,revision:r.revision,issue:r.issue,linked:Boolean(r.pointer),archived:Boolean(r.fields?.archived),updatedAt:r.updatedAt};});
+ const records=rows.docs.slice(0,20).map((d:any)=>{const r=d.data();return {id:r.notionPageId,revision:r.revision,issue:r.issue,excluded:Boolean(r.excluded),excludedIssue:r.excludedIssue||null,linked:Boolean(r.pointer),archived:Boolean(r.fields?.archived),updatedAt:r.updatedAt};});
  const s=state.data()||{};return {records,cursor:rows.docs.length>20?records.at(-1)?.id:null,sync:{ready:Boolean(s.ready),approved:Boolean(s.approved),phase:s.phase||'not-started',lastSuccessAt:s.lastSuccessAt||null,error:s.error||null}};
 }
 export async function reconcileDirectoryStep(db:any,actor:any,kindInput:unknown,notion:RegistrationNotion=registrationNotion,clock=Date.now){
@@ -185,15 +189,28 @@ export async function applyDirectoryStudentSummary(db:any,actor:any,key:string,r
  });
 }
 export async function directoryAction(db:any,actor:any,body:any){
- const {action,...input}=body;const v=z.object({kind:kindSchema,cursor:z.string().max(1000).optional(),confirmed:z.literal(true).optional()}).strict().parse(input);
+ const {action,...input}=body;const v=z.object({kind:kindSchema,cursor:z.string().max(1000).optional(),id:z.string().uuid().optional(),confirmed:z.literal(true).optional()}).strict().parse(input);
  if(action==='directory-list')return directoryManagement(db,actor,v.kind,v.cursor);
  if(action==='directory-dry-run')return dryRunDirectory(db,actor,v.kind,v.cursor);
  if(v.confirmed!==true)throw Error('INVALID_INPUT');
  if(action==='directory-cutover'){const {cutoverCore}=await import('./academyCore.js');return cutoverCore(db,actor);}
  if(action==='directory-approve')return approveDirectory(db,actor,v.kind);
+ if(action==='directory-exclude'){if(!v.id)throw Error('INVALID_INPUT');return excludeDirectoryRow(db,actor,v.kind,v.id);}
  if(action==='directory-import-step')return importDirectoryStep(db,actor,v.kind);
  if(action==='directory-reconcile-step')return reconcileDirectoryStep(db,actor,v.kind);
  throw Error('INVALID_INPUT');
+}
+/** "Do not migrate" for one row that needs review (e.g. a test page). Recorded with history; the switch skips it; only review rows qualify. */
+export async function excludeDirectoryRow(db:any,actor:any,kindInput:unknown,idInput:unknown,clock=Date.now){
+ assertAdmin(actor);const kind=kindSchema.parse(kindInput),id=uuid(z.string().uuid().parse(idInput)),ref=db.collection(DIRECTORY_ROWS).doc(directoryRowKey(kind,id));
+ return db.runTransaction(async(tx:any)=>{
+  if((await tx.get(db.collection(DIRECTORY_CORE_AUTHORITY).doc('main'))).data()?.active)throw Error('CORE_FROZEN');
+  const old=(await tx.get(ref)).data();if(!old||old.academyId!=='main')throw Error('DIRECTORY_SOURCE_MISMATCH');if(old.excluded)return {id,excluded:true,alreadyDone:true};
+  if(!old.issue)throw Error('DIRECTORY_REVIEW_REQUIRED');
+  const at=clock(),next={...old,excluded:true,excludedIssue:old.issue,issue:null,verified:true,excludedBy:actor.uid,excludedAt:at,revision:(old.revision||0)+1,updatedAt:at};
+  tx.set(ref,next);tx.set(db.collection(DIRECTORY_HISTORY).doc(`${directoryRowKey(kind,id)}:${next.revision}:excluded`),{before:old,after:next,by:actor.uid,at,reason:'admin-excluded'});
+  return {id,excluded:true};
+ });
 }
 export async function approveDirectory(db:any,actor:any,kindInput:unknown,clock=Date.now){
  assertAdmin(actor);const kind=kindSchema.parse(kindInput),ref=db.collection(DIRECTORY_STATE).doc(directorySourceKey(kind));sourceReady(kind);

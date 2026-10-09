@@ -136,7 +136,7 @@ export async function saveCoreEnrollment(db:any,actor:any,keyInput:any,request:a
 export async function cutoverCore(db:any,actor:any){
  if(!actor.admin||actor.academyId!=='main')throw Error('FORBIDDEN');
  const {profileFromPage}=await import('./teacherStudentProfile.js');
- const rows:any[]=[];for(const kind of directoryKinds){const q=await db.collection(DIRECTORY_ROWS).where('sourceKey','==',directorySourceKey(kind)).limit(101).get();if(q.docs.length>100)throw Error('CORE_CUTOVER_LIMIT');rows.push(...q.docs);}
+ const rows:any[]=[];for(const kind of directoryKinds){const q=await db.collection(DIRECTORY_ROWS).where('sourceKey','==',directorySourceKey(kind)).limit(101).get();if(q.docs.length>100)throw Error('CORE_CUTOVER_LIMIT');rows.push(...q.docs.filter((d:any)=>!d.data().excluded));}
  if(Buffer.byteLength(JSON.stringify(rows.map(d=>d.data())))>6000000)throw Error('CORE_CUTOVER_LIMIT');
  return db.runTransaction(async(tx:any)=>{
   const active=(await tx.get(stateRef(db))).data();if(active?.active)return {active:true,alreadyDone:true};

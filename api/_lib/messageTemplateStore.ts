@@ -1,3 +1,4 @@
+import {migrationBatchSize} from './migrationTransport.js';
 import {createHash, randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
@@ -82,9 +83,10 @@ export async function storedMessageTemplatePage(db:any,actor:any,id:string){
  return {id:r.notionPageId,parent:{database_id:TEMPLATE_DATABASE},properties:{'유형':{title:chunks(r.data.title)},'내용(문자본문)':{rich_text:chunks(r.data.body)},'대상':{select:r.data.target?{name:r.data.target}:null}}};
 }
 async function sourcePage(notion:RegistrationNotion,cursor?:string,since?:number){
- const result=await notion(`databases/${TEMPLATE_DATABASE}/query`,'POST',{page_size:PAGE_SIZE,sorts:[{timestamp:'last_edited_time',direction:'ascending'}],
+ const size=migrationBatchSize(notion,PAGE_SIZE);
+ const result=await notion(`databases/${TEMPLATE_DATABASE}/query`,'POST',{page_size:size,sorts:[{timestamp:'last_edited_time',direction:'ascending'}],
   ...(cursor?{start_cursor:cursor}:{}),...(since?{filter:{timestamp:'last_edited_time',last_edited_time:{on_or_after:new Date(since-2000).toISOString()}}}:{})});
- if(!Array.isArray(result.results)||result.results.length>PAGE_SIZE||result.has_more&&!result.next_cursor||result.next_cursor===cursor&&result.has_more)throw Error('TEMPLATE_SOURCE_MISMATCH');
+ if(!Array.isArray(result.results)||result.results.length>size||result.has_more&&!result.next_cursor||result.next_cursor===cursor&&result.has_more)throw Error('TEMPLATE_SOURCE_MISMATCH');
  return {pages:result.results.map(templatePage),cursor:result.has_more?String(result.next_cursor):null};
 }
 function safeFailure(error:any){

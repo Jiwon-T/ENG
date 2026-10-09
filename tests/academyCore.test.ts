@@ -120,3 +120,22 @@ test('cutover cannot silently omit an existing active academy member',async()=>{
  const f=fixture();await f.setup();f.rows.set('academyStudentMemberships/77777777-7777-4777-8777-777777777777',{academyId:'main',disabled:false});
  await assert.rejects(cutoverCore(f.db,f.actor),/CORE_LINK_REQUIRED/);assert.equal(f.rows.has(CORE_AUTHORITY+'/main'),false);
 });
+
+import {excludeDirectoryRow} from '../api/_lib/academyDirectorySource.js';
+test('a test teacher page without an app account can be left out; approval and the switch then proceed, and later syncs keep it out',async()=>{
+ const f=fixture(),testPage='44444444-4444-4444-8444-444444444444';
+ f.pages.get(teacherDB)!.push({...structuredClone(f.teacher),id:testPage,properties:{...f.teacher.properties,'선생님':{type:'title',title:[{plain_text:'테스트'}]}}});
+ for(const kind of ['students','teachers','enrollments'] as const){let r:any;do{r=await importDirectoryStep(f.db,f.actor,kind,f.notion);}while(r.continue);}
+ assert.equal(f.source('teachers',testPage).issue,'TEACHER_LINK_REVIEW');
+ await assert.rejects(approveDirectory(f.db,f.actor,'teachers'),/DIRECTORY_REVIEW_REQUIRED/);
+ await assert.rejects(excludeDirectoryRow(f.db,f.actor,'teachers',tid),/DIRECTORY_REVIEW_REQUIRED/,'a linked row cannot be excluded');
+ const r=await excludeDirectoryRow(f.db,f.actor,'teachers',testPage);assert.equal(r.excluded,true);
+ const row=f.source('teachers',testPage);assert.equal(row.excluded,true);assert.equal(row.excludedIssue,'TEACHER_LINK_REVIEW');assert.equal(row.issue,null);
+ assert.ok([...f.rows.values()].some((v:any)=>v.reason==='admin-excluded'));
+ // A later sync leaves the excluded row as is.
+ f.pages.get(teacherDB)!.find((p:any)=>p.id===testPage).last_edited_time=new Date().toISOString();
+ let step:any;do{step=await importDirectoryStep(f.db,f.actor,'teachers',f.notion);}while(step.continue);
+ assert.equal(f.source('teachers',testPage).excluded,true);
+ for(const kind of ['students','teachers','enrollments'] as const)await approveDirectory(f.db,f.actor,kind);
+ const done=await cutoverCore(f.db,f.actor);assert.equal(done.active,true);
+});
