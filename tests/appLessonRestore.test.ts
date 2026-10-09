@@ -72,7 +72,7 @@ test('a deleted migrated lesson returns to its original Notion public ID; an occ
 
 test('a lesson deleted before the switch comes back as a private draft; permissions and mode are enforced', async () => {
     const f = await appMode(), legacy = randomUUID();
-    f.rows.set('teacherLessonDrafts/' + legacy, { ownerUid: 'teacher', academyId: 'main', revision: 4, stage: 'archived', archived: true, deleteRequested: true, notionPageId: randomUUID(), data: lesson, updatedAt: 1 });
+    f.rows.set('teacherLessonDrafts/' + legacy, { ownerUid: 'teacher', academyId: 'main', revision: 4, stage: 'archived', archived: true, deleteRequested: true, notionPageId: randomUUID(), data: lesson, updatedAt: Date.now() - 60000 });
     const reports = snap(f, 'lessonReports/');
     const other = { ...f.teacher, uid: 'other' };
     assert.equal((await f.call(other, 'POST', { action: 'restore-lesson', id: legacy, revision: 4, confirmed: true })).status, 403);
@@ -84,4 +84,24 @@ test('a lesson deleted before the switch comes back as a private draft; permissi
     await deactivateLessonApp(f.db, admin, { confirmed: true });
     assert.equal((await f.call(f.teacher, 'POST', { action: 'restore-lesson', id: legacy, revision: 5, confirmed: true })).error, 'LESSON_APP_REQUIRED');
     assert.equal((await f.call(f.teacher, 'GET', { action: 'archived-lessons' })).appMode, false);
+});
+
+import { purgeExpiredLessonTrash, listArchivedAppLessons, restoreAppLesson, LESSON_TRASH_DAYS } from '../api/_lib/appLessonRestore.js';
+import { templateFirestore } from './helpers/templateFirestore.js';
+test('the lesson trash keeps 7 days: older items are hidden, cannot be restored, and the daily purge deletes only them', async () => {
+    assert.equal(LESSON_TRASH_DAYS, 7);
+    const f = templateFirestore(), day = 86400000, now = Date.now(), teacher = { uid: 't', admin: false, principal: false, academyId: 'main', scopes: [{ studentKey: STUDENT, subject: '영어' }], teachingScopes: [] };
+    const draft = (n: string, at: number, archived = true) => f.rows.set('teacherLessonDrafts/' + n, { ownerUid: 't', academyId: 'main', archived, stage: archived ? 'archived' : 'draft', revision: 2, updatedAt: at, data: { studentKey: STUDENT, subject: '영어', date: '2026-10-01' } });
+    const fresh = randomUUID(), old = randomUUID(), live = randomUUID();
+    draft(fresh, now - 2 * day); draft(old, now - 8 * day); draft(live, now - 30 * day, false);
+    f.rows.set('lessonAppHistory/' + old + ':2:archive', { before: { feedback: 'x' }, publicId: 'p' });
+    f.rows.set('lessonAppHistory/' + fresh + ':2:archive', { before: { feedback: 'y' }, publicId: 'q' });
+    const listed = await listArchivedAppLessons(f.db, teacher);
+    assert.deepEqual(listed.records.map((r: any) => r.id), [fresh], 'only the last 7 days are listed');
+    await assert.rejects(restoreAppLesson(f.db, teacher, { id: old, revision: 2, confirmed: true }), /LESSON_TRASH_EXPIRED/);
+    const r = await purgeExpiredLessonTrash(f.db, now);
+    assert.equal(r.purged, 1);
+    assert.ok(!f.rows.has('teacherLessonDrafts/' + old) && !f.rows.has('lessonAppHistory/' + old + ':2:archive'), 'expired trash and its archive copy are gone');
+    assert.ok(f.rows.has('teacherLessonDrafts/' + fresh) && f.rows.has('lessonAppHistory/' + fresh + ':2:archive'), 'recent trash stays');
+    assert.ok(f.rows.has('teacherLessonDrafts/' + live), 'non-deleted lessons are never touched');
 });

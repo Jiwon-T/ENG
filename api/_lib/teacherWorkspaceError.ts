@@ -16,6 +16,7 @@ export function workspaceError(error: unknown, failureStage: string) {
  const blocker=(error as any)?.managedBlocker;
  if(blocker&&typeof blocker.title==='string'){const what=blocker.kind==='curricula'?'교재':'반·시간표',name=blocker.title?`‘${blocker.title}’ ${what}`:what;managedMessages.MANAGED_PENDING_WRITE=`${name}: ${blocker.reason==='running'?'Notion 반영이 진행 중입니다. 끝난 뒤 다시 시작해 주세요.':blocker.reason==='deletion'?'삭제 요청이 있어 먼저 결과를 확인해야 합니다.':'Notion 반영이 끝나지 않은 앱 저장본입니다. 이전을 다시 시작하면 앱 저장본으로 확정됩니다.'} 앱 저장본과 이전 위치는 보존했습니다.`;}
  Object.assign(directoryMessages,managedMessages);allowed.push(...Object.keys(managedMessages));
+ directoryMessages.LESSON_TRASH_EXPIRED='휴지통에 7일이 넘게 있던 일지는 복원할 수 없습니다.';allowed.push('LESSON_TRASH_EXPIRED');
  const config = raw.startsWith('CONFIG_ERROR') || raw === 'AUTH_SERVER_CONFIG_ERROR';
  const notion = /^NOTION_/.test(raw);
  const missingIndex = failureStage === 'report-review' && /requires an index|FAILED_PRECONDITION.*index/i.test(raw);

@@ -173,3 +173,40 @@
 .teacher-workspace .gr-chips .rv-chip{min-height:28px;padding:0 10px;font-size:12px}
 @media(max-width:760px){.teacher-workspace .gr-tr{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 72px 40px;}.teacher-workspace .gr-tr>:nth-child(4),.teacher-workspace .gr-tr>:nth-child(6){display:none}.teacher-workspace .gr-student{grid-template-columns:minmax(0,1fr) 90px 70px}.teacher-workspace .gr-chips{grid-column:1/-1;justify-content:flex-start}}
 .teacher-workspace .gr-spark{width:100%;height:32px;display:block;overflow:visible}
+/* Schedule card: tappable status with a small menu */
+.teacher-workspace .schedule-event-card{position:relative}
+.teacher-workspace .schedule-status-pick{position:absolute;right:8px;bottom:8px;z-index:2}
+.teacher-workspace .schedule-status-button{min-height:auto;padding:2px 4px;border:0;background:none;border-radius:999px;cursor:pointer}
+.teacher-workspace .schedule-status-button:hover{background:var(--workspace-brand-bg)}
+.teacher-workspace .schedule-status-menu{position:absolute;right:0;bottom:calc(100% + 4px);display:grid;gap:2px;padding:6px;min-width:96px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 8px 24px #0f172a1f}
+.teacher-workspace .schedule-status-menu button{min-height:34px;padding:0 8px;border:0;background:none;border-radius:8px;text-align:left}
+.teacher-workspace .schedule-status-menu button:hover:not(:disabled){background:var(--workspace-brand-bg)}
+.teacher-workspace .schedule-status-menu button:disabled{opacity:.45}
+.teacher-workspace .schedule-event-card .schedule-event-bottom{padding-right:58px}
+.teacher-workspace .schedule-inline-note{margin:6px 2px;font-size:13px;font-weight:600;color:#047857}
+/* Lesson detail dialog and trash */
+.teacher-workspace .lrd-head{display:grid;gap:4px;margin-bottom:8px}
+.teacher-workspace .lrd-head .lesson-review-summary{margin:0;font-size:17px;color:#1e293b}
+.teacher-workspace .lrd-sub{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0;font-size:13px;color:#64748b}
+.teacher-workspace .lrd-publish{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:8px 0;padding:10px 12px;border-radius:14px;background:#fffbeb;border:1px solid #fde68a;font-size:13px;font-weight:600;color:#92400e}
+.teacher-workspace .lrd-chips{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.teacher-workspace .lrd-chips .rv-pill{font-size:13px;padding:4px 10px}
+.teacher-workspace .workspace-dialog .lesson-review-detail{display:grid;gap:10px;margin:0}
+.teacher-workspace .workspace-dialog .lesson-review-detail>div{display:grid;gap:4px;padding:10px 12px;border:1px solid #eef2f6;border-radius:12px;background:#fff}
+.teacher-workspace .workspace-dialog .lesson-review-detail dt{font-size:12px;font-weight:800;color:#64748b}
+.teacher-workspace .workspace-dialog .lesson-review-detail dd{margin:0;font-size:14px;line-height:1.6;color:#1e293b;white-space:pre-line}
+.teacher-workspace .gs .gs-row.lrd-trash-row{grid-template-columns:minmax(0,1fr) auto auto;padding:8px 12px;border:1px solid #eef2f6;border-radius:14px}
+.teacher-workspace .student-view-switch{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px}
+.teacher-workspace .student-view-switch .rv-seg b{font-weight:800;margin-left:2px}
+/* Curriculum tab: cards */
+.teacher-workspace .curriculum-management-board{display:block}
+.teacher-workspace .cur-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.teacher-workspace .cur-card{display:grid;gap:6px;align-content:start;text-align:left;padding:14px;border:1px solid #eef2f6;border-radius:16px;background:#fff;min-height:auto;font:inherit;color:inherit}
+.teacher-workspace .cur-card:hover{border-color:var(--workspace-brand-dot);box-shadow:0 2px 10px #0f172a0a}
+.teacher-workspace .cur-title{font-size:15px;font-weight:800;color:#1e293b}
+.teacher-workspace .cur-tags{display:flex;flex-wrap:wrap;gap:4px}
+.teacher-workspace .cur-preview{font-size:13px;line-height:1.55;color:#475569;white-space:pre-line;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* Lesson form: both bands share one column grid so the left (time / attendance) and right (content / notes) edges line up. */
+@container lesson-input (min-width:1000px){.teacher-workspace .lesson-first-band,.teacher-workspace .lesson-second-band{grid-template-columns:minmax(600px,1.25fr) minmax(320px,1fr)}.teacher-workspace .lesson-first-band{grid-template-areas:'schedule content'}.teacher-workspace .lesson-second-band{grid-template-areas:'assessment extras'}}
+@container lesson-input (min-width:900px) and (max-width:999.99px){.teacher-workspace .lesson-first-band{grid-template-columns:minmax(0,1fr);grid-template-areas:'schedule' 'content'}}
+.teacher-workspace .lesson-area-schedule>*,.teacher-workspace .lesson-area-assessment>*{max-width:none}

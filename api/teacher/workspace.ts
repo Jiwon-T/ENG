@@ -100,7 +100,10 @@ export default async function handler(req: IncomingMessage,res:ServerResponse){
 export async function handleLessonMigrationCron(req: IncomingMessage,res:ServerResponse,initialize=getFirebaseAdmin){
     const secret=process.env.CRON_SECRET||'',header=req.headers.authorization||'';
     if(secret.length<16||!timingSafeCompare(header,'Bearer '+secret))return sendJson(res,401,{ok:false,error:'UNAUTHORIZED'});
-    try{const {db}=initialize();const result:any=await runLessonMigrationCron(db);return sendJson(res,200,{ok:true,status:result.status,phase:result.phase||null,idle:Boolean(result.idle)});}
+    try{const {db}=initialize();const result:any=await runLessonMigrationCron(db);
+        // Same daily run: empty lessons that have been in the trash for more than 7 days.
+        const {purgeExpiredLessonTrash}=await import('../_lib/appLessonRestore.js');const trash=await purgeExpiredLessonTrash(db).catch((e:any)=>{console.warn('LESSON_TRASH_PURGE_FAILED',{error:String(e?.message||'').slice(0,80)});return {purged:0,more:false};});
+        return sendJson(res,200,{ok:true,status:result.status,phase:result.phase||null,idle:Boolean(result.idle),trashPurged:trash.purged});}
     catch(error:any){const result=workspaceError(error,'lesson-migration-cron');console.warn('LESSON_MIGRATION_CRON_FAILED',{error:result.body.error,diagnosticId:result.body.diagnosticId});return sendJson(res,result.status,result.body);}
 }
 export async function handleWorkspace(req: IncomingMessage, res: ServerResponse, actorProvider=teacherActor) {

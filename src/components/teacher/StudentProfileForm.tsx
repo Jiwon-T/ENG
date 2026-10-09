@@ -18,7 +18,7 @@ export default function StudentProfileForm({value,onChange,onSubmit,disabled,bus
             <label htmlFor={`${id}-tuition`}>수강료<OptionalMark/><input id={`${id}-tuition`} type="number" min={0} max={100000000} step={1} value={value.tuition ?? ''} onChange={e=>change('tuition',e.target.value===''?null:Number(e.target.value))}/></label>
             <label htmlFor={`${id}-paymentDeadline`}>납부기한<OptionalMark/><input id={`${id}-paymentDeadline`} maxLength={200} value={value.paymentDeadline} onChange={e=>change('paymentDeadline',e.target.value)} autoComplete="off"/></label>
         </fieldset>
-        <p className="text-xs text-slate-500 mt-4">보호자 번호를 변경하면 기존 인증이 해제됩니다. 노션 반영 후 같은 리포트 주소에서 새 번호 뒤 4자리로 인증합니다. 번호를 비우면 PIN 인증이 중지됩니다.</p>
+        <p className="text-xs text-slate-500 mt-4">보호자 번호를 변경하면 기존 인증이 해제됩니다. 저장 후 같은 리포트 주소에서 새 번호 뒤 4자리로 인증합니다. 번호를 비우면 PIN 인증이 중지됩니다.</p>
         <button type="submit" className="primary-button mt-4" disabled={busy || (disabled && !retrying) || !value.displayName.trim()}>{busy?'저장·반영 중…':retrying?'저장 결과 확인·재시도':'학생 정보 저장·반영'}</button>
     </form>;
 }

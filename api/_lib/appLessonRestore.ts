@@ -9,6 +9,9 @@ import { hashStudentKey } from './security.js';
  * public copy in history, so they come back as private drafts to be published again.
  */
 const UUID = z.string().uuid();
+/** Deleted lessons stay in the trash for 7 days, then the daily job removes them for good (academy decision). */
+export const LESSON_TRASH_DAYS = 7;
+const TRASH_MS = LESSON_TRASH_DAYS * 86400000;
 function canRestore(actor: any, d: any) {
     if (actor.admin) return true;
     if (actor.principal) return Boolean(actor.academyId && d.academyId === actor.academyId);
@@ -20,7 +23,8 @@ export async function listArchivedAppLessons(db: any, actor: any) {
     const c = db.collection('teacherLessonDrafts');
     const q = actor.admin ? c.where('archived', '==', true) : actor.principal ? c.where('academyId', '==', actor.academyId).where('archived', '==', true) : c.where('ownerUid', '==', actor.uid).where('archived', '==', true);
     const snap = await q.limit(501).get();
-    const rows = snap.docs.map((d: any) => ({ id: d.id, ...d.data() })).filter((d: any) => canRestore(actor, d))
+    const since = Date.now() - TRASH_MS;
+    const rows = snap.docs.map((d: any) => ({ id: d.id, ...d.data() })).filter((d: any) => canRestore(actor, d) && (d.updatedAt || 0) >= since)
         .sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 100);
     const history = await Promise.all(rows.map((r: any) => db.collection('lessonAppHistory').doc(`${r.id}:${r.revision}:archive`).get()));
     return {
@@ -40,6 +44,7 @@ export async function restoreAppLesson(db: any, actor: any, input: { id?: unknow
         if (!old || !canRestore(actor, old)) throw Error('FORBIDDEN');
         if (old.revision !== revision) throw Error('DRAFT_CONFLICT');
         if (!old.archived) return { restored: true, alreadyRestored: true, record: { id, ...old } };
+        if ((old.updatedAt || 0) < Date.now() - TRASH_MS) throw Error('LESSON_TRASH_EXPIRED');
         const key = old.data?.studentKey;
         const member = (await tx.get(db.collection('academyStudentMemberships').doc(key))).data();
         const mapping = (await tx.get(db.collection('notionStudentMappings').doc(hashStudentKey(key)))).data();
@@ -63,4 +68,22 @@ export async function restoreAppLesson(db: any, actor: any, input: { id?: unknow
         tx.set(db.collection('lessonAppHistory').doc(`${id}:${next}:restore`), { beforeDraft: old, afterDraft: record, publicId, restoredPublic: publicId ? { ...hist.before, teacherDraftId: id, teacherAppRevision: next } : null, by: actor.uid, at: now, reason: 'restore' });
         return { restored: true, publicRestored: Boolean(publicId), record: { id, ...record } };
     });
+}
+
+/**
+ * Daily: permanently delete lessons that have been in the trash longer than 7 days — the deleted draft and the
+ * archive history entry that holds its removed public report copy. Nothing that is not archived is touched.
+ */
+export async function purgeExpiredLessonTrash(db: any, now = Date.now()) {
+    const snap = await db.collection('teacherLessonDrafts').where('archived', '==', true).limit(500).get();
+    const expired = snap.docs.filter((d: any) => (d.data().updatedAt || 0) < now - TRASH_MS);
+    let purged = 0;
+    for (const d of expired) purged += await db.runTransaction(async (tx: any) => {
+        const current = (await tx.get(d.ref)).data();
+        if (!current?.archived || (current.updatedAt || 0) >= now - TRASH_MS) return 0; // restored or touched since listing
+        tx.delete(d.ref);
+        tx.delete(db.collection('lessonAppHistory').doc(`${d.id}:${current.revision}:archive`));
+        return 1;
+    });
+    return { purged, more: snap.docs.length === 500 };
 }

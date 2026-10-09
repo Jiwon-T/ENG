@@ -50,14 +50,14 @@ export default function StudentProfileEditor({studentKey,onClose,onSaved}:{stude
     }
     async function discard(){
         if(writing.current || !record?.pending?.canDiscard || !intent)return;
-        if(!window.confirm('노션에 기록되지 않은 수정 요청을 취소하고 현재 학생 정보를 다시 불러올까요?'))return;
+        if(!window.confirm('저장되지 않은 수정 요청을 취소하고 현재 학생 정보를 다시 불러올까요?'))return;
         writing.current=true;setBusy(true);const current=version.current,uid=auth.currentUser?.uid;
         try {
             const r=await teacherAuthenticatedRequest<Result>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'discard-student-profile',studentKey,operationId:intent.operationId})});
             if(current!==version.current || auth.currentUser?.uid!==uid)return;
             if(!r.ok || !r.data?.ok)throw Error(errorMessage(r));
             const saved=await read();if(current!==version.current)return;
-            setRecord(saved);setValue(saved.data);setIntent(null);setDirty(false);setMessage('수정 요청을 취소했습니다. 현재 노션 정보를 불러왔습니다.');
+            setRecord(saved);setValue(saved.data);setIntent(null);setDirty(false);setMessage('수정 요청을 취소했습니다. 현재 학생 정보를 불러왔습니다.');
         }catch(error){if(current===version.current)setMessage(error instanceof Error?error.message:'취소 결과를 확인하지 못했습니다.');}
         finally{writing.current=false;if(current===version.current)setBusy(false);}
     }

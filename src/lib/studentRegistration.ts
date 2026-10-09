@@ -53,7 +53,7 @@ export function emptyRegistration(): RegistrationInput {
     return {purpose:'new',intakeStage:'new',existingStudentKey:null,admission:emptyAdmission(),name:'', school:'', grade:'', studentPhone:'', guardianPhone:'', guardianName:'', studentSalutation:'', guardianSalutation:'', tuition:null, paymentDeadline:'', enrollments:[{subject:'영어', status:'등록', startDate:today, endDate:null}]};
 }
 export const registrationStatusLabels: Record<RegistrationSyncStatus, string> = {
-    pending:'노션 반영 대기', syncing:'노션 반영 중', synced:'노션 반영 완료', failed:'노션 반영 실패', uncertain:'노션 결과 확인 필요',
+    pending:'등록 대기', syncing:'등록 중', synced:'등록 완료', failed:'등록 실패', uncertain:'등록 결과 확인 필요',
 };
 
 export interface RegistrationOptions {

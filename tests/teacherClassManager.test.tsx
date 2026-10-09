@@ -13,8 +13,8 @@ test('regular timetable has Monday–Sunday columns and its own repeat schedule 
 });
 test('curriculum screen shares class records and provides editable curriculum and textbook states',()=>{
  const html=renderToStaticMarkup(<TeacherClassManager {...props} mode="curriculum"/>);
- assert.ok(html.includes('월요반'));assert.ok(html.includes('교재 1권'));assert.ok(html.includes('커리큘럼 등록'));assert.ok(html.includes('진도·수업 계획'));assert.ok(html.includes('+ 새 교재'));
- assert.equal(html.includes('weekly-board'),false);assert.ok(html.includes('curriculum-management-board'));assert.ok(html.includes('커리큘럼 관리'));assert.ok(html.includes('공통 계획에서 교재 선택'));assert.equal((html.match(/<dialog/g)||[]).length,2);
+ assert.ok(html.includes('월요반'),'classes appear as filter chips');assert.ok(html.includes('커리큘럼·교재 등록'));assert.ok(html.includes('반 관리'),'points to where classes are managed');assert.ok(html.includes('진도·수업 계획'));assert.ok(html.includes('+ 새 교재'));
+ assert.equal(html.includes('weekly-board'),false);assert.ok(html.includes('curriculum-management-board'));assert.ok(html.includes('cur-board'));assert.ok(html.includes('공통 계획에서 교재 선택'));assert.equal((html.match(/<dialog/g)||[]).length,2);
 });
 test('regular timetable sorts times and hides stopped classes and individual slots',()=>{
  const mk=(name:string,start:string,status?:string,slotStatus?:string)=>({...data.classes[0],id:name,name,status,slots:[{weekday:1,start,end:'22:00',status:slotStatus}]});

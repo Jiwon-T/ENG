@@ -77,8 +77,8 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
             const saved=result.data.record;
             intent.current=null;setKey(saved.requestId);setRevision(saved.revision);setValue(saved.data);setDirty(false);setRetrying(false);
             setLocked(saved.canEdit===false || ['syncing','uncertain','synced'].includes(saved.syncStatus));setOpen(true);
-            if(saved.syncStatus==='synced')setFeedback('노션에 반영한 학생 정보는 아래 학생 명부의 ‘정보 수정’에서 변경할 수 있습니다.');
-            if(saved.canEdit===false && saved.syncStatus!=='synced')setFeedback('노션 반영 결과를 확인한 뒤 수정할 수 있습니다.');
+            if(saved.syncStatus==='synced')setFeedback('등록한 학생 정보는 학생 목록의 ‘정보 수정’에서 변경할 수 있습니다.');
+            if(saved.canEdit===false && saved.syncStatus!=='synced')setFeedback('등록 결과를 확인한 뒤 수정할 수 있습니다.');
         } catch(error) { if(current===generation.current)setFeedback(error instanceof Error?error.message:'등록 내용을 불러오지 못했습니다.'); }
         finally { if(current===generation.current)setBusy(false); }
     }
@@ -103,7 +103,7 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
                 throw new Error(responseMessage(result));
             }
             intent.current=null;setRevision(result.data.revision);setDirty(false);setLocked(false);setRetrying(false);
-            setFeedback(value.purpose==='additional'?'추가 과목 상담을 저장했습니다. 목록에서 기존 학생의 수강 관리로 이어갈 수 있습니다.':value.intakeStage==='consultation'?'상담 내용을 저장했습니다. 아직 학생 명부에는 등록하지 않았습니다.':coreMode?'등록 내용을 저장했습니다. 앱 등록 확정 후 등록 첫 달 목록에서 관리합니다.':'등록 내용을 저장했습니다. 노션 반영 후 등록 첫 달 목록에서 관리합니다.');setReload(old=>old+1);
+            setFeedback(value.purpose==='additional'?'추가 과목 상담을 저장했습니다. 목록에서 기존 학생의 수강 관리로 이어갈 수 있습니다.':value.intakeStage==='consultation'?'상담 내용을 저장했습니다. 아직 학생 명부에는 등록하지 않았습니다.':coreMode?'등록 내용을 저장했습니다. 앱 등록 확정 후 등록 첫 달 목록에서 관리합니다.':'등록 내용을 저장했습니다. 등록 확정 후 등록 첫 달 목록에서 관리합니다.');setReload(old=>old+1);
         } catch(error) {
             if(current!==generation.current)return;
             if(!responseReceived && intent.current){setRetrying(true);setLocked(true);}
@@ -120,7 +120,7 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
             const result=await teacherAuthenticatedRequest<ServerResult>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'sync-student-registration',id:record.id,revision:record.revision})});
             if(current!==generation.current || auth.currentUser?.uid!==uid)return;
             if(!result.ok || !result.data?.ok)throw new Error(responseMessage(result));
-            setFeedback(result.data.sourceMode==='firestore'?'학생·수강·담당·반 연결을 앱에 저장했습니다.':'학생·수강 정보를 노션에 반영하고 학생 명부에 연결했습니다.');
+            setFeedback(result.data.sourceMode==='firestore'?'학생·수강·담당·반 연결을 앱에 저장했습니다.':'학생·수강 정보를 등록하고 학생 목록에 연결했습니다.');
             try { await onSynced(); } catch { setFeedback('등록은 완료됐지만 학생 명부를 다시 불러오지 못했습니다. 새로고침해 주세요.'); }
         } catch(error) { if(current===generation.current)setFeedback(error instanceof Error?error.message:'반영 결과를 확인하지 못했습니다.'); }
         finally {
@@ -136,7 +136,7 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
     }
     const stageText=(record:RegistrationSummary)=>record.purpose==='additional'?'추가 과목 상담':record.intakeStage==='consultation'?'상담만 진행':record.syncStatus==='synced'?'등록 첫 달':registrationStatusLabels[record.syncStatus]||'등록 확인 필요';
     const actions=(record:RegistrationSummary)=><>
-        {record.purpose!=='additional'&&record.intakeStage!=='consultation'&&record.syncStatus!=='synced' ? <button type="button" className="primary-button" disabled={busy} onClick={()=>void sync(record)}>{record.syncStatus==='uncertain' || record.syncStatus==='syncing'?'반영 결과 확인':record.syncStatus==='failed'?coreMode?'앱 등록 재시도':'노션 반영 재시도':coreMode?'앱 등록 확정':'노션 반영'}</button> : null}
+        {record.purpose!=='additional'&&record.intakeStage!=='consultation'&&record.syncStatus!=='synced' ? <button type="button" className="primary-button" disabled={busy} onClick={()=>void sync(record)}>{record.syncStatus==='uncertain' || record.syncStatus==='syncing'?'반영 결과 확인':record.syncStatus==='failed'?coreMode?'앱 등록 재시도':'등록 재시도':coreMode?'앱 등록 확정':'등록 확정'}</button> : null}
         {record.purpose==='additional'&&record.existingStudentKey ? <button type="button" className="small-button" disabled={busy} onClick={()=>setEnrollmentKey(record.existingStudentKey!)}>기존 학생 수강 관리</button> : null}
         {(record.syncStatus==='synced'||record.purpose==='additional') ? <button type="button" className="small-button" disabled={busy} onClick={()=>void convert(record)}>{record.purpose==='additional'?'수강 완료 · 목록에서 정리':'재원생으로 전환'}</button> : null}
     </>;

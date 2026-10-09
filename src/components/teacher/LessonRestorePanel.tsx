@@ -15,7 +15,7 @@ export default function LessonRestorePanel({request,act,busy=false,students=[],s
   <summary><strong>삭제한 일지 복원</strong></summary>
   {error&&<p role="alert" className="lesson-cutover-warn">{error}</p>}
   {message&&<p role="status" aria-live="polite" className="lesson-cutover-note">{message}</p>}
-  {state&&!state.appMode&&<p className="lesson-cutover-muted">일지 앱 전용 전환 후에 사용할 수 있습니다. 지금은 Notion 휴지통에서 복원합니다.</p>}
+  {state&&!state.appMode&&<p className="lesson-cutover-muted">일지 앱 전용 전환 후에 사용할 수 있습니다. </p>}
   {state?.appMode&&<>
    <p className="lesson-cutover-muted">삭제 직전 기록으로 되돌립니다. 학생·학부모 리포트가 있던 일지는 같은 리포트 주소와 번호로 다시 보이고, 전환 전에 삭제한 일지는 비공개 초안으로 돌아옵니다.{state.truncated?' 최근 삭제 기준 일부만 표시합니다.':''}</p>
    {state.records.length===0?<p className="lesson-cutover-muted">복원할 일지가 없습니다.</p>:<ul className="lesson-cutover-items">{state.records.map((r:any)=><li key={r.id}>

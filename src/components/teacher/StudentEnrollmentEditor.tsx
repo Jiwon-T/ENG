@@ -96,7 +96,7 @@ export default function StudentEnrollmentEditor({ studentKey, onClose, onSaved }
     async function discard() {
         if (writing.current || !intent || !record?.pending?.canDiscard)
             return;
-        if (!window.confirm('노션에 반영하지 않은 수강 변경 요청을 취소할까요?'))
+        if (!window.confirm('저장되지 않은 수강 변경 요청을 취소할까요?'))
             return;
         writing.current = true;
         setBusy(true);
