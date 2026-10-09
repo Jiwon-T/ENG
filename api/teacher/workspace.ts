@@ -43,6 +43,7 @@ import {scheduleRange,readReflectedRange,readManagedScheduleRange} from '../_lib
 import { latestPreviousLesson, previousLessonValues } from '../../src/lib/teacherTodayLessons.js';
 import {sessionBase,sessionRecordSummaries} from '../../src/lib/sessionNumbers.js';
 import { teacherReadCache, teacherReadKey, pageRows, pageNumber, invalidateTeacherMutation } from '../_lib/teacherReadCache.js';
+import { lessonStatus, lessonStatusCounts, validLessonStatus, academicStats, withPreviousScores } from '../_lib/reviewSummary.js';
 import { normalizeNotionPageId } from '../_lib/notionPageId.js';
 import {enableSharedWorkspace,sourcesFor,readNotionWorkspace,mergeNotionRows,syncManagedRecord,readSourceEnrollments,syncTeacherAssignments,readSourceLessons,readSourceSchedules} from '../_lib/teacherNotionWorkspace.js';
 import { scheduleArchivePatch } from '../_lib/teacherRecordArchive.js';
@@ -131,6 +132,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(action==='integrity-audit'){failureStage='integrity-audit';return sendJson(res,200,{ok:true,...await readIntegrityAudit(db,actor)});}
             if(action==='messages'){failureStage='message-read';return sendJson(res,200,{ok:true,...await readTeacherMessages(db,actor,params.get('studentKey'),params.get('subject'))});}
             if(action==='student-enrollment'){failureStage='student-enrollment-read';return sendJson(res,200,{ok:true,record:await readStudentEnrollment(db,actor,params.get('studentKey'))});}
+            if(action==='student-school'){failureStage='student-school';const {readStudentSchool}=await import('../_lib/studentSchool.js');return sendJson(res,200,{ok:true,...await readStudentSchool(db,actor,params.get('studentKey'))});}
             if(action==='student-profile'){failureStage='student-profile-read';return sendJson(res,200,{ok:true,record:await readStudentProfile(db,actor,params.get('studentKey'))});}
             if (action === 'registration-options') {
                 failureStage='student-registration-options';
@@ -161,7 +163,10 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const {examPeriod}=await import('../../src/lib/academicExamPeriod.js');
                 const students=await teacherReadCache.get(teacherReadKey(actor,'academic-firestore-students'),()=>appAcademicStudents(db,actor),force);const names=new Map(students.map(s=>[s.studentKey,s.studentDisplayName]));
                 const filtered=records.filter((r:any)=>(!params.get('teacher')||r.ownerUid===params.get('teacher')||r.teacherUids?.includes(params.get('teacher')))&&(!params.get('student')||r.data.studentKey===params.get('student'))&&(!params.get('kind')||r.data.examType===params.get('kind'))&&(!params.get('subject')||r.data.subject===params.get('subject'))&&(!params.get('period')||examPeriod(r.data)?.key===params.get('period'))&&(!params.get('search')||[names.get(r.data.studentKey),r.data.title,r.data.subject,r.data.note].join(' ').toLowerCase().includes(params.get('search')!.toLowerCase()))).sort((a:any,b:any)=>b.data.examDate.localeCompare(a.data.examDate)||a.id.localeCompare(b.id));
-                return sendJson(res,200,{ok:true,...pageRows(filtered,pageNumber(params.get('page')),12),teachers:[...new Set(records.flatMap((r:any)=>r.teacherUids?.length?r.teacherUids:[r.ownerUid]).filter(Boolean))],periods:[...new Map(records.map((r:any)=>examPeriod(r.data)).filter(Boolean).map((p:any)=>[p.key,p])).values()]});
+                // Stats cover every filter except the 미제출 shortcut, so its count stays visible while it is selected.
+                const shown=params.get('submission')==='미제출'?filtered.filter((r:any)=>r.data.submissionStatus==='미제출'):filtered;
+                const paged=pageRows(shown,pageNumber(params.get('page')),12);
+                return sendJson(res,200,{ok:true,...paged,records:withPreviousScores(paged.records,records),stats:academicStats(filtered),teachers:[...new Set(records.flatMap((r:any)=>r.teacherUids?.length?r.teacherUids:[r.ownerUid]).filter(Boolean))],periods:[...new Map(records.map((r:any)=>examPeriod(r.data)).filter(Boolean).map((p:any)=>[p.key,p])).values()]});
             }
             if (action === 'academy-lessons' || action === 'academy-lessons-fast' || action === 'academy-lessons-export') {
                 const exporting=action==='academy-lessons-export';
@@ -195,12 +200,13 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 if(!params.has('page'))return sendJson(res,200,{ok:true,records:named});
                 const periodDays=slice.days?new Set(slice.days):null;
                 const filtered=named.filter((r:any)=>(!params.get('teacher')||r.ownerUid===params.get('teacher'))&&(!params.get('day')||r.data.date===params.get('day'))&&(!periodDays||periodDays.has(r.data.date))&&(!params.get('student')||r.data.studentKey===params.get('student'))).sort(compareLessonReview);
+                const status=validLessonStatus(params.get('status'));
                 if(narrowsLessonSlice(slice)&&(actor.admin||actor.principal)){
                     // The teacher filter keeps listing every teacher even when only one day is loaded.
                     const access=(await teacherReadCache.get(teacherReadKey(actor,'review-teachers'),async()=>(await (actor.admin?db.collection('teacherWorkspaceAccess').get():db.collection('teacherWorkspaceAccess').where('academyId','==',actor.academyId).get())).docs.filter((d:any)=>!d.data().disabled).map((d:any)=>d.id),force)) as string[];
                     await Promise.all(access.filter(uid=>!names.has(uid)).map(async uid=>names.set(uid,await teacherReadCache.get(teacherReadKey(actor,'staff:'+uid),async()=>{const user=(await db.collection('users').doc(uid).get()).data();return user?.alias||user?.name||'선생님';},force))));
                 }
-                return sendJson(res,200,{ok:true,...pageRows(filtered,pageNumber(params.get('page')),10),teachers:[...names].map(([uid,name])=>({uid,name})),range:slice.days?{from:slice.days.at(-1),to:slice.days[0]}:null});
+                return sendJson(res,200,{ok:true,...pageRows(status?filtered.filter((r:any)=>lessonStatus(r.stage)===status):filtered,pageNumber(params.get('page')),10),statusCounts:lessonStatusCounts(filtered),teachers:[...names].map(([uid,name])=>({uid,name})),range:slice.days?{from:slice.days.at(-1),to:slice.days[0]}:null});
             }
             if(action==='schedule-records') {
                 const range=scheduleRange({day:params.get('day'),from:params.get('from'),to:params.get('to')});

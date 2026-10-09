@@ -27,7 +27,7 @@ export default function TemplateCutoverPanel({request,act,busy=false,onStatus}:P
  return <div className="lesson-cutover" aria-labelledby="template-cutover-title">
   <header className="lesson-cutover-header"><div><h3 id="template-cutover-title">문자 템플릿 앱 전환</h3><p className="lesson-cutover-muted">전환하면 문자 화면과 템플릿 편집이 앱 저장본만 사용하고, Notion으로는 더 이상 반영하지 않습니다.</p></div>
    <StatusBadge kind={status.active?'done':'unwritten'} text={status.active?'앱 전용 사용 중':'Notion 사용 중'}/></header>
-  <ul className="lesson-cutover-checks">{status.items.map((i:any)=><li key={i.key}><StatusBadge kind={i.ok?'done':'failed'} text={i.ok?'완료':'확인 필요'} compact/><span>{templateCutoverCheckLabel[i.key]||i.key}{!i.ok&&i.count?` (${i.count}건)`:''}</span></li>)}</ul>
+  <ul className="lesson-cutover-checks">{(status.items||[]).map((i:any)=><li key={i.key}><StatusBadge kind={i.ok?'done':'failed'} text={i.ok?'완료':'확인 필요'} compact/><span>{templateCutoverCheckLabel[i.key]||i.key}{!i.ok&&i.count?` (${i.count}건)`:''}</span></li>)}</ul>
   {!status.active&&!status.ready&&<p className="lesson-cutover-muted">'최근 15분' 항목은 전환 버튼을 누르면 자동으로 채워집니다. 충돌·접근 확인 항목은 아래 템플릿 목록에서 먼저 정리해 주세요.</p>}
   {message&&<p role="status" aria-live="polite" className="lesson-cutover-note">{message}</p>}
   {error&&<p role="alert" className="lesson-cutover-warn">{error}</p>}

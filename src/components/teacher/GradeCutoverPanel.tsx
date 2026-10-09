@@ -25,7 +25,7 @@ export default function GradeCutoverPanel({request,act,busy=false,onChanged,onSt
  return <div className="lesson-cutover" aria-labelledby="grade-cutover-title">
   <header className="lesson-cutover-header"><div><h3 id="grade-cutover-title">성적 앱 전환</h3><p className="lesson-cutover-muted">성적은 이미 앱에서 작성합니다. 전환하면 Notion에서 고친 성적이 더 이상 앱에 들어오지 않아, Make 성적 시나리오를 끌 수 있습니다.</p></div>
    <StatusBadge kind={status.active?'done':'unwritten'} text={status.active?'앱 전용 사용 중':'Notion 반영 받는 중'}/></header>
-  <ul className="lesson-cutover-checks">{status.items.map((i:any)=><li key={i.key}><StatusBadge kind={i.ok?'done':'failed'} text={i.ok?'완료':'확인 필요'} compact/><span>{gradeCutoverCheckLabel[i.key]||i.key}{!i.ok&&i.count?` (${i.count}건)`:''}</span></li>)}</ul>
+  <ul className="lesson-cutover-checks">{(status.items||[]).map((i:any)=><li key={i.key}><StatusBadge kind={i.ok?'done':'failed'} text={i.ok?'완료':'확인 필요'} compact/><span>{gradeCutoverCheckLabel[i.key]||i.key}{!i.ok&&i.count?` (${i.count}건)`:''}</span></li>)}</ul>
   {!status.active&&!status.ready&&!blocked&&<p className="lesson-cutover-muted">대조 항목은 전환 버튼을 누르면 자동으로 채워집니다.</p>}
   {message&&<p role="status" aria-live="polite" className="lesson-cutover-note">{message}</p>}
   {error&&<p role="alert" className="lesson-cutover-warn">{error}</p>}

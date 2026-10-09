@@ -41,3 +41,43 @@ test('activation is held until final full-source verification and stops source i
  const f=fixture();await assert.rejects(activateManaged(f.db,f.actor),/CORE_NOT_READY/);await f.setup();const p=await managedPlan(f.db,f.actor);await assert.rejects(importManagedStep(f.db,f.actor,{key:p.sources[0].key,kind:'curricula',confirmed:true},f.notion),/CORE_FROZEN/);assert.equal(f.rows.get(CLASS_AUTHORITY+'/main').active,true);
  const badge=syncStatusMap('app_saved')!;assert.equal(badge.text,'앱 저장 완료');assert.equal(badge.kind,'editing');
 });
+
+import {workspaceError} from '../api/_lib/teacherWorkspaceError.js';
+import {runManagedMigration,confirmManagedMigration,managedRetryable} from '../src/lib/managedMigrationRunner.js';
+async function importAll(f:any,kinds=['curricula','classes'],dryRun=false){const plan=await managedPlan(f.db,f.actor);const out:any[]=[];for(const kind of kinds){const item=plan.sources.find((s:any)=>s.kind===kind)!;out.push(await importManagedStep(f.db,f.actor,dryRun?{key:item.key,kind,dryRun:true}:{key:item.key,kind,final:true,confirmed:true},f.notion));}return out;}
+test('an unfinished Notion write keeps the app copy, resumes, and can be confirmed without re-sending to Notion',async()=>{
+ const f=fixture();await importAll(f);
+ const row=f.rows.get('teacherClasses/'+cls);Object.assign(row,{name:'앱에서 고친 반',notionSyncStage:'failed',notionSyncError:'NOTION_400'});
+ f.resetMetrics();const [dry]=await importAll(f,['classes'],true);assert.equal(dry.decision,'app-preserved');assert.equal(f.metrics.writes,0);
+ const [step]=await importAll(f,['classes']);assert.equal(step.decision,'app-preserved');
+ const kept=f.rows.get('teacherClasses/'+cls);assert.equal(kept.name,'앱에서 고친 반','Notion value must not overwrite the newer app copy');assert.equal(kept.migrationAppAuthoritative,true);
+ assert.ok([...f.rows.values()].some((v:any)=>v.reason==='pending-write-app-preserved'));
+ // Running again is a no-op for the preserved row (no new revision).
+ const revision=kept.revision;await importAll(f,['classes']);assert.equal(f.rows.get('teacherClasses/'+cls).revision,revision);
+ const before=f.calls;await activateManaged(f.db,f.actor);assert.equal(f.calls,before,'activation never writes to Notion');
+ const done=f.rows.get('teacherClasses/'+cls);assert.equal(done.name,'앱에서 고친 반');assert.equal(done.notionSyncStage,'app_saved');
+});
+test('a running Notion write or deletion stops with the class name; the message is no longer a server-connection error',async()=>{
+ const f=fixture();await importAll(f);
+ const row=f.rows.get('teacherClasses/'+cls);row.notionSyncStage='syncing';
+ let failure:any;try{await importAll(f,['classes']);}catch(e){failure=e;}
+ assert.equal(failure.message,'MANAGED_PENDING_WRITE');assert.deepEqual({title:failure.managedBlocker.title,reason:failure.managedBlocker.reason},{title:'반',reason:'running'});
+ const response=workspaceError(failure,'managed-import');assert.equal(response.status,409);assert.match(response.body.message!,/‘반’ 반·시간표: Notion 반영이 진행 중/);assert.deepEqual(response.body.blocker,{kind:'classes',title:'반',reason:'running'});
+ assert.equal(f.rows.get('teacherClasses/'+cls).notionSyncStage,'syncing','nothing changed');
+ row.notionSyncStage='synced';row.deleteRequested=true;await assert.rejects(importAll(f,['classes']),(e:any)=>e.managedBlocker?.reason==='deletion');
+ for(const code of ['MANAGED_LINK_REQUIRED','MANAGED_BOOKS_FIRST','MANAGED_IMPORT_FAILED'])assert.notEqual(workspaceError(Error(code),'managed-import').body.error,'WORKSPACE_ERROR');
+});
+test('activation still refuses an unfinished Notion write the import has not confirmed',async()=>{
+ const f=fixture();await importAll(f);f.rows.get('teacherClasses/'+cls).notionSyncStage='failed';
+ await assert.rejects(activateManaged(f.db,f.actor),(e:any)=>e.message==='MANAGED_PENDING_WRITE'&&e.managedBlocker.reason==='unconfirmed');
+});
+test('the runner retries temporary failures and a running write, but stops on real problems',async()=>{
+ const err=(code?:string,blocker?:any)=>Object.assign(Error(code||'network'),{code,blocker});
+ assert.equal(managedRetryable(err()),true);assert.equal(managedRetryable(err('NOTION_429')),true);assert.equal(managedRetryable(err('MANAGED_PENDING_WRITE',{reason:'running'})),true);
+ assert.equal(managedRetryable(err('MANAGED_PENDING_WRITE',{reason:'deletion'})),false);assert.equal(managedRetryable(err('MANAGED_LINK_REQUIRED')),false);
+ const plan={sources:[{key:'b',kind:'curricula',subject:'영어',ready:false}]};let failures=2,waits:number[]=[];const seen:any[]=[];
+ const request=async(a:string)=>{if(a==='managed-migration-plan')return seen.length?{sources:[{...plan.sources[0],ready:true,verifiedAt:1}]}:plan;if(a==='managed-activate'){seen.push('activate');return {active:true};}if(failures-->0)throw err('NOTION_CONNECTION_ERROR');seen.push('step');return {continue:false,decision:'app-preserved'};};
+ const r:any=await confirmManagedMigration(request,()=>false,()=>{},async ms=>{waits.push(ms);});
+ assert.deepEqual(waits,[3000,10000]);assert.equal(r.activated,true);assert.equal(r.preserved,2);assert.equal(seen.at(-1),'activate');
+ let tries=0;await assert.rejects(runManagedMigration(async a=>{if(a==='managed-migration-plan')return plan;tries++;throw err('MANAGED_LINK_REQUIRED');},()=>false,()=>{},async()=>{}),/MANAGED_LINK_REQUIRED/);assert.equal(tries,1);
+});

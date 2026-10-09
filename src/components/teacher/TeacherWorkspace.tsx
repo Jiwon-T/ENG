@@ -56,6 +56,7 @@ const AcademyLessonReview = lazy(() => import('./AcademyLessonReview'));
 const WordbookManager = lazy(() => import('./WordbookManager'));
 import './teacherWorkspace.css';
 import './lessonCutover.css';
+import './reviewRedesign.css';
 import './scheduleWorkspace.css';
 import TeacherReportReview from './TeacherReportReview';
 import TeacherLessonGrid from './TeacherLessonGrid';
@@ -137,7 +138,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
             try{const kind=action==='publish'?'lesson':action==='publish-schedule'?'schedule':'academic';const saved=await request('read:managed-record',{kind,id:body.id});if(kind!=='academic')setData((old:any)=>old?{...old,[kind==='lesson'?'drafts':'schedules']:upsertWorkspaceRecord(old[kind==='lesson'?'drafts':'schedules'],saved.record)}:old);}catch{/* Preserve the original error, never retry the mutation. */}
         }
         if (!result.ok || !result.data?.ok)
-            throw new Error(`${result.data?.message || errors[result.data?.error] || result.userMessage || '처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'}${result.data?.diagnosticId ? ` (오류 ID: ${result.data.diagnosticId})` : ''}`);
+            throw Object.assign(new Error(`${result.data?.message || errors[result.data?.error] || result.userMessage || '처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'}${result.data?.diagnosticId ? ` (오류 ID: ${result.data.diagnosticId})` : ''}`),{code:result.data?.error,blocker:result.data?.blocker});
         if(posting&&action!=='previous-lesson'&&action!=='report-review') {
             if(currentContext.current===operationContext)loadVersion.current++;if(action==='save-draft'||action==='publish')draftVersion.current++;invalidateTeacherReads(action!);
             dirtyResources.current.add(action==='save-class'&&result.data.statusOnly?'save-class-status':action!);
