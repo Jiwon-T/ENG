@@ -1,5 +1,11 @@
 {
   "version": 2,
+  "crons": [
+    {
+      "path": "/api/cron/lesson-migration",
+      "schedule": "0 18 * * *"
+    }
+  ],
   "redirects": [
     {
       "source": "/report/:slug",
@@ -15,6 +21,10 @@
     {
       "source": "/api/student/:endpoint",
       "destination": "/api/student?__endpoint=:endpoint"
+    },
+    {
+      "source": "/api/cron/lesson-migration",
+      "destination": "/api/teacher/workspace?__cron=lesson-migration"
     },
     {
       "source": "/api/(.*)",

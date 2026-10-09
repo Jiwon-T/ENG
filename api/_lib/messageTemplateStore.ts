@@ -17,6 +17,15 @@ export const templateKey=(id:string)=>hash([TEMPLATE_ACADEMY,TEMPLATE_DATABASE,u
 const editSchema=z.object({title:z.string().trim().min(1).max(300),body:z.string().max(10000)}).strict();
 export type TemplateValue={title:string;body:string;target:string;archived:boolean};
 export function templateFirestoreReads(){return process.env.MESSAGE_TEMPLATE_READ_MODE==='firestore';}
+/** Firestore reads when the verified app-only switch is on (normal path) or the legacy env override is set. */
+export async function templateReadsFromApp(db:any){
+ if(templateFirestoreReads())return true;
+ const {templateAppActive}=await import('./messageTemplateAuthority.js');return templateAppActive(db);
+}
+async function assertNotAppOnly(db:any){
+ // After the switch the app value is authoritative; Notion pulls would overwrite newer app edits.
+ const {templateAppActive}=await import('./messageTemplateAuthority.js');if(await templateAppActive(db))throw Error('TEMPLATE_APP_ACTIVE');
+}
 export function assertTemplateAccess(actor:any,write=false){
  if(actor.academyId!==TEMPLATE_ACADEMY || write&& !actor.admin)throw Error('FORBIDDEN');
 }
@@ -51,7 +60,8 @@ export async function templateManagementList(db:any,actor:any,cursor?:string){
  const [state,snapshot]=await Promise.all([db.collection(TEMPLATE_STATE).doc(TEMPLATE_SOURCE).get(),pageQuery(db,cursor,PAGE_SIZE+1).get()]);
  const rows=snapshot.docs.slice(0,PAGE_SIZE).map((d:any)=>dto(assertStored(d.data())));
  const s=state.data()||{};
- return {records:rows,cursor:snapshot.docs.length>PAGE_SIZE?rows.at(-1)?.id:null,readMode:templateFirestoreReads()?'firestore':'notion',
+ const {templateAppActive}=await import('./messageTemplateAuthority.js');const appOnly=await templateAppActive(db);
+ return {records:rows,cursor:snapshot.docs.length>PAGE_SIZE?rows.at(-1)?.id:null,readMode:appOnly||templateFirestoreReads()?'firestore':'notion',appOnly,
   sync:{ready:Boolean(s.ready),phase:s.phase||'not-started',hasMore:Boolean(s.cursor),lastSuccessAt:s.lastSuccessAt||null,error:s.error||null,reconcileHasMore:Boolean(s.reconcileCursor),lastReconcileAt:s.lastReconcileAt||null}};
 }
 async function requireReady(db:any){
@@ -81,7 +91,7 @@ function safeFailure(error:any){
  const text=String(error?.message||'');return /^(NOTION_(400|401|403|404|409|429|5\d\d)|TEMPLATE_[A-Z_]+)$/.test(text)?text:text.startsWith('CONFIG_ERROR')?'CONFIG_ERROR':'SYNC_TRANSPORT_FAILED';
 }
 export async function dryRunTemplates(db:any,actor:any,cursor?:string,notion:RegistrationNotion=registrationNotion){
- assertTemplateAccess(actor,true);const result=await sourcePage(notion,cursor);
+ assertTemplateAccess(actor,true);await assertNotAppOnly(db);const result=await sourcePage(notion,cursor);
  const items=[];for(const p of result.pages){const old=(await refFor(db,p.id).get()).data();
   if(old)assertStored(old,p.id);
   items.push({id:p.id,title:p.data.title,decision:!old?'new':old.dataHash===p.hash?'unchanged':old.status==='pending'||old.status==='failed'||old.status==='conflict'?'review':'update'});
@@ -108,7 +118,7 @@ async function ingest(db:any,p:ReturnType<typeof templatePage>,at:number,by:stri
 }
 // One shared source lease, one Notion page per step. Checkpoint is advanced last.
 export async function importTemplateStep(db:any,actor:any,notion:RegistrationNotion=registrationNotion,clock=Date.now){
- assertTemplateAccess(actor,true);const ref=db.collection(TEMPLATE_STATE).doc(TEMPLATE_SOURCE),owner=randomUUID(),started=clock();
+ assertTemplateAccess(actor,true);await assertNotAppOnly(db);const ref=db.collection(TEMPLATE_STATE).doc(TEMPLATE_SOURCE),owner=randomUUID(),started=clock();
  const state=await db.runTransaction(async(tx:any)=>{
   const old=(await tx.get(ref)).data()||{};if(old.pullOwnerUntil>started)throw Error('TEMPLATE_BUSY');
   const next={...old,phase:old.phase==='initial'||old.phase==='catchup'?old.phase:'delta',runStartedAt:old.cursor?old.runStartedAt:started,pullOwner:owner,pullOwnerUntil:started+LEASE_MS,error:null};
@@ -134,13 +144,24 @@ export async function saveTemplate(db:any,actor:any,input:unknown,clock=Date.now
  const intent=hash([actor.uid,id,v.revision,v.data]),ref=refFor(db,id),jobRef=db.collection(TEMPLATE_JOBS).doc(jobId);
  return db.runTransaction(async(tx:any)=>{
   const old=assertStored((await tx.get(ref)).data(),id),receipt=(await tx.get(jobRef)).data();
+  const authority=(await tx.get(db.collection('messageTemplateAuthority').doc('main'))).data();
+  const proof=authority?.active&&authority.verifiedRunId?(await tx.get(db.collection('messageTemplateVerificationRuns').doc(authority.verifiedRunId))).data():null;
+  const appOnly=Boolean(authority?.active&&authority.schemaVersion===1&&proof?.verified&&proof.hash===authority.verificationHash);
   if(receipt){if(receipt.intent!==intent)throw Error('TEMPLATE_REQUEST_CONFLICT');return dto(old);}
   if(old.revision!==v.revision)throw Error('TEMPLATE_REVISION_CONFLICT');
-  if(!['synced','pending','failed'].includes(old.status)||old.data.archived)throw Error('TEMPLATE_PENDING');
+  if(!['synced','pending','failed','app'].includes(old.status)||old.data.archived)throw Error('TEMPLATE_PENDING');
   const priorRef=old.pendingJobId?db.collection(TEMPLATE_JOBS).doc(old.pendingJobId):null,prior=priorRef?(await tx.get(priorRef)).data():null;
   if(priorRef&&(!prior||prior.sourceKey!==TEMPLATE_SOURCE))throw Error('TEMPLATE_REVISION_CONFLICT');
   if(prior?.leaseUntil>at)throw Error('TEMPLATE_BUSY');
   const data={...old.data,...v.data},dataHash=hash(data);if(dataHash===old.dataHash)return dto(old);
+  if(appOnly){
+   // App-only: saved and final in this transaction. The receipt keeps same-operation retries idempotent.
+   const next={...old,data,dataHash,revision:old.revision+1,status:'app',pendingJobId:null,updatedAt:at,error:null};
+   if(priorRef)tx.set(priorRef,{...prior,status:'not-needed',leaseOwner:null,leaseUntil:0});
+   tx.set(ref,next);history(tx,db,next,old,'app-edit',at,actor.uid);
+   tx.set(jobRef,{sourceKey:TEMPLATE_SOURCE,notionPageId:id,revision:next.revision,desired:data,desiredHash:dataHash,intent,status:'not-needed',appOnly:true,attempts:0,createdAt:at,ownerUid:actor.uid,leaseOwner:null,leaseUntil:0});
+   return dto(next);
+  }
   const next={...old,data,dataHash,revision:old.revision+1,status:'pending',pendingJobId:jobId,updatedAt:at,error:null};
   if(priorRef)tx.set(priorRef,{...prior,status:'superseded',leaseOwner:null,leaseUntil:0});
   tx.set(ref,next);history(tx,db,next,old,'app-edit',at,actor.uid);
@@ -163,7 +184,7 @@ export async function restoreTemplate(db:any,actor:any,input:unknown){
  return saveTemplate(db,actor,{id:v.id,revision:v.revision,operationId:v.operationId,data:{title:old.after.title,body:old.after.body}});
 }
 export async function retryTemplate(db:any,actor:any,id:string,clock=Date.now){
- assertTemplateAccess(actor,true);const ref=refFor(db,id),at=clock();
+ assertTemplateAccess(actor,true);await assertNotAppOnly(db);const ref=refFor(db,id),at=clock();
  return db.runTransaction(async(tx:any)=>{
   const old=assertStored((await tx.get(ref)).data(),id);if(!old.pendingJobId||old.status==='conflict')throw Error('TEMPLATE_PENDING');
   const jobRef=db.collection(TEMPLATE_JOBS).doc(old.pendingJobId),job=(await tx.get(jobRef)).data();
@@ -180,6 +201,12 @@ function properties(data:TemplateValue){
 }
 export async function processTemplateJob(db:any,jobId:string,notion:RegistrationNotion=registrationNotion,clock=Date.now){
  const jr=db.collection(TEMPLATE_JOBS).doc(jobId),owner=randomUUID(),at=clock();
+ const {templateAppActive}=await import('./messageTemplateAuthority.js');
+ if(await templateAppActive(db)){
+  // No Notion copy after the switch: retire the job without any Notion call.
+  await db.runTransaction(async(tx:any)=>{const old=(await tx.get(jr)).data();if(old&&['pending','retry','running'].includes(old.status)&&!(old.leaseUntil>at))tx.set(jr,{...old,status:'not-needed',leaseOwner:null,leaseUntil:0,finishedAt:at});});
+  return 'skipped';
+ }
  const job=await db.runTransaction(async(tx:any)=>{
   const old=(await tx.get(jr)).data();if(!old||old.sourceKey!==TEMPLATE_SOURCE||!['pending','retry','running'].includes(old.status)||old.nextAttemptAt>at||old.leaseUntil>at)return null;
   const ref=refFor(db,old.notionPageId),row=assertStored((await tx.get(ref)).data(),old.notionPageId);
@@ -241,7 +268,7 @@ export async function resolveTemplate(db:any,actor:any,input:unknown,clock=Date.
 }
 // Low-frequency bounded reconciliation. 403/404 is unknown, never an automatic deletion.
 export async function reconcileTemplateStep(db:any,actor:any,notion:RegistrationNotion=registrationNotion,clock=Date.now){
- assertTemplateAccess(actor,true);const ref=db.collection(TEMPLATE_STATE).doc(TEMPLATE_SOURCE),owner=randomUUID(),at=clock();
+ assertTemplateAccess(actor,true);await assertNotAppOnly(db);const ref=db.collection(TEMPLATE_STATE).doc(TEMPLATE_SOURCE),owner=randomUUID(),at=clock();
  const state=await db.runTransaction(async(tx:any)=>{const s=(await tx.get(ref)).data()||{};if(s.reconcileOwnerUntil>at)throw Error('TEMPLATE_BUSY');tx.set(ref,{...s,reconcileOwner:owner,reconcileOwnerUntil:at+LEASE_MS});return s;});
  try{
   const snapshot=await pageQuery(db,state.reconcileCursor||undefined,6).get(),docs=snapshot.docs.slice(0,5),counts={checked:0,unknown:0,changed:0};

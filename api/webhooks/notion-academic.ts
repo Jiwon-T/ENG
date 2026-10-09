@@ -1,3 +1,4 @@
+import { withNotionUsageRoute, recordMakeWebhook } from '../_lib/notionUsage.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { timingSafeEqual } from 'node:crypto';
 import { parseJsonBody, sendJson } from '../_lib/http.js';
@@ -5,7 +6,8 @@ import { getSecretOrThrow } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 import { isNotionPageId, normalizeNotionPageId } from '../_lib/notionPageId.js';
 import { notionRequest, syncAcademicPage } from '../_lib/academic.js';
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+export default function handler(req: IncomingMessage, res: ServerResponse) { return withNotionUsageRoute('webhook:academic', () => routeHandler(req, res)); }
+async function routeHandler(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
   try {
     const expected = Buffer.from(getSecretOrThrow('MAKE_NOTION_WEBHOOK_SECRET', 32));
@@ -15,8 +17,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     if (!isNotionPageId(body.pageId)) return sendJson(res, 400, { ok: false, error: 'INVALID_PAGE_ID' });
     const page = await notionRequest(`pages/${normalizeNotionPageId(body.pageId)}`);
     const result = await syncAcademicPage(getFirebaseAdmin().db, page);
+    recordMakeWebhook('academic', 'applied');
     return sendJson(res, 200, { ok: true, ...result });
   } catch (error: any) {
+    recordMakeWebhook('academic', 'error');
     const invalid = /SOURCE_NOT_ALLOWED|EXACTLY_ONE_STUDENT|INVALID_EXAM|INVALID_SCORE|INVALID_PERCENTILE|INVALID_SOURCE|DUPLICATE_ENROLLMENT/.test(error.message);
     return sendJson(res, invalid ? 422 : 500, { ok: false, error: invalid ? error.message : 'ACADEMIC_SYNC_FAILED' });
   }

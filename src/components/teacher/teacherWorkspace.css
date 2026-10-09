@@ -77,9 +77,12 @@
 .teacher-workspace input:not([type=checkbox]), .teacher-workspace select, .teacher-workspace textarea { display:block; width:100%; min-height:44px; margin-top:5px; border:1px solid var(--workspace-neutral-border); border-radius:10px; padding:9px 11px; background:var(--workspace-surface); color:var(--workspace-text); font-size:var(--workspace-font-base); outline:none; }
 .teacher-workspace input:focus, .teacher-workspace select:focus, .teacher-workspace textarea:focus { border-color:var(--workspace-palette-f9a8d4); box-shadow:0 0 0 3px var(--workspace-palette-fdf2f8); }
 .teacher-workspace input[type=checkbox] { accent-color:var(--workspace-focus); width:16px; height:16px; }
-.teacher-workspace .primary-button, .teacher-workspace .small-button { min-height:44px; padding:8px 14px; border-radius:10px; font-size:var(--workspace-font-sm); font-weight:700; }
-.teacher-workspace .primary-button { background:var(--workspace-brand-dot); color:white; }
-.teacher-workspace .small-button { background:var(--workspace-brand-bg); color:var(--workspace-brand-fg); border:1px solid var(--workspace-brand-border); }
+.teacher-workspace .primary-button, .teacher-workspace .small-button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; padding:8px 16px; border:1px solid transparent; border-radius:var(--workspace-radius-button); font-size:var(--workspace-font-sm); font-weight:700; transition:background-color .15s,box-shadow .15s,transform .05s; }
+.teacher-workspace :is(.primary-button,.small-button):not(:disabled):active { transform:translateY(1px); }
+.teacher-workspace :is(.primary-button,.small-button):focus-visible { outline:2px solid var(--workspace-focus); outline-offset:2px; }
+.teacher-workspace :is(.primary-button,.small-button):disabled { background:var(--workspace-button-disabled-bg); color:var(--workspace-button-disabled-fg); border-color:transparent; box-shadow:none; cursor:not-allowed; }
+.teacher-workspace .primary-button { background:var(--workspace-brand-dot); color:var(--workspace-brand-on-solid); box-shadow:0 4px 12px var(--workspace-brand-shadow); }
+.teacher-workspace .small-button { background:var(--workspace-brand-bg); color:var(--workspace-brand-fg); border:1px solid transparent; }
 .teacher-workspace button:disabled { opacity:.45; cursor:not-allowed; }
 .teacher-workspace button:focus-visible { outline:2px solid var(--workspace-focus); outline-offset:3px; }
 
@@ -88,8 +91,8 @@
 .teacher-workspace nav button { transition:background .15s,box-shadow .15s; }
 .teacher-workspace nav button[aria-pressed=true] { box-shadow:0 3px 8px var(--workspace-palette-e8799c25); }
 .teacher-workspace textarea { resize:vertical; line-height:1.6; }
-.teacher-workspace .primary-button:hover:not(:disabled) { background:var(--workspace-palette-e96491); }
-.teacher-workspace .small-button:hover:not(:disabled) { background:var(--workspace-palette-ffe8f1); }
+.teacher-workspace .primary-button:hover:not(:disabled) { background:var(--workspace-brand-hover); }
+.teacher-workspace .small-button:hover:not(:disabled) { background:var(--workspace-brand-soft-hover); }
 @media(max-width:640px) {
  .teacher-workspace .panel { padding:14px; border-radius:16px; }
  .teacher-workspace nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
@@ -242,7 +245,7 @@
 @media(max-width:480px){.teacher-workspace .workspace-filters label,.teacher-workspace .workspace-filters>select,.teacher-workspace .workspace-filters>input {width:calc(50% - 6px);}.teacher-workspace .workspace-filters label select,.teacher-workspace .workspace-filters label input {width:100%;}}
 
 /* Compact, consistent action buttons; navigation and clickable cards retain their own layout. */
-.teacher-workspace .primary-button,.teacher-workspace .small-button,.teacher-workspace .lesson-grid .primary-button,.teacher-workspace .lesson-grid .small-button,.teacher-workspace .review-pagination button {min-height:34px;padding:6px 11px;font-size:var(--workspace-font-xs);border-radius:9px;}
+.teacher-workspace .primary-button,.teacher-workspace .small-button,.teacher-workspace .lesson-grid .primary-button,.teacher-workspace .lesson-grid .small-button,.teacher-workspace .review-pagination button {min-height:34px;padding:6px 12px;font-size:var(--workspace-font-xs);border-radius:var(--workspace-radius-button);}
 .teacher-workspace .lesson-time-row,.teacher-workspace .lesson-grid .lesson-time-row {grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;}
 .lesson-time-row label:nth-of-type(1) {grid-column:1;grid-row:1;}
 .lesson-time-row label:nth-of-type(2) {grid-column:1;grid-row:2;}
@@ -344,10 +347,11 @@
 .lesson-action-state>span {display:flex;align-items:center;gap:7px;font-weight:600;}
 .lesson-action-reason {font-size:11px;color:var(--lesson-muted);margin-top:4px;line-height:1.5;}
 .lesson-action-buttons,.lesson-action-controls {display:flex;align-items:center;gap:8px;}
-.teacher-workspace .lesson-action-bar .primary-button,.teacher-workspace .lesson-action-bar .small-button {display:flex;justify-content:center;align-items:center;gap:6px;min-width:80px;height:38px;min-height:38px;border-radius:var(--lesson-radius);}
-.teacher-workspace .lesson-action-bar .primary-button {background:var(--lesson-pink);color:var(--lesson-white);}
-.teacher-workspace .lesson-action-bar .small-button {background:var(--lesson-soft);color:var(--lesson-accent);border:1px solid var(--lesson-border);}
-.teacher-workspace .lesson-refresh-button {display:grid;place-items:center;min-width:38px;height:38px;border:1px solid var(--lesson-border);border-radius:var(--lesson-radius);color:var(--lesson-accent);background:var(--lesson-white);}
+.teacher-workspace .lesson-action-bar .primary-button,.teacher-workspace .lesson-action-bar .small-button {display:flex;justify-content:center;align-items:center;gap:6px;min-width:80px;height:38px;min-height:38px;border-radius:var(--workspace-radius-button);}
+.teacher-workspace .lesson-action-bar .primary-button {background:var(--lesson-pink);color:var(--workspace-brand-on-solid);box-shadow:0 4px 12px var(--workspace-brand-shadow);}
+.teacher-workspace .lesson-action-bar .small-button {background:var(--lesson-soft);color:var(--lesson-accent);border:1px solid transparent;}
+.teacher-workspace .lesson-refresh-button {display:grid;place-items:center;min-width:38px;height:38px;border:1px solid var(--lesson-border);border-radius:var(--workspace-radius-button);color:var(--lesson-accent);background:var(--lesson-white);transition:background-color .15s;}
+.teacher-workspace .lesson-refresh-button:hover:not(:disabled) {background:var(--workspace-brand-bg);}
 .teacher-workspace .lesson-action-bar button:not(:disabled):hover {filter:brightness(.98);box-shadow:var(--lesson-shadow);}
 .teacher-workspace .lesson-action-bar button:not(:disabled):active {transform:translateY(1px);}
 .teacher-workspace .lesson-action-bar button:focus-visible {outline:2px solid var(--lesson-focus);outline-offset:2px;}
@@ -401,8 +405,8 @@
 .teacher-workspace .lesson-option-chip.tone-red[aria-checked=true]:not(:disabled):hover {background:var(--lesson-red-soft);}
 .teacher-workspace .lesson-option-chip.tone-yellow[aria-checked=true]:not(:disabled):hover {background:var(--lesson-yellow-soft);}
 .teacher-workspace .lesson-grid td[data-label="저장·반영"]:not(:has(button,p)) {display:none;}
-.teacher-workspace .lesson-action-bar .primary-button:not(:disabled):hover {background:var(--lesson-pink);}
-.teacher-workspace .lesson-action-bar .small-button:not(:disabled):hover {background:var(--lesson-soft);}
+.teacher-workspace .lesson-action-bar .primary-button:not(:disabled):hover {background:var(--workspace-brand-hover);}
+.teacher-workspace .lesson-action-bar .small-button:not(:disabled):hover {background:var(--workspace-brand-soft-hover);}
 
 .teacher-workspace .grid-student-strip {position:sticky;top:0;z-index:4;background:var(--lesson-white);padding-top:8px;padding-bottom:8px;}
 .teacher-workspace .student-combobox {position:relative;min-width:0;}
@@ -675,8 +679,10 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
  --workspace-pending-bg:#fffbeb;--workspace-pending-fg:#b45309;--workspace-pending-border:#fde68a;--workspace-pending-dot:#f59e0b;
  --workspace-danger-bg:#fff1f2;--workspace-danger-fg:#be123c;--workspace-danger-border:#fecdd3;--workspace-danger-dot:#f43f5e;
  --workspace-neutral-bg:#f8fafc;--workspace-neutral-fg:#64748b;--workspace-neutral-border:#e2e8f0;--workspace-neutral-dot:#94a3b8;
- --workspace-brand-bg:#fff5f8;--workspace-brand-fg:#a42e59;--workspace-brand-border:#fce7ef;--workspace-brand-dot:#f4729c;--workspace-brand-on-solid:#60182f;
- --workspace-surface:#fff;--workspace-text:#334155;--workspace-muted:#64748b;--workspace-focus:#ec4899;
+ /* Rosy peach (warm) brand, chosen 2026-10-09: light solid with dark text (contrast 6.3:1). */
+ --workspace-brand-bg:#fef2f3;--workspace-brand-fg:#8b2f40;--workspace-brand-border:#fadde1;--workspace-brand-dot:#f5a3a8;--workspace-brand-on-solid:#5e1e2a;
+ --workspace-brand-hover:#f08c93;--workspace-brand-soft-hover:#fde3e6;--workspace-brand-shadow:#f5a3a840;--workspace-radius-button:999px;--workspace-button-disabled-bg:#f1f5f9;--workspace-button-disabled-fg:#94a3b8;
+ --workspace-surface:#fff;--workspace-text:#334155;--workspace-muted:#64748b;--workspace-focus:#d9606b;
  --workspace-font-xs:12px;--workspace-font-sm:13px;--workspace-font-base:14px;--workspace-font-lg:16px;--workspace-font-title:20px;--workspace-font-hero:24px;
  --workspace-radius-card:20px;--workspace-radius-input:12px;--workspace-radius-chip:999px;--workspace-radius-badge:8px;
  --workspace-shadow-small:0 2px 8px #0f172a08;--workspace-shadow-large:0 8px 24px #0f172a12;
@@ -931,3 +937,36 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 @container(max-width:800px){.academic-batch-row{grid-template-columns:repeat(2,minmax(0,1fr));}.academic-batch-row>strong{grid-column:1/-1;}}
 
 .academic-batch-actions{position:sticky;bottom:0;background:var(--workspace-surface);padding:12px 0;z-index:2;border-top:1px solid var(--workspace-neutral-border);}
+
+/* Teacher screens only: Pretendard keeps Hangul, Latin and digits in one face on every device.
+   Student/parent screens keep their current font. Loaded from index.html (dynamic subset). */
+.teacher-workspace {font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,system-ui,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;}
+
+/* Design pass 2 (2026-10-09): warm rosy-peach family everywhere, pill tabs, consistent fields and cards.
+   Legacy pink palette tokens keep their names (used across files) but now carry warm values. */
+.teacher-workspace {
+ --workspace-palette-f9a8d4:#f3b3b7;--workspace-palette-fdf2f8:#fef2f3;--workspace-palette-e8799c25:#e88a9225;--workspace-palette-e96491:#f08c93;
+ --workspace-palette-ffe8f1:#fde3e6;--workspace-palette-fff0f5:#fff4f4;--workspace-palette-8f5065:#8b4550;--workspace-palette-f59ab8:#f29aa1;
+ --workspace-palette-7d5664:#7c5157;--workspace-palette-d66b8c:#d6737c;--workspace-palette-a98a96:#a88b8f;--workspace-palette-bd5680:#bc5a67;
+ --workspace-palette-fce0eb:#fbe1e3;--workspace-palette-fce2ec:#fbe2e4;--workspace-palette-b05074:#ad4f5d;--workspace-palette-db638f:#d9707a;
+ --workspace-palette-72344722:#72343a22;--workspace-palette-42303d55:#42303255;--workspace-palette-a76580:#a6656e;--workspace-palette-fbcfe8:#f9d0d3;
+ --workspace-palette-fce7f3:#fce6e8;--workspace-palette-db2777:#c44a58;--workspace-palette-f472b6:#ee8790;--workspace-palette-fff7fa:#fff8f7;
+ --workspace-palette-ec489912:#e2737c12;--workspace-palette-fff0f6:#fff2f2;--workspace-palette-ff4778:#f0606c;--workspace-palette-8d3555:#8a3540;
+ --workspace-palette-be416c18:#b0475518;--workspace-palette-be416c0d:#b047550d;
+ --workspace-field-hover:#cbd5e1;--workspace-field-ring:#fde3e6;
+}
+/* Fields: 12px corners (the existing input radius token), warm focus ring, readable placeholder. */
+.teacher-workspace input:not([type=checkbox]):not([type=radio]), .teacher-workspace select, .teacher-workspace textarea {border-radius:var(--workspace-radius-input);transition:border-color .15s,box-shadow .15s;}
+.teacher-workspace :is(input:not([type=checkbox]):not([type=radio]),select,textarea):hover:not(:disabled):not(:focus) {border-color:var(--workspace-field-hover);}
+.teacher-workspace :is(input,select,textarea):focus {border-color:var(--workspace-brand-dot);box-shadow:0 0 0 3px var(--workspace-field-ring);}
+.teacher-workspace :is(input,textarea)::placeholder {color:#94a3b8;}
+.teacher-workspace :is(input,select,textarea):disabled {background:var(--workspace-neutral-bg);color:var(--workspace-muted);}
+/* Tabs: pill highlight instead of a boxed underline, matching the pill buttons. */
+.teacher-workspace .workspace-tab-strip>button {border-radius:var(--workspace-radius-button);padding:0 12px;transition:background-color .15s,color .15s;}
+.teacher-workspace .workspace-tab-strip>button[aria-selected=true] {background:var(--workspace-brand-bg);color:var(--workspace-brand-fg);border-bottom:0;font-weight:700;}
+.teacher-workspace .workspace-tab-strip>button:focus-visible,.workspace-history-control>button:focus-visible {outline:2px solid var(--workspace-focus);outline-offset:2px;}
+.workspace-history-control>button {border-radius:var(--workspace-radius-button);}
+.workspace-history-control>button:hover {background:var(--workspace-neutral-bg);}
+/* Cards: the card radius token (20px) and a softer shadow. */
+.teacher-workspace .panel {border-radius:var(--workspace-radius-card);box-shadow:var(--workspace-shadow-small);}
+.teacher-workspace .today-dismiss:focus-visible {outline-color:var(--workspace-focus);}

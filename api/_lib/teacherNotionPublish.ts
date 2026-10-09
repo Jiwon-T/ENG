@@ -1,3 +1,4 @@
+import { recordNotionCall } from './notionUsage.js';
 import { SCHEDULE_DATABASE, assertSchedulePlace } from './teacherSchedulePlaces.js';
 import {lessonExamScopeProperties} from './lessonExamScope.js';
 import {assertLessonNotionFields} from './teacherLessonDiagnostics.js';
@@ -15,6 +16,7 @@ async function notion(path: string, method = 'GET', body?: any) {
     const token = process.env.NOTION_INTEGRATION_TOKEN;
     if (!token)
         throw new Error('CONFIG_ERROR');
+    recordNotionCall(path);
     const response = await fetch(`https://api.notion.com/v1/${path}`, { method, headers: { Authorization: `Bearer ${token}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000) });
     if (!response.ok)
         throw new Error(`NOTION_${response.status}`);

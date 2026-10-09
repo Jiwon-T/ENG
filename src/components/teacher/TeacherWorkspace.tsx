@@ -1,3 +1,7 @@
+import ScheduleTransitionPanel from './ScheduleTransitionPanel';
+import LessonMigrationPanel from './LessonMigrationPanel';
+import LessonRestorePanel from './LessonRestorePanel';
+import NotionDisconnectPanel from './NotionDisconnectPanel';
 import StudentMasterPanel from './StudentMasterPanel';
 import ScheduleViewHeader,{type ScheduleView} from './ScheduleViewHeader';
 import WorkspaceNavigation from './WorkspaceNavigation';
@@ -51,6 +55,7 @@ const TeacherAcademicManager = lazy(() => import('./TeacherAcademicManager'));
 const AcademyLessonReview = lazy(() => import('./AcademyLessonReview'));
 const WordbookManager = lazy(() => import('./WordbookManager'));
 import './teacherWorkspace.css';
+import './lessonCutover.css';
 import './scheduleWorkspace.css';
 import TeacherReportReview from './TeacherReportReview';
 import TeacherLessonGrid from './TeacherLessonGrid';
@@ -225,7 +230,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     function deleteCurrentLesson(){
         if(!currentDraft)return;
         const target=currentDraft,version=autoVersion.current;
-        if(!window.confirm(`${target.data.date} ${target.data.subject} 일지를 삭제할까요?\n선택한 일지와 해당 리포트만 숨기며, 연결된 노션 일지는 휴지통으로 옮깁니다.`))return;
+        if(!window.confirm(`${target.data.date} ${target.data.subject} 일지를 삭제할까요?\n선택한 일지와 해당 리포트만 숨기며, ${data?.lessonAppMode?'삭제 전 내용은 복구용 기록으로 보관합니다.':'연결된 노션 일지는 휴지통으로 옮깁니다.'}`))return;
         void act(async()=>{
             await request('archive-lesson',{id:target.id,revision:target.revision});
             setData((old:any)=>old?{...old,drafts:old.drafts.filter((row:any)=>row.id!==target.id)}:old);
@@ -237,14 +242,14 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
 
     const latestLessonJob=[...jobs].reverse().find(job=>job.keys.includes('lesson-editor:'+autoVersion.current)||Boolean(draftId&&job.keys.includes('lesson-record:'+draftId)));
     async function submitSingleLesson(mode:'save'|'publish'){
-        if(mode==='publish'&&!window.confirm('현재 입력 내용을 저장하고 Notion과 리포트에 반영할까요?'))return;
+        if(mode==='publish'&&!window.confirm(data?.lessonAppMode?'현재 입력 내용을 저장하고 학생·학부모 리포트에 반영할까요?':'현재 입력 내용을 저장하고 Notion과 리포트에 반영할까요?'))return;
         const token=autoVersion.current;
         try{
             const outcome=await submitLesson({mode,id:draftId||newLessonId.current,revision,data:lesson,record:currentDraft,request,onSaved:saved=>{
                 if(token!==autoVersion.current)return;
                 setSavedPulse({id:saved.id,at:Date.now()});setDraftId(saved.id);setRevision(saved.record?.revision);if(saved.record)setLesson(compactLessonInput(saved.record.data));setMessage('앱에 저장했습니다.');
             }});
-            if(mode==='publish'&&token===autoVersion.current)setMessage(outcome.warning||'학생·학부모 리포트와 노션에 반영했습니다.');
+            if(mode==='publish'&&token===autoVersion.current)setMessage(outcome.warning||(data?.lessonAppMode?'학생·학부모 리포트에 반영했습니다.':'학생·학부모 리포트와 노션에 반영했습니다.'));
             return outcome;
         }finally{await refresh();}
     }
@@ -271,7 +276,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
    </aside>
    <LessonEditorContainer modal={lessonDialogOpen} onClose={()=>setLessonDialogOpen(false)}>{lessonEditor}</LessonEditorContainer>
   </div>}
-  <div className="schedule-workspace-page" hidden={tab !== 'schedule'}><ScheduleViewHeader view={scheduleView} onView={setScheduleView} count={data.classes?.length||0} disabled={busy} onCreate={()=>scheduleView==='dated'?createScheduleRef.current?.():createClassRef.current?.()}/><TeacherWeeklyCalendar hidden={scheduleView!=='dated'} createRef={createScheduleRef} data={data} busy={busy} request={request} active={tab==='schedule'} onAdd={date => openSchedule(date)} onEdit={record => {if((record.source==='notion'||record.notionPageId)&&!record.deleteRequested&&!canRetryPublication(record)){void act(async()=>{const result=await request('import-source-record',{id:record.notionPageId||record.id,kind:'schedule'});setData((old:any)=>({...old,schedules:[result.record,...old.schedules.filter((r:any)=>r.id!==result.record.id&&r.notionPageId!==result.record.notionPageId)]}));openSchedule(result.record.data.date,result.record);});}else openSchedule(record.data.date,record);}} onRegular={() => {}}/><div ref={scheduleEditorRef}><WorkspaceDialog open={Boolean(scheduleSelection) && tab==='schedule'} title="일정 추가·수정" onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) { setScheduleSelection(undefined); setScheduleDirty(false); } }}>{scheduleSelection && <TeacherScheduleEditor data={data} busy={busy} request={request} refresh={refresh} act={act} selection={scheduleSelection} onSelection={record=>{setScheduleSelection({date:record.data.date,record,nonce:++scheduleNonce.current});setScheduleDirty(false);}} onNotice={setMessage} onDirty={handleScheduleDirty} onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) {
+  <div className="schedule-workspace-page" hidden={tab !== 'schedule'}>{tab==='schedule'&&data.admin&&data.academyId==='main'&&<ScheduleTransitionPanel request={request} act={act} onChanged={refresh}/>}<ScheduleViewHeader view={scheduleView} onView={setScheduleView} count={data.classes?.length||0} disabled={busy} onCreate={()=>scheduleView==='dated'?createScheduleRef.current?.():createClassRef.current?.()}/><TeacherWeeklyCalendar hidden={scheduleView!=='dated'} createRef={createScheduleRef} data={data} busy={busy} request={request} active={tab==='schedule'} onAdd={date => openSchedule(date)} onEdit={record => {if((record.source==='notion'||record.notionPageId)&&!record.deleteRequested&&!canRetryPublication(record)){void act(async()=>{const result=await request('import-source-record',{id:record.notionPageId||record.id,kind:'schedule'});setData((old:any)=>({...old,schedules:[result.record,...old.schedules.filter((r:any)=>r.id!==result.record.id&&r.notionPageId!==result.record.notionPageId)]}));openSchedule(result.record.data.date,result.record);});}else openSchedule(record.data.date,record);}} onRegular={() => {}}/><div ref={scheduleEditorRef}><WorkspaceDialog open={Boolean(scheduleSelection) && tab==='schedule'} title="일정 추가·수정" onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) { setScheduleSelection(undefined); setScheduleDirty(false); } }}>{scheduleSelection && <TeacherScheduleEditor data={data} busy={busy} request={request} refresh={refresh} act={act} selection={scheduleSelection} onSelection={record=>{setScheduleSelection({date:record.data.date,record,nonce:++scheduleNonce.current});setScheduleDirty(false);}} onNotice={setMessage} onDirty={handleScheduleDirty} onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) {
             setScheduleSelection(undefined);
             setScheduleDirty(false);
         } }}/>}</WorkspaceDialog></div><div ref={regularRef}><TeacherClassManager view={scheduleView} createRef={createClassRef} data={data} busy={busy} request={request} refresh={refresh} act={act} active={tab==='schedule'} mode="schedule"/></div></div>
@@ -289,6 +294,9 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
   {tab === 'word' && <section className="panel"><h2>내 학습 세트 관리</h2><div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="관리할 세트 종류">{([['word', '단어장'], ['grammar', '문법 세트'], ['exam', '시험기간']] as const).map(([value, label]) => <button key={value} className={setCategory === value ? 'primary-button' : 'small-button'} aria-pressed={setCategory === value} onClick={() => setSetCategory(value)}>{label}</button>)}</div><Suspense fallback={<p className="text-sm text-slate-500">세트를 불러오는 중…</p>}><WordbookManager key={setCategory} category={setCategory}/></Suspense></section>}
   {tab === 'settings' && (data.admin || data.principal) && <Suspense fallback={<p>점검 화면을 불러오는 중…</p>}><TeacherIntegrityAudit key={data.uid+':'+data.academyId}/></Suspense>}
   {tab === 'settings' && (data.admin || data.principal) && <WorkspaceSyncPanel data={data} busy={busy} request={request} refresh={refresh} act={act}/>}
+  {tab === 'settings' && (data.admin || data.principal) && <LessonRestorePanel request={request} act={act} busy={busy} students={data.students} staff={data.staff} onRestored={refresh}/>}
+  {tab === 'settings' && data.admin && data.academyId==='main' && <NotionDisconnectPanel request={request}/>}
+  {tab === 'settings' && data.admin && data.academyId==='main' && <LessonMigrationPanel request={request} act={act} students={data.students} staff={data.staff}/>}
   {tab === 'settings' && (data.admin || data.principal) && <TeacherAssignmentManager data={data} request={request} act={act} busy={busy} refresh={refresh} onAccounts={onAccounts}/>}
   </>}
  </div>;

@@ -1,10 +1,12 @@
+import { withNotionUsageRoute, recordMakeWebhook } from '../_lib/notionUsage.js';
 import { LESSON_DATABASE, backfillAcademyPage } from '../_lib/academyBackfill.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { verifyAdminAuth } from '../_lib/auth.js';
 import { parseJsonBody, sendJson } from '../_lib/http.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 import { GRADE_DATABASE, ENROLLMENT_DATABASE, notionRequest, syncAcademicPage } from '../_lib/academic.js';
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+export default function handler(req: IncomingMessage, res: ServerResponse) { return withNotionUsageRoute('import-academic', () => routeHandler(req, res)); }
+async function routeHandler(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
   try { await verifyAdminAuth(req); } catch (error: any) { return sendJson(res, error.message === 'FORBIDDEN' ? 403 : 401, { ok: false, error: 'UNAUTHORIZED' }); }
   try {

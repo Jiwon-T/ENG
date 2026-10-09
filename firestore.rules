@@ -389,6 +389,14 @@ service cloud.firestore {
     match /messageTemplateSync/{id} { allow read, write: if false; }
     match /messageTemplateHistory/{id} { allow read, write: if false; }
     match /teacherLessonDrafts/{id} { allow read, write: if false; }
+    // Past lesson migration: server (Admin SDK) only.
+    match /lessonSourceRecords/{id} { allow read, write: if false; }
+    match /lessonMigrationJobs/{id} { allow read, write: if false; }
+    match /lessonMigrationRuns/{id} { allow read, write: if false; }
+    match /lessonMigrationHolds/{id} { allow read, write: if false; }
+    match /lessonMigrationSeen/{id} { allow read, write: if false; }
+    match /lessonMigrationHistory/{id} { allow read, write: if false; }
+    match /lessonImportVersions/{id} { allow read, write: if false; }
     match /teacherSchedules/{id} { allow read, write: if false; }
     match /teacherClasses/{id} { allow read, write: if false; }
     match /teacherAcademicDrafts/{id} { allow read, write: if false; }

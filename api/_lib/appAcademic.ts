@@ -5,7 +5,7 @@ import { canTeach, canAccessOwned, assertDraftEditable } from './teacherWorkspac
 import { hashStudentKey } from './security.js';
 const nativeId = (id: string) => 'app-' + id;
 const refs = (db: any, id: string) => [db.collection('academicRecords').doc(id), db.collection('academicRecords').doc(id.replace(/-/g, '')), db.collection('examResults').doc(id), db.collection('examResults').doc(id.replace(/-/g, ''))];
-async function identity(tx: any, db: any, actor: any, key: string, subject: string) { if (!actor.academyId || !canTeach(actor, key, subject))
+export async function identity(tx: any, db: any, actor: any, key: string, subject: string) { if (!actor.academyId || !canTeach(actor, key, subject))
     throw Error('FORBIDDEN'); const member = (await tx.get(db.collection('academyStudentMemberships').doc(key))).data(), mapping = (await tx.get(db.collection('notionStudentMappings').doc(hashStudentKey(key)))).data(); if (!member || member.disabled || member.academyId !== actor.academyId || !mapping?.internalStudentId || member.internalStudentId && member.internalStudentId !== mapping.internalStudentId)
     throw Error('STUDENT_MAPPING_CONFLICT'); if (!actor.admin) {
     const profile = (await tx.get(db.collection('teacherWorkspaceAccess').doc(actor.uid))).data(), authority = (await tx.get(db.collection('academyCoreAuthority').doc('main'))).data();
@@ -14,7 +14,7 @@ async function identity(tx: any, db: any, actor: any, key: string, subject: stri
     if (authority?.active && !(profile.scopes || []).some((s: any) => s.studentKey === key && s.subject === subject))
         throw Error('FORBIDDEN');
 } return mapping; }
-async function draftAccess(tx: any, db: any, actor: any, key: string, subject: string) { if (!actor.academyId || !canTeach(actor, key, subject))
+export async function draftAccess(tx: any, db: any, actor: any, key: string, subject: string) { if (!actor.academyId || !canTeach(actor, key, subject))
     throw Error('FORBIDDEN'); const authority = (await tx.get(db.collection('academyCoreAuthority').doc('main'))).data(); if (authority?.active)
     return identity(tx, db, actor, key, subject); const member = (await tx.get(db.collection('academyStudentMemberships').doc(key))).data(); if (member && (member.disabled || member.academyId !== actor.academyId))
     throw Error('FORBIDDEN'); const profile = (await tx.get(db.collection('teacherWorkspaceAccess').doc(actor.uid))).data(); if (!actor.admin && profile && (profile.disabled || profile.academyId !== actor.academyId))

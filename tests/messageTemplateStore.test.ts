@@ -38,7 +38,7 @@ test('initial pagination resumes, catches T0 edits, and readiness is not granted
 test('delta compares returned IDs only, does not rewrite unchanged template/history, and list never queries Notion',async()=>{
  const f=fixture(25);await f.setup();f.advance();f.resetMetrics();const queries=f.queries;
  await storedMessageTemplates(f.db,actor);await storedMessageTemplatePage(f.db,actor,f.id);assert.equal(f.queries,queries);
- f.resetMetrics();await importTemplateStep(f.db,actor,f.notion,f.clock);assert.equal(f.metrics.queries,0);assert.equal(f.metrics.writes,2);assert.equal(f.metrics.readDocuments,2); // Shared lease/checkpoint only: old remote timestamps excluded.
+ f.resetMetrics();await importTemplateStep(f.db,actor,f.notion,f.clock);assert.equal(f.metrics.queries,0);assert.equal(f.metrics.writes,2);assert.equal(f.metrics.readDocuments,3); // Shared lease/checkpoint + the app-only switch check; old remote timestamps excluded.
 });
 test('shared pull lease rejects concurrent runs and resumes after expiry',async()=>{
  const f=fixture();const all=await Promise.allSettled([importTemplateStep(f.db,actor,f.notion,f.clock),importTemplateStep(f.db,actor,f.notion,f.clock)]);assert.equal(all.filter(r=>r.status==='fulfilled').length,1);assert.match(String((all.find(r=>r.status==='rejected') as any).reason),/TEMPLATE_BUSY/);

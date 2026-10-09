@@ -5,6 +5,10 @@ export async function storeWebhookLessonReport(db: any, data: NotionReportWebhoo
     const id = uuid(data.notionPageId), target = db.collection('lessonReports').doc(id), legacy = db.collection('lessonReports').doc(id.replace(/-/g, ''));
     if (data.sourceUpdatedAt && !Number.isFinite(Date.parse(data.sourceUpdatedAt)))
         throw Error('INVALID_INPUT');
+    // After the lesson app switch, Notion copies never overwrite app-authoritative public reports.
+    const { lessonAppActive } = await import('./lessonAuthority.js');
+    if (await lessonAppActive(db, { academyId: 'main' }))
+        return { applied: false, reason: 'APP_AUTHORITY', isNew: false };
     return db.runTransaction(async (tx: any) => {
         const deleted=await tx.get(db.collection('teacherLessonDrafts').where('notionPageId','==',id));if(deleted.docs.some((d:any)=>d.data().archived||d.data().deleteRequested))return {applied:false,reason:'APP_ARCHIVED',isNew:false};
         const [current, compact] = await Promise.all([tx.get(target), tx.get(legacy)]), records = [current, compact].filter(s => s.exists);

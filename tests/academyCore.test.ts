@@ -95,7 +95,8 @@ test('Notion blocked: enrollment option loader and existing report identity look
  const f=fixture();await f.setup();await cutoverCore(f.db,f.actor);const options=await registrationAssignmentOptions(f.db,f.actor,f.deny);assert.equal(options.teachers[0].uid,'teacher');
  const old=await readStudentProfile(f.db,f.actor,sid,f.deny);await saveStudentProfile(f.db,f.actor,sid,randomUUID(),old.editedAt,{...old.data,displayName:'현재 이름',guardianPhone:'0'+'3'.repeat(10)},f.deny);
  const current=await lookupStudentIdentity(f.db as any,sid);assert.equal(current.studentDisplayName,'현재 이름');assert.equal(current.parentPhonePinHash,hashPin('3333'));
- assert.deepEqual(await syncAcademicPage(f.db as any,f.enrollment,f.deny),{applied:false,reason:'APP_OWNED',kind:'studentEnrollments'});
+ // After the core cutover the whole enrollment source is app-authoritative (checked before the per-record guard).
+ assert.deepEqual(await syncAcademicPage(f.db as any,f.enrollment,f.deny),{applied:false,reason:'APP_AUTHORITY',kind:'studentEnrollments'});
 });
 test('selective restore keeps account/report identity, advances app version, and replays without rotating PIN twice',async()=>{
  const f=fixture();await f.setup();await cutoverCore(f.db,f.actor);const r=await readStudentProfile(f.db,f.actor,sid,f.deny);await saveStudentProfile(f.db,f.actor,sid,randomUUID(),r.editedAt,{...r.data,displayName:'수정 이름',guardianPhone:'0'+'4'.repeat(10)},f.deny);

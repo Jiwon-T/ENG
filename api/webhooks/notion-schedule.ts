@@ -1,3 +1,5 @@
+import { withNotionUsageRoute, recordMakeWebhook } from '../_lib/notionUsage.js';
+import { appSchedulesActive } from '../_lib/appSchedule.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson } from '../_lib/http.js';
 import { NotionScheduleWebhookSchema, } from '../_lib/reportSchemas.js';
@@ -5,7 +7,8 @@ import { getSecretOrThrow } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 import { projectSchedule } from '../_lib/scheduleProjection.js';
 export { generateScheduleDocId } from '../_lib/scheduleProjection.js';
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+export default function handler(req: IncomingMessage, res: ServerResponse) { return withNotionUsageRoute('webhook:schedule', () => routeHandler(req, res)); }
+export async function routeHandler(req: IncomingMessage, res: ServerResponse, deps = { getFirebaseAdmin }) {
     try {
         if (req.method !== 'POST') {
             res.setHeader('Allow', 'POST');
@@ -34,11 +37,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             });
         }
         const data = parsed.data;
-        const { db } = getFirebaseAdmin();
+        const { db } = deps.getFirebaseAdmin();
+        // After the verified schedule switch the app is authoritative; Notion copies never overwrite it.
+        if (await appSchedulesActive(db, { academyId: 'main' })) { recordMakeWebhook('schedule', 'APP_AUTHORITY'); return sendJson(res, 200, { ok: true, applied: false, reason: 'APP_AUTHORITY' }); }
         const result = await projectSchedule(db, data);
+        recordMakeWebhook('schedule', (result as any)?.applied === false ? ((result as any).reason || 'skipped') : 'applied');
         return sendJson(res, 200, { ok: true, notionScheduleId: data.notionScheduleId, ...result });
     }
     catch (err: any) {
+        recordMakeWebhook('schedule', 'error');
         return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });
     }
 }

@@ -4,7 +4,7 @@ export function registrationFirestore() {
     const document=(path:string):any=>({id:path.slice(path.lastIndexOf('/')+1),path,get:async()=>snapshot(path),set:async(value:any)=>rows.set(path,structuredClone(value)),update:async(patch:any)=>rows.set(path,{...rows.get(path),...structuredClone(patch)})});
     const snapshot=(path:string):any=>({id:path.slice(path.lastIndexOf('/')+1),ref:document(path),exists:rows.has(path),data:()=>rows.has(path)?structuredClone(rows.get(path)):undefined});
     const collection=(name:string):any=>{
-        const list=(filters:any[]):any=>({where:(...filter:any[])=>list([...filters,filter]),get:async()=>({docs:[...rows.keys()].filter(path=>path.startsWith(name+'/') && !path.slice(name.length+1).includes('/') && filters.every(([key,operator,value])=>operator==='==' ? rows.get(path)[key]===value : operator==='in' ? value.includes(rows.get(path)[key]) : false)).map(snapshot)})});
+        const list=(filters:any[]):any=>({where:(...filter:any[])=>list([...filters,filter]),get:async()=>({docs:[...rows.keys()].filter(path=>path.startsWith(name+'/') && !path.slice(name.length+1).includes('/') && filters.every(([key,operator,value])=>{const field=String(key).split('.').reduce((o:any,p:string)=>o?.[p],rows.get(path));return operator==='==' ? field===value : operator==='in' ? value.includes(field) : false;})).map(snapshot)})});
         return {...list([]),doc:(id:string)=>document(name+'/'+id)};
     };
     const db={collection,runTransaction:(fn:any)=>{

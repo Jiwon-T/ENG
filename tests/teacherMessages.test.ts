@@ -52,3 +52,17 @@ test('Firestore template cutover removes only template Notion reads; existing pr
  }finally{previous===undefined?delete process.env.MESSAGE_TEMPLATE_READ_MODE:process.env.MESSAGE_TEMPLATE_READ_MODE=previous;}
 });
 
+import {directoryRowKey} from '../api/_lib/academyDirectorySource.js';
+test('after the core cutover an app-registered student can be messaged with no Notion page and no Notion backup write',async()=>{
+ const f=fixture();let notionCalls=0;const notion=async(path:string,method='GET',body?:any)=>{notionCalls++;return f.notion(path,method,body);};
+ f.rows.set('academyCoreAuthority/main',{active:true});
+ f.rows.set('academyDirectorySources/'+directoryRowKey('students',key),{kind:'students',academyId:'main',origin:'app',databaseId:null,appEditedAt:'2026-10-05T00:00:00.000Z',fields:{properties:{학생:{title:[{plain_text:'앱 학생'}]},보호자연락처:{phone_number:'01012345678'}}}});
+ const old=process.env.MESSAGE_TEMPLATE_READ_MODE;process.env.MESSAGE_TEMPLATE_READ_MODE='notion';
+ try{
+  const prepared=await prepareTeacherMessage(f.db,f.actor,f.input,notion);
+  assert.equal(prepared.status,'ready');assert.equal(f.patches,0,'no Notion backup write after cutover');
+  assert.equal(prepared.recipient,'01012345678');
+  // Only the template read (template mode notion in this test) touched Notion; the student page did not.
+  assert.equal(notionCalls,1);
+ }finally{if(old===undefined)delete process.env.MESSAGE_TEMPLATE_READ_MODE;else process.env.MESSAGE_TEMPLATE_READ_MODE=old;}
+});

@@ -5,6 +5,15 @@ import { getFirebaseAdmin } from '../firebaseAdmin.js';
 import type { StudentLessonReportDTO, StoredLessonReport } from '../reportSchemas.js';
 import { readStudentMapping } from '../studentIdentity.js';
 import crypto from 'crypto';
+import { lessonReportId } from '../reportAudienceDTO.js';
+
+/**
+ * The student screen receives reportId from studentLessonDTO (reportIdentity, else notionPageId).
+ * Completion must resolve the same ID; app-native reports have no Notion page ID.
+ */
+export function findAssignmentTarget(reports: StoredLessonReport[], reportId: string) {
+  return reports.find(report => (report.reportIdentity || report.notionPageId) && lessonReportId(report) === reportId);
+}
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
@@ -103,14 +112,13 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     // 학생별 자기 확인 완료 상태: 교사 평가나 원본 일지는 수정하지 않습니다.
     const completionCollection = db.collection('users').doc(studentUid).collection('assignmentCompletions');
-    const reportIdFor = (report: StoredLessonReport) => crypto.createHash('sha256').update(report.notionPageId).digest('hex').slice(0, 16);
     const assignmentHashFor = (report: StoredLessonReport) => crypto.createHash('sha256').update(report.derivedAssignment || '').digest('hex');
     if (req.method === 'PATCH') {
       const body = await parseJsonBody(req);
       if (typeof body?.reportId !== 'string' || !/^[a-f0-9]{16}$/.test(body.reportId)) {
         return sendJson(res, 400, { ok: false, error: 'INVALID_REPORT_ID' });
       }
-      const target = storedReports.find(report => reportIdFor(report) === body.reportId);
+      const target = findAssignmentTarget(storedReports, body.reportId);
       if (!target || !target.derivedAssignment?.trim()) {
         return sendJson(res, 404, { ok: false, error: 'ASSIGNMENT_NOT_FOUND' });
       }

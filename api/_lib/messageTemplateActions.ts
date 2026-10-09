@@ -13,6 +13,9 @@ export async function templateAction(db:any,actor:any,body:any){
   case 'template-restore': return {record:await restoreTemplate(db,actor,input)};
   case 'template-retry': {const v=z.object({id:z.string().uuid()}).strict().parse(input);return retryTemplate(db,actor,v.id);}
   case 'template-resolve': return {record:await resolveTemplate(db,actor,input)};
+  case 'template-cutover-status': {const {templateCutoverStatus}=await import('./messageTemplateAuthority.js');return templateCutoverStatus(db,actor);}
+  case 'template-cutover': {const v=z.object({confirmed:z.literal(true)}).strict().parse(input);const {activateTemplateApp}=await import('./messageTemplateAuthority.js');return activateTemplateApp(db,actor,v);}
+  case 'template-cutover-deactivate': {const v=z.object({confirmed:z.literal(true)}).strict().parse(input);const {deactivateTemplateApp}=await import('./messageTemplateAuthority.js');return deactivateTemplateApp(db,actor,v);}
   default: throw Error('INVALID_INPUT');
  }
 }

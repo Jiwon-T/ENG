@@ -1,3 +1,4 @@
+import { recordNotionCall } from './notionUsage.js';
 import {emptyAdmission} from '../../src/lib/studentAdmission.js';
 import {admissionNotionProperties} from './studentAdmission.js';
 import { studentRegistrationTitle, type StudentRegistration } from './teacherStudentRegistration.js';
@@ -48,6 +49,7 @@ export type RegistrationNotion=(path:string,method?:string,body?:unknown)=>Promi
 // a timeout, transport failure or 5xx may have committed the page remotely.
 export async function registrationNotion(path:string,method='GET',body?:unknown) {
     const token=process.env.NOTION_INTEGRATION_TOKEN;if(!token)throw Error('CONFIG_ERROR');
+    recordNotionCall(path);
     const response=await fetch(`https://api.notion.com/v1/${path}`,{method,headers:{Authorization:`Bearer ${token}`,'Notion-Version':'2022-06-28','Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(12000)});
     if(!response.ok)throw Error(`NOTION_${response.status}`);
     return response.json();

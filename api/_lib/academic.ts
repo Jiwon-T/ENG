@@ -1,3 +1,4 @@
+import { recordNotionCall } from './notionUsage.js';
 import {detailMetadata} from '../../src/lib/academicExamPeriod.js';
 import crypto from 'node:crypto';
 import type { Firestore } from 'firebase-admin/firestore';
@@ -19,6 +20,7 @@ export const publicId = (id: string) => crypto.createHash('sha256').update(id).d
 export async function notionRequest(path: string, body?: unknown) {
   const token = process.env.NOTION_INTEGRATION_TOKEN;
   if (!token) throw new Error('SERVER_CONFIG_ERROR');
+  recordNotionCall(path);
   const response = await fetch(`https://api.notion.com/v1/${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
@@ -68,6 +70,11 @@ async function resolveAcademicStudent(studentPageId: string) {
 }
 export async function syncAcademicPage(db: Firestore, page: any, resolveStudent = resolveAcademicStudent, mapStudent = migrateStudentMapping, app?:{draftId:string;revision:number;academyId:string}) {
   const parsed = parseAcademicPage(page);
+  // After the verified switches the app is authoritative: Notion copies never overwrite app grades/enrollments.
+  if(!app){
+    if(parsed.collection==='academicRecords'){const {academicAppActive}=await import('./academicAuthority.js');if(await academicAppActive(db))return {applied:false,reason:'APP_AUTHORITY',kind:parsed.collection};}
+    if(parsed.collection==='studentEnrollments'){const {coreActive}=await import('./academyCore.js');if(await coreActive(db,{academyId:'main'}).catch(()=>true))return {applied:false,reason:'APP_AUTHORITY',kind:parsed.collection};}
+  }
   const marker=text(page.properties?.['앱 기록 ID']);const nativeDraft=marker&&/^[a-f0-9-]{36}$/i.test(marker)?(await db.collection('teacherAcademicDrafts').doc(marker).get()).data():null;
   if(parsed.collection==='academicRecords'&&(nativeDraft?.sourceMode==='firestore'||nativeDraft?.archived))return {applied:false,reason:'APP_OWNED',kind:parsed.collection};
   const ref = db.collection(parsed.collection).doc(parsed.id);

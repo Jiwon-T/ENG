@@ -7,8 +7,11 @@ import { normalizeNotionPageId as uuid } from './notionPageId.js';
 import { ids } from './teacherNotionWorkspace.js';
 const hash = (v: any) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const progressKey = hash(['main', GRADE_DATABASE]), progressRef = (db: any) => db.collection('academicImportProgress').doc(progressKey);
+/** Shared with the grade switch, which verifies a fresh completed pass. */
+export const academicProgressRef = progressRef;
 function access(actor: any) { if (!actor.admin || actor.academyId !== 'main')
     throw Error('FORBIDDEN'); }
+async function notAppOnly(db: any) { const { academicAppActive } = await import('./academicAuthority.js'); if (await academicAppActive(db)) throw Error('ACADEMIC_APP_ACTIVE'); }
 async function sourceRows(db: any, actor: any, notion: any, cursor?: string) { const page = await notion(`databases/${GRADE_DATABASE}/query`, 'POST', { page_size: 10, ...(cursor ? { start_cursor: cursor } : {}), sorts: [{ timestamp: 'last_edited_time', direction: 'ascending' }] }); if (!Array.isArray(page.results) || page.has_more && !page.next_cursor)
     throw Error('ACADEMIC_MIGRATION_REQUIRED'); const profiles = (await db.collection('teacherWorkspaceAccess').where('academyId', '==', actor.academyId).get()).docs; const rows = []; for (const raw of page.results) {
     const value = structuredClone(raw);
@@ -52,10 +55,10 @@ async function sourceRows(db: any, actor: any, notion: any, cursor?: string) { c
     const current = (await db.collection('teacherAcademicDrafts').doc(recordId).get()).data();
     rows.push({ id, recordId, data, mappingId: hashStudentKey(data.studentKey), internalStudentId: mapping.internalStudentId, ownerUid: owners.length === 1 ? owners[0] : null, teacherUids: owners, raw: value, parsed: parsed.data, owned: !!current && (current.sourceOrigin !== 'notion-import' || current.appEdited || current.archived), sourceKey: hash(['main', GRADE_DATABASE, id]), version: hash([value.last_edited_time, value.properties]) });
 } return { rows, next: page.has_more ? page.next_cursor : null }; }
-export async function previewAcademicMigration(db: any, actor: any, notion = gradeNotion) { access(actor); const state = (await progressRef(db).get()).data(); if (state?.done)
+export async function previewAcademicMigration(db: any, actor: any, notion = gradeNotion) { access(actor); await notAppOnly(db); const state = (await progressRef(db).get()).data(); if (state?.done)
     return { done: true, total: state.total || 0 }; if (state?.leaseUntil > Date.now())
     throw Error('PUBLISH_IN_PROGRESS'); const page = await sourceRows(db, actor, notion, state?.cursor); return { reviewToken: hash([actor.uid, state?.cursor || null, page.rows.map(r => [r.id, r.version, r.recordId, r.ownerUid, r.owned])]), done: false, count: page.rows.length, appOwned: page.rows.filter(r => r.owned).length, unknownAuthors: page.rows.filter(r => !r.ownerUid).length, hasMore: !!page.next }; }
-export async function importAcademicMigrationStep(db: any, actor: any, confirmed: unknown, reviewToken: unknown, notion = gradeNotion) { access(actor); if (confirmed !== true || typeof reviewToken !== 'string' || !/^[a-f0-9]{64}$/.test(reviewToken))
+export async function importAcademicMigrationStep(db: any, actor: any, confirmed: unknown, reviewToken: unknown, notion = gradeNotion) { access(actor); await notAppOnly(db); if (confirmed !== true || typeof reviewToken !== 'string' || !/^[a-f0-9]{64}$/.test(reviewToken))
     throw Error('INVALID_INPUT'); const ref = progressRef(db), lease = randomUUID(); const state = await db.runTransaction(async (tx: any) => { const old = (await tx.get(ref)).data() || { cursor: null, total: 0 }; if (old.done)
     return old; if (old.leaseUntil > Date.now())
     throw Error('PUBLISH_IN_PROGRESS'); const next = { ...old, leaseOwner: lease, leaseUntil: Date.now() + 180000, startedAt: old.startedAt || Date.now() }; tx.set(ref, next); return next; }); if (state.done)
@@ -93,7 +96,7 @@ catch (error) {
         tx.set(ref, { ...current, leaseOwner: null, leaseUntil: 0, error: 'IMPORT_REVIEW_REQUIRED' }); });
     throw error;
 } }
-export async function resetAcademicMigration(db: any, actor: any, confirmed: unknown) { access(actor); if (confirmed !== true)
+export async function resetAcademicMigration(db: any, actor: any, confirmed: unknown) { access(actor); await notAppOnly(db); if (confirmed !== true)
     throw Error('INVALID_INPUT'); return db.runTransaction(async (tx: any) => { const ref = progressRef(db), old = (await tx.get(ref)).data(); if (old?.leaseUntil > Date.now())
     throw Error('PUBLISH_IN_PROGRESS'); if (old)
     tx.set(db.collection('academicImportRuns').doc(progressKey + ':' + (old.startedAt || Date.now())), { ...old, by: actor.uid }); tx.set(ref, { cursor: null, total: 0, done: false, leaseUntil: 0, leaseOwner: null, startedAt: Date.now() }); return { reset: true }; }); }

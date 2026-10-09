@@ -1,3 +1,4 @@
+import { withNotionUsageRoute, recordMakeWebhook } from '../_lib/notionUsage.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { sendJson } from '../_lib/http.js';
 import { verifyAdminAuth } from '../_lib/auth.js';
@@ -6,8 +7,15 @@ import { readStudentDirectoryMappings } from '../_lib/studentDirectoryMappings.j
 import { randomUUID } from 'node:crypto';
 import { studentDirectoryError } from '../_lib/studentDirectoryError.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
+import { coreActive } from '../_lib/academyCore.js';
+import { readDirectoryStudents } from '../_lib/academyDirectorySource.js';
 
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+export default function handler(req: IncomingMessage, res: ServerResponse) { return withNotionUsageRoute('notion-students', () => routeHandler(req, res)); }
+async function routeHandler(req: IncomingMessage, res: ServerResponse) {
+  return handleStudentDirectory(req, res);
+}
+/** After the student/teacher cutover the roster (including app-registered students) comes from the app directory. */
+export async function handleStudentDirectory(req: IncomingMessage, res: ServerResponse, deps = { verifyAdminAuth, getFirebaseAdmin, listNotionStudents }) {
   const diagnosticId = randomUUID();
   let stage = 'authentication';
   try {
@@ -17,7 +25,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     try {
-      await verifyAdminAuth(req);
+      await deps.verifyAdminAuth(req);
     } catch (err: any) {
       if (!['FORBIDDEN', 'UNAUTHORIZED', 'INVALID_TOKEN'].includes(err.message)) throw err;
       return sendJson(res, err.message === 'FORBIDDEN' ? 403 : 401, {
@@ -27,9 +35,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     stage = 'firebase_initialization';
-    const { db } = getFirebaseAdmin();
-    stage = 'notion_query';
-    const notionStudents = await listNotionStudents();
+    const { db } = deps.getFirebaseAdmin();
+    const core = await coreActive(db, { academyId: 'main' });
+    stage = core ? 'directory_query' : 'notion_query';
+    const notionStudents = core ? await readDirectoryStudents(db, { uid: 'admin', academyId: 'main', admin: true, coreMode: true }) : await deps.listNotionStudents();
     stage = 'student_mapping';
     const mappings = await readStudentDirectoryMappings(db);
     const students = await Promise.all(notionStudents.map(async student => {

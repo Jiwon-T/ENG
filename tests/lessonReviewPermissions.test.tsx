@@ -5,7 +5,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import AcademyLessonReview from '../src/components/teacher/AcademyLessonReview';
 import {teacherCacheRead} from '../src/lib/teacherReadCache';
 function render(patch:any={}) {
- const uid='review-'+JSON.stringify(patch),key='academy-lessons:'+JSON.stringify({page:1,teacher:'',day:'',student:''});
+ const uid='review-'+JSON.stringify(patch),key='academy-lessons:'+JSON.stringify({page:1,teacher:'',day:'',student:'',period:'7'});
  teacherCacheRead(uid,key,{records:[{id:'a',ownerUid:uid,revision:1,stage:'draft',data:{date:'2026-09-29',subject:'영어',studentKey:'s'}},{id:'b',ownerUid:'other',revision:1,stage:'draft',data:{date:'2026-09-29',subject:'영어',studentKey:'s'}}],total:2,page:1,pages:1,teachers:[{uid:'other',name:'다른 선생님'}]});
  return renderToStaticMarkup(<AcademyLessonReview data={{uid,students:[],...patch}} request={async()=>({})} act={async()=>{}} busy={false} onEdit={()=>{}}/>);
 }

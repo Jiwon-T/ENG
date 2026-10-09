@@ -1,0 +1,45 @@
+/* Lesson app cutover card: reuses workspace tokens and StatusBadge. */
+.lesson-cutover {display:grid;gap:14px;margin-top:16px;color:var(--workspace-text);}
+.lesson-cutover h3 {font-size:var(--workspace-font-base);font-weight:800;margin:0;}
+.lesson-cutover p {margin:0;font-size:var(--workspace-font-sm);line-height:1.6;}
+.lesson-cutover-header {display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+.lesson-cutover-header>div {display:grid;gap:4px;min-width:0;}
+.lesson-cutover-muted {color:var(--workspace-muted);font-size:var(--workspace-font-xs);}
+.lesson-cutover p.lesson-cutover-muted {font-size:var(--workspace-font-xs);}
+.lesson-cutover-warn {color:var(--workspace-danger-fg);background:var(--workspace-danger-bg);border:1px solid var(--workspace-danger-border);border-radius:10px;padding:8px 10px;}
+.lesson-cutover-note {background:var(--workspace-neutral-bg);border:1px solid var(--workspace-neutral-border);border-radius:10px;padding:8px 10px;}
+.lesson-cutover-steps {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0;padding:0;list-style:none;}
+.lesson-cutover-steps li {display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;border:1px solid var(--workspace-neutral-border);background:var(--workspace-surface);font-size:var(--workspace-font-xs);font-weight:700;color:var(--workspace-muted);min-width:0;}
+.lesson-cutover-steps li>span:last-child {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lesson-cutover-steps li.is-current {border-color:var(--workspace-brand-border);background:var(--workspace-brand-bg);color:var(--workspace-brand-fg);}
+.lesson-cutover-steps li.is-done {color:var(--workspace-success-fg);}
+.lesson-cutover-step-dot {display:inline-grid;place-items:center;flex:none;width:22px;height:22px;border-radius:999px;background:var(--workspace-neutral-bg);border:1px solid var(--workspace-neutral-border);}
+.is-current .lesson-cutover-step-dot {background:var(--workspace-brand-dot);border-color:var(--workspace-brand-dot);color:var(--workspace-brand-on-solid);}
+.is-done .lesson-cutover-step-dot {background:var(--workspace-success-bg);border-color:var(--workspace-success-border);}
+.lesson-cutover-body {display:grid;gap:12px;}
+.lesson-cutover-actions {display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+.lesson-cutover-link {min-height:44px;padding:8px 14px;background:none;border:0;border-radius:var(--workspace-radius-button,999px);color:var(--workspace-brand-fg);font-size:var(--workspace-font-sm);font-weight:700;transition:background-color .15s;}
+.lesson-cutover-link:hover:not(:disabled) {background:var(--workspace-brand-bg);}
+.lesson-cutover-link:focus-visible,.lesson-cutover a:focus-visible {outline:2px solid var(--workspace-focus);outline-offset:2px;border-radius:6px;}
+.lesson-cutover-progress {display:grid;gap:8px;padding:12px;border:1px solid var(--workspace-neutral-border);border-radius:12px;background:var(--workspace-neutral-bg);}
+.lesson-cutover-progress-head {display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+.lesson-cutover-bar {height:6px;border-radius:999px;background:var(--workspace-neutral-border);overflow:hidden;}
+.lesson-cutover-bar>span {display:block;width:35%;height:100%;border-radius:999px;background:var(--workspace-brand-dot);animation:lesson-cutover-run 1.6s ease-in-out infinite;}
+@keyframes lesson-cutover-run {from{transform:translateX(-100%);}to{transform:translateX(290%);}}
+.lesson-cutover-phases {display:flex;flex-wrap:wrap;gap:4px 12px;margin:0;padding:0;list-style:none;font-size:var(--workspace-font-xs);color:var(--workspace-muted);}
+.lesson-cutover-phases li.is-done {color:var(--workspace-success-fg);}
+.lesson-cutover-phases li.is-done::before {content:'✓ ';}
+.lesson-cutover-phases li.is-current {color:var(--workspace-brand-fg);font-weight:700;}
+.lesson-cutover-groups,.lesson-cutover-items,.lesson-cutover-checks {display:grid;gap:8px;margin:0;padding:0;list-style:none;}
+.lesson-cutover-group {display:grid;gap:6px;padding:12px;border:1px solid var(--workspace-neutral-border);border-radius:12px;}
+.lesson-cutover-group-head {display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:var(--workspace-font-sm);}
+.lesson-cutover-count {color:var(--workspace-pending-fg);font-weight:700;font-size:var(--workspace-font-xs);}
+.lesson-cutover-items li {display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:6px 0;border-top:1px solid var(--workspace-neutral-border);font-size:var(--workspace-font-xs);}
+.lesson-cutover-items a {color:var(--workspace-brand-fg);font-weight:700;}
+.lesson-cutover-checks li {display:flex;align-items:center;gap:8px;font-size:var(--workspace-font-sm);}
+@media (max-width:640px){
+ .lesson-cutover-header {flex-direction:column;}
+ .lesson-cutover-steps {grid-template-columns:1fr;}
+ .lesson-cutover-actions>.primary-button {width:100%;}
+}
+@media (prefers-reduced-motion:reduce){.lesson-cutover-bar>span{animation:none;width:100%;opacity:.5;}}

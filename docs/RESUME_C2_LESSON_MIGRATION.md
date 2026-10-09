@@ -1,0 +1,29 @@
+# 재개 기록 — C2 일지 이전·전환
+
+저장소 파일: `C:\Users\lizzi\Downloads\지원t-english\ENG-repo` — `.git`이 없어 GitHub 저장소 폴더에 그대로 복사·덮어쓰기할 수 있습니다(사용법: `ENG-repo-사용법.txt`).
+변경 기록: `ENG-repo.git` (`git --git-dir=ENG-repo.git --work-tree=ENG-repo log --oneline`)
+- 태그 `c2-auto-import` → `c2-lesson-migration` → `c2-lesson-cutover-switch` → `c2-lesson-app-paths` → `c2-notion-dependency-audit` → `c2-template-cutover` → `c2-lesson-read-scope` → `c2-lesson-restore` → `c2-lesson-review-period` → `c2-design-rosy-peach` → `c2-notion-disconnect-readiness` → `c2-app-only-notion-gaps` → `c2-grade-cutover` → `c2-first-load-verified`
+- 작업 폴더 `checkpoint-10-a\ENG`에서 고친 뒤 `python -I sync-eng-repo.py`로 저장소에 반영하고 커밋합니다.
+- 전역 git 설정 `core.autocrlf=true`와 달리, 이 저장소만 `false`로 두어 파일 바이트를 그대로 보존합니다.
+
+상세 문서(docs/): C2_LESSON_MIGRATION · C2_LESSON_CUTOVER · C2_LESSON_APP_PATHS · C2_NOTION_DEPENDENCY_AUDIT · C2_TEMPLATE_CUTOVER · C2_LESSON_READ_SCOPE · C2_LESSON_RESTORE · C2_LESSON_REVIEW_PERIOD · C2_NOTION_DISCONNECT · C2_APP_ONLY_NOTION_GAPS · C2_GRADE_CUTOVER
+
+## 현재 상태 (`c2-first-load-verified`)
+- 영역별 검증 기반 앱 전용 스위치가 모두 있습니다: 학생·선생님(C1) · 반·교재·시간표(C1) · 일정 · 일지 · 문자 템플릿 · 성적.
+- 모든 스위치를 켜면 앱 화면(첫 화면 포함)의 Notion 호출이 0회입니다(테스트로 확인). 남은 Notion 사용은 관리자 진단·설정·이전 도구뿐입니다.
+- 전환 후 Make 수신(일지·일정·성적·수강)은 반영하지 않습니다.
+- 설정 탭 `Notion·Make 연결 정리 준비` 카드: 영역별 전환 상태·순서·위치, Make·작업기·토큰 정리 단계, 최근 7일 사용량.
+- 디자인: 로지 피치 알약 버튼, Pretendard(선생님 화면만).
+- 운영 미실행: 배포, 데이터 이전, 전환, 실제 로그인 화면, Make 변경·중단, 문자 발송, 원격 push.
+
+## 배포 후 사용자 순서 (승인 후)
+1. 연결 정리 카드의 `다음 차례`를 따라 영역별로 전환합니다. 각 카드는 버튼 하나로 최종 대조 후 전환하고, 문제가 있으면 전환하지 않습니다.
+2. 카드의 정리 단계에 따라 Make 일지 → 일정 → 성적 시나리오, 템플릿 작업기, Notion 쓰기 권한을 차례로 정리합니다.
+3. 문제가 생기면 해당 영역의 `전환 해제`로 되돌립니다. 앱 자료는 보존됩니다.
+
+## 다음 구간 후보
+1. 배포 후 사용량 카드에 예상 밖 Notion 경로가 보이면 정리.
+2. 디자인 후속: 9~11px 작은 글자(약 57곳) 점검(사용자 결정으로 보류 중).
+
+## 보존할 것
+학생 계정·내부 ID·담당, 리포트 주소·PIN, 원본 DB/페이지 ID, 공개 ID/reportIdentity, 기존 이전 도구, report-review 계약, ParentReportView·LearningReport 무변경.

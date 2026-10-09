@@ -231,6 +231,14 @@ export async function readSourceEnrollments(db?:any,actor?:any,force=false){
  map.set(students[0],subjects.filter(s=>choice(p.properties[s])).map(subject=>({subject,status:choice(p.properties[subject]),startDate:p.properties[`${subject} 시작일`]?.date?.start||null,endDate:p.properties[`${subject} 중단일`]?.date?.start||null})));}return map;}
 export {syncTeacherAssignments} from './teacherAssignmentSync.js';
 export async function lessonSource(db:any,ownerUid:string,subject:string){const list=await sourcesFor(db,{uid:ownerUid,admin:ownerUid===process.env.ADMIN_UID,principal:false,academyId:'main'});return list.find(s=>(s.shared||s.ownerUid===ownerUid&&s.subject===subject)&&s.lessonDatabaseId);}
+/** Shared by the source reader and the lesson migration so both map Notion fields identically. */
+export function sourceLessonData(page:any,key:string,subject:string){
+ const p=page.properties||{};
+ const date=p['타임 슬롯']?.date||p['수업 날짜']?.date;const range=text(p['배정 시간']||p['수업']).match(/([0-2]?\d:[0-5]\d)\s*[~–-]\s*([0-2]?\d:[0-5]\d)/);const study=text(p['자습시간']).match(/([0-2]?\d:[0-5]\d)\s*[~–-]\s*([0-2]?\d:[0-5]\d)/);
+ const total=p['단어']?.number??null,wrong=p['틀린 단어']?.number??null,examTotal=p['문항 수']?.number??null,examWrong=p['오답 수']?.number??null;
+ const feedback=text(p['수업 내용']);const marker=[...feedback.matchAll(/(?:^|\n)[ \t]*과제[ \t]*[:：][ \t]*/g)].at(-1);
+ return {studentKey:key,subject,date:date?.start?.slice(0,10)||'',classSession:range?'있음':'없음',start:range?.[1]?.padStart(5,'0')||'',end:range?.[2]?.padStart(5,'0')||'',round:p['회차']?.number??null,selfStudy:p['자습']?.checkbox||study?'있음':'없음',selfStudyStart:study?.[1]?.padStart(5,'0')||'',selfStudyEnd:study?.[2]?.padStart(5,'0')||'',selfStudyRound:p['자습회차']?.number??p['자습 회차']?.number??null,attendance:choice(p['출석'])||'미확인',attitude:choice(p['태도'])||'미확인',homework:choice(p['숙제'])||'미확인',test:choice(p['테스트'])||'미확인',content:marker?feedback.slice(0,marker.index).trimEnd():feedback,assignment:extractAssignmentFromFeedback(feedback)||'',note:'',nextPlan:text(p['메모']),examScope:text(p['시험범위']),attendanceNote:text(p['앱 출결 메모']),specialNote:readLessonSpecialNote(p),correct:total!==null&&wrong!==null?total-wrong:null,total:wrong!==null?total:null,examCorrect:examTotal!==null&&examWrong!==null?examTotal-examWrong:null,examTotal:examWrong!==null?examTotal:null};
+}
 export async function readSourceLessons(db:any,actor:any,force=false){
  const out:any[]=[];const sourceList=await sourcesFor(db,actor);
  for(const source of sourceList){if(!source.lessonDatabaseId)continue;
@@ -242,10 +250,7 @@ export async function readSourceLessons(db:any,actor:any,force=false){
  for(const page of pages){const row=await rowSource(page,{...source,legacyLesson:source.lessonDatabaseId===DEFAULT_SOURCE.lessonDatabaseId},actor);if(!row)continue;const p=page.properties,studentIds=await ids(page,'학생');if(studentIds.length!==1)continue;const key=studentIds[0];const subject=choice(p['과목'])||source.subject;
  if(!key||(!source.shared&&subject!==source.subject)||(!actor.admin&&!actor.scopes.some((s:any)=>s.studentKey===key&&s.subject===subject)))continue;
  if(!source.shared&&p['담당 선생님']&&!(await ids(page,'담당 선생님')).includes(source.teacherPageId))continue;
- const date=p['타임 슬롯']?.date||p['수업 날짜']?.date;const range=text(p['배정 시간']||p['수업']).match(/([0-2]?\d:[0-5]\d)\s*[~–-]\s*([0-2]?\d:[0-5]\d)/);const study=text(p['자습시간']).match(/([0-2]?\d:[0-5]\d)\s*[~–-]\s*([0-2]?\d:[0-5]\d)/);
- const total=p['단어']?.number??null,wrong=p['틀린 단어']?.number??null,examTotal=p['문항 수']?.number??null,examWrong=p['오답 수']?.number??null;
- const feedback=text(p['수업 내용']);const marker=[...feedback.matchAll(/(?:^|\n)[ \t]*과제[ \t]*[:：][ \t]*/g)].at(-1);
- const data={studentKey:key,subject,date:date?.start?.slice(0,10)||'',classSession:range?'있음':'없음',start:range?.[1]?.padStart(5,'0')||'',end:range?.[2]?.padStart(5,'0')||'',round:p['회차']?.number??null,selfStudy:p['자습']?.checkbox||study?'있음':'없음',selfStudyStart:study?.[1]?.padStart(5,'0')||'',selfStudyEnd:study?.[2]?.padStart(5,'0')||'',selfStudyRound:p['자습회차']?.number??p['자습 회차']?.number??null,attendance:choice(p['출석'])||'미확인',attitude:choice(p['태도'])||'미확인',homework:choice(p['숙제'])||'미확인',test:choice(p['테스트'])||'미확인',content:marker?feedback.slice(0,marker.index).trimEnd():feedback,assignment:extractAssignmentFromFeedback(feedback)||'',note:'',nextPlan:text(p['메모']),examScope:text(p['시험범위']),attendanceNote:text(p['앱 출결 메모']),specialNote:readLessonSpecialNote(p),correct:total!==null&&wrong!==null?total-wrong:null,total:wrong!==null?total:null,examCorrect:examTotal!==null&&examWrong!==null?examTotal-examWrong:null,examTotal:examWrong!==null?examTotal:null};
+ const data=sourceLessonData(page,key,subject);
  out.push({id:uuid(page.id),appRecordId:text(p['앱 기록 ID']),data,ownerUid:row.ownerUid,academyId:source.academyId,notionPageId:uuid(page.id),sourceDatabaseId:source.lessonDatabaseId,notionEditedAt:page.last_edited_time,stage:choice(p['전송 완료'])==='완료'?'published':'draft',revision:0,source:'notion',updatedAt:Date.parse(page.last_edited_time)});
  }}return out;
 }

@@ -9,7 +9,7 @@ test('lesson save returns its committed canonical record without a second docume
   const collection=f.db.collection(name);
   return {...collection,doc:(key:string)=>{
    const ref=collection.doc(key);
-   return {...ref,get:async()=>{reads++;return ref.get();}};
+   return {...ref,get:async()=>{if(name==='teacherLessonDrafts')reads++;return ref.get();}};
   }};
  }};
  const actor:any={uid:'teacher',admin:false,academyId:'main',scopes:[{studentKey:student,subject:'영어'}],db};let body:any;const res:any={setHeader:()=>{},end:(v:string)=>body=JSON.parse(v)};

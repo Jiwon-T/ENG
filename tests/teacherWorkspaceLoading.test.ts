@@ -10,12 +10,12 @@ async function lessonReadFixture(patch:any={}) {
  await teacherReadCache.get(teacherReadKey(actor,'students'),async()=>[{studentKey:'s',studentDisplayName:'학생 이름'}]);
  const rows=Array.from({length:24},(_,i)=>({id:String(i).padStart(2,'0'),ownerUid:uid,academyId:'main',revision:1,stage:'draft',data:{studentKey:'s',date:'2026-09-29',start:i<12?'18:00':'15:00',classSession:'있음'}}));
  rows.push({id:'foreign',ownerUid:'another',academyId:'elsewhere',revision:1,stage:'draft',data:{studentKey:'s',date:'2026-09-29',start:'10:00',classSession:'있음'}});
- const db:any={collection:(name:string)=>{if(name==='users')return {doc:()=>({get:async()=>({data:()=>({alias:'지원T'})})})};const q:any={where:()=>q,get:async()=>({docs:rows.map(r=>({id:r.id,data:()=>r}))})};return q;}};
+ const db:any={collection:(name:string)=>{if(name==='users')return {doc:()=>({get:async()=>({data:()=>({alias:'지원T'})})})};const q:any={where:()=>q,doc:()=>({get:async()=>({exists:false,data:()=>undefined})}),get:async()=>({docs:rows.map(r=>({id:r.id,data:()=>r}))})};return q;}};
  return {db,actor};
 }
 test('lesson review sorts before pagination and regular teachers cannot see foreign records',async()=>{
  const {db}=await lessonReadFixture();
- const {body,status}=await run('/api/teacher/workspace?action=academy-lessons&page=1',db,{admin:false});
+ const {body,status}=await run('/api/teacher/workspace?action=academy-lessons&page=1&period=all',db,{admin:false});
  assert.equal(status,200);assert.equal(body.total,24);assert.equal(body.records[0].data.start,'15:00');assert.equal(body.records.length,10);assert.ok(body.records.every((r:any)=>r.ownerUid===uid));teacherReadCache.clear();
 });
 test('lesson export includes all pages for selected date and rejects another owner before reads',async()=>{

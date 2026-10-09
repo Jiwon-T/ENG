@@ -1,3 +1,4 @@
+import { recordNotionCall } from './notionUsage.js';
 import {notionFailureDiagnostic} from './notionFailure.js';
 import {writeTeacherNotionRecord,notionPropertiesMatch,updatePublicationRevision} from './teacherNotionWrite.js';
 import {readMirroredPages} from './teacherNotionMirror.js';
@@ -12,6 +13,7 @@ export async function gradeNotion(path:string, method='GET', body?:unknown) {
  if(!token) throw new Error('CONFIG_ERROR');
  let response:Response;
  for(let attempt=0;attempt<4;attempt++){
+  recordNotionCall(path);
   response=await fetch(`https://api.notion.com/v1/${path}`, {method,headers:{Authorization:`Bearer ${token}`,'Notion-Version':'2022-06-28','Content-Type':'application/json'},...(body ? {body:JSON.stringify(body)} : {}),signal:AbortSignal.timeout(15000)});
   if(response.status!==429||attempt===3)break;
   const delay=Math.min(10000,Math.max(1000,Number(response.headers?.get('retry-after')||1)*1000));await new Promise(resolve=>setTimeout(resolve,delay));

@@ -1,3 +1,4 @@
+import { withNotionUsageRoute, recordMakeWebhook } from '../_lib/notionUsage.js';
 import {storeWebhookLessonReport} from '../_lib/lessonWebhookProjection.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson } from '../_lib/http.js';
@@ -10,7 +11,8 @@ import { getSecretOrThrow } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 import { migrateStudentMapping } from '../_lib/studentIdentity.js';
 
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+export default function handler(req: IncomingMessage, res: ServerResponse) { return withNotionUsageRoute('webhook:lesson', () => routeHandler(req, res)); }
+async function routeHandler(req: IncomingMessage, res: ServerResponse) {
   try {
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'POST');
@@ -58,8 +60,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
     const mapping = await migrateStudentMapping(db, notionLookup.notionStudentPageId, notionLookup.studentDisplayName);
     const result=await storeWebhookLessonReport(db,data,mapping);
+    recordMakeWebhook('lesson', result.applied ? 'applied' : (result.reason || 'skipped'));
     return sendJson(res,200,{ok:true,notionPageId:data.notionPageId,...result});
   } catch (err: any) {
+    recordMakeWebhook('lesson', 'error');
     return sendJson(res, 500, { ok: false, error: 'SERVER_ERROR' });
   }
 }

@@ -1,3 +1,4 @@
+import { recordNotionCall } from './notionUsage.js';
 import { hashPin } from './security.js';
 import { normalizeNotionPageId } from './notionPageId.js';
 
@@ -41,6 +42,7 @@ export async function listNotionStudents(): Promise<NotionStudentListItem[]> {
   let cursor: string | undefined;
 
   do {
+    recordNotionCall(`databases/${dbId}/query`);
     const res = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
       method: 'POST',
       headers: {
@@ -103,6 +105,7 @@ export async function lookupStudentByPageId(
 
   const normalizedPageId = normalizeNotionPageId(notionStudentPageId);
 
+  recordNotionCall(`pages/${normalizedPageId}`);
   const res = await fetch(`https://api.notion.com/v1/pages/${normalizedPageId}`, {
     headers: {
       'Authorization': `Bearer ${token}`,

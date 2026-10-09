@@ -68,7 +68,8 @@ export async function projectSchedule(db: any, data: NotionScheduleWebhookPayloa
             throw Error('SOURCE_IDENTITY_LOCKED');
         const draftRef = app ? db.collection('teacherSchedules').doc(app.draftId) : null;
         const draft = app ? (await tx.get(draftRef)).data() : null;
-        if (app && (!draft || draft.revision !== app.revision))
+        if(app&&draft?.sourceMode==='firestore')return {applied:false,reason:'APP_OWNED'};
+        if (app && (!draft || (draft.archived||draft.deleteRequested)&&data.status!=='취소' || draft.revision !== app.revision))
             throw Error('DRAFT_CONFLICT');
         const memberships = app ? await Promise.all(students.map(s => tx.get(db.collection('academyStudentMemberships').doc(s.studentKey)))) : [];
         if (app && memberships.some((m: any) => !m.data() || m.data().disabled || m.data().academyId !== app.academyId))
