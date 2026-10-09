@@ -56,7 +56,7 @@ test('학생·수강 노션 생성 후 기존 앱 매핑·과목 수강·학원 
     const synced=await syncStudentRegistration(db,actor,saved.id,1,deps);
     assert.equal(synced.syncStatus,'synced');assert.deepEqual(remote.counts(),{studentCreate:1,enrollmentCreate:1});
     assert.equal(rows.get('academyStudentMemberships/'+studentId).academyId,'main');
-    const mapping=rows.get('notionStudentMappings/'+hashStudentKey(studentId));assert.equal(mapping.firebaseUid,null);assert.equal(mapping.studentDisplayName,'신입생(학교 고1)');
+    const mapping=rows.get('notionStudentMappings/'+hashStudentKey(studentId));assert.equal(mapping.firebaseUid,null);assert.equal(mapping.studentDisplayName,'신입생 (학교1)');
     assert.equal(rows.get('studentEnrollments/'+enrollmentId).internalStudentId,mapping.internalStudentId);
     assert.deepEqual(rows.get('studentEnrollments/'+enrollmentId).subjects.map((entry:any)=>[entry.subject,entry.status]),[['영어','등록'],['수학','대기']]);
     assert.deepEqual(await teacherReadCache.get(teacherReadKey(actor,'students'),async()=>['new']),['new']);

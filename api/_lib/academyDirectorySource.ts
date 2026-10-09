@@ -164,11 +164,12 @@ export async function readDirectoryStudents(db:any,actor:any){
  if(ready.leaseUntil>Date.now())throw Error('DIRECTORY_BUSY');
  let rows:any[];
  if(actor.admin||actor.principal){const list=await rowsQuery(db,'students',undefined,501).get();if(list.docs.length>500)throw Error('DIRECTORY_PAGE_LIMIT');rows=list.docs.map((d:any)=>d.data());}
- else{const keys=[...new Set<string>((actor.scopes||[]).map((s:any)=>uuid(s.studentKey)))];if(keys.length>500)throw Error('DIRECTORY_PAGE_LIMIT');rows=[];for(const key of keys){const d=await db.collection(DIRECTORY_ROWS).doc(directoryRowKey('students',key)).get();if(d.exists)rows.push(d.data());}}
- const out=[];for(const r of rows){
-  if(r.sourceKey!==directorySourceKey('students')||r.academyId!=='main')throw Error('DIRECTORY_SOURCE_MISMATCH');
-  if(r.issue||!r.fields||r.fields.archived)continue;
-  const member=(await db.collection('academyStudentMemberships').doc(r.entityId||r.notionPageId).get()).data();
+ else{const keys=[...new Set<string>((actor.scopes||[]).map((s:any)=>uuid(s.studentKey)))];if(keys.length>500)throw Error('DIRECTORY_PAGE_LIMIT');rows=(await Promise.all(keys.map(key=>db.collection(DIRECTORY_ROWS).doc(directoryRowKey('students',key)).get()))).filter((d:any)=>d.exists).map((d:any)=>d.data());}
+ for(const r of rows)if(r.sourceKey!==directorySourceKey('students')||r.academyId!=='main')throw Error('DIRECTORY_SOURCE_MISMATCH');
+ // Memberships in one parallel batch (was one round trip per student).
+ const live=rows.filter(r=>!(r.issue||!r.fields||r.fields.archived)),members=await Promise.all(live.map(r=>db.collection('academyStudentMemberships').doc(r.entityId||r.notionPageId).get()));
+ const out=[];for(let i=0;i<live.length;i++){const r=live[i];
+  const member=members[i].data();
   if(!member||member.academyId!==actor.academyId||!actor.admin&&member.disabled)continue;
   if(!actor.admin&&!actor.principal&&!actor.scopes.some((s:any)=>uuid(s.studentKey)===(r.entityId||r.notionPageId)))continue;
   out.push(studentDTO(r));

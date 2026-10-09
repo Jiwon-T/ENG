@@ -9,7 +9,8 @@ import {studentRegistrationSchema} from '../api/_lib/teacherStudentRegistration'
 test('등록 화면의 과목 상태·연락처·수강료 및 읽기 전용 재시도',()=>{
     const value=emptyRegistration();value.enrollments[0]={...value.enrollments[0],status:'중단',endDate:'2026-10-06'};
     const html=renderToStaticMarkup(<StudentRegistrationForm value={value} onChange={()=>{}} onSubmit={()=>{}} disabled retrying/>);
-    for(const label of ['학생 이름','학교','학년','보호자 연락처','보호자 이름','수강료','납부기한','영어 중단일','저장 결과 확인·재시도'])assert.ok(html.includes(label));
+    for(const label of ['학생 이름','학교','학년','보호자 연락처','수강료','납부기한','영어 중단일','저장 결과 확인·재시도'])assert.ok(html.includes(label));
+ assert.ok(!html.includes('보호자 이름')&&!html.includes('보호자 호칭'),'guardian name and salutation inputs are removed');
     assert.ok(html.includes('fieldset disabled'));assert.ok(html.includes('type="tel"'));assert.ok(html.includes('type="date"'));
     const submit=html.match(/<button[^>]*type="submit"[^>]*>/)?.[0];assert.ok(submit);assert.equal(submit.includes('disabled'),false);
     const busy=renderToStaticMarkup(<StudentRegistrationForm value={value} onChange={()=>{}} onSubmit={()=>{}} busy/>);assert.ok(busy.includes('저장 중…'));assert.ok(busy.match(/<button[^>]*disabled/));

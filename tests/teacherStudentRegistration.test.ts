@@ -20,7 +20,9 @@ function memoryDb() {
 test('신입생 이름과 연락처 정규화, 과목별 수강 보존',()=>{
     const value=studentRegistrationSchema.parse(input);
     assert.equal(value.name,'홍길동');assert.equal(value.guardianPhone,'01000000000');
-    assert.equal(studentRegistrationTitle(value),'홍길동(용죽고 고1)');
+    assert.equal(studentRegistrationTitle(value),'홍길동 (용죽고1)');
+    assert.equal(studentRegistrationTitle({...value,school:'효명고등학교',grade:'고2'}),'홍길동 (효명고2)');
+    assert.equal(studentRegistrationTitle({...value,school:'',grade:'중3'}),'홍길동 (중3)');
     assert.equal(studentRegistrationTitle({...value,school:'',grade:''}),'홍길동');
 });
 test('중복 과목, 잘못된 날짜와 연락처, 수강일 모순 거절',()=>{

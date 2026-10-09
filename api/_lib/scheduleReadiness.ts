@@ -77,7 +77,7 @@ export async function activateAppSchedules(db: any, actor: any, confirmed: unkno
     if (!current || current.revision !== item.revision || hash(current.data) !== item.hash || current.notionWrite?.leaseUntil > Date.now())
         throw Error('DRAFT_CONFLICT');
 } const config = (await tx.get(db.collection('appScheduleConfig').doc('main'))).data(); if (!config?.places || JSON.stringify([...config.places].sort()) !== JSON.stringify([...proof.places].sort()))
-    throw Error('SCHEDULE_CONFIG_MIGRATION_REQUIRED'); tx.set(db.collection('scheduleVerificationRuns').doc(runId), { verified: true, academyId: 'main', hash: proof.hash, count: proof.count, at: Date.now(), by: actor.uid }); tx.set(authority, { active: true, schemaVersion: 1, verifiedRunId: runId, verificationHash: proof.hash, by: actor.uid, at: Date.now() }); return { active: true, count: proof.count }; }); }
+    throw Error('SCHEDULE_CONFIG_MIGRATION_REQUIRED'); tx.set(db.collection('scheduleVerificationRuns').doc(runId), { verified: true, academyId: 'main', hash: proof.hash, count: proof.count, at: Date.now(), by: actor.uid }); tx.set(authority, { active: true, schemaVersion: 1, verifiedRunId: runId, verificationHash: proof.hash, by: actor.uid, at: Date.now() }); return { active: true, count: proof.count }; }).finally(async () => { const { clearAppSchedulesActive } = await import('./appSchedule.js'); clearAppSchedulesActive(db); }); }
 /** Explicit preparation only; does not activate the normal read path. */
 export async function prepareScheduleRecords(db: any, actor: any, confirmed: unknown) { if (!actor.admin || actor.academyId !== 'main')
     throw Error('FORBIDDEN'); if (confirmed !== true)

@@ -76,11 +76,12 @@ export async function archiveAppAcademic(db: any, actor: any, idInput: any, revi
         throw Error('SOURCE_IDENTITY_LOCKED'); const at = Date.now(); for (let i = 0; i < snapshots.length; i++)
     tx.set(targets[i], { ...snapshots[i].data(), internalStudentId: mapping.internalStudentId, studentKey: old.data.studentKey, removed: true, archived: true, teacherDraftId: id, teacherAppRevision: revision, sourceMode: 'firestore' }); tx.set(ref, { ...old, archived: true, appEdited: true, stage: 'archived', sourceMode: 'firestore', deleteRequested: false, updatedAt: at }); tx.set(db.collection('academicAppHistory').doc(id + ':' + revision + ':archive'), { before: snapshots.filter(d => d.exists).map(d => ({ id: d.id, data: d.data() })), by: actor.uid, at, reason: 'archive' }); return { archived: true }; }); }
 export async function appAcademicStudents(db: any, actor: any) { const members = actor.admin || actor.principal ? (await db.collection('academyStudentMemberships').where('academyId', '==', actor.academyId).limit(501).get()).docs : await Promise.all([...new Set<string>((actor.scopes || []).map((s: any) => s.studentKey))].map(key => db.collection('academyStudentMemberships').doc(key).get())); if (members.length > 500)
-    throw Error('ACADEMIC_PAGE_LIMIT'); const result = []; for (const d of members) {
-    const member = d.data();
-    if (!d.exists || member.disabled || member.academyId !== actor.academyId)
-        continue;
-    const mapping = (await db.collection('notionStudentMappings').doc(hashStudentKey(d.id)).get()).data();
+    throw Error('ACADEMIC_PAGE_LIMIT'); const result = [];
+const live = members.filter((d: any) => d.exists && !d.data().disabled && d.data().academyId === actor.academyId);
+const mappings = await Promise.all(live.map((d: any) => db.collection('notionStudentMappings').doc(hashStudentKey(d.id)).get())); // one parallel batch
+for (let i = 0; i < live.length; i++) {
+    const d = live[i], member = d.data();
+    const mapping = mappings[i].data();
     if (mapping?.internalStudentId && member.internalStudentId && member.internalStudentId !== mapping.internalStudentId)
         throw Error('STUDENT_MAPPING_CONFLICT');
     if (mapping?.internalStudentId)
@@ -89,11 +90,11 @@ export async function appAcademicStudents(db: any, actor: any) { const members =
 export async function listAppAcademicSources(db: any, actor: any, options?: {
     studentKey?: string;
     subject?: string;
-}) { const students = (await appAcademicStudents(db, actor)).filter(s => !options?.studentKey || s.studentKey === options.studentKey), records = []; for (const student of students) {
-    let query = db.collection('academicRecords').where('internalStudentId', '==', student.internalStudentId);
-    if (options?.subject)
-        query = query.where('subject', '==', options.subject);
-    const result = await query.limit(501).get();
+}) { const students = (await appAcademicStudents(db, actor)).filter(s => !options?.studentKey || s.studentKey === options.studentKey), records = [];
+// Per-student queries run in parallel; results are still processed in order with the same limits.
+const results = await Promise.all(students.map(student => { let query = db.collection('academicRecords').where('internalStudentId', '==', student.internalStudentId); if (options?.subject) query = query.where('subject', '==', options.subject); return query.limit(501).get(); }));
+for (let si = 0; si < students.length; si++) { const student = students[si];
+    const result = results[si];
     if (result.docs.length > 500 || records.length + result.docs.length > 1000)
         throw Error('ACADEMIC_PAGE_LIMIT');
     for (const d of result.docs) {

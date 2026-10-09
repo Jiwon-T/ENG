@@ -28,7 +28,7 @@ test('등록 API 저장·목록·조회 연결과 연락처의 목록 제외',as
     const saved=await call(db,'POST',{action:'save-student-registration',requestId,writeId,data:input});
     assert.equal(saved.status,200);assert.equal(saved.data.syncStatus,'pending');
     const list=await call(db,'GET',{action:'student-registrations'});
-    assert.equal(list.status,200);assert.equal(list.data.total,1);assert.equal(list.data.records[0].title,'신입생(학교 고1)');
+    assert.equal(list.status,200);assert.equal(list.data.total,1);assert.equal(list.data.records[0].title,'신입생 (학교1)');
     assert.equal(JSON.stringify(list.data).includes(input.guardianPhone),false);assert.equal('requestId' in list.data.records[0],false);
     assert.equal(list.headers.get('Cache-Control'),'private, no-store, no-cache, must-revalidate');
     const read=await call(db,'GET',{action:'student-registration',id:saved.data.id});

@@ -120,3 +120,56 @@
 .teacher-workspace .workspace-dialog:has(.gs)>.workspace-dialog-header{position:relative;top:0;flex:none;padding:12px 16px;background:var(--workspace-surface,#fff)}
 .teacher-workspace .workspace-dialog:has(.gs)>.workspace-dialog-header h2{margin:0;font-size:18px;font-weight:800}
 .teacher-workspace .workspace-dialog:has(.gs)>.workspace-dialog-scroll{flex:1 1 auto;min-height:0;max-height:none;overflow:auto;margin:0 8px 8px;padding:4px 12px 12px}
+/* Teacher manager: student rows are labels (checkbox + name). */
+.teacher-workspace .gs label.gs-row{padding:8px 10px;border:1px solid #eef2f6;border-radius:14px;background:#fff;align-items:center;gap:10px;margin:0}
+.teacher-workspace .rv-card:disabled{opacity:.6}
+/* 학생 관리 list: one search, chips, 상담·신입생 rows in the same list */
+.teacher-workspace .student-master-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.teacher-workspace .student-master-head h2{margin:0}
+.teacher-workspace .student-master-head .small-button{min-height:36px;padding:0 12px;font-size:13px}
+.teacher-workspace .student-master-search{display:flex;align-items:center;gap:8px;border:1px solid #e2e8f0;border-radius:12px;padding:0 12px;min-height:44px;background:#fff;color:#94a3b8}
+.teacher-workspace .student-master-search:focus-within{border-color:var(--workspace-brand-dot)}
+.teacher-workspace .student-master-search input{border:0;margin:0;min-height:auto;padding:0;box-shadow:none;flex:1;min-width:0;background:none;outline:none}
+.teacher-workspace .student-master-segment button{font-size:12.5px;padding:0 6px;white-space:nowrap}
+.teacher-workspace .student-master-segment button b{font-weight:800;margin-left:2px}
+.teacher-workspace .student-intake-list{display:grid;gap:0;margin-top:4px}
+.teacher-workspace .student-intake-heading{margin:10px 2px 2px;font-size:12px;font-weight:800;color:#64748b}
+.teacher-workspace .student-intake-filters{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 6px}
+.teacher-workspace .student-intake-filters button{min-height:32px;padding:0 10px;border-radius:999px;border:1px solid #e2e8f0;background:#fff;font-size:12px;font-weight:600;color:#475569}
+.teacher-workspace .student-intake-filters button[aria-pressed=true]{background:var(--workspace-brand-bg);border-color:var(--workspace-brand-dot);color:var(--workspace-brand-fg);font-weight:800}
+.teacher-workspace button.student-intake-row{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--workspace-neutral-border);border-radius:0;font:inherit;color:inherit}
+.teacher-workspace button.student-intake-row:hover{background:var(--workspace-brand-bg)}
+.teacher-workspace .student-intake-row>div{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.teacher-workspace .student-intake-actions{position:sticky;top:-12px;z-index:3;display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:-4px 0 12px;padding:10px 12px;border-radius:14px;background:var(--workspace-brand-bg);border:1px solid var(--workspace-brand-dot)}
+.teacher-workspace .student-intake-status{font-size:13px;font-weight:800;color:var(--workspace-brand-fg);margin-right:auto}
+.teacher-workspace .student-master-mobile-intake{margin-top:8px}
+.teacher-workspace .student-master-mobile-intake .small-button{flex:1}
+/* 성적 관리: compact exam-period cards, table, student trend rows */
+.teacher-workspace .gr-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.teacher-workspace .gr-card{display:grid;gap:2px;text-align:left;padding:10px 12px;border:1px solid #eef2f6;border-radius:14px;background:#fff;min-height:auto;font:inherit;color:inherit}
+.teacher-workspace .gr-card:hover,.teacher-workspace .gr-tr:hover,.teacher-workspace .gr-student:hover{border-color:var(--workspace-brand-dot);background:#fffafb}
+.teacher-workspace .gr-name{display:flex;align-items:center;gap:6px;min-width:0}
+.teacher-workspace .gr-name strong{font-size:14px;font-weight:800;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.teacher-workspace .gr-name small{font-size:12px;color:#64748b;white-space:nowrap}
+.teacher-workspace .gr-meta{font-size:12px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.teacher-workspace .gr-score{display:flex;align-items:baseline;gap:6px;margin-top:2px}
+.teacher-workspace .gr-score b{font-size:22px;font-weight:800;color:#1e293b;font-variant-numeric:tabular-nums;line-height:1.15}
+.teacher-workspace .gr-score small,.teacher-workspace .gr-bar-cell small{font-size:12px;color:#94a3b8;font-weight:600}
+.teacher-workspace .gr-missing{font-size:13px;font-weight:700;color:#b45309}
+.teacher-workspace .gr-muted{font-size:13px;color:#64748b}
+.teacher-workspace .gr-dot{width:8px;height:8px;border-radius:999px;flex:none;background:#f59e0b}
+.teacher-workspace .gr-dot.failed{background:#e11d48}
+.teacher-workspace .gr-table{display:grid;border:1px solid #eef2f6;border-radius:14px;overflow:hidden;background:#fff}
+.teacher-workspace .gr-tr{display:grid;grid-template-columns:minmax(120px,1.3fr) minmax(110px,1.3fr) minmax(130px,1.6fr) 64px 56px 40px;gap:10px;align-items:center;padding:9px 14px;border:0;border-bottom:1px solid #f1f5f9;background:none;text-align:left;font:inherit;font-size:13px;color:inherit;min-height:auto;width:100%;border-radius:0}
+.teacher-workspace .gr-th{font-size:11px;font-weight:700;color:#94a3b8;background:#fcfcfd}
+.teacher-workspace .gr-strong{font-weight:800;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.teacher-workspace .gr-sub{color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.teacher-workspace .gr-bar-cell{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center}
+.teacher-workspace .gr-bar-cell b{font-weight:800;font-variant-numeric:tabular-nums}
+.teacher-workspace .gr-students{display:grid;gap:6px}
+.teacher-workspace .gr-student{display:grid;grid-template-columns:minmax(150px,1fr) 120px 90px minmax(0,2fr);gap:12px;align-items:center;padding:8px 14px;border:1px solid #eef2f6;border-radius:14px;background:#fff}
+.teacher-workspace .gr-student .gr-name{flex-direction:column;align-items:flex-start;gap:0}
+.teacher-workspace .gr-chips{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}
+.teacher-workspace .gr-chips .rv-chip{min-height:28px;padding:0 10px;font-size:12px}
+@media(max-width:760px){.teacher-workspace .gr-tr{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 72px 40px;}.teacher-workspace .gr-tr>:nth-child(4),.teacher-workspace .gr-tr>:nth-child(6){display:none}.teacher-workspace .gr-student{grid-template-columns:minmax(0,1fr) 90px 70px}.teacher-workspace .gr-chips{grid-column:1/-1;justify-content:flex-start}}
+.teacher-workspace .gr-spark{width:100%;height:32px;display:block;overflow:visible}

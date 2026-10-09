@@ -1,3 +1,4 @@
+import { clearAppSchedulesActive } from '../api/_lib/appSchedule.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { templateFirestore } from './helpers/templateFirestore.js';
@@ -46,7 +47,7 @@ test('readiness reflects each switch and the last 7 days of usage; Notion token 
     assert.deepEqual(step('notion-token').remainingRoutes.map((r: any) => r.route), ['workspace:previous-lesson'], 'admin diagnostics are allowed to remain');
     // Switch everything on (with their real verification records) and remove the remaining app route.
     f.rows.set('academyCoreAuthority/main', { active: true }); f.rows.set('academyClassAuthority/main', { active: true });
-    f.rows.set('appScheduleAuthority/main', { active: true, schemaVersion: 1, verifiedRunId: 's', verificationHash: 'h' }); f.rows.set('scheduleVerificationRuns/s', { verified: true, academyId: 'main', hash: 'h' });
+    f.rows.set('appScheduleAuthority/main', { active: true, schemaVersion: 1, verifiedRunId: 's', verificationHash: 'h' }); f.rows.set('scheduleVerificationRuns/s', { verified: true, academyId: 'main', hash: 'h' }); clearAppSchedulesActive(f.db); // the real switch clears its 2-second memo; this test writes the flag directly
     f.rows.set('lessonAppAuthority/main', { active: true, schemaVersion: 1, verifiedRunId: 'l', verificationHash: 'h' }); f.rows.set('lessonVerificationRuns/l', { verified: true, academyId: 'main', hash: 'h' });
     f.rows.set('messageTemplateAuthority/main', { active: true, schemaVersion: 1, verifiedRunId: 't', verificationHash: 'h' }); f.rows.set('messageTemplateVerificationRuns/t', { verified: true, hash: 'h' });
     f.rows.set('academicAppAuthority/main', { active: true, schemaVersion: 1, verifiedRunId: 'g', verificationHash: 'h' }); f.rows.set('academicVerificationRuns/g', { verified: true, hash: 'h' });
@@ -59,7 +60,7 @@ test('readiness reflects each switch and the last 7 days of usage; Notion token 
 test('after the schedule switch, Make schedule deliveries are refused before touching any schedule', async () => {
     const f = templateFirestore(), old = process.env.MAKE_NOTION_WEBHOOK_SECRET, secret = 's'.repeat(40);
     process.env.MAKE_NOTION_WEBHOOK_SECRET = secret;
-    f.rows.set('appScheduleAuthority/main', { active: true, schemaVersion: 1, verifiedRunId: 's', verificationHash: 'h' }); f.rows.set('scheduleVerificationRuns/s', { verified: true, academyId: 'main', hash: 'h' });
+    f.rows.set('appScheduleAuthority/main', { active: true, schemaVersion: 1, verifiedRunId: 's', verificationHash: 'h' }); f.rows.set('scheduleVerificationRuns/s', { verified: true, academyId: 'main', hash: 'h' }); clearAppSchedulesActive(f.db); // the real switch clears its 2-second memo; this test writes the flag directly
     const seen: any[] = []; captureNotionUsage(e => seen.push(e));
     try {
         let body: any; const res: any = { statusCode: 0, setHeader() {}, end(v: string) { body = JSON.parse(v); } };

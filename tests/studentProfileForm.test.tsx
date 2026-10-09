@@ -7,7 +7,8 @@ import {studentProfileSchema,profileProperties} from '../api/_lib/teacherStudent
 const value={displayName:'학생(학교 고1)',school:'학교',grade:'고1',studentPhone:'',guardianPhone:'01000000000',guardianName:'보호자',studentSalutation:'학생',tuition:0,paymentDeadline:'매월 5일'};
 test('profile form preserves original display names, explains PIN renewal, labels inputs and leaves readonly retry enabled',()=>{
  const html=renderToStaticMarkup(<StudentProfileForm value={value} disabled retrying onChange={()=>{}} onSubmit={()=>{}}/>);
- for(const label of ['학생 표시 이름','학교','학년','보호자 연락처','보호자 이름','학생 호칭','수강료','납부기한','새 번호 뒤 4자리','저장 결과 확인·재시도'])assert.ok(html.includes(label));
+ for(const label of ['학생 표시 이름','학교','학년','보호자 연락처','학생 호칭','수강료','납부기한','새 번호 뒤 4자리','저장 결과 확인·재시도'])assert.ok(html.includes(label));
+ assert.ok(!html.includes('보호자 이름')&&!html.includes('보호자 호칭'),'guardian name and salutation inputs are removed');
  assert.ok(html.includes('학생(학교 고1)'));assert.ok(html.includes('fieldset disabled'));assert.ok(html.includes('type="tel"'));
  const submit=html.match(/<button[^>]*type="submit"[^>]*>/)?.[0];assert.ok(submit);assert.equal(submit.includes('disabled'),false);
  const busy=renderToStaticMarkup(<StudentProfileForm value={value} busy onChange={()=>{}} onSubmit={()=>{}}/>);assert.ok(busy.includes('저장·반영 중'));assert.ok(busy.match(/<button[^>]*disabled/));

@@ -40,9 +40,13 @@ export const studentRegistrationSchema = z.object({
     if (new Set(value.enrollments.map(item => item.subject)).size !== value.enrollments.length) ctx.addIssue({code:'custom', message:'과목별 수강은 한 번씩 입력해 주세요.'});
 });
 export type StudentRegistration = z.infer<typeof studentRegistrationSchema>;
+/** Same style as the existing student list: "이용준 (세교중2)" — school without "학교", then the grade number ("효명고" + "고2" → "효명고2"). */
 export function studentRegistrationTitle(value: StudentRegistration) {
-    const suffix = [value.school, value.grade].filter(Boolean).join(' ');
-    return value.name + (suffix ? `(${suffix})` : '');
+    const raw = String(value.school || '').replace(/\s+/g, ''), short = raw.replace(/초등학교$/, '초').replace(/중학교$/, '중').replace(/고등학교$/, '고')
+        .replace(/학교$/, ''), school = short || raw;
+    const grade = String(value.grade || '').trim(), year = grade.match(/\d/)?.[0] || '';
+    const suffix = school ? school + (year || grade) : grade;
+    return value.name.trim() + (suffix ? ` (${suffix})` : '');
 }
 export type RegistrationActor = {uid:string; admin:boolean; principal?:boolean; academyId:string|null};
 export function assertRegistrationAccess(actor: RegistrationActor, previous?:any) {

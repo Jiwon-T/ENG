@@ -26,8 +26,6 @@ export default function StudentRegistrationForm({value,onChange,onSubmit,disable
             <label htmlFor={`${id}-salutation`}>학생 호칭<OptionalMark/><input id={`${id}-salutation`} maxLength={80} value={value.studentSalutation} onChange={e=>change('studentSalutation',e.target.value)} autoComplete="off"/></label>
             <label htmlFor={`${id}-student-phone`}>학생 연락처<OptionalMark/><input id={`${id}-student-phone`} type="tel" maxLength={30} value={value.studentPhone} onChange={e=>change('studentPhone',e.target.value)} autoComplete="off"/></label>
             <label htmlFor={`${id}-guardian-phone`}>보호자 연락처<OptionalMark/><input id={`${id}-guardian-phone`} type="tel" maxLength={30} value={value.guardianPhone} onChange={e=>change('guardianPhone',e.target.value)} autoComplete="off"/></label>
-            <label>보호자 호칭<OptionalMark/><input maxLength={80} value={value.guardianSalutation} onChange={e=>change('guardianSalutation',e.target.value)}/></label>
-            <label htmlFor={`${id}-guardian-name`}>보호자 이름<OptionalMark/><input id={`${id}-guardian-name`} maxLength={80} value={value.guardianName} onChange={e=>change('guardianName',e.target.value)} autoComplete="off"/></label>
             <StudentAdmissionFields section="basic" value={value.admission||emptyAdmission()} onChange={admission=>onChange({...value,admission})}/>
         </fieldset>
         <fieldset disabled={disabled||busy}><StudentAdmissionFields section="learning" value={value.admission||emptyAdmission()} onChange={admission=>onChange({...value,admission})}/></fieldset>

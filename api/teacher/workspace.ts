@@ -165,7 +165,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const filtered=records.filter((r:any)=>(!params.get('teacher')||r.ownerUid===params.get('teacher')||r.teacherUids?.includes(params.get('teacher')))&&(!params.get('student')||r.data.studentKey===params.get('student'))&&(!params.get('kind')||r.data.examType===params.get('kind'))&&(!params.get('subject')||r.data.subject===params.get('subject'))&&(!params.get('period')||examPeriod(r.data)?.key===params.get('period'))&&(!params.get('search')||[names.get(r.data.studentKey),r.data.title,r.data.subject,r.data.note].join(' ').toLowerCase().includes(params.get('search')!.toLowerCase()))).sort((a:any,b:any)=>b.data.examDate.localeCompare(a.data.examDate)||a.id.localeCompare(b.id));
                 // Stats cover every filter except the 미제출 shortcut, so its count stays visible while it is selected.
                 const shown=params.get('submission')==='미제출'?filtered.filter((r:any)=>r.data.submissionStatus==='미제출'):filtered;
-                const paged=pageRows(shown,pageNumber(params.get('page')),12);
+                const paged=pageRows(shown,pageNumber(params.get('page')),60); // grouped views need a fuller page
                 return sendJson(res,200,{ok:true,...paged,records:withPreviousScores(paged.records,records),stats:academicStats(filtered),teachers:[...new Set(records.flatMap((r:any)=>r.teacherUids?.length?r.teacherUids:[r.ownerUid]).filter(Boolean))],periods:[...new Map(records.map((r:any)=>examPeriod(r.data)).filter(Boolean).map((p:any)=>[p.key,p])).values()]});
             }
             if (action === 'academy-lessons' || action === 'academy-lessons-fast' || action === 'academy-lessons-export') {
@@ -307,6 +307,9 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const result:any = { ok: true, admin: actor.admin, principal: actor.principal, academyId: actor.academyId, teachingScopes: actor.teachingScopes, uid: actor.uid, scopes: actor.scopes, students, curricula: mergedCurricula.filter((r:any)=>!r.archived), drafts: records.filter((r:any)=>!r.archived), schedules: (fast?scheduleRecords:mergeNotionRows(scheduleRecords,sourceSchedules)).filter((r:any)=>!r.archived), reflectedSchedules: teacherReflectedSchedules(reflected.map(d => d.data()), mappings, actor), classes: mergedClasses.filter((r:any)=>!r.archived), notionIssues:sourceWorkspace.issues, notionSources:sourceWorkspace.sources, staff, access };
                 result.coreMode=Boolean(actor.coreMode);
                 if(needs('lesson'))result.lessonAppMode=await lessonAppActive(db,actor);
+                // Admin-only migration panels hide once their area is app-only.
+                if(actor.admin&&actor.academyId==='main'&&needs('schedule'))result.scheduleAppOnly=await appSchedulesActive(db,actor);
+                if(actor.admin&&actor.academyId==='main'&&(section==='base'||needs('settings')))result.academicAppOnly=await academicAppActive(db);
                 if(section!=='all') {
                     delete result.drafts;
                     if(!needs('lesson','schedule','curriculum','settings'))delete result.classes;
@@ -406,6 +409,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             return sendJson(res,200,await retryTeacherAssignment(db,actor,z.string().min(1).parse(body.uid)));
         }
         if (body.action === 'enable-shared-notion') return sendJson(res,200,{ok:true,...await enableSharedWorkspace(db,actor)});
+        if(body.action==='teacher-access'){failureStage='teacher-access';const {setCoreTeacherAccess}=await import('../_lib/academyCore.js');const {action,...input}=body;const result=await setCoreTeacherAccess(db,actor,input);invalidateTeacherMutation('grant');teacherReadCache.clear();return sendJson(res,200,{ok:true,...result});}
         if (body.action === 'grant') {
             if (!actor.admin && !actor.principal)
                 throw new Error('FORBIDDEN');

@@ -1,5 +1,7 @@
 import StudentEnrollmentEditor from './StudentEnrollmentEditor';
 import { useEffect, useRef, useState } from 'react';
+import StatusBadge from './StatusBadge';
+import { studentSearchResults } from '../../lib/koreanSearch';
 import { auth } from '../../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { teacherAuthenticatedRequest } from '../../lib/teacherAuthenticatedRequest';
@@ -17,7 +19,8 @@ async function request<T>(action:string, values:Record<string,unknown>={}) {
 function responseMessage(result:{userMessage?:string;data?:{message?:string;diagnosticId?:string}}) {
     return `${result.data?.message || result.userMessage || '처리하지 못했습니다. 다시 시도해 주세요.'}${result.data?.diagnosticId ? ` (오류 ID: ${result.data.diagnosticId})` : ''}`;
 }
-export default function StudentRegistrationManager({onSynced,students=[],coreMode=false}:{onSynced:()=>Promise<void>;coreMode?:boolean;students?:any[]}) {
+/** 상담·신입생 inside the student list: rows appear when the 신입생·상담 chip is on, or when the shared search matches; the 원서 opens in a dialog. */
+export default function StudentRegistrationManager({onSynced,students=[],coreMode=false,query='',active=false,startSignal=0,onCount}:{onSynced:()=>Promise<void>;coreMode?:boolean;students?:any[];query?:string;active?:boolean;startSignal?:number;onCount?:(count:number)=>void}) {
     const [intake,setIntake]=useState('all'),[enrollmentKey,setEnrollmentKey]=useState('');
     const [page,setPage]=useState(1),[reload,setReload]=useState(0);
     const [list,setList]=useState<PageResult>({ok:true,records:[],page:1,pages:1,total:0});
@@ -28,6 +31,9 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
     const [options,setOptions]=useState<RegistrationOptions | undefined>(),[optionsError,setOptionsError]=useState(''),[optionsReload,setOptionsReload]=useState(0);
     const [locked,setLocked]=useState(false),[retrying,setRetrying]=useState(false);
     const intent=useRef<RegistrationSaveIntent | null>(null),writeBusy=useRef(false),generation=useRef(0);
+    const [current,setCurrent]=useState<RegistrationSummary | null>(null);
+    useEffect(()=>{if(startSignal)start();},[startSignal]);
+    useEffect(()=>{onCount?.(list.counts?.all??list.total??0);},[list]);
     useEffect(()=>{
         let live=true;const uid=auth.currentUser?.uid;
         setLoading(true);setListError('');
@@ -58,12 +64,12 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
         return()=>{live=false;};
     },[open,optionsReload]);
     function start() {
-        generation.current++;intent.current=null;setKey(crypto.randomUUID());setRevision(undefined);setValue({...emptyRegistration(),intakeStage:'consultation'});
+        generation.current++;intent.current=null;setCurrent(null);setKey(crypto.randomUUID());setRevision(undefined);setValue({...emptyRegistration(),intakeStage:'consultation'});
         setFeedback('');setDirty(false);setLocked(false);setRetrying(false);setOpen(true);
     }
     async function edit(record:RegistrationSummary) {
         if(writeBusy.current)return;
-        const current=++generation.current;setBusy(true);setFeedback('');
+        const current=++generation.current;setBusy(true);setFeedback('');setCurrent(record);
         try {
             const result=await request<ServerResult>('student-registration',{id:record.id});
             if(current!==generation.current)return;
@@ -79,7 +85,7 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
     function close() {
         if(writeBusy.current)return;
         if((dirty || intent.current) && !window.confirm(intent.current?'저장 결과를 확인하지 못했습니다. 창을 닫은 뒤 목록을 새로고침해 저장 여부를 확인해 주세요. 닫을까요?':'저장하지 않은 입력을 닫을까요?'))return;
-        generation.current++;intent.current=null;setOptions(undefined);setOpen(false);setValue(emptyRegistration());setKey('');setRevision(undefined);setRetrying(false);setFeedback('');setBusy(false);
+        generation.current++;intent.current=null;setCurrent(null);setOptions(undefined);setOpen(false);setValue(emptyRegistration());setKey('');setRevision(undefined);setRetrying(false);setFeedback('');setBusy(false);
     }
     async function save() {
         if(writeBusy.current || (locked && !retrying))return;
@@ -128,28 +134,28 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
         writeBusy.current=true;setBusy(true);setFeedback('');const current=generation.current,uid=auth.currentUser?.uid;
         try{const result=await teacherAuthenticatedRequest<ServerResult>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'convert-registration-resident',id:record.id,revision:record.revision})});if(current!==generation.current||auth.currentUser?.uid!==uid)return;if(!result.ok||!result.data?.ok)throw Error(responseMessage(result));setReload(n=>n+1);setFeedback('목록에서 정리했습니다. 아래 학생 관리 카드에서 계속 관리할 수 있습니다.');await onSynced();}catch(error){if(current===generation.current)setFeedback(error instanceof Error?error.message:'전환 결과를 확인하지 못했습니다.');}finally{writeBusy.current=false;if(current===generation.current)setBusy(false);}
     }
-    return <section className="student-registration-manager mb-5" aria-label="상담·신입생 관리">
-
-        <details ><summary className="report-intake-summary">상담·신입생 {list.counts?.all??list.total??0}건</summary>
-        <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-bold text-slate-600">상담·신입생 관리</h3><button type="button" className="small-button" disabled={busy} onClick={start}>+ 상담·신입생 추가</button></div>
-        <p className="text-xs text-slate-500 my-2">상담만 저장한 학생은 별도로 관리합니다. 등록 첫 달은 신입생 목록에 두고, 재원생으로 전환하면 이 목록에서 빠져 아래 학생 관리 카드에서 관리합니다.</p>
-        <div role="group" aria-label="상담·등록 구분" className="flex flex-wrap gap-2 my-3">{[["all","전체"],["consultation","상담만 진행"],["new","등록 첫 달"],["additional","추가 과목 상담"]].map(([id,label])=><button key={id} type="button" className={intake===id?"primary-button":"small-button"} aria-pressed={intake===id} onClick={()=>{setIntake(id);setPage(1);}}>{label} {list.counts?.[id]??""}</button>)}</div>{loading ? <p role="status" className="text-xs text-slate-500 py-2">불러오는 중…</p> : null}
-        {listError ? <div role="alert" className="text-xs text-rose-600 py-2">{listError}<button type="button" className="small-button ml-2" onClick={()=>setReload(old=>old+1)}>다시 불러오기</button></div> : null}
-        {!listError ? <div className="student-management-cards">{list.records.map(record=><div key={record.id} className="p-3 rounded-xl border border-pastel-pink-100 bg-pastel-pink-50/30">
-            <p className="font-bold text-sm">{record.title}</p><p className="text-xs text-slate-500 mt-1">{record.enrollments.map(row=>`${row.subject} · ${row.status}`).join(' / ')}</p>
-            <p className="text-xs text-pastel-pink-500 mt-1">{record.purpose==='additional'?'기존 학생 · 추가 과목 상담':record.intakeStage==='consultation'?'상담만 진행':record.sourceMode==='firestore'&&record.syncStatus==='synced'?'앱 등록 완료':registrationStatusLabels[record.syncStatus] || '상태 확인 필요'}</p>
-            {record.studentSaved && record.syncStatus!=='synced' ? <p className="text-xs text-slate-500 mt-1">학생 저장 완료 · {record.enrollmentSaved?'앱 연결 대기':'수강 저장 대기'}</p> : null}
-            <button type="button" className="small-button mt-2" disabled={busy} onClick={()=>void edit(record)}>등록 내용 열기</button>
-            {record.purpose!=='additional'&&record.intakeStage!=='consultation'&&record.syncStatus!=='synced' ? <button type="button" className="small-button mt-2 ml-2" disabled={busy} onClick={()=>void sync(record)}>{record.syncStatus==='uncertain' || record.syncStatus==='syncing'?'반영 결과 확인':record.syncStatus==='failed'?coreMode?'앱 등록 재시도':'노션 반영 재시도':coreMode?'앱 등록 확정':'노션 반영'}</button> : null}
-            {record.purpose==='additional'&&record.existingStudentKey ? <button type="button" className="small-button mt-2 ml-2" disabled={busy} onClick={()=>setEnrollmentKey(record.existingStudentKey!)}>기존 학생 수강 관리</button> : null}
-            {(record.syncStatus==='synced'||record.purpose==='additional') ? <button type="button" className="small-button mt-2 ml-2" disabled={busy} onClick={()=>void convert(record)}>{record.purpose==='additional'?'수강 완료 · 목록에서 정리':'재원생으로 전환'}</button> : null}
-            {record.purpose!=='additional'&&record.syncStatus==='synced'&&record.enrollments.some(e=>e.status==='등록'&&e.startDate?.slice(0,7)<new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date()).slice(0,7)) ? <p className="text-xs text-slate-500 mt-2">등록 다음 달입니다. 재원생으로 전환해 주세요.</p> : null}
-        </div>)}</div> : null}
-        {!loading && !listError && !list.total ? <p className="text-xs text-slate-400 py-3">이 구분에 저장한 상담·신입생 내용이 없습니다.</p> : null}
-        {list.pages>1 ? <div className="review-pagination"><button disabled={loading || list.page===1} onClick={()=>setPage(list.page-1)}>이전</button><span>{list.page} / {list.pages}</span><button disabled={loading || list.page===list.pages} onClick={()=>setPage(list.page+1)}>다음</button></div> : null}
-        {feedback && !open ? <p role="status" className="text-xs text-slate-600 py-2">{feedback}</p> : null}
-        </details>
+    const stageText=(record:RegistrationSummary)=>record.purpose==='additional'?'추가 과목 상담':record.intakeStage==='consultation'?'상담만 진행':record.syncStatus==='synced'?'등록 첫 달':registrationStatusLabels[record.syncStatus]||'등록 확인 필요';
+    const actions=(record:RegistrationSummary)=><>
+        {record.purpose!=='additional'&&record.intakeStage!=='consultation'&&record.syncStatus!=='synced' ? <button type="button" className="primary-button" disabled={busy} onClick={()=>void sync(record)}>{record.syncStatus==='uncertain' || record.syncStatus==='syncing'?'반영 결과 확인':record.syncStatus==='failed'?coreMode?'앱 등록 재시도':'노션 반영 재시도':coreMode?'앱 등록 확정':'노션 반영'}</button> : null}
+        {record.purpose==='additional'&&record.existingStudentKey ? <button type="button" className="small-button" disabled={busy} onClick={()=>setEnrollmentKey(record.existingStudentKey!)}>기존 학생 수강 관리</button> : null}
+        {(record.syncStatus==='synced'||record.purpose==='additional') ? <button type="button" className="small-button" disabled={busy} onClick={()=>void convert(record)}>{record.purpose==='additional'?'수강 완료 · 목록에서 정리':'재원생으로 전환'}</button> : null}
+    </>;
+    const matched=query.trim()?studentSearchResults(list.records.map(r=>({...r,studentKey:r.id,studentDisplayName:r.title})),query):list.records;
+    const showList=active||Boolean(query.trim()&&matched.length);
+    return <section className="student-registration-manager" aria-label="상담·신입생">
+        {showList&&<div className="student-intake-list">
+            {!active&&<p className="student-intake-heading">상담·신입생</p>}
+            {active&&<div role="group" aria-label="상담·등록 구분" className="student-intake-filters">{[["all","전체"],["consultation","상담만"],["new","등록 첫 달"],["additional","추가 과목"]].map(([id,label])=><button key={id} type="button" aria-pressed={intake===id} onClick={()=>{setIntake(id);setPage(1);}}>{label} {list.counts?.[id]??""}</button>)}</div>}
+            {loading ? <p role="status" className="report-caption">불러오는 중…</p> : null}
+            {listError ? <div role="alert" className="report-caption">{listError}<button type="button" className="small-button ml-2" onClick={()=>setReload(old=>old+1)}>다시 불러오기</button></div> : null}
+            {!listError&&matched.map(record=>{const parts=record.title.match(/^(.*?)\s*\((.*)\)$/);const old=record.purpose!=='additional'&&record.syncStatus==='synced'&&record.enrollments.some(e=>e.status==='등록'&&e.startDate?.slice(0,7)<new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date()).slice(0,7));
+                return <button key={record.id} type="button" className="student-master-row student-intake-row" disabled={busy} onClick={()=>void edit(record)}><strong>{parts?.[1]||record.title}</strong>{parts&&<small>{parts[2]}</small>}<small>{record.enrollments.map(row=>`${row.subject} ${row.status}`).join(' · ')||'과목 미정'}</small><div><StatusBadge kind={record.intakeStage==='consultation'||record.purpose==='additional'?'editing':record.syncStatus==='synced'?'done':record.syncStatus==='failed'?'failed':'saved'} text={stageText(record)}/>{old&&<StatusBadge kind="saved" text="재원생 전환 필요"/>}</div></button>;})}
+            {active&&!loading&&!listError&&!list.total ? <p className="report-caption">이 구분에 저장한 상담·신입생이 없습니다.</p> : null}
+            {active&&list.pages>1 ? <div className="review-pagination"><button disabled={loading || list.page===1} onClick={()=>setPage(list.page-1)}>이전</button><span>{list.page} / {list.pages}</span><button disabled={loading || list.page===list.pages} onClick={()=>setPage(list.page+1)}>다음</button></div> : null}
+        </div>}
+        {feedback && !open ? <p role="status" className="report-caption">{feedback}</p> : null}
         <WorkspaceDialog open={open} title={revision===undefined?'입학·상담 원서 작성':'입학·상담 원서 조회·수정'} onClose={close}>
+            {current&&revision!==undefined ? <div className="student-intake-actions"><span className="student-intake-status">{stageText(current)}</span>{actions(current)}</div> : null}
             {feedback ? <p role="status" className="text-sm text-slate-600 mb-3">{feedback}</p> : null}
             {retrying ? <p className="text-xs text-rose-600 mb-3">저장 결과가 불명확합니다. 입력을 유지한 채 같은 요청으로 다시 확인합니다.</p> : null}
             {optionsError ? <p role="status" className="text-xs text-rose-600 mb-3">{optionsError} <button type="button" className="small-button" onClick={()=>setOptionsReload(n=>n+1)}>담당·반 다시 불러오기</button></p> : !options ? <p role="status" className="text-xs mb-3">담당 선생님·반을 불러오는 중…</p> : null}

@@ -139,3 +139,22 @@ test('a test teacher page without an app account can be left out; approval and t
  for(const kind of ['students','teachers','enrollments'] as const)await approveDirectory(f.db,f.actor,kind);
  const done=await cutoverCore(f.db,f.actor);assert.equal(done.active,true);
 });
+
+import {setCoreTeacherAccess} from '../api/_lib/academyCore.js';
+test('after the switch the admin registers a new teacher without a Notion page, assigns students, and can stop and resume access',async()=>{
+ const f=fixture();await f.setup();await cutoverCore(f.db,f.actor);
+ f.rows.set('users/newbie',{role:'teacher',name:'새 선생님'});
+ const value={uid:'newbie',scopes:[{studentKey:sid,subject:'영어'}],notionTeacherPageId:null,workspaceLabel:'새 선생님',workspaceRole:'teacher',academyId:'main',academyStudents:[sid]};
+ // A principal cannot create a teacher record; the admin can.
+ await assert.rejects(saveCoreGrant(f.db,{...f.actor,admin:false,principal:true},value,0,assertTeacherSettingsAccess),/INVALID_TEACHER|FORBIDDEN/);
+ await saveCoreGrant(f.db,f.actor,value,0,assertTeacherSettingsAccess);
+ const saved=f.rows.get('teacherWorkspaceAccess/newbie');assert.equal(saved.academyId,'main');assert.deepEqual(saved.scopes,[{studentKey:sid,subject:'영어'}]);assert.equal(saved.notionTeacherPageId,null);
+ assert.deepEqual(await readCoreScopes(f.db,{uid:'newbie',academyId:'main',workspaceRole:'teacher'}),[{studentKey:sid,subject:'영어'}]);
+ await assert.rejects(setCoreTeacherAccess(f.db,{...f.actor,admin:false,principal:true},{uid:'newbie',disabled:true}),/FORBIDDEN/);
+ await setCoreTeacherAccess(f.db,f.actor,{uid:'newbie',disabled:true});
+ await assert.rejects(readCoreScopes(f.db,{uid:'newbie',academyId:'main',workspaceRole:'teacher'}),/TEACHER_NOT_CONFIGURED/);
+ assert.deepEqual(f.rows.get('teacherWorkspaceAccess/newbie').scopes,[{studentKey:sid,subject:'영어'}],'assignments are kept while stopped');
+ await setCoreTeacherAccess(f.db,f.actor,{uid:'newbie',disabled:false});
+ assert.equal((await readCoreScopes(f.db,{uid:'newbie',academyId:'main',workspaceRole:'teacher'})).length,1);
+ await assert.rejects(setCoreTeacherAccess(f.db,f.actor,{uid:'admin',disabled:true}),/FORBIDDEN/,'the admin cannot stop themselves');
+});

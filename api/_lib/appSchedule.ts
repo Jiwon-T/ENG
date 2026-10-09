@@ -53,6 +53,11 @@ export async function archiveAppSchedule(db: any, actor: any, id: any, revision:
         throw Error('FORBIDDEN'); if (old.revision !== revision)
         throw Error('DRAFT_CONFLICT'); stable(old); tx.set(ref, { ...old, archived: true, stage: 'archived', sourceMode: 'firestore', updatedAt: Date.now() }); tx.set(db.collection('scheduleAppHistory').doc(id + ':' + revision + ':archive'), { before: old, by: actor.uid, at: Date.now(), reason: 'archive-private' }); return { archived: true }; }); return publishAppSchedule(db, actor, id, revision, true); }
 /** Never switch a live academy merely because the new code is deployed. */
+// One bootstrap asked this up to 18 times; a 2-second per-instance memo (cleared on switch changes) keeps it to one read pair.
+const scheduleModeMemo = new WeakMap<object, { at: number; value: Promise<boolean> }>();
+export function clearAppSchedulesActive(db: any) { scheduleModeMemo.delete(db); }
 export async function appSchedulesActive(db: any, actor: any) { if (actor.academyId !== 'main')
-    return false; const mode = (await db.collection('appScheduleAuthority').doc('main').get()).data(); if (!mode?.active || !mode.verifiedRunId || mode.schemaVersion !== 1)
+    return false; const hit = scheduleModeMemo.get(db); if (hit && Date.now() - hit.at < 2000) return hit.value;
+    const value = readAppSchedulesActive(db, actor); scheduleModeMemo.set(db, { at: Date.now(), value }); value.catch(() => scheduleModeMemo.delete(db)); return value; }
+async function readAppSchedulesActive(db: any, actor: any) { const mode = (await db.collection('appScheduleAuthority').doc('main').get()).data(); if (!mode?.active || !mode.verifiedRunId || mode.schemaVersion !== 1)
     return false; const proof = (await db.collection('scheduleVerificationRuns').doc(mode.verifiedRunId).get()).data(); return Boolean(proof?.verified && proof.academyId === actor.academyId && proof.hash === mode.verificationHash); }

@@ -35,7 +35,21 @@ export async function readCoreScopes(db:any,profile:any){
  if(live){if(live.disabled||live.academyId!=='main'||live.workspaceRole!==profile.workspaceRole)throw Error('TEACHER_NOT_CONFIGURED');profile={...live,uid:profile.uid};}
  else if(profile.uid!==process.env.ADMIN_UID)throw Error('TEACHER_NOT_CONFIGURED');
  if(profile.notionTeacherPageId){const row=valid((await refFor(db,'teachers',profile.notionTeacherPageId).get()).data(),'teachers');if(row.pointer?.teacherUid!==profile.uid)throw Error('CORE_LINK_REQUIRED');if(['중단','휴직'].includes(choice(row.fields.properties['상태'])))throw Error('TEACHER_NOT_CONFIGURED');}
- const out=[];for(const s of profile.scopes||[]){const key=uuid(s.studentKey);if(!subjects.includes(s.subject))throw Error('CORE_LINK_REQUIRED');const m=(await db.collection('academyStudentMemberships').doc(key).get()).data();if(m?.academyId==='main'&&!m.disabled)out.push({...s,studentKey:key});}return out;
+ // One parallel batch instead of one round trip per assigned student (this runs on every request).
+ const scopes=(profile.scopes||[]).map((s:any)=>{if(!subjects.includes(s.subject))throw Error('CORE_LINK_REQUIRED');return {...s,studentKey:uuid(s.studentKey)};});
+ const keys=[...new Set<string>(scopes.map((s:any)=>s.studentKey))],docs=await Promise.all(keys.map(key=>db.collection('academyStudentMemberships').doc(key).get()));
+ const ok=new Set(keys.filter((_,i)=>{const m=docs[i].data();return m?.academyId==='main'&&!m.disabled;}));
+ return scopes.filter((s:any)=>ok.has(s.studentKey));
+}
+/** Stop or resume one teacher's workspace access (admin, after the switch). Assignments are kept for a later resume. */
+export async function setCoreTeacherAccess(db:any,actor:any,input:any){
+ if(!actor.admin||actor.academyId!=='main')throw Error('FORBIDDEN');
+ const v=z.object({uid:z.string().min(1).max(200),disabled:z.boolean()}).strict().parse(input);
+ if(v.uid===process.env.ADMIN_UID||v.uid===actor.uid)throw Error('FORBIDDEN');
+ const ref=db.collection('teacherWorkspaceAccess').doc(v.uid);
+ return db.runTransaction(async(tx:any)=>{await guard(tx,db);const old=(await tx.get(ref)).data();if(!old||old.academyId!=='main')throw Error('INVALID_TEACHER');
+  if(Boolean(old.disabled)===v.disabled)return {uid:v.uid,disabled:v.disabled,alreadySaved:true};
+  tx.set(ref,{...old,disabled:v.disabled,accessChangedAt:Date.now(),accessChangedBy:actor.uid,assignmentRevision:(old.assignmentRevision||0)+1});return {uid:v.uid,disabled:v.disabled};});
 }
 export async function readCoreProfile(db:any,actor:any,keyInput:any,decode:(page:any)=>any){
  manage(actor);const key=uuid(z.string().uuid().parse(keyInput));await member({get:(r:any)=>r.get()},db,actor,key);
@@ -183,16 +197,18 @@ export async function saveCoreGrant(db:any,actor:any,value:any,expected:number,p
  manage(actor);if(value.academyId!=='main')throw Error('FORBIDDEN');
  const ref=db.collection('teacherWorkspaceAccess').doc(value.uid),ur=db.collection('users').doc(value.uid),intent=digest([value,expected]);
  return db.runTransaction(async(tx:any)=>{
-  await guard(tx,db);const old=(await tx.get(ref)).data(),user=(await tx.get(ur)).data();
+  await guard(tx,db);const saved=(await tx.get(ref)).data(),user=(await tx.get(ur)).data();
+  // After the switch the admin can register a teacher account that has no workspace record yet (no Notion page needed).
+  const old=saved||(actor.admin&&['teacher','principal'].includes(user?.role)&&!value.notionTeacherPageId?{academyId:'main',scopes:[],assignmentRevision:0,notionTeacherPageId:null,workspaceRole:value.workspaceRole,createdAt:Date.now(),createdBy:actor.uid}:null);
   if(!old||old.academyId!=='main'||value.uid!==process.env.ADMIN_UID&&!['teacher','principal'].includes(user?.role))throw Error('INVALID_TEACHER');
   if(old.lastCoreGrantIntent===intent)return {sourceMode:'firestore',alreadySaved:true};
   if((old.assignmentRevision||0)!==expected)throw Error('DRAFT_CONFLICT');
-  if(value.notionTeacherPageId!==old.notionTeacherPageId)throw Error('SOURCE_IDENTITY_LOCKED');
+  if((value.notionTeacherPageId||null)!==(old.notionTeacherPageId||null))throw Error('SOURCE_IDENTITY_LOCKED');
   const keys=[...new Set<string>([...value.academyStudents,...value.scopes.map((s:any)=>uuid(s.studentKey)),...(old.scopes||[]).map((s:any)=>uuid(s.studentKey))])];if(keys.length>100)throw Error('CORE_CUTOVER_LIMIT');
   const memberships=[];for(const key of keys)memberships.push(await member(tx,db,actor,key));policy(actor,value,old,user,memberships);
   const enrollments=[];for(const key of keys){const found=await enrollmentRow(db,key),row=valid((await tx.get(found.ref)).data(),'enrollments');enrollments.push({key,ref:found.ref,row});}
   if(old.notionTeacherPageId){const teacher=valid((await tx.get(refFor(db,'teachers',old.notionTeacherPageId))).data(),'teachers');if(teacher.pointer?.teacherUid!==value.uid||['중단','휴직'].includes(choice(teacher.fields.properties['상태'])))throw Error('INVALID_TEACHER');}
-  else if(value.scopes.length)throw Error('CORE_LINK_REQUIRED');
+  // Without a Notion teacher page the app record alone holds the assignment (the app is the only store now).
   if(!actor.admin&&JSON.stringify(value.notionSources||[])!==JSON.stringify(old.notionSources||[]))throw Error('FORBIDDEN');
   const teacherId=old.notionTeacherPageId?uuid(old.notionTeacherPageId):null,at=Date.now();
   for(const e of enrollments){const p={...e.row.fields.properties};for(const subject of subjects){const ids=members(p[subject+' 담당']).filter(id=>id!==teacherId);if(teacherId&&value.scopes.some((s:any)=>uuid(s.studentKey)===e.key&&s.subject===subject))ids.push(teacherId);p[subject+' 담당']={relation:ids.map(id=>({id}))};}changed(tx,db,e.ref,e.row,p,actor.uid,at);}
