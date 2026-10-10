@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
-import {DIRECTORY_ROWS,DIRECTORY_STATE,DIRECTORY_HISTORY,DIRECTORY_CORE_AUTHORITY,directoryKinds,directoryRowKey,directorySourceKey} from './academyDirectorySource.js';
+import {DIRECTORY_ROWS,DIRECTORY_HISTORY,DIRECTORY_CORE_AUTHORITY,directoryRowKey,directorySourceKey} from './academyDirectorySource.js';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {hashPin,hashStudentKey} from './security.js';
 import {subjects} from './teacherWorkspacePolicy.js';
@@ -21,7 +21,6 @@ function text(p:any){return (p?.title||p?.rich_text||[]).map((v:any)=>v.plain_te
 function name(row:any){return Object.values(row.fields.properties).map((p:any)=>p.title?text(p):'').filter(Boolean).join('')||'이름 확인 필요';}
 function members(p:any){return (p?.relation||[]).map((v:any)=>uuid(v.id));}
 function choice(p:any){return p?.status?.name||p?.select?.name||'';}
-const rich=(v:string)=>({rich_text:v?[{text:{content:v}}]:[]});
 async function member(tx:any,db:any,actor:any,key:string){const m=(await tx.get(db.collection('academyStudentMemberships').doc(key))).data();if(!m||m.academyId!==actor.academyId||!actor.admin&&m.disabled)throw Error('FORBIDDEN');return m;}
 async function guard(tx:any,db:any){if(!(await tx.get(stateRef(db))).data()?.active)throw Error('CORE_NOT_READY');}
 function changed(tx:any,db:any,ref:any,old:any,properties:any,by:string,at:number){
@@ -146,42 +145,6 @@ export async function saveCoreEnrollment(db:any,actor:any,keyInput:any,request:a
    const keys=(items:any[])=>items.map(v=>uuid(v.studentKey)+':'+v.subject).sort();if(JSON.stringify(keys(scopes))!==JSON.stringify(keys(profile.scopes||[])))tx.set(d.ref,{...profile,scopes,assignmentRevision:(profile.assignmentRevision||0)+1,assignmentSource:'firestore'});}
   tx.set(projectedRef,{...projected,internalStudentId:s.pointer.internalStudentId,studentKey:key,sourceUpdatedAt:stamp(next),removed:false,subjects:subjects.filter(subject=>choice(p[subject])).map(subject=>({subject,status:choice(p[subject]),startAt:p[subject+' 시작일']?.date?.start||null,endAt:p[subject+' 중단일']?.date?.start||null})),appSource:'firestore'});
   const result={status:'synced',alreadySaved:false,sourceMode:'firestore'};tx.set(cr,{fingerprint,result,at});return result;
- });
-}
-export async function cutoverCore(db:any,actor:any){
- if(!actor.admin||actor.academyId!=='main')throw Error('FORBIDDEN');
- const {profileFromPage}=await import('./teacherStudentProfile.js');
- const rows:any[]=[];for(const kind of directoryKinds){const q=await db.collection(DIRECTORY_ROWS).where('sourceKey','==',directorySourceKey(kind)).limit(101).get();if(q.docs.length>100)throw Error('CORE_CUTOVER_LIMIT');rows.push(...q.docs.filter((d:any)=>!d.data().excluded));}
- if(Buffer.byteLength(JSON.stringify(rows.map(d=>d.data())))>6000000)throw Error('CORE_CUTOVER_LIMIT');
- return db.runTransaction(async(tx:any)=>{
-  const active=(await tx.get(stateRef(db))).data();if(active?.active)return {active:true,alreadyDone:true};
-  const registrations=await tx.get(db.collection('teacherStudentRegistrations').where('academyId','==','main').limit(101));if(registrations.docs.length>100)throw Error('CORE_CUTOVER_LIMIT');
-  if(registrations.docs.some((d:any)=>{const r=d.data();return r.syncStatus!=='synced'&&(r.syncStatus==='syncing'||r.syncStatus==='uncertain'||r.studentCreateAttempted||r.enrollmentCreateAttempted||r.notionStudentPageId||r.notionEnrollmentPageId||r.studentSaved||r.enrollmentSaved);}))throw Error('CORE_REGISTRATION_IN_PROGRESS');
-  for(const kind of directoryKinds){const state=(await tx.get(db.collection(DIRECTORY_STATE).doc(directorySourceKey(kind)))).data();if(!state?.ready||!state.approved||state.phase!=='idle'||state.leaseUntil>Date.now()||Date.now()-state.lastSuccessAt>900000)throw Error('CORE_NOT_READY');}
-  const current=[];for(const d of rows){const r=(await tx.get(d.ref)).data();if(r?.revision!==d.data().revision||r.issue||!r.fields)throw Error('CORE_LINK_REQUIRED');current.push(r);}
-  const profiles=(await tx.get(db.collection('teacherWorkspaceAccess').where('academyId','==','main'))).docs;if(profiles.length>100)throw Error('CORE_CUTOVER_LIMIT');
-  const academyMembers=(await tx.get(db.collection('academyStudentMemberships').where('academyId','==','main').limit(101))).docs;if(academyMembers.length>100)throw Error('CORE_CUTOVER_LIMIT');
-  if(academyMembers.some((d:any)=>!d.data().disabled&&!current.some(r=>r.kind==='students'&&r.notionPageId===d.id&&!r.fields.archived)))throw Error('CORE_LINK_REQUIRED');
-  const assignments=new Map<string,any[]>(),studentKeys=new Set<string>(),projections:any[]=[];
-  for(const r of current.filter(r=>r.kind==='enrollments'&&!r.fields.archived)){
-   if(studentKeys.has(r.studentKey))throw Error('NOTION_DUPLICATE_ENROLLMENT');studentKeys.add(r.studentKey);
-   await member(tx,db,actor,r.studentKey);for(const subject of subjects)for(const id of members(r.fields.properties[subject+' 담당']))assignments.set(id,[...(assignments.get(id)||[]),{studentKey:r.studentKey,subject}]);
-   const ref=db.collection('studentEnrollments').doc(r.notionPageId),old=(await tx.get(ref)).data();if(old?.internalStudentId&&old.internalStudentId!==r.pointer.internalStudentId||old?.sourceUpdatedAt&&Date.parse(old.sourceUpdatedAt)>Date.parse(r.remoteEditedAt))throw Error('CORE_LINK_REQUIRED');
-   projections.push({ref,data:{...old,internalStudentId:r.pointer.internalStudentId,studentKey:r.studentKey,sourceUpdatedAt:r.remoteEditedAt,removed:false,subjects:subjects.filter(subject=>choice(r.fields.properties[subject])).map(subject=>({subject,status:choice(r.fields.properties[subject]),startAt:r.fields.properties[subject+' 시작일']?.date?.start||null,endAt:r.fields.properties[subject+' 중단일']?.date?.start||null})),appSource:'firestore'}});
-  }
-  for(const r of current.filter(r=>r.kind==='students'&&!r.fields.archived)){
-   profileFromPage({properties:r.fields.properties});
-   const pending=await tx.get(db.collection('teacherStudentEdits').doc(hashStudentKey(r.notionPageId)));if(pending.exists&&!['synced','discarded'].includes(pending.data().status))throw Error('PUBLISH_IN_PROGRESS');
-   const ep=await tx.get(db.collection('teacherStudentEnrollmentEdits').doc(hashStudentKey(r.notionPageId)));if(ep.exists&&!['synced','discarded'].includes(ep.data().status))throw Error('PUBLISH_IN_PROGRESS');
-   for(const id of members(r.fields.properties['소속반']))await classRecord(db,id);
-  }
-  if(current.some(r=>r.kind==='students'&&!r.fields.archived&&members(r.fields.properties['소속반']).length)){
-   if(!(await tx.get(db.collection('academyClassAuthority').doc('main'))).data()?.active)throw Error('CORE_CLASS_MIGRATION_REQUIRED');
-  }
-  for(const d of profiles){const p=d.data();if(p.notionAssignmentLeaseUntil>Date.now()||['pending','failed'].includes(p.notionAssignmentStage))throw Error('PUBLISH_IN_PROGRESS');if(p.notionTeacherPageId&&!current.some(r=>r.kind==='teachers'&&r.notionPageId===uuid(p.notionTeacherPageId)&&r.pointer?.teacherUid===d.id))throw Error('CORE_LINK_REQUIRED');}
-  for(const p of projections)tx.set(p.ref,p.data);
-  for(const d of profiles){const p=d.data();tx.set(d.ref,{...p,scopes:p.notionTeacherPageId?assignments.get(uuid(p.notionTeacherPageId))||[]:p.scopes||[],assignmentSource:'firestore',assignmentRevision:(p.assignmentRevision||0)+1});}
-  tx.set(stateRef(db),{active:true,by:actor.uid,at:Date.now(),sourceMode:'firestore',notionSyncRequired:false});return {active:true};
  });
 }
 export async function restoreCoreProfile(db:any,actor:any,input:any,parse:(v:any)=>any,decode:(p:any)=>any,makeProperties:(v:any,b:any)=>any){

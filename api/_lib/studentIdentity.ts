@@ -2,7 +2,6 @@ import type { Firestore } from 'firebase-admin/firestore';
 import type { StoredNotionStudentMapping } from './reportSchemas.js';
 import { generateInternalStudentId, hashStudentKey } from './security.js';
 import { normalizeNotionPageId, isNotionPageId } from './notionPageId.js';
-import { lookupStudentByPageId } from './notion.js';
 import {coreActive,coreStudentIdentity} from './academyCore.js';
 
 /** Read-only bridge for previously linked accounts. Never claims an account. */
@@ -26,10 +25,10 @@ export async function resolveStudentPageId(db: Firestore, key: string): Promise<
   return normalizeNotionPageId(mapping.sourceMode==='firestore'?mapping.studentKey:mapping.notionStudentPageId);
 }
 
+/** Students live in the app since the core switch; there is no Notion lookup to fall back to. */
 export async function lookupStudentIdentity(db: Firestore, key: string, requireGuardianContact = true) {
-  if(await coreActive(db,{academyId:'main'}))return coreStudentIdentity(db,await resolveStudentPageId(db,key),requireGuardianContact);
-  const mapping=await readStudentMapping(db,key);if(mapping?.origin==='app')throw Error('CORE_NOT_READY');
-  return lookupStudentByPageId(await resolveStudentPageId(db, key), '', requireGuardianContact);
+  if(!await coreActive(db,{academyId:'main'}))throw Error('CORE_NOT_READY');
+  return coreStudentIdentity(db,await resolveStudentPageId(db,key),requireGuardianContact);
 }
 
 /**

@@ -98,15 +98,6 @@ test('zero rounded increments are not raised to one and still follow base plus i
  assert.equal(nextSessionNumbers([row()],{...input,end:'14:03'}).lesson,12);
  assert.equal(nextSessionNumbers([row({date:'2026-10-06',start:'14:00',end:'14:03',round:100}),row()],input).lesson,13);
 });
-test('Notion fallback paginates in the same endpoint flow and reads title times with independent study history',async()=>{
- const {previousNotionLesson}=await import('../api/_lib/teacherNotionPublish');
- const previousFetch=globalThis.fetch,token=process.env.NOTION_INTEGRATION_TOKEN;process.env.NOTION_INTEGRATION_TOKEN='test';let calls=0;
- const page=(date:string,round:number,study:boolean)=>({id:date,properties:{'타임 슬롯':{date:{start:date+'T14:00:00+09:00'}},'배정 시간':{title:[{text:{content:'14:00 ~ 15:20'}}]},'회차':{number:round},'출석':{select:{name:'보강 출석'}},'자습':{checkbox:study},'자습시간':{rich_text:[{text:{content:study?'15:20 ~ 16:20':''}}]},'자습 회차':{number:study?8:null}}});
- const db:any={collection:()=>({doc:()=>({get:async()=>({data:()=>undefined})}),get:async()=>({docs:[]})})};
- globalThis.fetch=async(_url:any,init:any)=>{const query=JSON.parse(init.body);assert.equal(query.page_size,100);assert.equal(query.sorts,undefined);assert.ok(JSON.stringify(query.filter).includes(studentKey));calls++;return new Response(JSON.stringify(calls===1?{results:[page('2026-10-06',13,false)],has_more:true,next_cursor:'next'}:{results:[page('2026-10-04',12,true)],has_more:false}));};
- try{const result=await previousNotionLesson(studentKey,{db,actor:{uid:'teacher'},subject:'영어',date:input.date,includeSessionHistory:true});assert.equal(calls,2);assert.equal(result.round,13);assert.deepEqual(nextSessionNumbers(result.sessionRecords,input),{lesson:14,study:9});}
- finally{globalThis.fetch=previousFetch;if(token===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=token;}
-});
 
 test('extended history contains counter metadata only and existing decimal validation/export remains exact',async()=>{
  const {sessionRecordSummaries}=await import('../src/lib/sessionNumbers');
@@ -118,18 +109,6 @@ test('extended history contains counter metadata only and existing decimal valid
  const parsed=lessonDraftSchema.parse(value);assert.equal(assertLessonComplete(parsed).round,12.9);assert.equal(parsed.selfStudyRound,0.5);
  assert.equal(JSON.parse(JSON.stringify(parsed)).round,12.9);assert.ok(lessonExcelCells({data:parsed,studentDisplayName:'모의 학생'})[1].includes('(12.9)'));
  assert.equal(assertLessonComplete({...value,round:13,selfStudyRound:8}).round,13);
-});
-
-test('missing local study counter uses Notion without replacing the authoritative app lesson counter',async()=>{
- teacherReadCache.clear();const previousFetch=globalThis.fetch,token=process.env.NOTION_INTEGRATION_TOKEN;process.env.NOTION_INTEGRATION_TOKEN='test';let calls=0;
- const local=row({date:'2026-10-06',round:13,selfStudy:'없음',selfStudyRound:null});
- const db:any={collection:(name:string)=>name==='teacherLessonDrafts'?{where:()=>({get:async()=>({docs:[{id:'local',data:()=>local}]})})}:{doc:()=>({get:async()=>({exists:false,data:()=>undefined})}),get:async()=>({docs:[]})}};
- const page={id:'22222222-2222-4222-8222-222222222222',properties:{'수업 날짜':{date:{start:'2026-10-05T14:00:00+09:00'}},'배정 시간':{title:[{text:{content:'14:00 ~ 15:20'}}]},'회차':{number:50},'출석':{select:{name:'보강 출석'}},'자습':{checkbox:true},'자습시간':{rich_text:[{text:{content:'15:20 ~ 16:20'}}]},'자습회차':{number:8}}};
- globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify({results:[page],has_more:false}));};
- let body:any;const res:any={setHeader:()=>{},end:(value:string)=>body=JSON.parse(value)};
- try{await handleWorkspace({method:'POST',body:{action:'previous-lesson',studentKey,subject:'영어',date:input.date}} as any,res,async()=>({uid:'teacher',admin:false,principal:false,academyId:'main',scopes:[{studentKey,subject:'영어'}],db} as any));
-  assert.equal(res.statusCode,200);assert.equal(calls,1);assert.equal(body.data.round,13);assert.deepEqual(nextSessionNumbers(body.data.sessionRecords,input),{lesson:14,study:9});
- }finally{teacherReadCache.clear();globalThis.fetch=previousFetch;if(token===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=token;}
 });
 
 test('absence keeps the preceding counters without increment and automatic session clears do not count as manual edits',()=>{

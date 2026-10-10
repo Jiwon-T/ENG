@@ -3,9 +3,7 @@ import assert from 'node:assert/strict';
 import { handleWorkspace } from '../api/teacher/workspace.js';
 import { teacherReadCache, teacherReadKey } from '../api/_lib/teacherReadCache.js';
 import { templateFirestore } from './helpers/templateFirestore.js';
-import { STUDENT, id, admin, page, fixture, drain, report } from './helpers/lessonMigrationFixture.js';
-import { startLessonMigration } from '../api/_lib/lessonMigration.js';
-import { activateLessonApp } from '../api/_lib/lessonAuthority.js';
+import { STUDENT, id, admin, sourceRecord, fixture, report } from './helpers/lessonAppFixture.js';
 
 const S2 = '33333333-3333-4333-8333-333333333333';
 const lesson = (date: string, o: any = {}) => ({ studentKey: STUDENT, subject: '영어', date, start: '14:00', end: '15:20', classSession: '있음', content: '수업 ' + date, ...o });
@@ -70,11 +68,9 @@ test('export and bad filters', async () => {
 });
 
 test('app mode slices migrated rows by date too', async () => {
-    const pages = [page(1, { date: '2026-09-01T14:00:00+09:00' }), page(2, { date: '2026-09-08T14:00:00+09:00' })];
-    const f = fixture(pages);
+    const f = fixture([sourceRecord(1, { date: '2026-09-01T14:00:00+09:00' }), sourceRecord(2, { date: '2026-09-08T14:00:00+09:00' })]);
     f.rows.set('lessonReports/' + id(1), report(1)); f.rows.set('lessonReports/' + id(2), report(2, { lessonDateStart: '2026-09-08T14:00:00+09:00' }));
     f.rows.set('academyCoreAuthority/main', { active: true });
-    await startLessonMigration(f.db, admin, { confirmed: true, mode: 'full' }); await drain(f); await activateLessonApp(f.db, admin, { confirmed: true });
     teacherReadCache.clear();
     const actor = { ...admin, scopes: [], teachingScopes: [] };
     const slice = await call(f.db, actor, { action: 'academy-lessons', page: '1', day: '2026-09-08' });

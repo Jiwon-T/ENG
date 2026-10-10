@@ -78,8 +78,9 @@ test('새 담당·반 선택 액션은 일반 교사의 조회와 잘못된 배�
     globalThis.fetch=async()=>{remoteCalls++;throw Error('NO_REMOTE_CALL_EXPECTED');};
     try {
         assert.equal((await call(db,'GET',{action:'registration-options'},{...actor,principal:false})).status,403);
+        rows.set('academyCoreAuthority/main',{active:true});const before=rows.size;
         const invalid=await call(db,'POST',{action:'save-student-registration',requestId,writeId,data:{...input,enrollments:[{...input.enrollments[0],teacherUid:'outside-teacher'}]}},{...actor,academyId:'main'});
-        assert.equal(invalid.data.error,'NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');assert.equal(rows.size,0);assert.equal(remoteCalls,0);
+        assert.notEqual(invalid.status,200);assert.equal(invalid.data.ok,false);assert.equal(rows.size,before);assert.equal(remoteCalls,0);
     } finally {globalThis.fetch=original;}
 });
 

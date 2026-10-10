@@ -12,3 +12,9 @@ test('unlinked and empty states are distinct and never imply an unlinked student
  assert.ok(renderToStaticMarkup(<TeacherOnlineLearning data={{...base,reason:'account-not-linked'}}/>).includes('계정이 연결되지 않아'));
  assert.ok(renderToStaticMarkup(<TeacherOnlineLearning data={base} page={0} loading={false}/>).includes('저장된 온라인 학습 활동이 없습니다.'));
 });
+test('학습 성취도 평가 box shows the saved note on the first page only, and the records stay read-only',()=>{
+ const html=renderToStaticMarkup(<TeacherOnlineLearning data={{...base,evaluation:{text:'꾸준히 하고 있어요',updatedAt:'2026-10-08T00:00:00Z'}}} studentKey="11111111-1111-4111-8111-111111111111" page={0} loading={false}/>);
+ assert.ok(html.includes('학습 성취도 평가'));assert.ok(html.includes('꾸준히 하고 있어요'));assert.ok(html.includes('학생 학습 리포트에 보입니다'));assert.ok(html.includes('기록은 읽기 전용'));
+ assert.ok(/<button[^>]*disabled=""[^>]*>평가 저장/.test(html),'nothing to save until the note changes');
+ assert.ok(!renderToStaticMarkup(<TeacherOnlineLearning data={base} studentKey="11111111-1111-4111-8111-111111111111" page={1} loading={false}/>).includes('학습 성취도 평가'),'later pages have no evaluation');
+});

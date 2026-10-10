@@ -30,15 +30,7 @@ async function startServer() {
   // (개발 환경과 Vercel 운영 환경 간의 코드 불일치(Drift)를 완전히 없애기 위해
   //  동일한 Vercel Functions 핸들러를 직접 바인딩하여 실행)
   // ----------------------------------------------------
-  app.post("/api/webhooks/notion-report", async (req, res) => {
-    const handler = (await import("./api/webhooks/notion-report.ts")).default;
-    await handler(req as any, res as any);
-  });
 
-  app.post("/api/webhooks/notion-schedule", async (req, res) => {
-    const handler = (await import("./api/webhooks/notion-schedule.ts")).default;
-    await handler(req as any, res as any);
-  });
 
   app.all("/api/teacher/report-slug", async (req, res) => {
     const handler = (await import("./api/teacher/report-slug.ts")).default;
@@ -81,25 +73,13 @@ async function startServer() {
     await handler(req as any, res as any);
   });
 
-  app.get("/api/teacher/notion-students", async (req, res) => {
-    const handler = (await import("./api/teacher/notion-students.ts")).default;
-    await handler(req as any, res as any);
-  });
 
   app.patch("/api/student/assignment-completion", async (req, res) => {
     const handler = (await import("./api/_lib/student/assignment-completion.ts")).default;
     await handler(req as any, res as any);
   });
 
-  app.post("/api/webhooks/notion-academic", async (req, res) => {
-    const handler = (await import("./api/webhooks/notion-academic.ts")).default;
-    await handler(req as any, res as any);
-  });
 
-  app.post("/api/teacher/import-academic", async (req, res) => {
-    const handler = (await import("./api/teacher/import-academic.ts")).default;
-    await handler(req as any, res as any);
-  });
 
   app.get("/api/student/academic", async (req, res) => {
     const handler = (await import("./api/_lib/student/academic.ts")).default;

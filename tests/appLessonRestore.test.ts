@@ -2,20 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { handleWorkspace } from '../api/teacher/workspace.js';
-import { startLessonMigration } from '../api/_lib/lessonMigration.js';
-import { activateLessonApp, deactivateLessonApp } from '../api/_lib/lessonAuthority.js';
 import { teacherReadCache } from '../api/_lib/teacherReadCache.js';
 import { studentLessonDTO } from '../api/_lib/reportAudienceDTO.js';
-import { STUDENT, id, admin, page, fixture, drain, report } from './helpers/lessonMigrationFixture.js';
+import { STUDENT, id, admin, sourceRecord, fixture, report, switchOff } from './helpers/lessonAppFixture.js';
 
 const scope = [{ studentKey: STUDENT, subject: '영어' }];
 const lesson = { studentKey: STUDENT, subject: '영어', date: '2026-10-09', start: '14:00', end: '15:20', classSession: '있음', round: 7, selfStudy: '없음', attendance: '출석', attitude: '상', homework: '상', test: '상', content: '앱 수업', assignment: '복습', note: '', nextPlan: '', correct: 9, total: 10 };
 async function appMode() {
-    const f = fixture([page(1, { date: '2026-09-01T14:00:00+09:00' })]);
+    const f = fixture([sourceRecord(1, { date: '2026-09-01T14:00:00+09:00' })]);
     f.rows.set('lessonReports/' + id(1), report(1));
     f.rows.set('academyCoreAuthority/main', { active: true });
     f.rows.get('teacherWorkspaceAccess/teacher').scopes = scope;
-    await startLessonMigration(f.db, admin, { confirmed: true, mode: 'full' }); await drain(f); await activateLessonApp(f.db, admin, { confirmed: true });
     teacherReadCache.clear();
     const teacher = { uid: 'teacher', academyId: 'main', admin: false, principal: false, scopes: scope, teachingScopes: scope };
     const principal = { uid: 'boss', academyId: 'main', admin: false, principal: true, scopes: [], teachingScopes: [] };
@@ -81,7 +78,7 @@ test('a lesson deleted before the switch comes back as a private draft; permissi
     assert.equal(r.publicRestored, false); assert.equal(snap(f, 'lessonReports/'), reports, 'no public report appears by itself');
     const d = f.rows.get('teacherLessonDrafts/' + legacy);
     assert.equal(d.stage, 'draft'); assert.equal(d.archived, false); assert.equal(d.deleteRequested, false); assert.equal(d.revision, 5);
-    await deactivateLessonApp(f.db, admin, { confirmed: true });
+    switchOff(f);
     assert.equal((await f.call(f.teacher, 'POST', { action: 'restore-lesson', id: legacy, revision: 5, confirmed: true })).error, 'LESSON_APP_REQUIRED');
     assert.equal((await f.call(f.teacher, 'GET', { action: 'archived-lessons' })).appMode, false);
 });
@@ -104,4 +101,14 @@ test('the lesson trash keeps 7 days: older items are hidden, cannot be restored,
     assert.ok(!f.rows.has('teacherLessonDrafts/' + old) && !f.rows.has('lessonAppHistory/' + old + ':2:archive'), 'expired trash and its archive copy are gone');
     assert.ok(f.rows.has('teacherLessonDrafts/' + fresh) && f.rows.has('lessonAppHistory/' + fresh + ':2:archive'), 'recent trash stays');
     assert.ok(f.rows.has('teacherLessonDrafts/' + live), 'non-deleted lessons are never touched');
+});
+
+test('trash purge pages past recent trash, so expired items behind 500+ newer ones are still emptied', async () => {
+    const f = templateFirestore(), day = 86400000, now = Date.now();
+    for (let i = 0; i < 520; i++) f.rows.set(`teacherLessonDrafts/a${String(i).padStart(4, '0')}`, { archived: true, updatedAt: now - day, revision: 1 });
+    f.rows.set('teacherLessonDrafts/z-expired', { archived: true, updatedAt: now - 9 * day, revision: 1 });
+    const r = await purgeExpiredLessonTrash(f.db, now);
+    assert.deepEqual([r.purged, r.more], [1, false]);
+    assert.equal(f.rows.has('teacherLessonDrafts/z-expired'), false);
+    assert.equal([...f.rows.keys()].filter(k => k.startsWith('teacherLessonDrafts/a')).length, 520);
 });

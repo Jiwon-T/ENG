@@ -1,4 +1,3 @@
-import { withNotionUsageRoute, recordMakeWebhook } from '../_lib/notionUsage.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson } from '../_lib/http.js';
 import { verifyAdminAuth } from '../_lib/auth.js';
@@ -19,7 +18,7 @@ import { linkStudentAccount } from '../_lib/studentAccountLink.js';
  * POST   /api/teacher/student-link (신규 연결: users와 notionStudentMappings 동시 갱신)
  * DELETE /api/teacher/student-link (연결 해제)
  */
-export default function handler(req: IncomingMessage, res: ServerResponse) { return withNotionUsageRoute('student-link', () => routeHandler(req, res)); }
+export default function handler(req: IncomingMessage, res: ServerResponse) { return routeHandler(req, res); }
 async function routeHandler(req: IncomingMessage, res: ServerResponse) {
   try {
     // 1. 관리자 권한 검증 (Bearer Token & ADMIN_UID 일치 확인)

@@ -1,7 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
 import {saveStudentRegistration,listStudentRegistrations,convertRegistrationToResident} from '../api/_lib/teacherStudentRegistration.js';
-import {syncStudentRegistration} from '../api/_lib/teacherStudentRegistrationSync.js';
 import {REGISTRATION_STUDENT_DATABASE} from '../api/_lib/teacherStudentRegistrationNotion.js';
 const actor={uid:'principal',admin:false,principal:true,academyId:'main'},requestId='11111111-1111-4111-8111-111111111111',student='22222222-2222-4222-8222-222222222222';
 const input={name:'학생',enrollments:[{subject:'영어',status:'등록',startDate:'2026-10-05'}]};
@@ -12,9 +11,8 @@ test('resident transition removes intake listing while preserving identities and
  const after=f.rows.get('teacherStudentRegistrations/'+saved.id);assert.deepEqual(after.data,before.data);assert.equal(after.notionStudentPageId,student);assert.equal(after.notionEnrollmentPageId,requestId);assert.equal(f.rows.get('reportSlugs/stable').slug,'unchanged');
  await assert.rejects(saveStudentRegistration(f.db,actor,input,requestId,1),/REGISTRATION_ALREADY_RESIDENT/);
 });
-test('consultation cannot create Notion students or become resident before actual registration',async()=>{
- const f=registrationFirestore(),saved=await saveStudentRegistration(f.db,actor,{...input,intakeStage:'consultation'},requestId),previous=process.env.NOTION_STUDENT_DATABASE_ID;process.env.NOTION_STUDENT_DATABASE_ID=REGISTRATION_STUDENT_DATABASE;
- try{await assert.rejects(syncStudentRegistration(f.db,actor,saved.id,1,{notion:async()=>assert.fail('no Notion write'),mapStudent:async()=>assert.fail(),syncEnrollment:async()=>assert.fail()} as any),/REGISTRATION_ENROLLMENT_REQUIRED/);}finally{if(previous===undefined)delete process.env.NOTION_STUDENT_DATABASE_ID;else process.env.NOTION_STUDENT_DATABASE_ID=previous;}
+test('consultation cannot become resident before actual registration',async()=>{
+ const f=registrationFirestore(),saved=await saveStudentRegistration(f.db,actor,{...input,intakeStage:'consultation'},requestId);
  await assert.rejects(convertRegistrationToResident(f.db,actor,saved.id,1),/REGISTRATION_ENROLLMENT_REQUIRED/);assert.equal((await listStudentRegistrations(f.db,actor)).length,1);
 });
 test('additional consultation requires existing academy member and confirmed active subjects',async()=>{

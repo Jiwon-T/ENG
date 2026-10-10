@@ -65,11 +65,11 @@ test('student school read returns only school and grade, and only for assigned s
     f.rows.set('academyDirectorySources/' + directoryRowKey('students', S), { kind: 'students', academyId: 'main', fields: { properties: { 학생: { title: [{ plain_text: '학생' }] }, 학교: { rich_text: [{ plain_text: '세교중학교' }] }, 학년: { select: { name: '중2' } }, 보호자연락처: { phone_number: '01012345678' } } } });
     const teacher = { uid: 't', academyId: 'main', admin: false, principal: false, scopes: [{ studentKey: S, subject: '영어' }], teachingScopes: [] };
     let notionCalls = 0; const notion = (async () => { notionCalls++; return {}; }) as any;
-    assert.deepEqual(await readStudentSchool(f.db, teacher, S, notion), { school: '세교중학교', grade: '중2' });
-    await assert.rejects(readStudentSchool(f.db, teacher, OTHER, notion), /FORBIDDEN/);
-    await assert.rejects(readStudentSchool(f.db, teacher, 'not-a-uuid', notion));
+    assert.deepEqual(await readStudentSchool(f.db, teacher, S), { school: '세교중학교', grade: '중2' });
+    await assert.rejects(readStudentSchool(f.db, teacher, OTHER), /FORBIDDEN/);
+    await assert.rejects(readStudentSchool(f.db, teacher, 'not-a-uuid'));
     // After the student switch a missing directory row never falls back to Notion.
-    assert.deepEqual(await readStudentSchool(f.db, { ...teacher, admin: true }, OTHER, notion), { school: '', grade: '' });
+    assert.deepEqual(await readStudentSchool(f.db, { ...teacher, admin: true }, OTHER), { school: '', grade: '' });
     assert.equal(notionCalls, 0);
 });
 

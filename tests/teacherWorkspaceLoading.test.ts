@@ -48,6 +48,7 @@ test('lesson bootstrap omits schedules, settings, all draft bodies and curriculu
  process.env.NOTION_INTEGRATION_TOKEN='test';process.env.NOTION_STUDENT_DATABASE_ID='test';
  globalThis.fetch=async()=>new Response(JSON.stringify({results:[],has_more:false}),{status:200});
  const reads:string[]=[];const db:any={collection:(name:string)=>{reads.push(name);const q:any={where:()=>q,get:async()=>({docs:[]}),doc:()=>({get:async()=>({data:()=>undefined})})};return q;}};
+ const {teacherReadKey}=await import('../api/_lib/teacherReadCache.ts');await teacherReadCache.get(teacherReadKey({uid,admin:true,principal:false,academyId:'main',scopes:[],teachingScopes:[]},'students'),async()=>[]);
  try{const {body,status}=await run('/api/teacher/workspace?action=bootstrap-fast&section=lesson',db);assert.equal(status,200);assert.deepEqual(body.classes,[]);
   for(const name of ['teacherSchedules','studentSchedules','teacherLessonDrafts','teacherCurricula','teacherWorkspaceAccess','users'])assert.equal(reads.includes(name),false,name);
   for(const key of ['drafts','schedules','reflectedSchedules','access','staff','curricula'])assert.equal(key in body,false,key);
@@ -105,10 +106,12 @@ test('lesson bootstrap carries page 1 of saved lessons when asked, so the tab ne
  globalThis.fetch=async()=>new Response(JSON.stringify({results:[],has_more:false}),{status:200});
  const drafts=Array.from({length:9},(_,i)=>({id:`d${i}`,ownerUid:uid,updatedAt:100-i,archived:false,stage:'draft',data:{studentKey:'s',date:'2026-10-06',subject:'영어'}}));
  const db:any={getAll:async(...refs:any[])=>refs.map(r=>({id:r.id,exists:true,data:()=>drafts.find(d=>d.id===r.id)})),collection:(name:string)=>{const q:any={where:()=>q,select:()=>q,limit:()=>q,orderBy:()=>q,get:async()=>({docs:name==='teacherLessonDrafts'?drafts.map(d=>({id:d.id,data:()=>d})):[]}),doc:(id:string)=>({id,get:async()=>({exists:false,data:()=>undefined})})};return q;}};
+ const {teacherReadKey}=await import('../api/_lib/teacherReadCache.ts');const seedStudents=()=>teacherReadCache.get(teacherReadKey({uid,admin:false,principal:false,academyId:'main',scopes:[],teachingScopes:[]},'students'),async()=>[]);
  try{
+  await seedStudents();
   const withList=await run('/api/teacher/workspace?action=bootstrap&section=lesson&draftsSize=6',db,{admin:false});
   assert.equal(withList.status,200,JSON.stringify(withList.body));assert.equal(withList.body.draftsPage.records.length,6);assert.equal(withList.body.draftsPage.total,9);assert.equal(withList.body.draftsPage.records[0].id,'d0');
-  teacherReadCache.clear();
+  teacherReadCache.clear();await seedStudents();
   const without=await run('/api/teacher/workspace?action=bootstrap&section=lesson',db,{admin:false});
   assert.equal('draftsPage' in without.body,false);
  }finally{globalThis.fetch=previous;if(token===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=token;if(database===undefined)delete process.env.NOTION_STUDENT_DATABASE_ID;else process.env.NOTION_STUDENT_DATABASE_ID=database;teacherReadCache.clear();}

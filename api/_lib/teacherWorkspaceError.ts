@@ -18,6 +18,25 @@ export function workspaceError(error: unknown, failureStage: string) {
  Object.assign(directoryMessages,managedMessages);allowed.push(...Object.keys(managedMessages));
  Object.assign(directoryMessages,{APP_USER_LINKED_STUDENT:'학생과 연결된 계정은 선생님으로 바꿀 수 없습니다. 선생님은 별도 계정으로 가입해 주세요.',APP_USER_NOT_FOUND:'해당 계정을 찾을 수 없습니다.',APP_USER_LIMIT:'계정이 너무 많아 목록을 불러오지 못했습니다.',TUITION_CONFLICT:'다른 곳에서 수강료 표가 먼저 저장되었습니다. 새로고침 후 다시 저장해 주세요.',TUITION_TOO_MANY_ROWS:'한 번에 저장할 수 있는 행 수를 넘었습니다.',APP_USER_SIGNIN_UPDATE_FAILED:'로그인 차단 설정을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.',APP_USER_TEACHER_REMOVE:'선생님 계정은 먼저 ‘학생으로 되돌리기’를 한 뒤 탈퇴시킬 수 있습니다.',APP_USER_LINKED_REMOVE:'등록된 학생과 연결된 계정입니다. 학생 관리에서 앱 계정 연결을 먼저 해제해 주세요.',PAYROLL_CONFLICT:'다른 곳에서 정산이 먼저 저장되었습니다. 새로고침 후 다시 저장해 주세요.',PAYROLL_TOO_MANY:'한 번에 저장할 수 있는 선생님 수를 넘었습니다.',TUITION_ROW_INVALID:'수강료 표의 학생·과목을 확인하지 못했습니다. 새로고침 후 다시 저장해 주세요.'});allowed.push('TUITION_CONFLICT','TUITION_TOO_MANY_ROWS','TUITION_ROW_INVALID','PAYROLL_CONFLICT','PAYROLL_TOO_MANY','APP_USER_TEACHER_REMOVE','APP_USER_LINKED_REMOVE','APP_USER_SIGNIN_UPDATE_FAILED');allowed.push('APP_USER_LINKED_STUDENT','APP_USER_NOT_FOUND','APP_USER_LIMIT');
  directoryMessages.LESSON_TRASH_EXPIRED='휴지통에 7일이 넘게 있던 일지는 복원할 수 없습니다.';allowed.push('LESSON_TRASH_EXPIRED');
+ // App-only wording for the codes the app paths still raise (Notion fallbacks are gone).
+ const appOnlyMessages:Record<string,string>={
+  CORE_NOT_READY:'학생·선생님 정보가 아직 앱으로 전환되지 않은 학원입니다. 관리자에게 확인해 주세요.',
+  LESSON_APP_REQUIRED:'일지는 앱에서만 저장·공개·삭제·복원할 수 있습니다. 새로고침한 뒤 다시 시도해 주세요.',
+  TEMPLATE_APP_REQUIRED:'문자 템플릿이 앱 전용으로 확인되지 않아 저장하지 않았습니다. 관리자에게 확인해 주세요.',
+  LESSON_APP_ACTIVE:'일지는 앱에서 바로 수정해 주세요. 예전 비교·충돌 처리 기능은 없어졌습니다.',
+  ACADEMIC_APP_ACTIVE:'성적은 앱에서 바로 수정해 주세요. 예전 비교·충돌 처리 기능은 없어졌습니다.',
+  SCHEDULE_APP_ACTIVE:'일정은 앱에서 바로 수정해 주세요. 예전 비교·충돌 처리 기능은 없어졌습니다.',
+  INVALID_TEACHER:'선택한 선생님이 이 과목 담당이 아닙니다. 담당 선생님을 다시 선택해 주세요.',
+  STUDENT_ACCOUNT_NOT_LINKED:'학생 앱 계정이 연결되어 있지 않아 평가를 남길 수 없습니다. 학생 관리에서 계정을 먼저 연결해 주세요.',
+  EVALUATION_CONFLICT:'다른 선생님이 먼저 평가를 바꿨습니다. 새로고침해서 최신 평가를 확인한 뒤 다시 저장해 주세요.',
+  // Codes keep their old names (screens and tests match on them); only the wording changes.
+  NOTION_EDIT_CONFLICT:'다른 곳에서 이 자료가 먼저 수정되었습니다. 새로고침한 뒤 다시 수정해 주세요.',
+  NOTION_SOURCE_MISMATCH:'학생 기록의 원본 연결이 맞지 않습니다. 관리자에게 확인해 주세요.',
+  NOTION_WRITE_RESULT_UNCERTAIN:'예전 반영 요청의 결과를 확인하지 못해 진행하지 않았습니다. 새 기록은 만들지 않았습니다. 관리자에게 확인해 주세요.',
+  DUPLICATE_NOTION_RECORD:'같은 기록에 연결된 자료가 여러 개입니다. 관리자에게 확인해 주세요.',
+  NOTION_REGISTRATION_SOURCE_REQUIRED:'이 학원에서는 학생·수강 정보를 바꿀 수 없습니다.',
+ };
+ Object.assign(directoryMessages,appOnlyMessages);allowed.push(...Object.keys(appOnlyMessages));
  const config = raw.startsWith('CONFIG_ERROR') || raw === 'AUTH_SERVER_CONFIG_ERROR';
  const notion = /^NOTION_/.test(raw);
  const missingIndex = failureStage === 'report-review' && /requires an index|FAILED_PRECONDITION.*index/i.test(raw);
@@ -83,11 +102,9 @@ messages.STUDENT_PROFILE_CONTACT_PENDING='보호자 연락처 변경을 먼저 �
  messages.NOTION_SUBJECT_NOT_CONFIGURED='이 과목의 노션 수업일지 DB 연결을 확인해 주세요.';
  messages.NOTION_WRITE_REQUEST_CONFLICT='저장한 노션 반영 요청과 내용이 다릅니다. 기존 요청 결과를 먼저 확인해 주세요.';
  messages.NOTION_WRITE_PENDING='노션 반영이 완료되지 않은 요청이 있습니다. 기존 반영 요청을 다시 확인해 주세요.';
- messages.NOTION_WRITE_RESULT_UNCERTAIN='노션 저장 결과를 아직 확인하지 못했습니다. 새 기록을 만들지 않고 기존 요청으로 결과를 다시 확인해 주세요.';
  messages.NOTION_SCHEDULE_PLACE_REQUIRED='선택한 장소가 현재 노션 옵션에 없습니다. 장소 목록을 새로고침하고 다시 선택해 주세요.';
  messages.NOTION_SCHEDULE_PLACE_SCHEMA_REQUIRED='노션 일정표의 장소 속성이 선택 형식인지 확인해 주세요.';
  messages.SCHEDULE_PROJECTION_LIMIT='일정의 누적 대상 수가 동시 반영 한도를 초과했습니다. 일정 연결을 확인해야 합니다.';
- messages.DUPLICATE_NOTION_RECORD='같은 앱 기록 ID의 노션 행이 여러 개입니다. 중복을 확인해 주세요.';
  messages.LESSON_CONTENT_REQUIRED='수업 내용을 입력해 주세요.';
  messages.INVALID_INPUT='입력한 값과 중복된 교재 선택을 확인해 주세요.';
  const fieldLabels:Record<string,string>={studentKey:'학생 연결',subject:'과목',date:'수업 날짜',start:'수업 시작 시간',end:'수업 종료 시간',attendance:'출결',attitude:'태도',homework:'숙제',test:'테스트',content:'수업 내용',correct:'일반 테스트 정답 수',total:'일반 테스트 문항 수',wrong:'일반 테스트 오답 수',examCorrect:'내신 대비 정답 수',examTotal:'내신 대비 문항 수',examWrong:'내신 대비 오답 수',round:'수업 회차',selfStudy:'자습 여부',selfStudyStart:'자습 시작 시간',selfStudyEnd:'자습 종료 시간',selfStudyRound:'자습 회차'};

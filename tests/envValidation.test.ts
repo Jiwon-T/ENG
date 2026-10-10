@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { getFirebaseAdmin } from '../api/_lib/firebaseAdmin.ts';
-import { lookupStudentAndGuardianContact } from '../api/_lib/notion.ts';
 
 // 등록된 서버 환경변수 목록
 export const OFFICIAL_SERVER_ENV_VARS = [
@@ -15,17 +14,9 @@ export const OFFICIAL_SERVER_ENV_VARS = [
   'ADMIN_UID',
   'PHONE_PIN_PEPPER',
   'PARENT_SESSION_SECRET',
-  'MAKE_NOTION_WEBHOOK_SECRET',
-  'NOTION_INTEGRATION_TOKEN',
-  'NOTION_STUDENT_DATABASE_ID',
   'MESSAGE_TEMPLATE_READ_MODE',
-  'MESSAGE_TEMPLATE_SYNC_ENABLED',
-  'MESSAGE_TEMPLATE_WORKER_SECRET',
-  'ACADEMY_DIRECTORY_READ_MODE',
-  'ACADEMY_DIRECTORY_SYNC_ENABLED',
   'ACADEMY_CORE_MODE',
   'CRON_SECRET',
-  'LESSON_MIGRATION_BUDGET_MS',
   'BATI_WEBHOOK_URL',
   'BATI_MESSAGE_PARAM',
   'BATI_RECIPIENT_PARAM',
@@ -128,24 +119,6 @@ describe('Environment Variable and Configuration Enforcement Tests', () => {
       if (origProj) process.env.FIREBASE_PROJECT_ID = origProj;
       if (origEmail) process.env.FIREBASE_CLIENT_EMAIL = origEmail;
       if (origKey) process.env.FIREBASE_PRIVATE_KEY = origKey;
-    }
-  });
-
-  it('4. lookupStudentAndGuardianContact throws CONFIG_ERROR when NOTION_STUDENT_DATABASE_ID is missing', async () => {
-    const origToken = process.env.NOTION_INTEGRATION_TOKEN;
-    const origDb = process.env.NOTION_STUDENT_DATABASE_ID;
-
-    try {
-      process.env.NOTION_INTEGRATION_TOKEN = 'test_token';
-      delete process.env.NOTION_STUDENT_DATABASE_ID;
-
-      await assert.rejects(
-        async () => await lookupStudentAndGuardianContact('학생1'),
-        /CONFIG_ERROR.*NOTION_STUDENT_DATABASE_ID/
-      );
-    } finally {
-      if (origToken) process.env.NOTION_INTEGRATION_TOKEN = origToken;
-      if (origDb) process.env.NOTION_STUDENT_DATABASE_ID = origDb;
     }
   });
 

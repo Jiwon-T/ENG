@@ -4,7 +4,7 @@ import { normalizeNotionPageId as uuid } from './notionPageId.js';
 // 관리자 설정 › 관리 기록: one list of who changed what, read from the history records the app already keeps.
 // Admin and principal only (it includes pay shares, tuition and account changes).
 const groups = {
-    account: [['appUserRoleHistory', 'role'], ['appUserRemovals', 'removal']],
+    account: [['appUserRoleHistory', 'role'], ['appUserNameHistory', 'name'], ['appUserRemovals', 'removal']],
     tuition: [['studentTuitionHistory', 'price'], ['tuitionMonthHistory', 'sheet']],
     payroll: [['payrollRateHistory', 'share'], ['payrollMonthHistory', 'adjust']],
     class: [['academyManagedHistory', 'managed']],
@@ -37,6 +37,7 @@ export async function readAdminHistory(db: any, actor: any, groupInput: unknown)
     const describe = (r: any): { area: string; text: string } => {
         switch (r.kind) {
             case 'role': return { area: '회원', text: `${who(r.uid)} · ${r.to === 'teacher' ? '선생님 권한 주기' : '학생으로 되돌리기'}` };
+            case 'name': return { area: '회원', text: `${r.from || '이름 없음'} → ${r.to} · 앱 이름 바꾸기` };
             case 'removal': return { area: '회원', text: `${r.user?.alias || r.user?.name || r.user?.email || '계정'} · 탈퇴${r.signInBlocked ? ' (로그인 막힘)' : ''}` };
             case 'price': { const before = r.before || {}, after = r.after || {}; const changes = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(k => before[k] !== after[k]).map(k => `${k} ${won(before[k])} → ${won(after[k])}`); return { area: '수강료', text: `${student.get(uuid(r.studentKey || '')) || '학생'} · ${changes.join(', ') || '변경 없음'}${r.source === 'tuition-sheet' ? ' (수강료 계산 표)' : r.source === 'profile' ? ' (학생 정보 수정)' : r.source === 'registration' ? ' (입학 원서)' : ''}` }; }
             case 'sheet': return { area: '수강료', text: r.confirm ? `${r.month} 수강료 확정` : `${r.month} 수강료 표 수정 ${Object.keys(r.after || {}).length}줄` };

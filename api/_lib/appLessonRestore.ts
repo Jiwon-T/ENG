@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { canTeach } from './teacherWorkspacePolicy.js';
 import { hashStudentKey } from './security.js';
+import { linkedSourceRows, markSourceRows } from './appLessonSource.js';
 
 /*
  * Restore a deleted lesson (app-only mode). The archive transaction stored the draft and the removed
@@ -58,6 +59,7 @@ export async function restoreAppLesson(db: any, actor: any, input: { id?: unknow
             if (target.exists || owned.docs.length) throw Error('SOURCE_IDENTITY_LOCKED');
             if (hist.before.internalStudentId && hist.before.internalStudentId !== mapping.internalStudentId) throw Error('SOURCE_IDENTITY_LOCKED');
         }
+        const sourceRows = await linkedSourceRows(tx, db, id, old);
         const now = Date.now(), next = old.revision + 1, base = hist?.beforeDraft || old;
         const record = { ...old, data: base.data, revision: next, archived: false, deleteRequested: false, deleteLease: null, deleteLeaseUntil: 0,
             sourceMode: 'firestore', appEdited: true, failureCode: null, restoredAt: now, restoredBy: actor.uid, updatedAt: now,
@@ -65,6 +67,7 @@ export async function restoreAppLesson(db: any, actor: any, input: { id?: unknow
                 : { stage: 'draft', appPublishedRevision: null, lastSubmittedRevision: null }) };
         if (publicId) tx.set(db.collection('lessonReports').doc(publicId), { ...hist.before, teacherDraftId: id, teacherAppRevision: next });
         tx.set(ref, record);
+        markSourceRows(tx, sourceRows.filter((r: any) => r.data().appDeleted), null);
         tx.set(db.collection('lessonAppHistory').doc(`${id}:${next}:restore`), { beforeDraft: old, afterDraft: record, publicId, restoredPublic: publicId ? { ...hist.before, teacherDraftId: id, teacherAppRevision: next } : null, by: actor.uid, at: now, reason: 'restore' });
         return { restored: true, publicRestored: Boolean(publicId), record: { id, ...record } };
     });
@@ -74,16 +77,28 @@ export async function restoreAppLesson(db: any, actor: any, input: { id?: unknow
  * Daily: permanently delete lessons that have been in the trash longer than 7 days — the deleted draft and the
  * archive history entry that holds its removed public report copy. Nothing that is not archived is touched.
  */
+// Pages through every trashed lesson (not just the first 500), so recent trash cannot hide older expired items.
+// Only the single-field index on `archived` is needed. A run looks at up to 5,000 trashed lessons; `more` says to continue tomorrow.
+const PURGE_PAGE = 500, PURGE_PAGES = 10;
 export async function purgeExpiredLessonTrash(db: any, now = Date.now()) {
-    const snap = await db.collection('teacherLessonDrafts').where('archived', '==', true).limit(500).get();
-    const expired = snap.docs.filter((d: any) => (d.data().updatedAt || 0) < now - TRASH_MS);
+    const expired: any[] = [];let cursor: any = null, pages = 0, full = false;
+    do {
+        let q = db.collection('teacherLessonDrafts').where('archived', '==', true).limit(PURGE_PAGE);
+        if (cursor) q = q.startAfter(cursor);
+        const snap = await q.get();pages++;
+        for (const d of snap.docs) if ((d.data().updatedAt || 0) < now - TRASH_MS) expired.push(d);
+        full = snap.docs.length === PURGE_PAGE;cursor = snap.docs[snap.docs.length - 1];
+    } while (full && pages < PURGE_PAGES);
     let purged = 0;
     for (const d of expired) purged += await db.runTransaction(async (tx: any) => {
         const current = (await tx.get(d.ref)).data();
         if (!current?.archived || (current.updatedAt || 0) >= now - TRASH_MS) return 0; // restored or touched since listing
+        // The migrated row stays (kept as history) but marked, so it never returns to lists, previous lesson or re-import.
+        const sourceRows = await linkedSourceRows(tx, db, d.id, current);
+        markSourceRows(tx, sourceRows.filter((r: any) => !r.data().appDeleted), { draftId: d.id, at: current.updatedAt || now });
         tx.delete(d.ref);
         tx.delete(db.collection('lessonAppHistory').doc(`${d.id}:${current.revision}:archive`));
         return 1;
     });
-    return { purged, more: snap.docs.length === 500 };
+    return { purged, more: full };
 }

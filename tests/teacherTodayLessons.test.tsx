@@ -7,7 +7,6 @@ import {newGridLesson} from '../src/lib/teacherLessonGrid.ts';
 import TeacherTodayLessons from '../src/components/teacher/TeacherTodayLessons';
 import {handleWorkspace} from '../api/teacher/workspace.ts';
 import {teacherReadCache,invalidateTeacherMutation} from '../api/_lib/teacherReadCache.ts';
-import {previousNotionLesson} from '../api/_lib/teacherNotionPublish.ts';
 const day='2026-10-05',a='11111111-1111-4111-8111-111111111111',b='22222222-2222-4222-8222-222222222222';
 const data:any={uid:'teacher',admin:false,scopes:[{studentKey:a,subject:'영어'},{studentKey:b,subject:'영어'}],students:[{studentKey:a,studentDisplayName:'학생A'},{studentKey:b,studentDisplayName:'학생B'}],classes:[{id:'class',ownerUid:'teacher',name:'정규반',subject:'영어',students:[a,b],slots:[{weekday:1,start:'17:00',end:'18:00'},{weekday:1,start:'19:00',end:'20:00',status:'중단'}]}]};
 const schedule=(id:string,status='예정',extra:any={})=>({id,notionPageId:id,data:{date:day,title:'보강',kind:'보강',subject:'영어',start:'15:00',end:'16:00',students:[a,b],status,...extra}});
@@ -56,12 +55,5 @@ test('previous-lesson endpoint reuses owner snapshots, preserves rounds and reje
  const first=await run(a),second=await run(b);assert.equal(first.status,200);assert.equal(first.body.data.round,1.7);assert.equal(second.body.data.content,b);assert.equal(reads,1);
  assert.equal((await run('33333333-3333-4333-8333-333333333333')).status,403);
  invalidateTeacherMutation('save-draft');await run(a);assert.equal(reads,2);teacherReadCache.clear();
-});
-test('Notion fallback reads both round property spellings and excludes future lessons',async()=>{
- const old=globalThis.fetch,token=process.env.NOTION_INTEGRATION_TOKEN;process.env.NOTION_INTEGRATION_TOKEN='test';let filter:any;
- const db:any={collection:()=>({doc:()=>({get:async()=>({data:()=>undefined})}),get:async()=>({docs:[]})})};
- globalThis.fetch=async(_url:any,init:any)=>{filter=JSON.parse(init.body).filter;return new Response(JSON.stringify({results:[{properties:{'회차':{number:1.7},'자습 회차':{number:0.5},'수업 내용':{rich_text:[{plain_text:'관계대명사\n\n과제: 교재 10쪽'}]}}}]}));};
- try{const result=await previousNotionLesson(a,{db,actor:{uid:'teacher'},subject:'영어',date:day});assert.equal(result.round,1.7);assert.equal(result.selfStudyRound,0.5);assert.equal(result.content,'관계대명사');assert.equal(result.assignment,'교재 10쪽');assert.equal(filter.and[1].date.on_or_before,day);}
- finally{globalThis.fetch=old;if(token===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=token;}
 });
 

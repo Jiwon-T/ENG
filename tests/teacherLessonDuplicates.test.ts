@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mergeNotionRows} from '../api/_lib/teacherNotionWorkspace.js';
+import {mergeNotionRows} from '../api/_lib/mergeSourceRows.js';
 const app='64fcb977-751c-4aac-a5dd-bb5223d385e8',page='3f00d0f1-c79a-8194-b425-e426ab16a821',student='3e20d0f1-c79a-80a5-bed9-faef008b94c5';
 const local={id:app,ownerUid:'teacher',academyId:'main',revision:1,stage:'report_published_notion_pending',data:{studentKey:student,subject:'영어',content:'앱 입력'}};
 const remote={id:page,notionPageId:page,appRecordId:app,ownerUid:'teacher',academyId:'main',stage:'published',data:{studentKey:student,subject:'영어',content:'노션 값'}};

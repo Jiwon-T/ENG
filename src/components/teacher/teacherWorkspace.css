@@ -3,8 +3,6 @@
 .teacher-workspace .message-template-grid {display:grid;grid-template-columns:1fr;gap:16px;margin-top:12px;}
 .teacher-workspace .message-template-row {display:flex;width:100%;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:12px;border-bottom:1px solid var(--workspace-neutral-border);text-align:left;}
 .teacher-workspace .message-template-row[aria-pressed=true] {background:var(--workspace-brand-bg);border-left:3px solid var(--workspace-brand-dot);}
-.teacher-workspace .message-template-conflict {padding:12px;background:var(--workspace-danger-bg);border:1px solid var(--workspace-danger-border);border-radius:12px;}
-.teacher-workspace .message-template-conflict pre {white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;}
 @container (min-width:800px) {.teacher-workspace .message-template-grid {grid-template-columns:minmax(220px,1fr) minmax(320px,2fr);}}
 .teacher-workspace {
  --workspace-neutral-border:#e2e8f0;
@@ -860,6 +858,8 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 .report-caption{margin:8px 0 12px;}
 .report-sparkline{width:100%;max-height:80px;color:var(--workspace-brand-fg);margin:12px 0;}
 .report-session,.report-assignment,.report-schedule{border-radius:16px;background:var(--workspace-neutral-bg);padding:16px;margin:12px 0;}
+/* Online report evaluation: one short note, saved for the student's own report. */
+.report-online-evaluation{border-radius:16px;background:var(--workspace-neutral-bg);padding:12px 16px;margin:12px 0;display:grid;gap:8px;}.report-online-evaluation h4{margin:0;font-size:14px;font-weight:800;}.report-online-evaluation textarea{width:100%;box-sizing:border-box;}.report-online-evaluation-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;}.report-online-evaluation-foot .report-caption{flex:1 1 200px;min-width:0;}.teacher-workspace .report-online-evaluation-foot .primary-button{min-height:44px;}
 .report-session-heading{display:flex;align-items:flex-start;gap:12px;}
 .report-session-heading>div:first-of-type{flex:1;min-width:0;}
 .report-session-heading strong{font-size:14px;overflow-wrap:anywhere;}

@@ -1,4 +1,3 @@
-import { withNotionUsageRoute, recordMakeWebhook } from './_lib/notionUsage.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { apiEndpoint } from './_lib/apiEndpoint.js';
 import { sendJson } from './_lib/http.js';
@@ -14,7 +13,7 @@ const handlers = {
   'schedules': h3,
   'academic': h4
 };
-export default function handler(req: IncomingMessage, res: ServerResponse) { return withNotionUsageRoute('parent', () => routeHandler(req, res)); }
+export default function handler(req: IncomingMessage, res: ServerResponse) { return routeHandler(req, res); }
 async function routeHandler(req: IncomingMessage, res: ServerResponse) {
   const endpoint = apiEndpoint(req.url, 'parent');
   if (!Object.hasOwn(handlers, endpoint)) return sendJson(res, 404, { ok: false, error: 'NOT_FOUND' });

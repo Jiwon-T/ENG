@@ -7,7 +7,7 @@ const response=(body:any,status=200)=>async()=>new Response(JSON.stringify(body)
 test('teacher room authenticates with restricted Admin role while still denying disabled workspace access',async()=>{
  const previous=globalThis.fetch,admin=process.env.ADMIN_UID;process.env.ADMIN_UID='admin';let disabled=false;
  globalThis.fetch=response({users:[{localId:'user',validSince:'100'}]}) as typeof fetch;
- const initialize:any=()=>({auth:{verifyIdToken:async(_:string,revoked:boolean)=>{if(revoked)throw {code:'auth/insufficient-permission'};return decoded;}},db:{collection:(name:string)=>({doc:()=>({get:async()=>({data:()=>name==='users'?{role:'teacher'}:{academyId:'main',disabled,scopes:[]}})})})}});
+ const initialize:any=()=>({auth:{verifyIdToken:async(_:string,revoked:boolean)=>{if(revoked)throw {code:'auth/insufficient-permission'};return decoded;}},db:{collection:(name:string)=>({doc:()=>({get:async()=>({data:()=>name==='academyCoreAuthority'?{active:true}:name==='users'?{role:'teacher'}:{academyId:'main',disabled,scopes:[]}})})})}});
  try{const request:any={headers:{authorization:'Bearer signed'}};assert.equal((await teacherActor(request,initialize)).uid,'user');disabled=true;await assert.rejects(teacherActor(request,initialize),/TEACHER_NOT_CONFIGURED/);}finally{globalThis.fetch=previous;if(admin===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=admin;}
 });
 test('Admin permission failure retains signed token verification and account lookup',async()=>{

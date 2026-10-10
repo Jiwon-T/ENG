@@ -86,13 +86,6 @@ export function assertDraftEditable(old: any, revision: unknown, value: {
     if (old.notionPageId && (old.data.studentKey !== value.studentKey || old.data.subject !== value.subject))
         throw new Error('SOURCE_IDENTITY_LOCKED');
 }
-export function publishDecision(old: any) {
-    if (old.stage === 'published' && old.lastSubmittedRevision === old.revision)
-        return 'already-published';
-    if (['publishing', 'processing', 'notion_saved'].includes(old.stage) && !(old.publishStartedAt && Date.now()-old.publishStartedAt>180000 && (old.notionWrite?.leaseUntil || 0)<=Date.now()))
-        throw new Error('PUBLISH_IN_PROGRESS');
-    return 'publish';
-}
 export const teacherScheduleSchema = z.object({
     title: z.string().trim().min(1).max(200), subject: z.enum(subjects),
     students: z.array(z.string().uuid()).min(1).max(100),

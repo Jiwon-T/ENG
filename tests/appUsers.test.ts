@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { templateFirestore } from './helpers/templateFirestore.js';
-import { listAppUsers, setAppUserRole, removeAppUser, listRemovedUsers, setRemovedSignIn } from '../api/_lib/appUsers.js';
+import { listAppUsers, setAppUserRole, removeAppUser, listRemovedUsers, setRemovedSignIn, setAppUserName } from '../api/_lib/appUsers.js';
+import { readAdminHistory } from '../api/_lib/adminHistory.js';
 
 const admin = { uid: 'admin', admin: true, academyId: 'main' };
 function seed() {
@@ -88,4 +89,20 @@ test('app users: if blocking sign-in fails, the record is still removed and the 
     assert.deepEqual([r.removed, r.signInBlocked, r.blockFailed], [true, false, true]);
     assert.equal(f.rows.has('users/new'), false);
     assert.equal((await listRemovedUsers(f.db, admin)).removed[0].signInBlocked, false);
+});
+test('app users: the admin corrects an app name (trimmed, recorded in 관리 기록); others, blanks and unknown accounts are refused', async () => {
+    const f = seed();
+    const uid = [...f.rows.keys()].find(k => k.startsWith('users/') && f.rows.get(k).role === 'student')!.slice(6);
+    const before = f.rows.get('users/' + uid);
+    await assert.rejects(setAppUserName(f.db, { ...admin, admin: false }, { uid, name: '새 이름' }), /FORBIDDEN/);
+    await assert.rejects(setAppUserName(f.db, admin, { uid, name: '   ' }));
+    await assert.rejects(setAppUserName(f.db, admin, { uid: 'nobody', name: '새 이름' }), /APP_USER_NOT_FOUND/);
+    assert.deepEqual(f.rows.get('users/' + uid), before);
+    const r = await setAppUserName(f.db, admin, { uid, name: '  새 이름 ' });
+    assert.equal(r.name, '새 이름'); assert.equal(f.rows.get('users/' + uid).alias, '새 이름'); assert.equal(f.rows.get('users/' + uid).isNameSet, true);
+    assert.equal(f.rows.get('users/' + uid).role, before.role, 'only the name changes');
+    assert.equal((await setAppUserName(f.db, admin, { uid, name: '새 이름' })).unchanged, true);
+    assert.equal([...f.rows.keys()].filter(k => k.startsWith('appUserNameHistory/')).length, 1);
+    const history = await readAdminHistory(f.db, admin, 'account');
+    assert.ok(history.entries.some((e: any) => e.area === '회원' && e.text.endsWith('→ 새 이름 · 앱 이름 바꾸기')));
 });

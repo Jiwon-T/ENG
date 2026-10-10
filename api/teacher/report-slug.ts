@@ -1,4 +1,3 @@
-import { withNotionUsageRoute, recordMakeWebhook } from '../_lib/notionUsage.js';
 import {assertContactEditAllowsIssuance} from '../_lib/studentContactEdit.js';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson } from '../_lib/http.js';
@@ -16,7 +15,7 @@ import { lookupStudentIdentity, migrateStudentMapping } from '../_lib/studentIde
 import { hashStudentKey } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 
-export default function handler(req: IncomingMessage, res: ServerResponse) { return withNotionUsageRoute('report-slug', () => routeHandler(req, res)); }
+export default function handler(req: IncomingMessage, res: ServerResponse) { return routeHandler(req, res); }
 async function routeHandler(req: IncomingMessage, res: ServerResponse) {
   try {
     // 1. 관리자 권한 검증 (Bearer Token & ADMIN_UID)

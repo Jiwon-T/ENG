@@ -14,27 +14,10 @@ export function admissionBlocks(a:AdmissionInput){
  return sections.flatMap(([title,values])=>{const body=values.filter(Boolean).join('\n\n');if(!body)return [];return [{object:'block',type:'heading_2',heading_2:{rich_text:[{type:'text',text:{content:title}}]}},...textChunks(body).map(content=>({object:'block',type:'paragraph',paragraph:{rich_text:[{type:'text',text:{content}}]}}))];});
 }
 
-export const admissionNotionSchema: Record<string, any> = {
- '생년월일': {date:{}},
- '주소':{rich_text:{}},'알게 된 경로':{rich_text:{}},'이전 학습 기간':{rich_text:{}},'이전 학원명':{rich_text:{}},'사용 교재':{rich_text:{}},'이전 학습 내용':{rich_text:{}},
- '학습 목표':{rich_text:{}},'수업 가능 요일':{multi_select:{options:['월','화','수','목','금','토','일'].map(name=>({name}))}},'수업 가능 시간':{rich_text:{}},'상담 참고 사항':{rich_text:{}},
- '개인정보 동의':{select:{options:['미확인','동의','미동의'].map(name=>({name}))}},'동의 확인일':{date:{}},'서명자 이름':{rich_text:{}},'서명 원서 보관':{checkbox:{}},'보호자 호칭':{rich_text:{}},
- ...Object.fromEntries(admissionSubjects.flatMap(subject=>[[subject+' 입학 내신 점수',{number:{}}],[subject+' 입학 내신 등급',{rich_text:{}}],[subject+' 입학 모평 점수',{number:{}}],[subject+' 입학 모평 등급',{rich_text:{}}],[subject+' 입학 진단평가',{rich_text:{}}]])),
-};
 // Keep long notes losslessly within Notion's per-rich-text-item limit.
 const richProperty=(value:string)=>({rich_text:textChunks(value).map(content=>({text:{content}}))});
 export function admissionNotionProperties(a:AdmissionInput,guardianSalutation='') {
  const p:Record<string,any>={'생년월일':{date:a.birthDate?{start:a.birthDate}:null},'주소':richProperty(a.address),'알게 된 경로':richProperty(a.referral),'이전 학습 기간':richProperty(a.previousPeriod),'이전 학원명':richProperty(a.previousAcademy),'사용 교재':richProperty(a.previousBooks),'이전 학습 내용':richProperty(a.previousContent),'학습 목표':richProperty(a.goal),'수업 가능 요일':{multi_select:a.availableDays.map(name=>({name}))},'수업 가능 시간':richProperty(a.availableTimes),'상담 참고 사항':richProperty(a.notes),'개인정보 동의':{select:{name:a.consent}},'동의 확인일':{date:a.consentDate?{start:a.consentDate}:null},'서명자 이름':richProperty(a.signerName),'서명 원서 보관':{checkbox:a.signedPaper},'보호자 호칭':richProperty(guardianSalutation)};
  for(const subject of admissionSubjects){const row=a.levels.find(r=>r.subject===subject);p[subject+' 입학 내신 점수']={number:row?.schoolScore??null};p[subject+' 입학 내신 등급']=richProperty(row?.schoolGrade||'');p[subject+' 입학 모평 점수']={number:row?.mockScore??null};p[subject+' 입학 모평 등급']=richProperty(row?.mockGrade||'');p[subject+' 입학 진단평가']=richProperty(row?.diagnostic||'');}
  return p;
-}
-export function assertAdmissionNotionSchema(schema:any) {
- for(const [name,expected] of Object.entries(admissionNotionSchema)){
-  const type=Object.keys(expected)[0],p=schema.properties?.[name];
-  if(p?.type!==type)throw Error('NOTION_ADMISSION_SCHEMA_REQUIRED');
-  if(type==='select'||type==='multi_select'){
-   const required=expected[type].options.map((o:any)=>o.name),actual=p[type]?.options?.map((o:any)=>o.name)||[];
-   if(required.some((name:string)=>!actual.includes(name)))throw Error('NOTION_ADMISSION_SCHEMA_REQUIRED');
-  }
- }
 }

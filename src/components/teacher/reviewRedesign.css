@@ -227,6 +227,11 @@
 .teacher-workspace .set-tab[aria-selected=true] small{color:#94a3b8}
 .teacher-workspace .gs-row.app-user-row{grid-template-columns:minmax(0,1fr) auto auto;padding:8px 12px;border:1px solid #eef2f6;border-radius:14px}
 .teacher-workspace .app-user-row .gs-row-who{flex-direction:column;align-items:flex-start;gap:0}
+.teacher-workspace .app-user-rename-open{margin-left:6px;min-height:32px;font-size:12px;font-weight:600}
+.teacher-workspace .app-user-row form.app-user-rename{grid-column:1/-1;flex-direction:row;align-items:center;gap:6px;flex-wrap:wrap}
+/* Phones: name and badge on the first line, the account actions on their own line so the name keeps its width. */
+@media (max-width:560px){.teacher-workspace .gs-row.app-user-row{grid-template-columns:minmax(0,1fr) auto}.teacher-workspace .app-user-row>:nth-child(3){grid-column:1/-1;justify-content:flex-start}}
+.teacher-workspace .app-user-rename input{min-height:40px;min-width:0;flex:1 1 140px;padding:0 10px;border:1px solid #d7dee8;border-radius:10px;font:inherit}
 /* 학생 관리 오른쪽 상세: 한 화면에 더 많이 보이도록 촘촘하게 (선생님방 안에서만 적용) */
 .teacher-workspace .student-detail-panel{padding:12px 14px}
 .teacher-workspace .student-detail-panel .student-management-tabs{margin:6px 0;padding-bottom:6px}
@@ -560,3 +565,12 @@
 .schedule-extras{margin-top:24px;padding-top:16px;border-top:1px dashed #f1e4e7}
 .schedule-kind.is-study{background:#ecfdf5;color:#047857;font-weight:700}
 .schedule-kind.is-test{background:#eef2ff;color:#4338ca;font-weight:700}
+
+/* 학부모 리포트 주소 */
+.teacher-workspace .plc-url{margin:4px 0 8px;padding:8px 10px;border-radius:10px;background:#f8fafc;font-weight:700;font-size:13px;word-break:break-all}
+.teacher-workspace .plc-label{display:block;margin-top:10px;font-size:12px;font-weight:700}
+.teacher-workspace .plc-form{display:flex;align-items:center;gap:6px;margin-top:6px}
+.teacher-workspace .plc-prefix{font-size:12px;color:var(--workspace-muted);white-space:nowrap}
+.teacher-workspace .plc-form input{flex:1;min-width:0;min-height:34px!important;height:34px!important;margin:0!important;padding:4px 8px!important}
+.teacher-workspace .plc-form .primary-button{margin:0;min-height:34px}
+.teacher-workspace .student-detail-header .sal+.sal{margin-left:4px}

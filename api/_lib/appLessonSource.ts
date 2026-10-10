@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { canAccessOwned, percentage } from './teacherWorkspacePolicy.js';
 import { draftAccess } from './appAcademic.js';
+import { normalizeNotionPageId } from './notionPageId.js';
 
 /*
  * App-only lesson reads (used only while lessonAppActive). The migrated Notion rows in
@@ -11,7 +12,7 @@ const SOURCE = 'lessonSourceRecords';
 
 /** Same visibility as the Notion reader: admin all; principal own academy; teacher owned/assigned rows within scope. */
 export function canReadSourceLesson(actor: any, s: any) {
-    if (!s || s.removed || s.academyId !== 'main') return false;
+    if (!s || s.removed || s.appDeleted || s.academyId !== 'main') return false;
     if (actor.admin) return true;
     if (actor.academyId !== s.academyId) return false;
     if (!(actor.scopes || []).some((x: any) => x.studentKey === s.studentKey && x.subject === s.subject)) return false;
@@ -35,10 +36,61 @@ export async function readAppSourceLessons(db: any, actor: any, filter: { day?: 
     return [...rows.values()];
 }
 
-/** Replacement for previousNotionLesson: same fields, built from the student's migrated history only. */
+/**
+ * Migrated rows a deleted app lesson came from. Deleting marks them (appDeleted) in the same transaction, a restore
+ * within the trash period clears the mark, and the mark outlives the trash so emptying it never brings the row back.
+ * Matched by identity only (source ID / app record ID), never by student and date: one day can hold several lessons.
+ */
+export async function linkedSourceRows(tx: any, db: any, id: string, draft: any) {
+    const rows = new Map<string, any>();
+    let page = '';
+    try { page = draft?.notionPageId ? normalizeNotionPageId(draft.notionPageId) : ''; } catch { page = ''; }
+    if (page) { const snap = await tx.get(db.collection(SOURCE).doc(page)); if (snap.exists) rows.set(snap.id, snap); }
+    for (const field of ['appRecordId', 'linkedDraftId']) for (const d of (await tx.get(db.collection(SOURCE).where(field, '==', id).limit(5))).docs) rows.set(d.id, d);
+    return [...rows.values()];
+}
+export function markSourceRows(tx: any, rows: any[], mark: { draftId: string, at: number } | null) {
+    for (const r of rows) tx.set(r.ref, { ...r.data(), appDeleted: mark });
+}
+
+/**
+ * The app lesson that took over a migrated row, if any. A published one carries the newer values; a deleted one hides
+ * the row. One edited again after publishing is someone's private draft: the row shows the last published app values
+ * (from that publish's history entry), never the draft and never the older migrated values.
+ */
+async function takenOver(db: any, sources: any[]) {
+    const ids = [...new Set(sources.flatMap((s: any) => [s.sourceId, s.appRecordId, s.linkedDraftId]).filter(Boolean))];
+    const snaps = await Promise.all(ids.map(id => db.collection('teacherLessonDrafts').doc(id).get()));
+    const drafts = new Map<string, any>();snaps.forEach((snap: any, i: number) => { if (snap.exists) drafts.set(ids[i], { id: ids[i], ...snap.data() }); });
+    const linked = (s: any) => drafts.get(s.linkedDraftId) || drafts.get(s.appRecordId) || drafts.get(s.sourceId);
+    const same = (s: any, d: any) => d?.academyId === 'main' && d.data?.studentKey === s.studentKey && d.data?.subject === s.subject;
+    // Extra reads only for lessons edited again after publishing: the history entry of the last publish (or public restore).
+    const pending = [...new Set(sources.map(linked).filter((d: any) => d && d.academyId === 'main' && !d.archived && !d.deleteRequested && d.stage !== 'published' && d.appPublishedRevision))];
+    const published = new Map<string, any>();
+    await Promise.all(pending.map(async (d: any) => {
+        for (const kind of ['publish', 'restore']) {
+            const h = (await db.collection('lessonAppHistory').doc(`${d.id}:${d.appPublishedRevision}:${kind}`).get()).data();
+            const after = h?.afterDraft;
+            if (after?.data && after.revision === d.appPublishedRevision && after.stage === 'published' && after.data.studentKey === d.data.studentKey && after.data.subject === d.data.subject) { published.set(d.id, after); return; }
+        }
+    }));
+    const at = (s: any, r: any) => new Date(r.updatedAt || Date.parse(s.notionEditedAt) || 0).toISOString();
+    return (s: any) => {
+        const d = linked(s);
+        if (!d || !same(s, d)) return s;
+        if (d.archived || d.deleteRequested) return null;
+        if (d.stage === 'published' && d.data) return { ...s, data: d.data, notionEditedAt: at(s, d) };
+        const last = published.get(d.id);
+        return last && same(s, last) ? { ...s, data: last.data, notionEditedAt: at(s, last) } : s;
+    };
+}
+
+/** Replacement for previousNotionLesson: same fields, built from the student's migrated history, with published app edits winning. */
 export async function previousAppSourceLesson(db: any, actor: any, studentKey: string, subject: string, date?: string) {
-    const docs = (await db.collection(SOURCE).where('studentKey', '==', studentKey).get()).docs.map((d: any) => d.data())
-        .filter((s: any) => s.subject === subject && !s.removed && s.academyId === 'main')
+    const rows = (await db.collection(SOURCE).where('studentKey', '==', studentKey).get()).docs.map((d: any) => d.data())
+        .filter((s: any) => s.subject === subject && !s.removed && !s.appDeleted && s.academyId === 'main');
+    const current = await takenOver(db, rows);
+    const docs = rows.map(current).filter(Boolean)
         .sort((a: any, b: any) => (b.data?.date || '').localeCompare(a.data?.date || '') || (Date.parse(b.notionEditedAt) || 0) - (Date.parse(a.notionEditedAt) || 0));
     const pick = date ? docs.find((s: any) => (s.data?.date || '') <= date) : docs[0];
     const sessionRecords = docs.map((s: any) => ({ id: s.sourceId, archived: false, updatedAt: Date.parse(s.notionEditedAt) || 0,
@@ -62,7 +114,7 @@ export async function ensureAppLessonDraft(db: any, actor: any, idInput: unknown
         const ref = db.collection('teacherLessonDrafts').doc(id), existing = (await tx.get(ref)).data();
         if (existing) { if (!canAccessOwned(actor, existing.ownerUid, existing.academyId)) throw Error('FORBIDDEN'); return { id, ...existing }; }
         const s = (await tx.get(db.collection(SOURCE).doc(id))).data();
-        if (!s || s.removed || !canReadSourceLesson(actor, s) || !canAccessOwned(actor, s.ownerUid, s.academyId)) throw Error('FORBIDDEN');
+        if (!s || s.removed || s.appDeleted || !canReadSourceLesson(actor, s) || !canAccessOwned(actor, s.ownerUid, s.academyId)) throw Error('FORBIDDEN');
         const linked = await tx.get(db.collection('teacherLessonDrafts').where('notionPageId', '==', id).limit(2));
         if (linked.docs.length > 1) throw Error('DUPLICATE_NOTION_RECORD');
         if (linked.docs.length) { const d = linked.docs[0].data(); if (!canAccessOwned(actor, d.ownerUid, d.academyId)) throw Error('FORBIDDEN'); return { id: linked.docs[0].id, ...d }; }

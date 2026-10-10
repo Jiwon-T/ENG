@@ -1,7 +1,6 @@
 import LessonReviewActions,{canManageLessonReview} from './LessonReviewActions';
 import WorkspaceDialog from './WorkspaceDialog';
 import {downloadLessonExcel} from '../../lib/lessonExcel';
-import LessonConflictReview from './LessonConflictReview';
 import {useTeacherPage} from '../../lib/useTeacherPage';
 import {useEffect,useRef,useState} from 'react';
 import StudentCombobox from './StudentCombobox';
@@ -65,7 +64,7 @@ export default function AcademyLessonReview({data,request,act,busy,onEdit,refres
  <dl className="lesson-review-detail">{[
  ['수업 내용',selected.data.content],['과제',selected.data.assignment],['시험범위',selected.data.examScope],['특이사항',selected.data.specialNote],['피드백',selected.data.note],['다음 수업 메모',selected.data.nextPlan]
  ].filter(([,value])=>value).map(([name,value])=><div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl>
- <LessonConflictReview key={selected.id+':'+selected.revision} record={selected} request={request} act={act} busy={busy} refresh={async()=>{const result=await load(true);setSelected(result.find((r:any)=>r.id===selected.id)||null);}}/>
+ 
  </>}</WorkspaceDialog>
  <WorkspaceDialog open={Boolean(trash)} title="휴지통 · 삭제한 일지" onClose={()=>setTrash(null)}>{trash&&<section className="gs">
   <p className="gs-lead">삭제한 일지는 7일 동안 여기에서 복원할 수 있고, 그 뒤에는 영구 삭제됩니다. 리포트가 있던 일지는 같은 리포트 주소로 다시 보입니다.</p>

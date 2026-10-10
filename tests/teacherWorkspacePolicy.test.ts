@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canAccessOwned, canTeach, continuation, lessonDraftSchema, percentage, timetableSlotSchema, assertDraftEditable, publishDecision } from '../api/_lib/teacherWorkspacePolicy.ts';
+import { canAccessOwned, canTeach, continuation, lessonDraftSchema, percentage, timetableSlotSchema, assertDraftEditable } from '../api/_lib/teacherWorkspacePolicy.ts';
 const studentKey='11111111-1111-4111-8111-111111111111';
 const lesson={studentKey,subject:'영어',date:'2026-10-02',start:'14:00',end:'15:30',attendance:'출석',attitude:'상',homework:'상',test:'상',content:'관계대명사',assignment:'문제 1–10',note:'다음 시간 재확인',nextPlan:'복습',correct:27,total:30,round:1};
 test('teacher can access owned records and assigned student subjects; highest admin can oversee',()=>{
@@ -31,11 +31,6 @@ test('draft conflicts and changing an already published student or subject are b
  assert.throws(()=>assertDraftEditable(old,1,lesson),/DRAFT_CONFLICT/);
  assert.throws(()=>assertDraftEditable(old,2,{...lesson,subject:'수학'}),/SOURCE_IDENTITY_LOCKED/);
  for(const stage of ['publishing','processing','notion_saved'])assert.throws(()=>assertDraftEditable({...old,stage},2,lesson),/PUBLISH_IN_PROGRESS/);
-});
-test('repeated publish of a confirmed revision is idempotent; pending reflection cannot be requeued',()=>{
- assert.equal(publishDecision({stage:'published',revision:2,lastSubmittedRevision:2}),'already-published');
- assert.equal(publishDecision({stage:'draft',revision:3,lastSubmittedRevision:2}),'publish');
- for(const stage of ['publishing','processing','notion_saved'])assert.throws(()=>publishDecision({stage}),/PUBLISH_IN_PROGRESS/);
 });
 test('schedule input requires recipients and rejects invalid dates and overnight time ranges',async()=>{
  const {teacherScheduleSchema}=await import('../api/_lib/teacherWorkspacePolicy.ts');

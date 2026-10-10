@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Make에서 POST /api/webhooks/notion-report로 전달하는 원본 페이로드 스키마
+ * (예전) Make가 보내던 일지 페이로드 모양 — 웹훅은 제거됨, 저장된 옛 기록을 읽을 때의 형태 참고용
  */
 export const NotionReportWebhookSchema = z.object({
   schemaVersion: z.literal(1).default(1),

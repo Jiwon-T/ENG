@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {assertLessonComplete,canAccessOwned,canTeach,lessonDraftSchema} from '../api/_lib/teacherWorkspacePolicy.ts';
 import {academicDraftSchema,canViewAcademyRecord} from '../api/_lib/teacherAcademicPolicy.ts';
-import {canReadNotionGrade} from '../api/_lib/teacherAcademicNotion.ts';
 import {workspaceError} from '../api/_lib/teacherWorkspaceError.ts';
 import {teacherActor} from '../api/_lib/teacherWorkspaceAuth.ts';
 const studentKey='11111111-1111-4111-8111-111111111111';
@@ -39,15 +38,6 @@ test('principals oversee their academy but cannot read private curricula or edit
  assert.equal(canViewAcademyRecord({uid:'t',admin:false},{ownerUid:'t',academyId:'one'}),true);
  assert.equal(canViewAcademyRecord({uid:'u',admin:false},{ownerUid:'t',academyId:'one'}),false);
 });
-test('Notion grade visibility requires real teacher relation or a principal academy student',()=>{
- const teacherId='22222222-2222-4222-8222-222222222222';
- const page={parent:{database_id:'fa6ce5a8-9572-4f4d-80d9-4d1485d44e6f'},properties:{학생:{relation:[{id:studentKey}]},과목:{select:{name:'영어'}},'담당 선생님':{relation:[{id:teacherId}]}}};
- assert.equal(canReadNotionGrade({admin:false,uid:'t'},{notionTeacherPageId:teacherId},page),true);
- assert.equal(canReadNotionGrade({admin:false,uid:'u'},{notionTeacherPageId:studentKey},page),false);
- assert.equal(canReadNotionGrade({admin:false,principal:true,scopes:[{studentKey}]},{},page),true);
- assert.equal(canReadNotionGrade({admin:false,principal:true,scopes:[]},{},page),false);
- assert.equal(canReadNotionGrade({admin:true},{},{...page,archived:true}),false);
-});
 test('workspace errors distinguish expired authentication, server setup, and invalid records without leaking raw detail',()=>{
  const setup=workspaceError(new Error('CONFIG_ERROR: secret'), 'authentication');
  assert.equal(setup.status,500);assert.equal(setup.body.error,'SERVER_CONFIG_ERROR');assert.ok(!JSON.stringify(setup).includes('secret'));
@@ -58,10 +48,10 @@ test('workspace errors distinguish expired authentication, server setup, and inv
 test('principal scope is server-approved academy membership, not user-editable role or submitted scopes',async()=>{
  const previous=process.env.ADMIN_UID;process.env.ADMIN_UID='admin';
  const request={headers:{authorization:'Bearer valid'}} as any;
- const make=(profile:any)=>()=>({auth:{verifyIdToken:async()=>({uid:'p'})},db:{collection:(name:string)=>({doc:()=>({get:async()=>({data:()=>name==='users'?{role:'principal'}:profile})}),where:()=>({get:async()=>({docs:[{id:studentKey,data:()=>({disabled:false})},{id:'disabled',data:()=>({disabled:true})}]})})})}}) as any;
+ const make=(profile:any)=>()=>({auth:{verifyIdToken:async()=>({uid:'p'})},db:{collection:(name:string)=>({doc:()=>({get:async()=>({data:()=>name==='academyCoreAuthority'?{active:true}:name==='users'?{role:'principal'}:profile})}),where:()=>({get:async()=>({docs:[{id:studentKey,data:()=>({disabled:false})},{id:'disabled',data:()=>({disabled:true})}]})})})}}) as any;
  try {
   await assert.rejects(teacherActor(request,make({scopes:[]})),/TEACHER_NOT_CONFIGURED/);
-  const actor=await teacherActor(request,make({workspaceRole:'principal',academyId:'one',scopes:[]}));
+  const actor=await teacherActor(request,make({workspaceRole:'principal',academyId:'main',scopes:[]}));
   assert.equal(actor.principal,true);assert.equal(actor.scopes.length,5);assert.ok(actor.scopes.every(s=>s.studentKey===studentKey));assert.equal(canTeach(actor,studentKey,'영어'),false);
  }finally{if(previous===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=previous;}
 });

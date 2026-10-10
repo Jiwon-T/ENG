@@ -4,6 +4,7 @@ import { lessonDraftSchema, canAccessOwned, percentage } from './teacherWorkspac
 import { identity, draftAccess } from './appAcademic.js';
 import { directLessonReport } from './teacherDirectReport.js';
 import { normalizeNotionPageId } from './notionPageId.js';
+import { linkedSourceRows, markSourceRows } from './appLessonSource.js';
 
 // Foundation only: no route or authority flag activates this before migration verification.
 function stable(record: any) {
@@ -81,6 +82,7 @@ async function changePublicLesson(db: any, actor: any, idInput: unknown, revisio
             prior.teacherDraftId && prior.teacherDraftId !== id ||
             prior.academyId && prior.academyId !== actor.academyId)) throw Error('SOURCE_IDENTITY_LOCKED');
         if (prior?.teacherAppRevision > old.revision) throw Error('DRAFT_CONFLICT');
+        const sourceRows = archive ? await linkedSourceRows(tx, db, id, old) : [];
         if (!archive && old.appPublishedRevision === old.revision && old.stage === 'published')
             return { stage: 'published', record: { id, ...old }, alreadyPublished: true };
         const version = old.sourceMode === 'firestore' ? revision : revision + 1;
@@ -95,6 +97,7 @@ async function changePublicLesson(db: any, actor: any, idInput: unknown, revisio
             prior || { reportIdentity: source || id }), notionPageId: source ? normalizeNotionPageId(source) : null,
             appLessonId: id, academyId: actor.academyId, sourceMode: 'firestore' };
         if (archive && previous) tx.delete(target);
+        if (archive) markSourceRows(tx, sourceRows, { draftId: id, at: now });
         if (projected) tx.set(target, projected);
         tx.set(ref, record);
         tx.set(db.collection('lessonAppHistory').doc(id + ':' + version + (archive ? ':archive' : ':publish')),

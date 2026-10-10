@@ -4,7 +4,6 @@ import { newGridLesson,applyCommonLesson,gridCanPublish,isCurrentStudent,process
 import { lessonFeedback } from '../api/_lib/teacherWorkspacePolicy.ts';
 import { extractAssignmentFromFeedback } from '../api/_lib/assignmentExtractor.ts';
 import { studentLessonDTO } from '../api/_lib/reportAudienceDTO.ts';
-import { decodeMakeBase64Payload } from '../api/webhooks/notion-report.ts';
 const lesson=()=>({...newGridLesson('11111111-1111-4111-8111-111111111111','영어','2026-10-03','14:00','15:30'),content:'관계대명사'});
 test('common class input keeps individual scores, attendance and feedback independent',()=>{
  const previous={...lesson(),correct:27,total:30,note:'개별 메모',attendance:'지각'};
@@ -15,7 +14,7 @@ test('app homework survives Notion feedback, Make base64 decoding, extraction an
  const d=applyCommonLesson(lesson(),{content:'수업 진행',assignment:'교재 10쪽\n단어 DAY 3',nextPlan:'다음 수업 준비'});
  const feedback=lessonFeedback({...d,note:'재확인 필요'} as any);
  assert.ok(feedback.endsWith('과제: 교재 10쪽\n단어 DAY 3'));
- const decoded=decodeMakeBase64Payload({payloadEncoding:'base64',feedback:Buffer.from(feedback).toString('base64')}) as any;
+ const decoded={feedback} as any; // (the Make webhook decoding step is gone; the app now writes feedback directly)
  const stored:any={notionPageId:'source',lessonDateStart:'2026-10-03',subject:'영어',category:'수업',attendance:'출석',homework:'상',vocabularyScore:90,schoolExamScore:null,feedback:decoded.feedback,derivedAssignment:extractAssignmentFromFeedback(decoded.feedback)};
  assert.equal(studentLessonDTO(stored).assignmentContent,'교재 10쪽\n단어 DAY 3');
  const changed={...d,assignment:'새 과제'};assert.equal(extractAssignmentFromFeedback(lessonFeedback(changed as any)),'새 과제');

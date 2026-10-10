@@ -1,5 +1,4 @@
 import {workspaceError} from '../api/_lib/teacherWorkspaceError.js';
-import {syncStudentRegistration} from '../api/_lib/teacherStudentRegistrationSync.js';
 import {REGISTRATION_STUDENT_DATABASE} from '../api/_lib/teacherStudentRegistrationNotion.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +8,7 @@ import {commitAppStudentRegistration} from '../api/_lib/appStudentRegistration.j
 import {saveStudentRegistration,convertRegistrationToResident} from '../api/_lib/teacherStudentRegistration.js';
 import {emptyRegistration} from '../src/lib/studentRegistration.js';
 import {directoryRowKey,directorySourceKey,readDirectoryStudents} from '../api/_lib/academyDirectorySource.js';
-import {readCoreProfile,readCoreEnrollment,saveCoreProfile,cutoverCore} from '../api/_lib/academyCore.js';
+import {readCoreProfile,readCoreEnrollment,saveCoreProfile} from '../api/_lib/academyCore.js';
 import {profileFromPage,profileProperties,studentProfileSchema} from '../api/_lib/teacherStudentProfile.js';
 import {readStudentMapping,lookupStudentIdentity} from '../api/_lib/studentIdentity.js';
 import {hashStudentKey} from '../api/_lib/security.js';
@@ -21,8 +20,6 @@ test('failed commit writes none of the live connections and retry creates only o
 test('revoked teacher, foreign class, stale intake, missing cutover, foreign actor and uncertain Notion work fail closed',async()=>{for(const change of ['teacher','class','revision','authority','actor','uncertain']){const f=await fixture();if(change==='teacher')f.rows.get('teacherWorkspaceAccess/'+teacher).disabled=true;if(change==='class')f.rows.get('teacherClasses/'+klassId).academyId='other';if(change==='authority')f.rows.get('academyClassAuthority/main').active=false;if(change==='uncertain')f.rows.get('teacherStudentRegistrations/'+f.saved.id).syncStatus='uncertain';const before=structuredClone([...f.rows]);await assert.rejects(commitAppStudentRegistration(f.db,change==='actor'?{...f.actor,admin:false}:f.actor,f.saved.id,change==='revision'?2:1));assert.deepEqual([...f.rows],before);}});
 test('new app profile edits preserve app provenance and existing URLs/PINs, and inactive core never falls back to Notion',async()=>{const f=await fixture(),r=await commitAppStudentRegistration(f.db,f.actor,f.saved.id,1),before=structuredClone(f.rows.get('reportSlugs/existing')),profile=await readCoreProfile(f.db,f.actor,r.studentKey,profileFromPage);await saveCoreProfile(f.db,f.actor,r.studentKey,randomUUID(),profile.editedAt,{...profile.data,school:'모의학교'},v=>studentProfileSchema.parse(v),profileFromPage,profileProperties);const mapping=await readStudentMapping(f.db as any,r.studentKey);assert.equal(mapping?.origin,'app');assert.equal(mapping?.notionStudentPageId,null);assert.deepEqual(f.rows.get('reportSlugs/existing'),before);f.rows.set('academyCoreAuthority/main',{active:false});await assert.rejects(lookupStudentIdentity(f.db as any,r.studentKey),/CORE_NOT_READY/);});
 
-test('cutover blocks uncertain legacy creation and late legacy worker cannot issue Notion requests',async()=>{const f=templateFirestore(),actor={uid:'admin',admin:true,academyId:'main'};f.rows.set('teacherStudentRegistrations/pending',{academyId:'main',syncStatus:'uncertain',studentCreateAttempted:true});await assert.rejects(cutoverCore(f.db,actor),/CORE_REGISTRATION_IN_PROGRESS/);const live=await fixture();process.env.NOTION_STUDENT_DATABASE_ID=REGISTRATION_STUDENT_DATABASE;let remote=0;await assert.rejects(syncStudentRegistration(live.db,live.actor,live.saved.id,1,{notion:async()=>{remote++;throw Error('NOTION_BLOCKED');},mapStudent:async()=>{throw Error('UNEXPECTED');},syncEnrollment:async()=>{throw Error('UNEXPECTED');}} as any),/CORE_NOT_READY/);assert.equal(remote,0);});
 
-test('partial legacy student saved without create-attempt marker still blocks cutover',async()=>{const f=templateFirestore();f.rows.set('teacherStudentRegistrations/partial',{academyId:'main',syncStatus:'failed',studentSaved:true,notionStudentPageId:randomUUID()});await assert.rejects(cutoverCore(f.db,{uid:'admin',admin:true,academyId:'main'}),/CORE_REGISTRATION_IN_PROGRESS/);assert.equal(f.rows.has('academyCoreAuthority/main'),false);});
 
 test('registration transition errors have bounded recovery messages without raw server details',()=>{for(const code of ['CORE_REGISTRATION_IN_PROGRESS','REGISTRATION_SOURCE_CONFLICT','REGISTRATION_ID_CONFLICT']){const result=workspaceError(Error(code),'student-registration-sync');assert.equal(result.body.error,code);assert.equal(result.status,409);assert.ok(result.body.message);assert.ok(!result.body.message.includes('undefined'));}});

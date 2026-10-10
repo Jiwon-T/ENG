@@ -1,6 +1,5 @@
 import {verifyFirebaseSession} from './firebaseSession.js';
 import {workspaceInflightRead} from './workspaceInflightRead.js';
-import {notionTeachingScopes} from './teacherNotionWorkspace.js';
 import type { IncomingMessage } from 'http';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
 import { subjects } from './teacherWorkspacePolicy.js';
@@ -44,7 +43,9 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     stage('account');
     workspaceStage='workspace-scope';
     const coreMode=await coreActive(db,{academyId});
-    let teachingScopes = coreMode ? await readCoreScopes(db,{...profile,uid,academyId,scopes:profile?.scopes||[]}) : profile?.notionTeacherPageId ? await notionTeachingScopes(db,profile) : profile?.scopes || [];
+    // App-only: assignments come from the app. An academy that never switched gets a clear error instead of a Notion lookup.
+    if(!coreMode)throw new Error('CORE_NOT_READY');
+    let teachingScopes = await readCoreScopes(db,{...profile,uid,academyId,scopes:profile?.scopes||[]});
     // readCoreScopes already keeps only active memberships of 'main' (the only core academy), so this pass is for the other paths.
     if(!coreMode&&!profile?.notionTeacherPageId&&teachingScopes.length){
         const checked=await Promise.all(teachingScopes.map(async(s:any)=>{const m=(await db.collection('academyStudentMemberships').doc(s.studentKey).get()).data();return m&&!m.disabled&&m.academyId===academyId?s:null;}));

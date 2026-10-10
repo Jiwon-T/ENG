@@ -232,23 +232,6 @@ export interface ParentLessonReportDTO {
  * ----------------------------------------------------
  */
 
-export const NotionScheduleWebhookSchema = z.object({
-  schemaVersion: z.number().optional().default(1),
-  notionScheduleId: z.string().min(1, 'notionScheduleId is required'),
-  // Legacy display keys exist only for mixed-version rollout; IDs always take precedence.
-  studentKeys: z.array(z.string().min(1, 'studentKey cannot be empty')).optional(),
-  notionStudentPageIds: z.array(z.string().regex(/^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i)).optional(),
-  title: z.string().min(1, 'title is required'),
-  startAt: z.string().min(1, 'startAt is required'),
-  endAt: z.string().nullable().optional(),
-  subject: z.string().optional().default('영어'),
-  scheduleType: z.string().optional().default('정규 수업'),
-  status: z.enum(['예정', '완료', '취소']).catch('예정'),
-  notice: z.string().nullable().optional(),
-  sourceUpdatedAt: z.string().optional(),
-}).refine(data => data.notionStudentPageIds !== undefined || (data.studentKeys?.length || 0) > 0, { message: 'Student page IDs are required.' });
-
-export type NotionScheduleWebhookPayload = z.infer<typeof NotionScheduleWebhookSchema>;
 
 /**
  * Firestore studentSchedules 컬렉션 저장 모델

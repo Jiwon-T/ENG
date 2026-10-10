@@ -2,23 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { handleWorkspace } from '../api/teacher/workspace.js';
-import { startLessonMigration } from '../api/_lib/lessonMigration.js';
-import { activateLessonApp, deactivateLessonApp } from '../api/_lib/lessonAuthority.js';
 import { teacherReadCache } from '../api/_lib/teacherReadCache.js';
-import { STUDENT, id, admin, page, fixture, drain, report } from './helpers/lessonMigrationFixture.js';
+import { STUDENT, id, admin, sourceRecord, fixture, report } from './helpers/lessonAppFixture.js';
 
 const scope = [{ studentKey: STUDENT, subject: '영어' }];
 const lesson = { studentKey: STUDENT, subject: '영어', date: '2026-10-09', start: '14:00', end: '15:20', classSession: '있음', round: 7, selfStudy: '없음', attendance: '출석', attitude: '상', homework: '상', test: '상', content: '앱에서 고친 수업', assignment: '복습', note: '', nextPlan: '', correct: 9, total: 10 };
 
 async function appMode() {
-    const pages = [page(1, { round: 5, date: '2026-09-01T14:00:00+09:00' }), page(2, { round: 6, date: '2026-09-08T14:00:00+09:00' })];
-    const f = fixture(pages);
+    const f = fixture([sourceRecord(1, { round: 5, date: '2026-09-01T14:00:00+09:00' }), sourceRecord(2, { round: 6, date: '2026-09-08T14:00:00+09:00' })]);
     f.rows.set('lessonReports/' + id(1), report(1)); f.rows.set('lessonReports/' + id(2), report(2, { lessonDateStart: '2026-09-08T14:00:00+09:00' }));
     f.rows.set('academyCoreAuthority/main', { active: true });
     f.rows.get('teacherWorkspaceAccess/teacher').scopes = scope;
     f.rows.set('users/teacher', { role: 'teacher', name: '박선생님' });
-    await startLessonMigration(f.db, admin, { confirmed: true, mode: 'full' }); await drain(f);
-    await activateLessonApp(f.db, admin, { confirmed: true });
     teacherReadCache.clear();
     const teacher = { uid: 'teacher', academyId: 'main', admin: false, principal: false, scopes: scope, teachingScopes: scope, db: f.db };
     const call = async (actor: any, method: string, input: any) => {
@@ -122,14 +117,4 @@ test('an old unconfirmed Notion creation is settled by evidence before app savin
         assert.ok([...f.rows.keys()].some(k => k === 'lessonAppHistory/' + settled + ':1:settle'));
         assert.equal((await f.call(f.teacher, 'POST', { action: 'save-draft', id: unknown, revision: 1, data: lesson })).error, 'NOTION_WRITE_RESULT_UNCERTAIN');
     });
-});
-
-test('switching back off returns lessons to the previous path without touching app data', async () => {
-    const f = await appMode();
-    await withoutNotion(async () => { await f.call(f.teacher, 'POST', { action: 'save-draft', data: lesson }); });
-    const drafts = JSON.stringify([...f.rows].filter(([k]) => k.startsWith('teacherLessonDrafts/')));
-    await deactivateLessonApp(f.db, admin, { confirmed: true });
-    assert.equal(JSON.stringify([...f.rows].filter(([k]) => k.startsWith('teacherLessonDrafts/'))), drafts);
-    const legacy = await f.call(f.teacher, 'POST', { action: 'save-draft', data: lesson });
-    assert.equal(legacy.ok, true); assert.equal(legacy.record.sourceMode, undefined);
 });

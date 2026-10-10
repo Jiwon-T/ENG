@@ -5,7 +5,7 @@ import { SpeedInsights } from '@vercel/speed-insights/react';
 import { auth, db, recordAttendance, logout } from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, collection, query, where, setDoc } from 'firebase/firestore';
-import { Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, ArrowRight, AlertTriangle, RefreshCw, Menu, History, BarChart3, Users, Download, Share, Smartphone, X as CloseIcon, Info, Plus, Dog } from 'lucide-react';
+import { Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, ArrowRight, AlertTriangle, RefreshCw, Menu, History, BarChart3, Users, Download, Share, Smartphone, X as CloseIcon, Info, Plus, Dog, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { RecentLearning } from './lib/recentLearning';
 import type { AnalysisResult, QuestionType } from './lib/gemini';
@@ -155,6 +155,8 @@ export default function App() {
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [newName, setNewName] = useState('');
   const [isUpdatingName, setIsUpdatingName] = useState(false);
+  // Opened from the pencil (a change, can be cancelled) rather than the required first-time prompt.
+  const [nameEditByChoice, setNameEditByChoice] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [platform, setPlatform] = useState<'ios' | 'android' | 'other'>('other');
@@ -484,8 +486,14 @@ export default function App() {
                     </div>
                   </button>
                   <div>
-                    <div className="text-2xl font-black text-slate-900 leading-tight tracking-tight">
-                      {profile?.alias || profile?.name}님
+                    <div className="text-2xl font-black text-slate-900 leading-tight tracking-tight flex items-center gap-2">
+                      <span>{profile?.alias || profile?.name}님</span>
+                      {/* App name: the student's own choice, changeable any time (the admin can also fix it in 앱 사용자). */}
+                      <button type="button" aria-label="앱 이름 바꾸기" title="앱 이름 바꾸기"
+                        onClick={() => { setNewName(profile?.alias || profile?.name || ''); setNameEditByChoice(true); setShowNameEditModal(true); }}
+                        className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-pastel-pink-500 hover:bg-pastel-pink-50 transition-colors">
+                        <Pencil size={16} aria-hidden="true" />
+                      </button>
                     </div>
                     <div className="text-[11px] text-pastel-pink-500 font-black uppercase tracking-widest mt-1">
                       {profile?.email === 'lizzieshere1@gmail.com' ? '관리자 선생님' : profile?.role === 'principal' ? '원장 선생님' : profile?.role === 'teacher' || profile?.role === 'admin' ? '선생님' : '수강생'}
@@ -979,10 +987,10 @@ export default function App() {
               <div className="w-16 h-16 bg-pastel-pink-100 rounded-2xl flex items-center justify-center mb-6 mx-auto text-pastel-pink-500">
                 <UserIcon size={32} />
               </div>
-              <h2 className="text-2xl font-black text-slate-900 mb-4 tracking-tight">이름 설정하기</h2>
+              <h2 className="text-2xl font-black text-slate-900 mb-4 tracking-tight">{nameEditByChoice ? '앱 이름 바꾸기' : '이름 설정하기'}</h2>
               <p className="text-slate-500 mb-6 font-medium leading-relaxed">
-                선생님이 확인하실 수 있도록<br />
-                <span className="text-slate-900 font-bold">학생 본인의 이름</span>을 설정해 주세요.
+                {nameEditByChoice ? <>앱에서 보이는 이름을 바꿉니다.</> : <>선생님이 확인하실 수 있도록<br />
+                <span className="text-slate-900 font-bold">학생 본인의 이름</span>을 설정해 주세요.</>}
               </p>
               
               <div className="space-y-4">
@@ -990,6 +998,7 @@ export default function App() {
                   type="text"
                   placeholder="자기 이름을 입력하세요"
                   value={newName}
+                  maxLength={100}
                   onChange={(e) => setNewName(e.target.value)}
                   className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-pastel-pink-200 focus:ring-4 focus:ring-pastel-pink-50 transition-all font-bold text-center text-lg"
                   autoFocus
@@ -1013,6 +1022,7 @@ export default function App() {
                       } : null);
                       
                       setShowNameEditModal(false);
+                      setNameEditByChoice(false);
                     } catch (err) {
                       console.error('Failed to update name:', err);
                     } finally {
@@ -1024,6 +1034,13 @@ export default function App() {
                 >
                   {isUpdatingName ? '저장 중...' : '설정 완료'}
                 </button>
+                {/* The first name is required; changing it later can be cancelled. */}
+                {nameEditByChoice && (
+                  <button type="button" onClick={() => { setShowNameEditModal(false); setNameEditByChoice(false); }} disabled={isUpdatingName}
+                    className="w-full py-3 text-slate-500 font-bold rounded-2xl hover:bg-slate-50 transition-all">
+                    취소
+                  </button>
+                )}
               </div>
             </motion.div>
           </motion.div>

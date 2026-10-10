@@ -4,8 +4,6 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { migrateStudentMapping, readStudentMapping, resolveStudentPageId } from '../api/_lib/studentIdentity.ts';
 import { normalizeNotionPageId } from '../api/_lib/notionPageId.ts';
 import { hashStudentKey } from '../api/_lib/security.ts';
-import { lookupStudentByPageId } from '../api/_lib/notion.ts';
-import { NotionScheduleWebhookSchema } from '../api/_lib/reportSchemas.ts';
 
 const pageId = '3e90d0f1-c79a-8105-94c4-ff6f31f73223';
 const dbId = 'e2b0d0f1-c79a-8262-a208-8116c9201cfc';
@@ -104,37 +102,4 @@ test('unknown name keys are never searched in Notion or bound automatically', as
   assert.equal(normalizeNotionPageId(pageId.toUpperCase()), pageId);
 });
 
-test('page lookup needs no duplicate-name property or guardian contact for student records; rejects pages outside student DB', async () => {
-  const previous = { ...process.env };
-  const originalFetch = globalThis.fetch;
-  process.env.NOTION_INTEGRATION_TOKEN = 'test';
-  process.env.NOTION_STUDENT_DATABASE_ID = dbId;
-  let foreign = false;
-  globalThis.fetch = async url => {
-    assert.ok(String(url).endsWith(`/pages/${pageId}`));
-    return new Response(JSON.stringify({ id: pageId, parent: { database_id: foreign ? pageId : dbId }, properties: {
-      '학생': { type: 'title', title: [{ plain_text: '학생 이름' }] },
-    } }));
-  };
-  try {
-    const result = await lookupStudentByPageId(pageId, '', false);
-    assert.equal(result.studentKey, pageId);
-    assert.equal(result.studentDisplayName, '학생 이름');
-    await assert.rejects(lookupStudentByPageId(pageId), /GUARDIAN_CONTACT_MISSING_OR_INVALID/);
-    foreign = true;
-    await assert.rejects(lookupStudentByPageId(pageId, '', false), /STUDENT_NOT_FOUND/);
-  } finally {
-    globalThis.fetch = originalFetch;
-    for (const key of ['NOTION_INTEGRATION_TOKEN', 'NOTION_STUDENT_DATABASE_ID']) {
-      if (previous[key] === undefined) delete process.env[key]; else process.env[key] = previous[key];
-    }
-  }
-});
 
-test('schedule page ID payload supports cancelling all targets and rejects malformed IDs', () => {
-  const base = { notionScheduleId: 'schedule', title: '일정', startAt: '2026-10-08' };
-  assert.equal(NotionScheduleWebhookSchema.safeParse({ ...base, notionStudentPageIds: [] }).success, true);
-  assert.equal(NotionScheduleWebhookSchema.safeParse({ ...base, notionStudentPageIds: [pageId] }).success, true);
-  assert.equal(NotionScheduleWebhookSchema.safeParse({ ...base, notionStudentPageIds: ['학생이름'] }).success, false);
-  assert.equal(NotionScheduleWebhookSchema.safeParse(base).success, false);
-});

@@ -12,9 +12,8 @@ export default function AppTemplateManager({busy,request,act}:{busy:boolean;requ
   <div className="rv-head"><h2>문자 템플릿{list&&<small>{list.length}개</small>}</h2>{!list&&<button type="button" className="small-button" disabled={busy} onClick={()=>act(load)}><MessageSquareText size={16} aria-hidden="true"/>템플릿 열기</button>}</div>
   <p className="gs-note">학부모 문자에 쓰는 템플릿을 고칩니다. 실제 문자는 보내지 않습니다.</p>
   {list&&<div className="gs-chips" role="group" aria-label="템플릿">{list.map(t=><button key={t.id} type="button" className="rv-chip" aria-pressed={selected?.id===t.id} onClick={()=>choose(t)}>{t.title||'제목 없음'}</button>)}{!list.length&&<p className="rv-empty">저장된 템플릿이 없습니다.</p>}</div>}
-  {selected&&<Fragment key={selected.id+':'+selected.revision}><MessageTemplateEditor record={selected} busy={busy} appOnly onDirty={setDirty}
-   onSave={data=>void act(async()=>{const input={id:selected.id,revision:selected.revision,data};const r=await request('template-save',{...input,operationId:command(input)});setSelected(r.record);setList(old=>(old||[]).map(t=>t.id===r.record.id?r.record:t));setDirty(false);setNotice('저장했습니다.');})}
-   onRetry={()=>{}} onResolve={()=>{}}/></Fragment>}
+  {selected&&<Fragment key={selected.id+':'+selected.revision}><MessageTemplateEditor record={selected} busy={busy} onDirty={setDirty}
+   onSave={data=>void act(async()=>{const input={id:selected.id,revision:selected.revision,data};const r=await request('template-save',{...input,operationId:command(input)});setSelected(r.record);setList(old=>(old||[]).map(t=>t.id===r.record.id?r.record:t));setDirty(false);setNotice('저장했습니다.');})}/></Fragment>}
   {notice&&<p role="status" className="gs-note">{notice}</p>}
  </section>;
 }

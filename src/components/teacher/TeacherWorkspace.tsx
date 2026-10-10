@@ -1,7 +1,4 @@
-import ScheduleTransitionPanel from './ScheduleTransitionPanel';
-import LessonMigrationPanel from './LessonMigrationPanel';
 import LessonRestorePanel from './LessonRestorePanel';
-import NotionDisconnectPanel from './NotionDisconnectPanel';
 import StudentMasterPanel from './StudentMasterPanel';
 import ScheduleViewHeader,{type ScheduleView} from './ScheduleViewHeader';
 import WorkspaceNavigation from './WorkspaceNavigation';
@@ -26,7 +23,6 @@ import {upsertWorkspaceRecord} from '../../lib/workspaceRecords';
 import {useWorkspaceNotice} from '../../lib/useWorkspaceNotice';
 import StudentManagementCard from './StudentManagementCard';
 import StudentManagementDialog from './StudentManagementDialog';
-import TeacherAssignmentManager from './TeacherAssignmentManager';
 import TeacherManager from './TeacherManager';
 import AppTemplateManager from './AppTemplateManager';
 import AppUserManager from './AppUserManager';
@@ -34,10 +30,10 @@ import WorkspaceToast from './WorkspaceToast';
 import TuitionCalculator from './TuitionCalculator';
 import TeacherPayroll from './TeacherPayroll';
 import StudentAccountLink from './StudentAccountLink';
+import ParentLinkControl from './ParentLinkControl';
 import SpeedCheckPanel from './SpeedCheckPanel';
 import AdminHistoryPanel from './AdminHistoryPanel';
 import {recordTiming} from '../../lib/requestTimings';
-import LessonConflictReview from './LessonConflictReview';
 import {canRetryPublication} from '../../lib/teacherPublicationRecovery';
 import {teacherCachedRead,teacherCacheRead,teacherReadGeneration,invalidateTeacherReads} from '../../lib/teacherReadCache';
 import OptionalMark from './OptionalMark';
@@ -45,7 +41,6 @@ import TeacherTodayLessons from './TeacherTodayLessons';
 import { applyPreviousLesson,sessionSeed} from '../../lib/teacherTodayLessons';
 import { loadTeacherSection } from '../../lib/loadTeacherSection';
 import WorkspaceDialog from './WorkspaceDialog';
-import WorkspaceSyncPanel from './WorkspaceSyncPanel';
 import LessonTests from './LessonTests';
 import TeacherClassManager from './TeacherClassManager';
 import { compactLessonInput } from '../../lib/lessonInput';
@@ -56,7 +51,6 @@ import { lazy, Suspense, useCallback,useEffect, useRef, useState, type ReactNode
 import { auth } from '../../lib/firebase';
 import {onAuthStateChanged} from 'firebase/auth';
 import { BookOpen, CalendarDays, ClipboardList, Users, Settings, RefreshCw, LoaderCircle } from 'lucide-react';
-const TeacherIntegrityAudit = lazy(() => import('./TeacherIntegrityAudit'));
 const StudentEnrollmentEditor = lazy(() => import('./StudentEnrollmentEditor'));
 const TeacherMessageComposer = lazy(() => import('./TeacherMessageComposer'));
 const StudentProfileEditor = lazy(() => import('./StudentProfileEditor'));
@@ -68,22 +62,16 @@ import './teacherWorkspace.css';
 import './lessonCutover.css';
 import './reviewRedesign.css';
 import './scheduleWorkspace.css';
-import TeacherReportReview from './TeacherReportReview';
+import TeacherReportReview, { UNSAVED_EVALUATION_MESSAGE } from './TeacherReportReview';
 import TeacherLessonGrid from './TeacherLessonGrid';
 import {matchingSavedLesson} from '../../lib/teacherLessonGrid';
 import TeacherScheduleEditor from './TeacherScheduleEditor';
 const subjects = ['영어', '수학', '국어', '과학', '한국사'];
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
 const emptyLesson = () => ({ studentKey: '', subject: '영어', date: today(), start: '14:00', end: '15:30', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', content: '', assignment: '', note: '', nextPlan: '', wrong:null as number | null,examWrong:null as number | null,correct: null, total: null, examCorrect: null, examTotal: null, round: null, classSession: '있음', selfStudy: '미확인', selfStudyStart: '', selfStudyEnd: '', selfStudyRound: null, attendanceNote: '', specialNote: '' });
-// After the app-only switch the quick preview request costs as much as the full one; remember that and send only one.
-// A per-browser hint holding no personal data; storage may be blocked, so failures just keep the old behaviour.
-const APP_ONLY_HINT='teacherWorkspaceAppOnly';
-function appOnlyKnown(){try{return localStorage.getItem(APP_ONLY_HINT)==='1';}catch{return false;}}
-function rememberAppOnly(){try{localStorage.setItem(APP_ONLY_HINT,'1');}catch{}}
 const errors: any = { UNAUTHORIZED: '로그인 인증이 만료되었습니다. 다시 로그인해 주세요.', SESSION_REVOKED: '로그인이 해제되었습니다. 다시 로그인해 주세요.', TEACHER_NOTION_LINK_REQUIRED: '관리자 설정에서 선생님 정보를 확인해 주세요.', TEACHER_NOT_CONFIGURED: '관리자가 담당 학생과 과목을 연결하면 사용할 수 있습니다.', SOURCE_IDENTITY_LOCKED: '반영된 기록의 학생·과목은 바꿀 수 없습니다. 새 수업으로 작성해 주세요.', INVALID_INPUT: '입력한 날짜, 시간, 점수와 필수 항목을 확인해 주세요.', FORBIDDEN: '이 자료에 접근할 권한이 없습니다.', DRAFT_CONFLICT: '다른 화면에서 수정되었습니다. 새로고침 후 확인해 주세요.', PUBLISH_IN_PROGRESS: '반영 중입니다. 잠시 후 새로고침해 주세요.', NOTION_SCHEMA_SETUP_REQUIRED: '관리자 설정에서 수업 일지 연결을 준비해 주세요.', MAKE_SUBJECT_NOT_CONFIGURED: '이 과목은 아직 반영 연결이 준비되지 않았습니다.', MAKE_TRIGGER_NOT_CONFIGURED: '수업 일지의 반영 연결을 확인해야 합니다.' };
-export default function TeacherWorkspace({ onNavigate, onAccounts }: {
+export default function TeacherWorkspace({ onNavigate }: {
     onNavigate?: (view: any) => void;
-    onAccounts?: () => void;
 }) {
     const [savedPulse,setSavedPulse]=useState<{id:string;at:number}|null>(null);
     const [scheduleView,setScheduleView]=useState<ScheduleView>('dated');
@@ -102,6 +90,8 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
  const studentAttemptRef=useRef<null|((action:()=>void)=>void)>(null);
  const registerStudentAttempt=useCallback((attempt:(action:()=>void)=>void)=>{studentAttemptRef.current=attempt;return()=>{if(studentAttemptRef.current===attempt)studentAttemptRef.current=null;};},[]);
  const [managementInitialTab,setManagementInitialTab]=useState('review');
+    // Unsaved 학습 성취도 평가 in the report tab: closing, switching tabs or students asks first.
+    const reviewDirty=useRef(false);
     const [lessonMode, setLessonMode] = useState<'single' | 'grid'>('single'), [managementStudentKey,setManagementStudentKey]=useState('');
     const profileStudentKey=managementStudentKey, enrollmentStudentKey=managementStudentKey, messageStudentKey=managementStudentKey;
     const setProfileStudentKey=setManagementStudentKey, setEnrollmentStudentKey=setManagementStudentKey;
@@ -172,7 +162,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
         return result.data;
     }
     function workspaceSection(value:string){return ['lesson','students','schedule','curriculum','settings'].includes(value)?value:'base';}
-    function mergeData(fresh:any){setData((old:any)=>({...{classes:[],curricula:[],drafts:[],schedules:[],reflectedSchedules:[],staff:[],access:[],notionSources:[],notionIssues:[]},...old,...fresh,students:fresh.students?.map((s:any)=>({...old?.students?.find((student:any)=>student.studentKey===s.studentKey),...s}))||old?.students||[]}));}
+    function mergeData(fresh:any){setData((old:any)=>({...{classes:[],curricula:[],drafts:[],schedules:[],reflectedSchedules:[],staff:[],access:[]},...old,...fresh,students:fresh.students?.map((s:any)=>({...old?.students?.find((student:any)=>student.studentKey===s.studentKey),...s}))||old?.students||[]}));}
     // Page 1 of saved lessons comes with the lesson bootstrap; later pages and refreshes still ask for drafts-page.
     const draftsViaBootstrap=useRef(false);
     function applyDraftsPage(r:any,uid:string,generation:number){if(draftPage!==1)return;draftVersion.current++;setDraftLoading(false);setDraftList(r);teacherCacheRead(uid,'drafts-page:1',r,generation);setData((old:any)=>old?{...old,drafts:[...r.records,...(old.drafts||[]).filter((d:any)=>!r.records.some((row:any)=>row.id===d.id))]}:old);}
@@ -188,7 +178,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
         const changed=changes[0]||'';
         if(changed==='save-schedule'||changed==='save-class-status')return;
         if(changed==='publish-schedule'||changed==='archive-schedule'){mergeData(await request('read:schedule-records',{force:'1'}));return;}
-        if(['save-class','save-curriculum','archive-class','archive-curriculum','sync-notion-record','migrate-notion-records'].includes(changed)){
+        if(['save-class','save-curriculum','archive-class','archive-curriculum'].includes(changed)){
             mergeData(await request('read:bootstrap',{section:'curriculum',resourcesOnly:'1',force:'1'}));return;
         }
         const fresh=await request('read:bootstrap',{section:workspaceSection(activeTab.current),force:'1'});mergeData(fresh);
@@ -203,14 +193,13 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
             const cached=teacherCachedRead(uid,'workspace:'+section),generation=teacherReadGeneration();
             if(cached&&live&&version===loadVersion.current){mergeData(cached);setSectionLoading(false);markShown();}
             await loadTeacherSection({
-                fast:cached||appOnlyKnown()?undefined:()=>request('read:bootstrap-fast',{section}),
                 fresh:()=>request('read:bootstrap',section==='lesson'?{section,draftsSize:'6'}:{section}),
                 apply:(value,isFresh)=>{
                     if(!live||version!==loadVersion.current||auth.currentUser?.uid!==uid)return;
                     mergeData(value);setSectionLoading(false);setBootstrapError('' );markShown();
                     if((value as any)?.draftsPage)applyDraftsPage((value as any).draftsPage,uid,generation);
                     else if(isFresh&&section==='lesson')void loadDrafts().catch(()=>{}); // a server without the bundled list still gets one
-                    if(isFresh){teacherCacheRead(uid,'workspace:'+section,value,generation);if((value as any)?.coreMode)rememberAppOnly();}
+                    if(isFresh)teacherCacheRead(uid,'workspace:'+section,value,generation);
                 },
             });
         })().catch(e=>{if(live&&version===loadVersion.current){setBootstrapError(e.message);setMessage(e.message);}}).finally(()=>{if(live&&version===loadVersion.current)setSectionLoading(false);});
@@ -284,12 +273,12 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
    <LessonTests value={lesson} error={fieldDisclosureError(message,'scores')} onChange={setField}/>
    </div><div className="lesson-area-extras">{[['specialNote', '특이 사항'], ['assignment', '과제'],['examScope','시험범위']].map(([key, label]) => <label key={key} className="lesson-text-field"><span className="lesson-label-line">{label}{key === 'content' ? <span className="text-xs text-rose-600 ml-1">(필수)</span> : <OptionalMark/>}</span><AutoTextarea required={key === 'content'} aria-required={key === 'content'} rows={key === 'content' ? 4 : 2} value={lesson[key] || ''} onChange={e => setField(key, e.target.value)}/></label>)}{(lesson.note || lesson.nextPlan) && <div className="mt-3 text-xs text-slate-500"><p className="font-semibold">기존 기록 메모</p>{lesson.note && <p className="whitespace-pre-wrap mt-2">기존 개인 피드백: {lesson.note}</p>}{lesson.nextPlan && <p className="whitespace-pre-wrap mt-2">기존 다음 수업 메모: {lesson.nextPlan}</p>}</div>}
    
-   </div></div></fieldset></div>{currentDraft&&<LessonConflictReview key={currentDraft.id+':'+currentDraft.revision} record={currentDraft} request={request} act={act} busy={busy} refresh={refresh}/>} {canRetryPublication(currentDraft) && <div className="mt-3"><p className="text-xs text-slate-500">저장한 요청의 반영 결과를 확인합니다. 이후 화면에서 바꾼 입력은 이 재시도에 포함하지 않습니다.</p><button className="small-button mt-2" disabled={busy} onClick={()=>act(async()=>{try{const result=await request('publish',{id:currentDraft.id});setMessage(result.warning || '저장한 수업일지 반영을 확인했습니다.');}finally{await refresh();}})}>저장 결과 확인·재시도</button></div>}{busy && <p role="status" className="text-xs mt-3">저장·반영 처리 중입니다. 창을 닫아도 처리는 계속됩니다.</p>}<LessonActionBar savedAt={savedPulse?.id===draftId?savedPulse.at:undefined} failureReason={!busy&&(latestLessonJob?.status==='failed'||currentDraft?.stage==='failed')?latestLessonJob?.error||currentDraft?.failureMessage||message||'반영 결과를 확인하고 다시 시도해 주세요.':undefined} onRetry={()=>act(()=>submitSingleLesson('save'))} retryDisabled={busy||autoLoading} status={lessonRecordStatus(currentDraft,busy,Boolean(currentDraft&&JSON.stringify(currentDraft.data)!==JSON.stringify(lesson)))} reason={busy?'현재 기록을 처리하고 있어요':autoLoading?'직전 수업을 불러오는 중이에요':!lesson.studentKey?'학생을 선택하면 반영할 수 있어요':!lesson.content?.trim()?'수업 내용을 입력하면 반영할 수 있어요':['publishing','processing','notion_saved'].includes(currentDraft?.stage)?'이미 반영 중인 기록이에요':currentDraft?.stage==='published'&&JSON.stringify(currentDraft.data)===JSON.stringify(lesson)?'이미 반영 완료된 기록이에요':undefined} refresh={<button type="button" disabled={busy} className="lesson-refresh-button" aria-label="새로고침" title="새로고침" onClick={() => act(refresh)}><RefreshCw size={16} aria-hidden="true"/></button>}><button disabled={busy||autoLoading} className="primary-button" onClick={() => act(()=>submitSingleLesson('save'))}>{busy&&<LoaderCircle size={14} className="lesson-button-spinner" aria-hidden="true"/>}이 학생 저장</button><button disabled={busy || autoLoading || !lesson.studentKey || !lesson.content?.trim() || ['publishing', 'processing', 'notion_saved'].includes(currentDraft?.stage) || (currentDraft?.stage==='published' && JSON.stringify(currentDraft?.data)===JSON.stringify(lesson))} className="small-button" onClick={() => act(()=>submitSingleLesson('publish'))}>{busy&&<LoaderCircle size={14} className="lesson-button-spinner" aria-hidden="true"/>}이 학생 반영</button><LessonDeleteButton viewer={data} record={currentDraft} busy={busy||autoLoading} onDelete={deleteCurrentLesson}/></LessonActionBar></section>;
+   </div></div></fieldset></div> {canRetryPublication(currentDraft) && <div className="mt-3"><p className="text-xs text-slate-500">저장한 요청의 반영 결과를 확인합니다. 이후 화면에서 바꾼 입력은 이 재시도에 포함하지 않습니다.</p><button className="small-button mt-2" disabled={busy} onClick={()=>act(async()=>{try{const result=await request('publish',{id:currentDraft.id});setMessage(result.warning || '저장한 수업일지 반영을 확인했습니다.');}finally{await refresh();}})}>저장 결과 확인·재시도</button></div>}{busy && <p role="status" className="text-xs mt-3">저장·반영 처리 중입니다. 창을 닫아도 처리는 계속됩니다.</p>}<LessonActionBar savedAt={savedPulse?.id===draftId?savedPulse.at:undefined} failureReason={!busy&&(latestLessonJob?.status==='failed'||currentDraft?.stage==='failed')?latestLessonJob?.error||currentDraft?.failureMessage||message||'반영 결과를 확인하고 다시 시도해 주세요.':undefined} onRetry={()=>act(()=>submitSingleLesson('save'))} retryDisabled={busy||autoLoading} status={lessonRecordStatus(currentDraft,busy,Boolean(currentDraft&&JSON.stringify(currentDraft.data)!==JSON.stringify(lesson)))} reason={busy?'현재 기록을 처리하고 있어요':autoLoading?'직전 수업을 불러오는 중이에요':!lesson.studentKey?'학생을 선택하면 반영할 수 있어요':!lesson.content?.trim()?'수업 내용을 입력하면 반영할 수 있어요':['publishing','processing','notion_saved'].includes(currentDraft?.stage)?'이미 반영 중인 기록이에요':currentDraft?.stage==='published'&&JSON.stringify(currentDraft.data)===JSON.stringify(lesson)?'이미 반영 완료된 기록이에요':undefined} refresh={<button type="button" disabled={busy} className="lesson-refresh-button" aria-label="새로고침" title="새로고침" onClick={() => act(refresh)}><RefreshCw size={16} aria-hidden="true"/></button>}><button disabled={busy||autoLoading} className="primary-button" onClick={() => act(()=>submitSingleLesson('save'))}>{busy&&<LoaderCircle size={14} className="lesson-button-spinner" aria-hidden="true"/>}이 학생 저장</button><button disabled={busy || autoLoading || !lesson.studentKey || !lesson.content?.trim() || ['publishing', 'processing', 'notion_saved'].includes(currentDraft?.stage) || (currentDraft?.stage==='published' && JSON.stringify(currentDraft?.data)===JSON.stringify(lesson))} className="small-button" onClick={() => act(()=>submitSingleLesson('publish'))}>{busy&&<LoaderCircle size={14} className="lesson-button-spinner" aria-hidden="true"/>}이 학생 반영</button><LessonDeleteButton viewer={data} record={currentDraft} busy={busy||autoLoading} onDelete={deleteCurrentLesson}/></LessonActionBar></section>;
     return <div className={`teacher-workspace max-w-6xl mx-auto px-4 py-5 md:p-8 ${tab==='lesson'?'lesson-writing':''} ${tab==='schedule'?'schedule-active':''}`}>
   <WorkspaceNavigation tab={tab} onTab={next=>{if(tab==='students'&&studentAttemptRef.current)studentAttemptRef.current(()=>setTab(next));else setTab(next);}} admin={data?.admin} principal={data?.principal} date={today()} history={workspaceHistory}/>
 
   {sectionLoading&&data&&<p role="status" className="text-sm text-slate-500 mb-3">자료를 불러오는 중…</p>}{message && <WorkspaceToast message={message} onClose={dismissMessage}/>}{jobs.some(job=>job.status==='running')&&<p role="status" className="workspace-job-status">처리 중: {jobs.filter(job=>job.status==='running').map(job=>job.label).join(' · ')} · 다른 기록을 작업할 수 있습니다.</p>}
-  {!data ? <div className="panel text-sm text-slate-500">{bootstrapError ? <><p>{bootstrapError}</p><button className="small-button mt-3" disabled={busy} onClick={() => act(refresh)}>다시 불러오기</button>{auth.currentUser?.email === 'lizzieshere1@gmail.com' && <button className="small-button mt-3 ml-2" onClick={onAccounts}>기존 계정·리포트 관리</button>}</> : '선생님방을 불러오는 중…'}</div> : <>
+  {!data ? <div className="panel text-sm text-slate-500">{bootstrapError ? <><p>{bootstrapError}</p><button className="small-button mt-3" disabled={busy} onClick={() => act(refresh)}>다시 불러오기</button></> : '선생님방을 불러오는 중…'}</div> : <>
   <div hidden={tab !== 'lesson'}><div hidden={lessonMode !== 'grid'}><TeacherLessonGrid headingActions={modeSwitch} isRecordBusy={id=>operations.busy('lesson-record:'+id)} active={tab==='lesson'&&lessonMode==='grid'} data={data} busy={busy} request={request} refresh={refresh} act={act}/></div></div>
   
   {((tab === 'lesson' && lessonMode === 'single') || lessonDialogOpen) && <div className="lesson-writing-layout">
@@ -299,7 +288,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
    </aside>
    <LessonEditorContainer modal={lessonDialogOpen} onClose={()=>setLessonDialogOpen(false)}>{lessonEditor}</LessonEditorContainer>
   </div>}
-  <div className="schedule-workspace-page" hidden={tab !== 'schedule'}>{tab==='schedule'&&data.admin&&data.academyId==='main'&&!data.scheduleAppOnly&&<ScheduleTransitionPanel request={request} act={act} onChanged={refresh}/>}<ScheduleViewHeader view={scheduleView} onView={setScheduleView} count={data.classes?.length||0} disabled={busy} onCreate={()=>scheduleView==='dated'?createScheduleRef.current?.():createClassRef.current?.()}/><TeacherWeeklyCalendar hidden={scheduleView!=='dated'} createRef={createScheduleRef} data={data} busy={busy} request={request} active={tab==='schedule'} onAdd={date => openSchedule(date)} onEdit={record => {if((record.source==='notion'||record.notionPageId)&&!record.deleteRequested&&!canRetryPublication(record)){void act(async()=>{const result=await request('import-source-record',{id:record.notionPageId||record.id,kind:'schedule'});setData((old:any)=>({...old,schedules:[result.record,...old.schedules.filter((r:any)=>r.id!==result.record.id&&r.notionPageId!==result.record.notionPageId)]}));openSchedule(result.record.data.date,result.record);});}else openSchedule(record.data.date,record);}} onRegular={() => {}}/><div ref={scheduleEditorRef}><WorkspaceDialog open={Boolean(scheduleSelection) && tab==='schedule'} title="일정 추가·수정" onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) { setScheduleSelection(undefined); setScheduleDirty(false); } }}>{scheduleSelection && <TeacherScheduleEditor data={data} busy={busy} request={request} refresh={refresh} act={act} selection={scheduleSelection} onSelection={record=>{setScheduleSelection({date:record.data.date,record,nonce:++scheduleNonce.current});setScheduleDirty(false);}} onNotice={setMessage} onDirty={handleScheduleDirty} onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) {
+  <div className="schedule-workspace-page" hidden={tab !== 'schedule'}><ScheduleViewHeader view={scheduleView} onView={setScheduleView} count={data.classes?.length||0} disabled={busy} onCreate={()=>scheduleView==='dated'?createScheduleRef.current?.():createClassRef.current?.()}/><TeacherWeeklyCalendar hidden={scheduleView!=='dated'} createRef={createScheduleRef} data={data} busy={busy} request={request} active={tab==='schedule'} onAdd={date => openSchedule(date)} onEdit={record => {if((record.source==='notion'||record.notionPageId)&&!record.deleteRequested&&!canRetryPublication(record)){void act(async()=>{const result=await request('import-source-record',{id:record.notionPageId||record.id,kind:'schedule'});setData((old:any)=>({...old,schedules:[result.record,...old.schedules.filter((r:any)=>r.id!==result.record.id&&r.notionPageId!==result.record.notionPageId)]}));openSchedule(result.record.data.date,result.record);});}else openSchedule(record.data.date,record);}} onRegular={() => {}}/><div ref={scheduleEditorRef}><WorkspaceDialog open={Boolean(scheduleSelection) && tab==='schedule'} title="일정 추가·수정" onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) { setScheduleSelection(undefined); setScheduleDirty(false); } }}>{scheduleSelection && <TeacherScheduleEditor data={data} busy={busy} request={request} refresh={refresh} act={act} selection={scheduleSelection} onSelection={record=>{setScheduleSelection({date:record.data.date,record,nonce:++scheduleNonce.current});setScheduleDirty(false);}} onNotice={setMessage} onDirty={handleScheduleDirty} onClose={() => { if (scheduleWorking || !scheduleDirty || window.confirm('저장하지 않은 변경을 취소하고 닫을까요?')) {
             setScheduleSelection(undefined);
             setScheduleDirty(false);
         } }}/>}</WorkspaceDialog></div><div ref={regularRef}><TeacherClassManager view={scheduleView} createRef={createClassRef} data={data} busy={busy} request={request} refresh={refresh} act={act} active={tab==='schedule'} mode="schedule"/></div></div>
@@ -308,11 +297,11 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
   {tab==='students'&&<div className="student-view-switch"><div className="rv-seg" role="group" aria-label="학생 관리 보기"><button type="button" aria-pressed={studentView==='students'} onClick={()=>setStudentView('students')}>학생</button><button type="button" aria-pressed={studentView==='classes'} onClick={()=>setStudentView('classes')}>반 관리 <b>{data.classes?.length||0}</b></button></div>{studentView==='classes'&&<button type="button" className="primary-button" disabled={busy} onClick={()=>studentClassRef.current?.()}>+ 새 반</button>}</div>}
   {/* 반 관리 is reachable from 학생 관리 too: the same class cards and editor as the schedule tab. */}
   {tab==='students'&&studentView==='classes'&&<TeacherClassManager view="classes" createRef={studentClassRef} data={data} busy={busy} request={request} refresh={refresh} act={act} active mode="schedule"/>}
-  {tab==='students'&&studentView==='students'&&<section ref={studentListRef} className="student-dashboard-shell"><div className="student-dashboard"><aside className="student-master-panel"><StudentMasterPanel registrations={data.admin||data.principal?{count:intakeCount,onAdd:()=>setIntakeStart(n=>n+1),render:(query,active)=><Suspense fallback={<p className="report-caption">상담·신입생을 불러오는 중…</p>}><StudentRegistrationManager query={query} active={active} startSignal={intakeStart} onCount={setIntakeCount} coreMode={Boolean(data.coreMode)} students={students} key={data.uid + ':' + data.academyId} onSynced={async()=>{invalidateTeacherReads('sync-student-registration');const fresh=await request('read:bootstrap',{section:'students',force:'1'});mergeData(fresh);teacherCacheRead(auth.currentUser?.uid||'','workspace:students',fresh);}}/></Suspense>}:undefined} students={students} value={managementStudentKey} onSelect={key=>{const change=()=>{setMessage('');setManagementInitialTab('review');setManagementStudentKey(key);};if(key===managementStudentKey)return;if(studentAttemptRef.current)studentAttemptRef.current(change);else change();}}/></aside><div className="student-dashboard-detail">  {tab==='students' && managementStudentKey && students.some((s:any)=>s.studentKey===managementStudentKey) ? <div key={data.uid+':'+managementStudentKey}><StudentManagementDialog inline registerAttempt={registerStudentAttempt} headerExtra={data.admin&&data.academyId==='main'?<StudentAccountLink studentKey={managementStudentKey} studentName={students.find((s:any)=>s.studentKey===managementStudentKey)?.studentDisplayName||'학생'} linkedUid={students.find((s:any)=>s.studentKey===managementStudentKey)?.linkedFirebaseUid||null} onChanged={async()=>{invalidateTeacherReads('student-link');const fresh=await request('read:bootstrap',{section:'students',force:'1'});mergeData(fresh);teacherCacheRead(auth.currentUser?.uid||'','workspace:students',fresh);}}/>:undefined} initialTab={managementInitialTab} name={students.find((s:any)=>s.studentKey===managementStudentKey)?.studentDisplayName||'학생'} canManage={Boolean(data.admin||data.principal)} busy={busy||autoLoading} notice={message} onClose={()=>{autoVersion.current++;setAutoLoading(false);setManagementStudentKey('');}} onSelect={next=>{if(next==='lesson'){const student=students.find((s:any)=>s.studentKey===managementStudentKey);void selectStudent(managementStudentKey,{subject:data.teachingScopes?.find((s:any)=>s.studentKey===managementStudentKey)?.subject||data.scopes?.find((s:any)=>s.studentKey===managementStudentKey)?.subject||student?.subjects?.[0]?.subject||'영어'});}}} render={(active,leave,headerId)=><Suspense fallback={<p role="status" className="text-sm text-slate-500">학생 관리 정보를 불러오는 중…</p>}>
+  {tab==='students'&&studentView==='students'&&<section ref={studentListRef} className="student-dashboard-shell"><div className="student-dashboard"><aside className="student-master-panel"><StudentMasterPanel registrations={data.admin||data.principal?{count:intakeCount,onAdd:()=>setIntakeStart(n=>n+1),render:(query,active)=><Suspense fallback={<p className="report-caption">상담·신입생을 불러오는 중…</p>}><StudentRegistrationManager query={query} active={active} startSignal={intakeStart} onCount={setIntakeCount} coreMode={Boolean(data.coreMode)} students={students} key={data.uid + ':' + data.academyId} onSynced={async()=>{invalidateTeacherReads('sync-student-registration');const fresh=await request('read:bootstrap',{section:'students',force:'1'});mergeData(fresh);teacherCacheRead(auth.currentUser?.uid||'','workspace:students',fresh);}}/></Suspense>}:undefined} students={students} value={managementStudentKey} onSelect={key=>{const change=()=>{setMessage('');setManagementInitialTab('review');setManagementStudentKey(key);};if(key===managementStudentKey)return;if(studentAttemptRef.current)studentAttemptRef.current(change);else change();}}/></aside><div className="student-dashboard-detail">  {tab==='students' && managementStudentKey && students.some((s:any)=>s.studentKey===managementStudentKey) ? <div key={data.uid+':'+managementStudentKey}><StudentManagementDialog inline registerAttempt={registerStudentAttempt} headerExtra={data.admin&&data.academyId==='main'?<><StudentAccountLink studentKey={managementStudentKey} studentName={students.find((s:any)=>s.studentKey===managementStudentKey)?.studentDisplayName||'학생'} linkedUid={students.find((s:any)=>s.studentKey===managementStudentKey)?.linkedFirebaseUid||null} onChanged={async()=>{invalidateTeacherReads('student-link');const fresh=await request('read:bootstrap',{section:'students',force:'1'});mergeData(fresh);teacherCacheRead(auth.currentUser?.uid||'','workspace:students',fresh);}}/><ParentLinkControl studentKey={managementStudentKey} studentName={students.find((s:any)=>s.studentKey===managementStudentKey)?.studentDisplayName||'학생'}/></>:undefined} initialTab={managementInitialTab} name={students.find((s:any)=>s.studentKey===managementStudentKey)?.studentDisplayName||'학생'} canManage={Boolean(data.admin||data.principal)} busy={busy||autoLoading} notice={message} onClose={()=>{autoVersion.current++;setAutoLoading(false);setManagementStudentKey('');}} onSelect={next=>{if(next==='lesson'){const student=students.find((s:any)=>s.studentKey===managementStudentKey);void selectStudent(managementStudentKey,{subject:data.teachingScopes?.find((s:any)=>s.studentKey===managementStudentKey)?.subject||data.scopes?.find((s:any)=>s.studentKey===managementStudentKey)?.subject||student?.subjects?.[0]?.subject||'영어'});}}} render={(active,leave,headerId)=><Suspense fallback={<p role="status" className="text-sm text-slate-500">학생 관리 정보를 불러오는 중…</p>}>
   {active==='profile' && (data.admin||data.principal) ? <StudentProfileEditor key={data.uid+':'+profileStudentKey} studentKey={profileStudentKey} onClose={leave} onSaved={profile=>{const key=profileStudentKey;setProfileStudentKey('');invalidateTeacherReads('save-student-profile');setData((old:any)=>({...old,students:old.students.map((s:any)=>s.studentKey===key?{...s,studentDisplayName:profile.displayName,hasGuardianContact:Boolean(profile.guardianPhone)}:s)}));setMessage('학생 정보를 저장했습니다. 보호자 번호를 바꾼 경우 새 번호 뒤 4자리로 인증해 주세요.');const uid=auth.currentUser?.uid||'',generation=teacherReadGeneration(),load=++loadVersion.current;void request('read:bootstrap',{section:'students',force:'1'}).then(fresh=>{if(auth.currentUser?.uid!==uid || loadVersion.current!==load || teacherReadGeneration()!==generation)return;mergeData(fresh);teacherCacheRead(auth.currentUser?.uid||'','workspace:students',fresh);}).catch(()=>{if(auth.currentUser?.uid===uid && loadVersion.current===load)setMessage('학생 정보는 반영됐지만 목록을 갱신하지 못했습니다. 새로고침해 주세요.');});}}/> : null}
   {active==='enrollment' && (data.admin||data.principal) ? <StudentEnrollmentEditor key={data.uid+':'+enrollmentStudentKey} studentKey={enrollmentStudentKey} onClose={leave} onSaved={()=>{setEnrollmentStudentKey('');invalidateTeacherReads('save-student-enrollment');setMessage('수강·담당·소속반 변경을 저장했습니다.');const uid=auth.currentUser?.uid||'',generation=teacherReadGeneration(),load=++loadVersion.current;void request('read:bootstrap',{section:'students',force:'1'}).then(fresh=>{if(auth.currentUser?.uid!==uid || loadVersion.current!==load || teacherReadGeneration()!==generation)return;mergeData(fresh);teacherCacheRead(uid,'workspace:students',fresh);}).catch(()=>{if(auth.currentUser?.uid===uid && loadVersion.current===load)setMessage('수강 변경은 반영됐지만 목록을 갱신하지 못했습니다. 새로고침해 주세요.');});}}/> : null}
   {active==='message' ? <TeacherMessageComposer key={data.uid+':'+messageStudentKey} studentKey={messageStudentKey} subjects={students.find((s:any)=>s.studentKey===messageStudentKey)?.subjects?.map((s:any)=>s.subject)||[]} onClose={leave}/> : null}
-  {active==='review' ? <WorkspaceDialog open title="학습 리포트" onClose={leave}><TeacherReportReview students={students} initialStudentKey={managementStudentKey} showStudentPicker={false} embedded headerTarget={headerId}/></WorkspaceDialog> : null}
+  {active==='review' ? <WorkspaceDialog open title="학습 리포트" onClose={()=>{if(reviewDirty.current&&!window.confirm(UNSAVED_EVALUATION_MESSAGE))return;reviewDirty.current=false;leave();}}><TeacherReportReview students={students} initialStudentKey={managementStudentKey} showStudentPicker={false} embedded headerTarget={headerId} onDirtyChange={dirty=>{reviewDirty.current=dirty;}}/></WorkspaceDialog> : null}
   {active==='lesson' ? <WorkspaceDialog open title="수업 작성" onClose={()=>{if(!busy&&autoTouches.current.size && JSON.stringify(lesson)!==JSON.stringify(currentDraft?.data) && !window.confirm('저장하지 않은 수업 내용을 닫을까요?'))return;autoVersion.current++;setAutoLoading(false);leave();}}>{lessonEditor}</WorkspaceDialog> : null}
   </Suspense>}/></div> : <div className="student-detail-empty">왼쪽에서 학생을 선택하세요</div>}
 </div></div></section>}
@@ -326,18 +315,11 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
    {(data.admin||data.principal) && data.academyId==='main' && <AdminHistoryPanel busy={busy} request={request} act={act}/>}
    {data.admin && data.academyId==='main' && <AppUserManager busy={busy} request={request} act={act} refresh={refresh}/>}
    {data.admin && data.academyId==='main' && <AppTemplateManager busy={busy} request={request} act={act}/>}
-   <details className="panel rv-admin"><summary>정리·점검 · 관리자용</summary><SpeedCheckPanel/><p className="gs-note my-2">외부 연결 정리 단계와 연결 점검입니다. 평소에는 열 필요가 없습니다.</p>
-    {data.admin && data.academyId==='main' && <NotionDisconnectPanel request={request}/>}
-    <Suspense fallback={<p>점검 화면을 불러오는 중…</p>}><TeacherIntegrityAudit key={data.uid+':'+data.academyId}/></Suspense>
-    {data.admin && onAccounts && <button type="button" className="small-button mt-3" onClick={onAccounts}>기존 계정·리포트 관리</button>}
+   <details className="panel rv-admin"><summary>점검 · 관리자용</summary><SpeedCheckPanel/>
+    
    </details>
   </>}
-  {tab === 'settings' && (data.admin || data.principal) && !data.coreMode && <><Suspense fallback={<p>점검 화면을 불러오는 중…</p>}><TeacherIntegrityAudit key={data.uid+':'+data.academyId}/></Suspense></>}
-  {tab === 'settings' && (data.admin || data.principal) && !data.coreMode && <WorkspaceSyncPanel data={data} busy={busy} request={request} refresh={refresh} act={act}/>}
   {tab === 'settings' && !data.coreMode && (data.admin || data.principal) && <LessonRestorePanel request={request} act={act} busy={busy} students={data.students} staff={data.staff} onRestored={refresh}/>}
-  {tab === 'settings' && !data.coreMode && data.admin && data.academyId==='main' && <NotionDisconnectPanel request={request}/>}
-  {tab === 'settings' && !data.coreMode && data.admin && data.academyId==='main' && <LessonMigrationPanel request={request} act={act} students={data.students} staff={data.staff}/>}
-  {tab === 'settings' && !data.coreMode && (data.admin || data.principal) && <TeacherAssignmentManager data={data} request={request} act={act} busy={busy} refresh={refresh} onAccounts={onAccounts}/>}
   </>}
  </div>;
 }

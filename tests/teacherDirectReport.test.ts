@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {directLessonReport,writeDirectLessonReport} from '../api/_lib/teacherDirectReport.ts';
+import {directLessonReport} from '../api/_lib/teacherDirectReport.ts';
 import {studentLessonDTO,parentLessonDTO,lessonReportId} from '../api/_lib/reportAudienceDTO.ts';
 import {hashStudentKey} from '../api/_lib/security.ts';
 const studentKey='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222-222222222222',pageId='33333333-3333-4333-8333-333333333333';
@@ -13,40 +13,4 @@ test('direct app report preserves fractional score, homework and audience separa
  assert.equal(student.schoolExamScore,72.5);assert.equal('feedback' in student,false);assert.match(parent.feedback,/특이 사항/);
  const mirror=directLessonReport(id,{...draft,notionPageId:pageId},mapping,r);assert.equal(lessonReportId(mirror as any),lessonReportId(r as any));
 });
-test('direct writes require no Notion/Make call for mapped students and migrate without duplicates',async()=>{
- const store=new Map<string,any>([[`notionStudentMappings/${hashStudentKey(studentKey)}`,mapping],[`teacherLessonDrafts/${id}`,draft],[`academyStudentMemberships/${studentKey}`,{academyId:'main'}]]);
- function ref(path:string):any{return {id:path.split('/').at(-1),get:async()=>snap(path)};}
- function snap(path:string){return {exists:store.has(path),data:()=>store.get(path)};}
- const db:any={collection:(name:string)=>({doc:(key:string)=>{const r=ref(`${name}/${key}`);r.path=`${name}/${key}`;return r;}}),runTransaction:async(fn:any)=>fn({get:async(r:any)=>snap(r.path),set:(r:any,d:any)=>store.set(r.path,{...store.get(r.path),...d}),delete:(r:any)=>store.delete(r.path),update:(r:any,d:any)=>store.set(r.path,{...store.get(r.path),...d})})};
- const originalFetch=globalThis.fetch;globalThis.fetch=async()=>{throw new Error('External service must not be called');};
- try{await writeDirectLessonReport(db,id,draft);assert.ok(store.has(`lessonReports/${id}`));await writeDirectLessonReport(db,id,{...draft,notionPageId:pageId});assert.equal(store.has(`lessonReports/${id}`),false);assert.ok(store.has(`lessonReports/${pageId}`));store.set(`teacherLessonDrafts/${id}`,{...draft,revision:2});await writeDirectLessonReport(db,id,{...draft,notionPageId:pageId,revision:2,data:{...draft.data,assignment:'새 과제'}});assert.equal([...store.keys()].filter(k=>k.startsWith('lessonReports/')).length,1);assert.equal(store.get(`lessonReports/${pageId}`).derivedAssignment,'새 과제');assert.equal(store.get(`teacherLessonDrafts/${id}`).directReportRevision,2);}finally{globalThis.fetch=originalFetch;}
-});
-test('migration preserves temporary public identity even if a Notion mirror already exists',async()=>{
- const {registrationFirestore}=await import('./helpers/registrationFirestore.js');const f=registrationFirestore();
- f.rows.set('notionStudentMappings/'+hashStudentKey(studentKey),mapping);f.rows.set('teacherLessonDrafts/'+id,draft);f.rows.set('academyStudentMemberships/'+studentKey,{academyId:'main'});
- const temporary=directLessonReport(id,draft,mapping);f.rows.set('lessonReports/'+id,temporary);
- f.rows.set('lessonReports/'+pageId,{...temporary,teacherDraftId:undefined,reportIdentity:pageId,notionPageId:pageId});
- await writeDirectLessonReport(f.db,id,{...draft,notionPageId:pageId});
- assert.equal(f.rows.has('lessonReports/'+id),false);assert.equal(f.rows.get('lessonReports/'+pageId).reportIdentity,id);
- assert.equal(lessonReportId(f.rows.get('lessonReports/'+pageId)),lessonReportId(temporary as any));
-});
-test('conflicting temporary report is retained and never deleted during canonical migration',async()=>{
- const {registrationFirestore}=await import('./helpers/registrationFirestore.js');const f=registrationFirestore();
- f.rows.set('notionStudentMappings/'+hashStudentKey(studentKey),mapping);f.rows.set('teacherLessonDrafts/'+id,draft);f.rows.set('academyStudentMemberships/'+studentKey,{academyId:'main'});
- f.rows.set('lessonReports/'+id,{...directLessonReport(id,draft,mapping),internalStudentId:'other-student'});
- await assert.rejects(writeDirectLessonReport(f.db,id,{...draft,notionPageId:pageId}),/SOURCE_IDENTITY_LOCKED/);assert.equal(f.rows.has('lessonReports/'+id),true);assert.equal(f.rows.has('lessonReports/'+pageId),false);
-});
 
-test('stale draft and changed academy membership cannot overwrite or create a report',async()=>{
- const {registrationFirestore}=await import('./helpers/registrationFirestore.js');const f=registrationFirestore();
- f.rows.set('notionStudentMappings/'+hashStudentKey(studentKey),mapping);
- f.rows.set('teacherLessonDrafts/'+id,{...draft,revision:2});
- f.rows.set('academyStudentMemberships/'+studentKey,{academyId:'main'});
- await assert.rejects(writeDirectLessonReport(f.db,id,draft),/DRAFT_CONFLICT/);
- for(const member of [{academyId:'other'},{academyId:'main',disabled:true},undefined]){
-  f.rows.set('teacherLessonDrafts/'+id,draft);
-  if(member)f.rows.set('academyStudentMemberships/'+studentKey,member);else f.rows.delete('academyStudentMemberships/'+studentKey);
-  await assert.rejects(writeDirectLessonReport(f.db,id,draft),/ACADEMY_MEMBERSHIP_CONFLICT/);
- }
- assert.equal([...f.rows.keys()].some(k=>k.startsWith('lessonReports/')),false);
-});

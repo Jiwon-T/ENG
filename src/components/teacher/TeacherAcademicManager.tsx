@@ -1,8 +1,6 @@
-import AcademicMigrationPanel from './AcademicMigrationPanel';
 import {saveAcademicBatchRow} from '../../lib/academicBatch';
 import StudentCombobox from './StudentCombobox';
 import AcademicBatchEditor from './AcademicBatchEditor';
-import LessonConflictReview from './LessonConflictReview';
 import StatusBadge from './StatusBadge';
 import {canRetryPublication} from '../../lib/teacherPublicationRecovery';
 import {useTeacherPage} from '../../lib/useTeacherPage';
@@ -84,7 +82,7 @@ export default function TeacherAcademicManager({data,busy,request,act}:{data:any
   {selected?.deleteRequested&&!selected?.deleteAttempted&&<button type="button" className="gs-quiet" onClick={()=>act(async()=>{await request('cancel-academic-delete',{id:selected.id,revision:selected.revision});await load(true);})}>삭제 요청 취소</button>}
   {selected&&<button type="button" className="gs-quiet" onClick={openNew}>새 성적</button>}
   <span className="gs-grow"/><button type="button" className="small-button" onClick={()=>act(()=>persist(false))}>저장</button><button type="button" className="primary-button" disabled={busy||selected?.deleteRequested||selected?.stage==='published'&&!changed} onClick={()=>act(()=>persist(true))}>{selected?.stage==='published'&&!changed?'반영 완료':'학생·학부모에게 반영'}</button></div>
- </fieldset><LessonConflictReview kind="academic" record={selected} request={request} act={act} busy={busy} refresh={()=>load(true)}/>{!selected?.deleteRequested && canRetryPublication(selected) && editable && <div><p className="gs-note">저장한 성적 입력으로 반영 결과를 확인합니다.</p><button className="small-button mt-2" disabled={busy} onClick={()=>act(async()=>{try{const result=await request('publish-academic',{id:selected.id});if(result.record){setSelected(result.record);setSaved(result.record.data);setValue(result.record.data);}}finally{const records=await load(true);const current=records.find((r:any)=>r.id===selected.id);if(current)setSelected(current);}})}>저장 결과 확인·재시도</button></div>}</section></WorkspaceDialog>
+ </fieldset>{!selected?.deleteRequested && canRetryPublication(selected) && editable && <div><p className="gs-note">저장한 성적 입력으로 반영 결과를 확인합니다.</p><button className="small-button mt-2" disabled={busy} onClick={()=>act(async()=>{try{const result=await request('publish-academic',{id:selected.id});if(result.record){setSelected(result.record);setSaved(result.record.data);setValue(result.record.data);}}finally{const records=await load(true);const current=records.find((r:any)=>r.id===selected.id);if(current)setSelected(current);}})}>저장 결과 확인·재시도</button></div>}</section></WorkspaceDialog>
  <section className="panel rv">
   <div className="rv-head"><h2>성적 관리<small>{result.total}건</small></h2><div className="rv-actions">{canWrite&&<><button className="small-button" disabled={busy} onClick={()=>setBatchOpen(true)}><Users size={16} aria-hidden="true"/>여러 학생 입력</button><button className="primary-button" disabled={busy} onClick={openNew}><Plus size={16} aria-hidden="true"/>성적 입력</button></>}<button type="button" className="rv-icon" aria-label="새로고침" title="새로고침" disabled={busy} onClick={()=>act(()=>load(true))}><RefreshCw size={16}/></button></div></div>
   <div className="rv-head"><div className="rv-seg" role="group" aria-label="시험 종류">{['학교 내신','학력평가'].map(k=><button key={k} type="button" aria-pressed={kind===k} onClick={()=>{setKind(k);setPage(1);setPeriod('');}}>{k==='학교 내신'?'내신':k}</button>)}</div><button type="button" className="rv-chip" aria-pressed={currentOnly} onClick={()=>setCurrentOnly(v=>!v)}>재원생만{currentOnly?` · ${currentKeys.size}명`:''}</button><span style={{flex:1}}/><div className="rv-seg" role="group" aria-label="보기">{([['exam','시험별'],['table','표'],['student','학생별']] as const).map(([k,l])=><button key={k} type="button" aria-pressed={view===k} onClick={()=>setView(k)}>{l}</button>)}</div></div>
@@ -114,7 +112,6 @@ export default function TeacherAcademicManager({data,busy,request,act}:{data:any
    </div>;})}</div>}
   {loaded&&!records.length&&<p className="rv-empty">{submission?'미제출 성적이 없습니다.':'해당하는 성적이 없습니다.'}</p>}
   {pages>1&&<div className="review-pagination"><button disabled={loading||current===1} onClick={()=>setPage(current-1)}>이전</button><span>{current} / {pages}</span><button disabled={loading||current===pages} onClick={()=>setPage(current+1)}>다음</button></div>}
-  {data.admin&&data.academyId==='main'&&!data.academicAppOnly&&<details className="rv-admin"><summary>관리자 도구 · 과거 Notion 성적 이전과 성적 앱 전환</summary><p className="text-xs text-slate-500 my-2">앱에 저장된 성적을 표시합니다. 아직 Notion에만 있는 과거 자료는 별도 이전 후 표시됩니다.</p><AcademicMigrationPanel request={request} act={act} onImported={()=>load(true)}/></details>}
  </section>
  </div>;
 }

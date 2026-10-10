@@ -1,4 +1,7 @@
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
+import {auth} from '../../lib/firebase';
+import {teacherAuthenticatedRequest} from '../../lib/teacherAuthenticatedRequest';
+import AutoTextarea from './AutoTextarea';
 import {Info,BookOpen,CheckCircle2,Trophy,TrendingUp} from 'lucide-react';
 import ChipGroup from './ChipGroup';
 import ScoreTrend from '../reports/ScoreTrend';
@@ -9,7 +12,27 @@ import {testPercentage,sessionMatches,filteredActivities,wrongRowExpanded} from 
 const filters=[['all','전체'],['test','단어 테스트'],['quiz','퀴즈'],['flashcard','플래시카드'],['grammar','문법'],['exam','시험 대비']];
 const modes:Record<string,string>={quiz:'객관식 퀴즈',flashcard:'플래시카드',match:'매치 게임',conjugation:'3단 변화',test:'단어 테스트'};
 const date=(v:string|null,options:any={month:'long',day:'numeric',weekday:'short'})=>v?new Date(v).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',...options}):'날짜 미상';
-export default function TeacherOnlineLearning({data,page,onPrevious,onNext,loading}:any){
+/** 학습 성취도 평가: a short note on how the student is doing in the online app; the student sees it in their own 학습 리포트. */
+function OnlineEvaluation({studentKey,initial,onDirty}:{key?:string;studentKey:string;initial:{text:string;updatedAt:string|null};onDirty?:(dirty:boolean)=>void}){
+ const [text,setText]=useState(initial.text),[saved,setSaved]=useState(initial),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
+ const dirty=busy||text.trim()!==saved.text;
+ // Report the unsaved state to the screen's guards, and warn before the browser tab closes.
+ useEffect(()=>{onDirty?.(dirty);},[dirty]);
+ useEffect(()=>()=>onDirty?.(false),[]);
+ useEffect(()=>{if(!dirty)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
+ const save=async()=>{setBusy(true);setMessage('');
+  try{const r=await teacherAuthenticatedRequest<any>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save-online-evaluation',studentKey,text,expectedUpdatedAt:saved.updatedAt})});
+   if(!r.ok||!r.data?.ok){setMessage(r.data?.message||'평가를 저장하지 못했습니다. 다시 시도해 주세요.');return;}
+   setSaved(r.data.evaluation);setText(r.data.evaluation.text);setMessage(r.data.evaluation.text?'저장했습니다. 학생의 학습 리포트에 보입니다.':'평가를 지웠습니다.');
+  }finally{setBusy(false);}};
+ return <section className="report-online-evaluation" aria-label="학습 성취도 평가"><h4>학습 성취도 평가</h4>
+  <AutoTextarea aria-label="학습 성취도 평가" value={text} maxLength={1000} maxRows={6} disabled={busy} placeholder="온라인 학습을 잘하고 있는지 간단히 남겨 주세요. 예: 단어 복습을 꾸준히 하고 있어요." onChange={e=>{setText(e.target.value);setMessage('');}}/>
+  <div className="report-online-evaluation-foot"><span className="report-caption">{saved.updatedAt?`마지막 저장 ${date(saved.updatedAt,{month:'long',day:'numeric',hour:'numeric',minute:'2-digit'})}`:'아직 남긴 평가가 없습니다.'} · 학생 학습 리포트에 보입니다.</span>
+   <button type="button" className="primary-button" disabled={busy||text.trim()===saved.text} onClick={()=>void save()}>{busy?'저장 중…':'평가 저장'}</button></div>
+  {message&&<p role="status" className="report-caption">{message}</p>}
+ </section>;
+}
+export default function TeacherOnlineLearning({data,page,onPrevious,onNext,loading,studentKey,onEvaluationDirty}:any){
  const [filter,setFilter]=useState('all'),[wrongOnly,setWrongOnly]=useState(false),[expanded,setExpanded]=useState<string[]>([]);
  if(!data)return <p role="status">온라인 학습 기록을 불러오는 중…</p>;
  const reasons:Record<string,string>={'account-not-linked':'학생 앱 계정이 연결되지 않아 온라인 학습 이력을 조회할 수 없습니다.','account-link-mismatch':'학생 계정 연결을 확인해야 합니다. 다른 계정의 기록은 표시하지 않습니다.','subject-not-available':'온라인 단어·문법 학습 기록은 영어 담당 범위에서 확인할 수 있습니다.'};
@@ -17,7 +40,8 @@ export default function TeacherOnlineLearning({data,page,onPrevious,onNext,loadi
  const sessions=data.sessions||[],loadedTests=sessions.filter((s:any)=>s.type==='test').map((s:any)=>({...s,percentage:testPercentage(s.score,s.totalItems)})),tests=loadedTests.filter((s:any)=>s.percentage!==null);
  const latest=[...loadedTests].sort((a:any,b:any)=>Date.parse(b.createdAt)-Date.parse(a.createdAt))[0]?.percentage??null,average=tests.length?Math.round(tests.reduce((sum:number,s:any)=>sum+s.percentage,0)/tests.length*10)/10:null;
  const visible=filteredActivities<any>(sessions,filter,wrongOnly);const labels=filters.map(([key,label])=>`${label} ${sessions.filter((s:any)=>sessionMatches(s,key)).length}`);const wrongIds=visible.filter((s:any)=>s.incorrectCount>0).map((s:any)=>s.id),allOpen=wrongOnly||wrongIds.length>0&&wrongIds.every((id:string)=>expanded.includes(id));
- return <div className="review-section report-online"><div className="report-online-caption"><span>온라인 학습 · 읽기 전용</span><span tabIndex={0} title="완료·오답·포인트 상태는 변경하지 않습니다." aria-label="읽기 전용 안내">ⓘ</span></div>
+ return <div className="review-section report-online"><div className="report-online-caption"><span>온라인 학습 · 기록은 읽기 전용</span><span tabIndex={0} title="학습 기록의 완료·오답·포인트 상태는 변경하지 않습니다. 평가만 남길 수 있습니다." aria-label="온라인 학습 안내">ⓘ</span></div>
+ {data.evaluation&&studentKey&&<OnlineEvaluation key={studentKey+':'+(data.evaluation.updatedAt||'')} studentKey={studentKey} initial={data.evaluation} onDirty={onEvaluationDirty}/>}
  <div className="report-stats"><StatCard label="학습 단어 기록" value={<><BookOpen size={16}/>{data.progress?.recorded??'—'}개</>}/><StatCard label="암기 완료" value={<><CheckCircle2 size={16}/>{data.progress?.learned??'—'}개</>}/><StatCard label="최근 단어 테스트" value={<><Trophy size={16}/>{latest===null?'—':`${latest}%`}</>}/><StatCard label="평균" value={<><TrendingUp size={16}/>{average===null?'—':`${average}%`}</>}/></div><p className="report-caption">최근 {loadedTests.length}회 기준</p>
  <ScoreTrend points={[...tests].sort((a:any,b:any)=>Date.parse(a.createdAt)-Date.parse(b.createdAt)).map((s:any)=>({id:s.id,value:s.percentage,date:date(s.createdAt,{month:'numeric',day:'numeric'})}))}/>
  <div className="report-learning-filters"><div className="report-filter-chips"><ChipGroup label="활동 유형" options={labels} value={labels[filters.findIndex(([key])=>key===filter)]} onChange={label=>setFilter(filters[labels.indexOf(label)][0])}/></div><span tabIndex={0} title="건수와 필터는 현재 불러온 페이지 기준입니다." aria-label="현재 페이지 필터 안내">ⓘ</span><label className="report-wrong-toggle"><input type="checkbox" checked={wrongOnly} onChange={e=>setWrongOnly(e.target.checked)}/>오답만 보기</label><button type="button" className="report-expand-all" disabled={!wrongIds.length} onClick={()=>{setWrongOnly(false);setExpanded(allOpen?[]:wrongIds);}}>{allOpen?'모두 접기':'모두 펼치기'}</button></div>

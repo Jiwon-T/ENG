@@ -39,6 +39,23 @@ export async function setAppUserRole(db: any, actor: any, input: unknown) {
     });
 }
 
+/** The app name (users.alias) the person chose at first sign-in; the admin can correct it here. Recorded for 관리 기록. */
+export async function setAppUserName(db: any, actor: any, input: unknown) {
+    admin(actor);
+    const v = z.object({ uid: z.string().min(1).max(200), name: z.string().trim().min(1).max(100) }).strict().parse(input);
+    const userRef = db.collection('users').doc(v.uid);
+    return db.runTransaction(async (tx: any) => {
+        const user = (await tx.get(userRef)).data();
+        if (!user) throw Error('APP_USER_NOT_FOUND');
+        const from = String(user.alias || user.name || '');
+        if (from === v.name) return { uid: v.uid, name: v.name, unchanged: true };
+        const at = Date.now();
+        tx.set(userRef, { ...user, alias: v.name, isNameSet: true });
+        tx.set(db.collection('appUserNameHistory').doc(`${v.uid}:${at}`), { uid: v.uid, from, to: v.name, by: actor.uid, at });
+        return { uid: v.uid, name: v.name };
+    });
+}
+
 /** 탈퇴: remove a student account's app record (as the old teacher room did) and, by default, block sign-in for that
  *  account (Firebase "disabled" + sessions revoked), so it cannot come back as a new student. Blocking is reversible
  *  (allowSignIn). A copy of the record is kept in appUserRemovals so a mistake can be undone.

@@ -93,3 +93,18 @@ test('first screen load stays off Notion in every section when every switch is o
         }
     });
 });
+
+test('student profile and enrollment work after the switch with no Notion database setting, and never call Notion', async () => {
+    const { discardStudentProfile } = await import('../api/_lib/teacherStudentProfile.js');
+    const { readStudentEnrollment } = await import('../api/_lib/teacherStudentEnrollment.js');
+    const saved = process.env.NOTION_STUDENT_DATABASE_ID; delete process.env.NOTION_STUDENT_DATABASE_ID;
+    const f = appOnly(); f.rows.set(`academyStudentMemberships/${S}`, { academyId: 'main', disabled: false });
+    const notion: any = async () => { throw Error('NOTION_CALLED'); };
+    try {
+        await noNotion(async () => {
+            // No pending edit: the app-only path gets as far as the edit check (never the Notion setting or Notion itself).
+            await assert.rejects(discardStudentProfile(f.db, admin as any, S, '44444444-4444-4444-8444-444444444444'), (e: any) => e.message !== 'NOTION_CALLED' && e.message !== 'NOTION_REGISTRATION_SOURCE_REQUIRED');
+            await assert.rejects(readStudentEnrollment(f.db, admin as any, S), (e: any) => e.message !== 'NOTION_CALLED' && e.message !== 'NOTION_REGISTRATION_SOURCE_REQUIRED');
+        });
+    } finally { if (saved === undefined) delete process.env.NOTION_STUDENT_DATABASE_ID; else process.env.NOTION_STUDENT_DATABASE_ID = saved; }
+});
