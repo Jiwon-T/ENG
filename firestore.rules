@@ -95,6 +95,11 @@ service cloud.firestore {
       return isAuthenticated() && (request.auth.token.email == "lizzieshere1@gmail.com");
     }
 
+    function isPrincipalUser() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'principal';
+    }
+
     function isTeacher() {
       return isAuthenticated() && (
         (request.auth.token.email == "lizzieshere1@gmail.com") ||
@@ -190,7 +195,8 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{uid} {
-      allow read: if isAuthenticated() && (isOwner(uid) || isTeacher());
+      // 이메일·UID 등 회원 정보는 본인, 관리자, 원장님만 읽습니다. 선생님 화면은 서버를 통해 필요한 것만 받습니다.
+      allow read: if isAuthenticated() && (isOwner(uid) || isAdmin() || isPrincipalUser());
       // 일반 사용자는 student 역할로만 본인 문서 생성 가능. notionStudentKey 등 관리자 필드 설정 불가.
       allow create: if isOwner(uid) && isValidNewUserCreation(uid, request.resource.data);
       allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
@@ -423,5 +429,8 @@ service cloud.firestore {
     match /payrollMonthHistory/{id} { allow read, write: if false; }
     match /appUserRoleHistory/{id} { allow read, write: if false; }
     match /appUserRemovals/{id} { allow read, write: if false; }
+    match /studentLinkCodes/{id} { allow read, write: if false; }
+    match /studentLinkCodeIndex/{id} { allow read, write: if false; }
+    match /studentLinkAttempts/{id} { allow read, write: if false; }
   }
 }

@@ -4,9 +4,12 @@ import { loadStudentResource } from '../lib/studentReportCache';
 import { readRecentLearning, type RecentLearning } from '../lib/recentLearning';
 import type { StudentLessonReportDTO, StudentScheduleDTO } from '../types/lessonReport';
 import { motion, AnimatePresence } from 'motion/react';
-import { GraduationCap, Languages, BookOpen, History, BarChart3, FileText, Users, ArrowRight, X, Sparkles, Dog } from 'lucide-react';
+import { GraduationCap, Languages, BookOpen, History, BarChart3, FileText, Users, ArrowRight, X, Sparkles, Dog, KeyRound } from 'lucide-react';
+import LinkCodeDialog from './student/LinkCodeDialog';
 
 interface HomeProps {
+  studentLinked?: boolean;
+  onLinked?: (studentKey: string) => void;
   onNavigate: (view: 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'exam' | 'vocab-mobile' | 'tutor' | 'report' | 'archive' | 'teacher-room' | 'pet') => void;
   userRole?: 'teacher' | 'student' | 'admin' | 'principal';
   userEmail?: string;
@@ -16,8 +19,9 @@ interface HomeProps {
   onResume?: (target: RecentLearning) => void;
 }
 
-export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment, userUid, pendingAssignmentCount, onResume }: HomeProps) {
+export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment, userUid, pendingAssignmentCount, onResume, studentLinked = true, onLinked }: HomeProps) {
   const isEducator = userRole === 'teacher' || userRole === 'principal' || userRole === 'admin';
+  const [linkOpen, setLinkOpen] = useState(false);
   const recent = userUid ? readRecentLearning(userUid) : null;
   const [nextSchedule, setNextSchedule] = useState<{ uid: string; schedule: StudentScheduleDTO | null } | null>(null);
   const [lessonPending, setLessonPending] = useState<{ uid: string; count: number } | null>(null);
@@ -170,8 +174,10 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button type="button" onClick={() => onNavigate('pet')} className="min-h-[44px] px-4 py-2 rounded-xl border border-emerald-100 bg-emerald-50 flex items-center gap-2 text-sm font-semibold text-emerald-700"><Dog size={18}/> 나만의 펫 <span className="text-[10px] font-normal">Beta</span></button>
+        {userRole === 'student' && !studentLinked && onLinked && <button type="button" onClick={() => setLinkOpen(true)} className="relative min-h-[44px] px-4 py-2 rounded-xl border border-pastel-pink-200 bg-gradient-to-r from-pastel-pink-50 to-violet-50 flex items-center gap-2 text-sm font-semibold text-pastel-pink-600"><KeyRound size={18}/> 학원 연결<span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-pastel-pink-400 ring-2 ring-white" aria-hidden="true"/><span className="sr-only">(아직 연결 안 됨)</span></button>}
         {isEducator && <button type="button" onClick={() => onNavigate('teacher-room')} className="min-h-[44px] px-4 py-2 rounded-xl border border-pink-100 bg-white flex items-center gap-2 text-sm font-semibold text-pink-600"><Users size={18}/> 선생님방</button>}
       </div>
+      {linkOpen && onLinked && <LinkCodeDialog onClose={() => setLinkOpen(false)} onLinked={onLinked} />}
       <footer className="mt-6 md:mt-12 text-center border-t border-slate-100 pt-3 md:pt-4">
         <p className="text-slate-400 text-[10px] md:text-xs font-normal">
           © 2026 지원T English. All rights reserved.

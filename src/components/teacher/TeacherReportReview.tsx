@@ -25,7 +25,7 @@ export default function TeacherReportReview({ students, initialStudentKey, showS
     const [headerElement,setHeaderElement]=useState<HTMLElement|null>(null);
     useEffect(()=>{setHeaderElement(headerTarget?document.getElementById(headerTarget):null);},[headerTarget]);
     const [studentKey, setStudentKey] = useState(initialStudentKey || ''), [audience, setAudience] = useState<'parent' | 'student'>('student');
-    const [data, setData] = useState<any>(null), [error, setError] = useState(''), [loading, setLoading] = useState(false), [refresh, setRefresh] = useState(0), [page, setPage] = useState(1), [schedulePage, setSchedulePage] = useState(1), [section, setSection] = useState<'schedule'|'lessons'|'grades'|'online'>(()=>{const initial=students.find(s=>s.studentKey===initialStudentKey);return initial&&!initial.linkedFirebaseUid?'lessons':'online';}), [subject, setSubject] = useState('');
+    const [data, setData] = useState<any>(null), [error, setError] = useState(''), [loading, setLoading] = useState(false), [refresh, setRefresh] = useState(0), [page, setPage] = useState(1), [schedulePage, setSchedulePage] = useState(1), [section, setSection] = useState<'schedule'|'lessons'|'grades'|'online'>(()=>{const initial=students.find(s=>s.studentKey===initialStudentKey);return initial&&!(initial.accountLinked??initial.linkedFirebaseUid)?'lessons':'online';}), [subject, setSubject] = useState('');
     const [onlineCursors,setOnlineCursors]=useState(['']),[onlinePage,setOnlinePage]=useState(0);
     const resetOnline=()=>{setOnlineCursors(old=>old.length===1&&old[0]===''?old:['']);setOnlinePage(0);};
     const [selectedReport,setSelectedReport]=useState('');

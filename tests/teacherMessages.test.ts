@@ -76,3 +76,17 @@ test('optional score lines drop out when the lesson has no value',()=>{
  assert.equal(renderTeacherMessage(t,messageVariables({displayName:'민수'},{})).body,'민수 수업 결과\n감사합니다');
  assert.deepEqual(renderTeacherMessage('{{보호자이름}}님',messageVariables({displayName:'민수'},{})).missing,['보호자이름']);
 });
+
+test('보호자 문자 no longer needs the Notion student database setting after the app-only switch', async () => {
+    const { templateFirestore } = await import('./helpers/templateFirestore.js');
+    const { readTeacherMessages } = await import('../api/_lib/teacherMessages.js');
+    const saved = process.env.NOTION_STUDENT_DATABASE_ID; delete process.env.NOTION_STUDENT_DATABASE_ID;
+    try {
+        const key = '11111111-1111-4111-8111-111111111111', actor = { uid: 't', admin: false, principal: false, academyId: 'main', scopes: [] };
+        const before = templateFirestore();
+        await assert.rejects(readTeacherMessages(before.db, actor, key, '영어'), /NOTION_REGISTRATION_SOURCE_REQUIRED/);
+        const after = templateFirestore(); after.rows.set('academyCoreAuthority/main', { active: true });
+        // Past the setting check, the usual membership/permission check decides.
+        await assert.rejects(readTeacherMessages(after.db, actor, key, '영어'), /FORBIDDEN/);
+    } finally { if (saved === undefined) delete process.env.NOTION_STUDENT_DATABASE_ID; else process.env.NOTION_STUDENT_DATABASE_ID = saved; }
+});

@@ -6,11 +6,13 @@ import h0 from './_lib/student/lesson-reports.js';
 import h1 from './_lib/student/schedules.js';
 import h2 from './_lib/student/academic.js';
 import h3 from './_lib/student/assignment-completion.js';
+import h4 from './_lib/student/link-code.js';
 const handlers = {
   'lesson-reports': h0,
   'schedules': h1,
   'academic': h2,
-  'assignment-completion': h3
+  'assignment-completion': h3,
+  'link-code': h4
 };
 export default function handler(req: IncomingMessage, res: ServerResponse) { return withNotionUsageRoute('student', () => routeHandler(req, res)); }
 async function routeHandler(req: IncomingMessage, res: ServerResponse) {

@@ -613,6 +613,8 @@ export default function App() {
                 onNavigate={setCurrentView} 
                 userRole={profile?.role} 
                 userEmail={profile?.email}
+                studentLinked={Boolean((profile as any)?.notionStudentKey)}
+                onLinked={key => setProfile(prev => prev ? ({ ...prev, notionStudentKey: key } as any) : prev)}
                 hasNewAssignment={hasNewAssignment}
                 userUid={user.uid}
                 pendingAssignmentCount={pendingAssignmentCount}

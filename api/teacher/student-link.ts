@@ -11,6 +11,7 @@ import { lookupStudentIdentity, migrateStudentMapping, readStudentMapping } from
 import { hashStudentKey } from '../_lib/security.js';
 import { normalizeNotionPageId } from '../_lib/notionPageId.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
+import { linkStudentAccount } from '../_lib/studentAccountLink.js';
 
 /**
  * 관리자 전용 학생 계정 연결/해제 API (지속적인 관리자 권한 확인)
@@ -103,125 +104,21 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
       }
 
       const { firebaseUid } = parsed.data;
-      let studentKey = parsed.data.studentKey;
-
-      // 1) 대상 Firebase 사용자 문서 존재 및 역할 확인 (오직 student만 가능)
-      const userRef = db.collection('users').doc(firebaseUid);
-      const userSnap = await userRef.get();
-      if (!userSnap.exists) {
-        return sendJson(res, 404, {
-          ok: false,
-          error: 'USER_NOT_FOUND',
-          message: '대상이 되는 Firebase 사용자 계정을 찾을 수 없습니다.',
-        });
-      }
-
-      const userData = userSnap.data();
-      if (userData?.role !== 'student') {
-        return sendJson(res, 400, {
-          ok: false,
-          error: 'INVALID_ROLE',
-          message: '학생(student) 역할의 계정만 수업 리포트에 연결할 수 있습니다.',
-        });
-      }
-
-      // 2) Notion DB_학생 관리에서 학생이 정확히 1명 존재하는지 검증
-      let notionLookup;
+      // Same linking steps as before, now shared with student link codes (api/_lib/studentAccountLink.ts).
+      let linked;
       try {
-        notionLookup = await lookupStudentIdentity(db, studentKey, false);
-      } catch (notionErr: any) {
-        if (notionErr.message === 'STUDENT_NOT_FOUND') {
-          return sendJson(res, 404, {
-            ok: false,
-            error: 'STUDENT_NOT_FOUND_IN_NOTION',
-            message: 'Notion [DB_학생 관리]에서 학생을 찾을 수 없습니다.',
-          });
-        }
-        if (notionErr.message === 'MULTIPLE_STUDENTS_MATCHED') {
-          return sendJson(res, 409, {
-            ok: false,
-            error: 'MULTIPLE_STUDENTS_MATCHED',
-            message: 'Notion에서 동명의 학생이 2명 이상 검색되었습니다.',
-          });
-        }
-        throw notionErr;
+        linked = await linkStudentAccount(db, { firebaseUid, studentKey: parsed.data.studentKey, linkedByUid: adminUser.uid });
+      } catch (linkErr: any) {
+        if (linkErr.message === 'USER_NOT_FOUND') return sendJson(res, 404, { ok: false, error: 'USER_NOT_FOUND', message: '대상이 되는 Firebase 사용자 계정을 찾을 수 없습니다.' });
+        if (linkErr.message === 'INVALID_ROLE') return sendJson(res, 400, { ok: false, error: 'INVALID_ROLE', message: '학생(student) 역할의 계정만 수업 리포트에 연결할 수 있습니다.' });
+        if (linkErr.message === 'STUDENT_NOT_FOUND') return sendJson(res, 404, { ok: false, error: 'STUDENT_NOT_FOUND_IN_NOTION', message: 'Notion [DB_학생 관리]에서 학생을 찾을 수 없습니다.' });
+        if (linkErr.message === 'MULTIPLE_STUDENTS_MATCHED') return sendJson(res, 409, { ok: false, error: 'MULTIPLE_STUDENTS_MATCHED', message: 'Notion에서 동명의 학생이 2명 이상 검색되었습니다.' });
+        throw linkErr;
       }
-
-      const existingIdentity = await migrateStudentMapping(db, notionLookup.notionStudentPageId, notionLookup.studentDisplayName);
-      studentKey = existingIdentity.studentKey;
-      const internalStudentId = existingIdentity.internalStudentId;
-      const studentKeyHash = hashStudentKey(studentKey);
-      const mappingRef = db.collection('notionStudentMappings').doc(studentKeyHash);
-
-      const now = new Date().toISOString();
-
-      // 3) Firestore Transaction으로 충돌 검사 및 두 컬렉션 원자적 동시 갱신
-      await db.runTransaction(async (t) => {
-        const mappingSnap = await t.get(mappingRef);
-        const currentUserSnap = await t.get(userRef);
-
-        if (!currentUserSnap.exists) {
-          throw new Error('USER_NOT_FOUND');
-        }
-
-        // 이미 다른 학생 키에 이 사용자가 연결되어 있는지 확인
-        const currentData = currentUserSnap.data();
-        if (currentData?.notionStudentKey && currentData.notionStudentKey !== studentKey) {
-          // 기존에 연결된 이전 매핑이 있다면 이전 매핑의 firebaseUid를 해제
-          let prevMappingRef = db.collection('notionStudentMappings').doc(hashStudentKey(currentData.notionStudentKey));
-          let prevMappingSnap = await t.get(prevMappingRef);
-          if (prevMappingSnap.exists && prevMappingSnap.data()?.notionStudentPageId) {
-            const canonicalRef = db.collection('notionStudentMappings').doc(hashStudentKey(normalizeNotionPageId(prevMappingSnap.data()!.notionStudentPageId)));
-            const canonicalSnap = await t.get(canonicalRef);
-            if (canonicalSnap.exists) { prevMappingRef = canonicalRef; prevMappingSnap = canonicalSnap; }
-          }
-          if (prevMappingSnap.exists && prevMappingSnap.data()?.firebaseUid === firebaseUid) {
-            t.update(prevMappingRef, { firebaseUid: null, updatedAt: now });
-          }
-        }
-
-        if (mappingSnap.exists) {
-          const mappingData = mappingSnap.data() as StoredNotionStudentMapping;
-          // 해당 Notion 학생이 이미 다른 Firebase 계정과 연결되어 있는지 검증
-          if (mappingData.firebaseUid && mappingData.firebaseUid !== firebaseUid) {
-            throw new Error('NOTION_STUDENT_ALREADY_LINKED_TO_ANOTHER_ACCOUNT');
-          }
-
-          t.update(mappingRef, {
-            firebaseUid,
-            linkedByAdminUid: adminUser.uid,
-            linkedAt: now,
-            updatedAt: now,
-          });
-        } else {
-          // 매핑 문서 신규 생성
-          const newMapping: StoredNotionStudentMapping = {
-            internalStudentId,
-            studentKey,
-            studentDisplayName: notionLookup.studentDisplayName,
-            notionStudentPageId: notionLookup.notionStudentPageId,
-            firebaseUid,
-            linkedByAdminUid: adminUser.uid,
-            linkedAt: now,
-            createdAt: now,
-            updatedAt: now,
-          };
-          t.set(mappingRef, newMapping);
-        }
-
-        // users/{firebaseUid} 문서에 notionStudentKey 기록
-        t.update(userRef, {
-          notionStudentKey: studentKey,
-          updatedAt: now,
-        });
-      });
 
       return sendJson(res, 200, {
         ok: true,
-        firebaseUid,
-        studentKey,
-        studentDisplayName: notionLookup.studentDisplayName,
-        linkedAt: now,
+        ...linked,
         message: '학생 계정과 Notion 학생 리포트가 성공적으로 연결되었습니다.',
       });
     }

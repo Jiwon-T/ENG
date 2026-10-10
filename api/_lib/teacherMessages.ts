@@ -15,7 +15,10 @@ function assertMember(actor:any,member:any){if(member?.disabled||member?.academy
 const digest=(s:string)=>createHash('sha256').update(s).digest('hex');
 function assertPage(page:any,key:string,db=REGISTRATION_STUDENT_DATABASE){if(page?.archived||page?.in_trash||uuid(page?.id)!==key||uuid(page.parent?.database_id)!==db)throw Error('NOTION_SOURCE_MISMATCH');}
 async function access(db:any,actor:any,key:string,subject:string){
- if(actor.academyId!=='main'||uuid(process.env.NOTION_STUDENT_DATABASE_ID||'')!==REGISTRATION_STUDENT_DATABASE)throw Error('NOTION_REGISTRATION_SOURCE_REQUIRED');
+ // The Notion student database setting is only needed before the app-only switch.
+ if(actor.academyId!=='main')throw Error('NOTION_REGISTRATION_SOURCE_REQUIRED');
+ const notionConfigured=(()=>{try{return uuid(process.env.NOTION_STUDENT_DATABASE_ID||'')===REGISTRATION_STUDENT_DATABASE;}catch{return false;}})();
+ if(!notionConfigured&&!await coreActive(db,actor))throw Error('NOTION_REGISTRATION_SOURCE_REQUIRED');
  const member=(await db.collection('academyStudentMemberships').doc(key).get()).data();
  assertMember(actor,member);
  if(!actor.admin&&!actor.principal&&!(actor.scopes||[]).some((s:any)=>uuid(s.studentKey)===key&&s.subject===subject))throw Error('FORBIDDEN');
@@ -43,7 +46,9 @@ export async function readTeacherMessages(db:any,actor:any,keyInput:unknown,subj
  const records=await db.collection('teacherLessonDrafts').where('data.studentKey','in',[...new Set([key,key.replace(/-/g,'')])]).get();
  const lessons=records.docs.map((d:any)=>({id:d.id,...d.data()})).filter((r:any)=>r.academyId===actor.academyId&&r.stage==='published'&&!r.archived&&r.data?.studentKey?.replace(/-/g,'')===key.replace(/-/g,'')&&r.data?.subject===subject).sort((a:any,b:any)=>b.data.date.localeCompare(a.data.date)).slice(0,30).map((r:any)=>({id:r.id,data:r.data}));
  const drafts=await db.collection('teacherMessages').where('studentKey','==',key).get();
- return {delivery:batiReadiness(),templates,profile:profileFromPage(page),lessons,records:drafts.docs.map((d:any)=>d.data()).filter((r:any)=>r.academyId===actor.academyId&&r.subject===subject&&(actor.admin||actor.principal||r.ownerUid===actor.uid)).sort((a:any,b:any)=>b.createdAt-a.createdAt).slice(0,30).map(publicDraft)};
+ // 수강료 is for the admin and principal only.
+ const profile=profileFromPage(page);if(!actor.admin&&!actor.principal)profile.tuition=null;
+ return {delivery:batiReadiness(),templates,profile,lessons,records:drafts.docs.map((d:any)=>d.data()).filter((r:any)=>r.academyId===actor.academyId&&r.subject===subject&&(actor.admin||actor.principal||r.ownerUid===actor.uid)).sort((a:any,b:any)=>b.createdAt-a.createdAt).slice(0,30).map(publicDraft)};
 }
 export const messagePrepareSchema=z.object({action:z.literal('prepare-message'),id:z.string().uuid(),studentKey:z.string().uuid(),subject:z.string().min(1).max(100),templateId:z.string().uuid(),lessonId:z.string().uuid().nullable(),body:z.string().trim().min(1).max(5000)}).strict();
 export async function prepareTeacherMessage(db:any,actor:any,input:unknown,notion:RegistrationNotion=registrationNotion){

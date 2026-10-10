@@ -491,3 +491,72 @@
 .teacher-workspace .tt-study-row{position:relative;padding-right:32px}
 .teacher-workspace .tt-study-row .tt-study-who{flex-basis:100%;order:3;padding-left:2px}
 .teacher-workspace .tt-study-row>.tt-icon{position:absolute;right:0;top:6px}
+
+.teacher-workspace .tu-changed{display:flex;flex-direction:column;gap:4px;margin:6px 0 8px;padding:10px 12px;border-radius:12px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:13px}
+.teacher-workspace .tu-changed .gs-quiet{align-self:flex-start}
+.teacher-workspace .tu-table tr.is-changed td,.teacher-workspace .tu-table tr.is-changed th{background:#fef9c3}
+
+/* 관리 기록 */
+.teacher-workspace .ah-list{list-style:none;margin:10px 0 0;padding:0;max-height:480px;overflow:auto}
+.teacher-workspace .ah-day{margin:10px 0 4px;font-size:12px;font-weight:800;color:var(--workspace-muted)}
+.teacher-workspace .ah-row{display:grid;grid-template-columns:48px 86px minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 4px;border-top:1px solid #f3f4f6;font-size:13px}
+.teacher-workspace .ah-time{font-variant-numeric:tabular-nums;color:var(--workspace-muted);font-size:12px}
+.teacher-workspace .ah-area{justify-self:start;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#f1f5f9;color:#475569;white-space:nowrap}
+.teacher-workspace .ah-area.a-회원{background:#eef2ff;color:#4338ca}.teacher-workspace .ah-area.a-수강료{background:#fff1f3;color:#be185d}.teacher-workspace .ah-area.a-정산{background:#fef3c7;color:#92400e}.teacher-workspace .ah-area.a-반·커리큘럼{background:#ecfdf5;color:#047857}
+.teacher-workspace .ah-text{min-width:0;overflow-wrap:anywhere}
+.teacher-workspace .ah-by{font-size:12px;color:var(--workspace-muted);white-space:nowrap}
+@media(max-width:640px){.teacher-workspace .ah-row{grid-template-columns:44px minmax(0,1fr)}.teacher-workspace .ah-area,.teacher-workspace .ah-by{grid-column:2}}
+
+.teacher-workspace .sal-code{margin-top:10px;padding-top:10px;border-top:1px dashed #f1e4e7}
+.teacher-workspace .sal-code-value{margin:4px 0;font-size:22px;font-weight:800;letter-spacing:.12em;text-align:center;color:var(--workspace-brand-fg);font-variant-numeric:tabular-nums}
+/* 반·정규 시간표 editor: class info, students and books on the left, the timetable on the right (stacked when narrow). */
+.teacher-workspace .ce-layout{display:grid;gap:14px;align-items:start}
+@container class-editor (min-width:900px){.teacher-workspace .ce-layout{grid-template-columns:minmax(300px,360px) minmax(0,1fr)}}
+.teacher-workspace .ce-side{display:grid;gap:12px;min-width:0}
+.teacher-workspace .ce-main{min-width:0}
+.teacher-workspace .ce-main .tt{margin-top:0}
+.teacher-workspace .ce-card{padding:12px 14px;border:1px solid #f1e4e7;border-radius:16px;background:#fff}
+.teacher-workspace .ce-title{margin:0 0 8px;font-size:15px;font-weight:800}
+.teacher-workspace .ce-title small{margin-left:4px;font-size:12px;font-weight:700;color:var(--workspace-muted)}
+.teacher-workspace .ce-title-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.teacher-workspace .ce-title-row>span{font-size:12px;color:var(--workspace-muted)}
+.teacher-workspace .ce-card .class-basics{grid-template-columns:1fr 1fr;gap:8px}
+.teacher-workspace .ce-card .class-basics>label:first-child{grid-column:1/-1}
+.teacher-workspace .ce-card .class-basics label{font-size:12px;font-weight:700;color:var(--workspace-muted)}
+.teacher-workspace .ce-card :is(input:not([type=checkbox]),select){min-height:40px!important;height:40px;margin-top:4px;border-radius:10px}
+.teacher-workspace .ce-picked{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.teacher-workspace .ce-chip{display:inline-flex;align-items:center;gap:2px;min-height:30px;padding:2px 4px 2px 10px;border:1px solid #f472b6;border-radius:999px;background:#fce7f3;color:#9d174d;font-size:12px;font-weight:700}
+.teacher-workspace .ce-chip button{display:grid;place-items:center;width:22px;height:22px;min-height:22px;padding:0;border-radius:999px;background:transparent;color:#9d174d}
+.teacher-workspace .ce-chip button:hover{background:#fbcfe8}
+.teacher-workspace .ce-hint{font-size:12px;color:var(--workspace-muted)}
+.teacher-workspace .ce-search{display:flex;gap:6px;align-items:center}
+.teacher-workspace .ce-search-box{position:relative;flex:1;min-width:0}
+.teacher-workspace .ce-search-box svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8;pointer-events:none}
+.teacher-workspace .ce-search-box input{width:100%;margin:0!important;padding-left:32px!important}
+.teacher-workspace .ce-seg{display:inline-flex;flex:none;padding:3px;border-radius:999px;background:#f8fafc;gap:2px}
+.teacher-workspace .ce-seg button{min-height:30px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;color:var(--workspace-muted);background:transparent}
+.teacher-workspace .ce-seg button[aria-pressed=true]{background:#fff;color:#be185d;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.teacher-workspace .ce-results{display:grid;gap:2px;margin:6px 0 0;padding:4px;list-style:none;border:1px solid #f1e4e7;border-radius:12px;background:#fffafb;max-height:300px;overflow:auto}
+.teacher-workspace .ce-results button{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:38px;padding:4px 10px;border-radius:9px;background:transparent;font-size:13px;color:var(--workspace-text,#1f2937);text-align:left}
+.teacher-workspace .ce-results button:hover{background:#fff1f3}
+.teacher-workspace .ce-results button[aria-pressed=true]{background:#fce7f3;color:#9d174d;font-weight:700}
+.teacher-workspace .ce-state{display:inline-flex;align-items:center;gap:3px;flex:none;font-size:11px;font-weight:700;color:#be185d}
+.teacher-workspace .ce-empty{padding:6px 10px;font-size:12px;color:var(--workspace-muted)}
+.teacher-workspace .ce-books>summary{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:32px;cursor:pointer;list-style:none}
+.teacher-workspace .ce-books>summary::-webkit-details-marker{display:none}
+.teacher-workspace .ce-books>summary::after{content:'';margin-left:auto;width:8px;height:8px;border-right:2px solid #94a3b8;border-bottom:2px solid #94a3b8;transform:rotate(45deg);transition:transform .15s;order:2}
+.teacher-workspace .ce-books[open]>summary::after{transform:rotate(225deg)}
+.teacher-workspace .ce-books>summary .ce-title{margin:0}
+.teacher-workspace .ce-books-peek{order:3;flex-basis:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:12px;color:var(--workspace-muted)}
+.teacher-workspace .ce-books[open] .ce-books-peek{display:none}
+.teacher-workspace .ce-books-pick{display:block;margin-top:8px;font-size:12px;font-weight:700;color:var(--workspace-muted)}
+.teacher-workspace .ce-book-row{display:grid;grid-template-columns:minmax(0,1fr) 106px 34px;gap:6px;align-items:center;margin-top:6px}
+.teacher-workspace .ce-book-row :is(input,select){margin:0!important;font-size:13px}
+.teacher-workspace .ce-book-row select{padding:4px 22px 4px 8px!important;background-position:right 6px center}
+.teacher-workspace .ce-add{display:inline-flex;align-items:center;justify-content:center;gap:4px;width:100%;min-height:36px;margin-top:8px;border-radius:12px;border:1px dashed #f9a8c0;background:#fffafb;color:#be185d;font-size:13px;font-weight:700}
+/* Regular board: lessons above, 정규 자습·테스트 below. */
+.schedule-board-title{display:flex;align-items:center;gap:6px;margin:4px 0 0;font-size:14px;font-weight:800}
+.schedule-board-title small{font-size:12px;font-weight:700;color:var(--workspace-muted)}
+.schedule-extras{margin-top:24px;padding-top:16px;border-top:1px dashed #f1e4e7}
+.schedule-kind.is-study{background:#ecfdf5;color:#047857;font-weight:700}
+.schedule-kind.is-test{background:#eef2ff;color:#4338ca;font-weight:700}

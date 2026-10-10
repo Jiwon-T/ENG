@@ -100,3 +100,23 @@ test('tuition month: 3차시 test lines are not lessons, and a line for other st
     const a = (await readTuitionMonth(f.db, admin, '2026-10', NOW)).rows.find((x: any) => x.studentKey === A);
     assert.equal(a.planned, 3, 'same as before: Thu 22, Thu 29, makeup 24');
 });
+
+test('tuition month: after confirming, a lesson edit that moves a bill is flagged until confirmed again', async () => {
+    const f = seed();
+    await saveTuitionMonth(f.db, admin, { month: '2026-10', revision: 0, rows: {}, confirm: true }, NOW);
+    let r = await readTuitionMonth(f.db, admin, '2026-10', NOW);
+    assert.equal(r.changedSinceConfirm, 0);
+    // One of B's two lessons is deleted after confirmation.
+    const [path, row] = [...f.rows].find(([p, v]) => p.startsWith('teacherLessonDrafts/') && v.data.studentKey === B)!;
+    f.rows.set(path, { ...row, archived: true });
+    r = await readTuitionMonth(f.db, admin, '2026-10', NOW);
+    const b = r.rows.find((x: any) => x.studentKey === B);
+    assert.equal(r.changedSinceConfirm, 1);
+    assert.deepEqual([b.charged, b.changedSinceConfirm.charged, b.changedSinceConfirm.amount], [1, 2, 60000]);
+    // Saving an unrelated edit keeps the flag; confirming again clears it.
+    await saveTuitionMonth(f.db, admin, { month: '2026-10', revision: r.revision, rows: { [`${A}|영어`]: { free: 0 } } }, NOW);
+    r = await readTuitionMonth(f.db, admin, '2026-10', NOW);
+    assert.equal(r.changedSinceConfirm, 1);
+    await saveTuitionMonth(f.db, admin, { month: '2026-10', revision: r.revision, rows: {}, confirm: true }, NOW);
+    assert.equal((await readTuitionMonth(f.db, admin, '2026-10', NOW)).changedSinceConfirm, 0);
+});

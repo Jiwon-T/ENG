@@ -35,6 +35,7 @@ import TuitionCalculator from './TuitionCalculator';
 import TeacherPayroll from './TeacherPayroll';
 import StudentAccountLink from './StudentAccountLink';
 import SpeedCheckPanel from './SpeedCheckPanel';
+import AdminHistoryPanel from './AdminHistoryPanel';
 import {recordTiming} from '../../lib/requestTimings';
 import LessonConflictReview from './LessonConflictReview';
 import {canRetryPublication} from '../../lib/teacherPublicationRecovery';
@@ -322,6 +323,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
    <TeacherManager data={data} request={request} act={act} busy={busy} refresh={refresh}/>
    {(data.admin||data.principal) && data.academyId==='main' && <TuitionCalculator busy={busy} request={request} act={act}/>}
    {(data.admin||data.principal) && data.academyId==='main' && <TeacherPayroll busy={busy} request={request} act={act}/>}
+   {(data.admin||data.principal) && data.academyId==='main' && <AdminHistoryPanel busy={busy} request={request} act={act}/>}
    {data.admin && data.academyId==='main' && <AppUserManager busy={busy} request={request} act={act} refresh={refresh}/>}
    {data.admin && data.academyId==='main' && <AppTemplateManager busy={busy} request={request} act={act}/>}
    <details className="panel rv-admin"><summary>정리·점검 · 관리자용</summary><SpeedCheckPanel/><p className="gs-note my-2">외부 연결 정리 단계와 연결 점검입니다. 평소에는 열 필요가 없습니다.</p>

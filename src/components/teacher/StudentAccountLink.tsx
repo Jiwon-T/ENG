@@ -14,10 +14,12 @@ const failures:Record<string,string>={
 const failureText=(r:any)=>failures[r.data?.error]||r.data?.message?.replace(/Notion\s*/g,'')||r.userMessage||'연결 결과를 확인하지 못했습니다.';
 /** Admin: link this registered student to the app account they signed up with (uses /api/teacher/student-link unchanged). */
 export default function StudentAccountLink({studentKey,studentName,linkedUid,onChanged}:{studentKey:string;studentName:string;linkedUid:string|null;onChanged:()=>Promise<void>|void}){
+ const [code,setCode]=useState<{code:string;expiresAt:number}|null>(null),[copied,setCopied]=useState(false);
  const [open,setOpen]=useState(false),[users,setUsers]=useState<any[]|null>(null),[query,setQuery]=useState(''),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
  const baseName=studentName.replace(/\s*\(.*\)\s*$/,'').trim();
  async function load(){setMessage('');const r=await teacherAuthenticatedRequest<any>(auth,'/api/teacher/workspace?'+new URLSearchParams({action:'app-users'}));if(!r.ok||!r.data?.ok){setMessage('앱 사용자 목록을 불러오지 못했습니다.');return;}setUsers(r.data.users||[]);}
  function toggle(){const next=!open;setOpen(next);setQuery('');if(next&&!users)void load();}
+ async function makeCode(){setBusy(true);setMessage('');try{const r=await teacherAuthenticatedRequest<any>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'create-link-code',studentKey})});if(!r.ok||!r.data?.ok){setMessage(r.data?.message||'코드를 만들지 못했습니다.');return;}setCode({code:r.data.code,expiresAt:r.data.expiresAt});}finally{setBusy(false);}}
  async function send(method:'POST'|'DELETE',body:any,done:string){
   setBusy(true);setMessage('');
   try{const r=await teacherAuthenticatedRequest<any>(auth,'/api/teacher/student-link',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -43,6 +45,12 @@ export default function StudentAccountLink({studentKey,studentName,linkedUid,onC
     {!users?<p className="gs-note">앱 사용자 목록을 불러오는 중…</p>:<ul className="sal-list">{candidates.slice(0,30).map(u=><li key={u.uid}><span><strong>{u.name||'이름 없음'}</strong><small>{u.email}</small></span>
      <button type="button" className="small-button" disabled={busy} onClick={()=>{if(window.confirm(`${u.name||u.email} 계정을 ${studentName} 학생과 연결할까요?`))void send('POST',{firebaseUid:u.uid,studentKey},`${u.name||'앱 계정'} 계정을 연결했습니다.`);}}>연결</button></li>)}
      {!candidates.length&&<li className="gs-note">연결할 수 있는 학생 계정이 없습니다. 학생이 먼저 앱에 가입해야 합니다.</li>}</ul>}
+    <div className="sal-code">
+     <p className="sal-title">또는 학생에게 연결 코드 주기</p>
+     {code?<><p className="sal-code-value">{code.code}</p><p className="gs-note">{new Date(code.expiresAt).toLocaleDateString('ko-KR')}까지, 한 번만 쓸 수 있습니다. 학생이 앱에 가입한 뒤 홈 화면의 ‘학원 연결 코드’에 입력하면 자동으로 연결됩니다.</p>
+      <div className="gs-foot"><button type="button" className="small-button" onClick={()=>{const text=`[학원 앱 연결 안내]\n앱에 가입한 뒤 홈 화면의 ‘학원에서 받은 연결 코드’에 아래 코드를 입력해 주세요.\n코드: ${code.code} (${new Date(code.expiresAt).toLocaleDateString('ko-KR')}까지)`;void navigator.clipboard?.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}).catch(()=>window.prompt('복사해 주세요.',text));}}>{copied?'복사됨':'안내 문구 복사'}</button><button type="button" className="gs-quiet" disabled={busy} onClick={()=>void makeCode()}>새 코드</button></div></>
+     :<button type="button" className="small-button" disabled={busy} onClick={()=>void makeCode()}>연결 코드 만들기</button>}
+    </div>
    </>}
   </div>}
   {message&&<p role="status" className="sal-msg">{message}</p>}

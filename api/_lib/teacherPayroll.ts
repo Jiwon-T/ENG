@@ -57,7 +57,7 @@ export async function readTeacherPayroll(db: any, actor: any, monthInput: unknow
     const list = [...teachers.values()].map(t => { const a = adjust[t.uid] || {}, extra = typeof a.amount === 'number' ? a.amount : 0; return { ...t, adjust: extra, adjustNote: String(a.note || ''), total: t.pay + extra }; }).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
     const revenue = sheet.rows.reduce((n: number, r: any) => n + (r.amount || 0), 0), teacherTotal = list.reduce((n, t) => n + t.total, 0);
     return {
-        month: m, defaultShare, sheetConfirmedAt: sheet.confirmedAt, revision: saved.data()?.revision || 0, teachers: list, unassigned, revenue, teacherTotal, academy: revenue - teacherTotal,
+        month: m, defaultShare, sheetConfirmedAt: sheet.confirmedAt, sheetChangedSinceConfirm: sheet.changedSinceConfirm || 0, revision: saved.data()?.revision || 0, teachers: list, unassigned, revenue, teacherTotal, academy: revenue - teacherTotal,
         staff: staff.filter((p: any) => !p.disabled).map((p: any) => ({ uid: p.uid, name: nameOf(p.uid), share: rate.get(p.uid) ?? null })).sort((a: any, b: any) => a.name.localeCompare(b.name, 'ko')),
     };
 }

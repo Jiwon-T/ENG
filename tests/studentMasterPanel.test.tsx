@@ -23,3 +23,9 @@ test('student rows show the student\'s picked icon on the left and their pet bes
  assert.match(html,/smr-icon[^>]*>🦊</);assert.match(html,/smr-pet-art[^>]*>(<div[^>]*>)*<svg/,'the pet is drawn as a small picture');assert.match(html,/뭉치<b>Lv\.3<\/b>/);
  assert.match(html,/smr-icon[^>]*>김</,'no icon: first letter of the name');
 });
+
+test('teachers see linked/unlinked without the account UID',()=>{
+ const render=(accountLinked:boolean)=>renderToStaticMarkup(<StudentMasterPanel students={[{...students[0],linkedFirebaseUid:null,accountLinked}]} value="" onSelect={()=>{}}/>);
+ assert.doesNotMatch(render(true),/앱 계정 미연결/);
+ assert.match(render(false),/앱 계정 미연결/);
+});

@@ -24,6 +24,7 @@ export default function TeacherPayroll({busy,request,act}:{busy:boolean;request:
     <div className="tu-month"><button type="button" aria-label="이전 달" disabled={busy} onClick={()=>go(shift(month,-1))}><ChevronLeft size={18}/></button><strong>{Number(month.slice(0,4))}년 {Number(month.slice(5))}월</strong><button type="button" aria-label="다음 달" disabled={busy} onClick={()=>go(shift(month,1))}><ChevronRight size={18}/></button></div>
     <div className="tu-stats"><span>원비 합계 <strong>{won(data.revenue)}</strong></span><span>선생님 지급 <strong>{won(data.teacherTotal)}</strong></span><span className="ok">학원 <strong>{won(data.academy)}</strong></span></div>
    </div>
+   {data.sheetConfirmedAt&&data.sheetChangedSinceConfirm>0&&<p className="pay-warn">수강료를 확정한 뒤 일지가 바뀌어 청구가 달라진 학생이 {data.sheetChangedSinceConfirm}명 있습니다. 위 ‘수강료 계산’에서 확인하고 다시 확정해 주세요.</p>}
    {!data.sheetConfirmedAt&&<p className="pay-warn">이 달 수강료가 아직 확정되지 않아 예상 금액입니다. 위 ‘수강료 계산’에서 확정하면 정산도 확정 금액이 됩니다.</p>}
    <div className="pay-tools"><button type="button" className="gs-quiet" onClick={()=>setReveal(!reveal)}>{reveal?<EyeOff size={14} aria-hidden="true"/>:<Eye size={14} aria-hidden="true"/>}{reveal?'비율 숨기기':'비율 보기'}</button>
     <button type="button" className="gs-quiet" onClick={()=>{setReveal(true);setEditShares({defaultShare:data.defaultShare,shares:Object.fromEntries(data.staff.map((s:any)=>[s.uid,s.share]))});}}>비율 설정</button><span className="gs-grow"/><span className="gs-note">기본 선생님 {pct(data.defaultShare)} · 학원 {reveal?`${100-data.defaultShare}%`:'••%'}</span></div>

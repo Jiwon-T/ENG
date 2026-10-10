@@ -71,7 +71,15 @@ export async function readTuitionMonth(db: any, actor: any, monthInput: unknown,
         rows.push({ key: k, studentKey: key, name: person.name, subject, status, left, enrollment: person.enrollment, endDate: e?.endDate || null, classes: mine.map((c: any) => c.name).filter(Boolean), written: w.count, writers: w.writers, lastRound: w.round, planned, expected: w.count + planned, sessions, free, tuition: price, tuitionSource: typeof edit.tuition === 'number' ? 'edited' : typeof own === 'number' ? 'subject' : fallback != null ? 'student' : 'missing', note: String(edit.note || ''), edited: Boolean(edit.sessions != null || edit.free != null || edit.tuition != null), ...tuitionCharge(price, sessions, free) });
     }
     rows.sort((a, b) => a.name.localeCompare(b.name, 'ko') || a.subject.localeCompare(b.subject, 'ko'));
-    return { month: m, today, sessionsPerPrice: TUITION_SESSIONS, revision: saved.revision || 0, confirmedAt: saved.confirmedAt || null, confirmedBy: saved.confirmedByName || null, rows, total: rows.reduce((n, r) => n + (r.amount || 0), 0) };
+    // After the month is confirmed, flag rows whose bill no longer matches what was confirmed (a lesson edited, added or removed).
+    const snapshot = saved.confirmedAt && saved.snapshot ? saved.snapshot : null;
+    const removedSinceConfirm: any[] = [];
+    if (snapshot) {
+        for (const r of rows) { const was = snapshot[r.key]; r.changedSinceConfirm = !was ? ((r.amount || 0) > 0 ? { charged: 0, amount: 0, written: 0 } : null) : was.charged !== r.charged || (was.amount ?? null) !== (r.amount ?? null) ? was : null; }
+        const now = new Set(rows.map(r => r.key));
+        for (const [key, was] of Object.entries(snapshot) as [string, any][]) if (!now.has(key) && (was.amount || 0) > 0) removedSinceConfirm.push({ key, name: was.name || '학생', subject: was.subject || '', ...was });
+    }
+    return { month: m, today, sessionsPerPrice: TUITION_SESSIONS, revision: saved.revision || 0, confirmedAt: saved.confirmedAt || null, confirmedBy: saved.confirmedByName || null, changedSinceConfirm: rows.filter(r => r.changedSinceConfirm).length + removedSinceConfirm.length, removedSinceConfirm, rows, total: rows.reduce((n, r) => n + (r.amount || 0), 0) };
 }
 
 const editSchema = z.object({ sessions: z.number().int().min(0).max(62).nullable().optional(), free: z.number().int().min(0).max(31).nullable().optional(), tuition: z.number().int().min(0).max(100_000_000).nullable().optional(), note: z.string().max(300).optional() }).strict();
@@ -90,7 +98,7 @@ export async function saveTuitionMonth(db: any, actor: any, input: unknown, now 
     }
     if (prices.size > 400) throw Error('TUITION_TOO_MANY_ROWS');
     const ref = sheetRef(db, v.month);
-    return db.runTransaction(async (tx: any) => {
+    const result = await db.runTransaction(async (tx: any) => {
         const old = (await tx.get(ref)).data() || { rows: {}, revision: 0 };
         const priceDocs = await Promise.all([...prices.keys()].map(async key => [key, (await tx.get(tuitionRef(db, key))).data()] as const));
         if ((old.revision || 0) !== v.revision) throw Error('TUITION_CONFLICT');
@@ -102,9 +110,16 @@ export async function saveTuitionMonth(db: any, actor: any, input: unknown, now 
             if (Object.keys(merged).length) rows[k] = merged; else delete rows[k];
         }
         for (const [key, oldPrices] of priceDocs) writePrices(db, tx, actor, key, oldPrices, prices.get(key)!, now, 'tuition-sheet');
-        const next = { academyId: 'main', month: v.month, rows, revision: (old.revision || 0) + 1, updatedAt: now, updatedBy: actor.uid, ...(v.confirm ? { confirmedAt: now, confirmedBy: actor.uid, confirmedByName: actor.name || '' } : { confirmedAt: old.confirmedAt || null, confirmedBy: old.confirmedBy || null, confirmedByName: old.confirmedByName || null }) };
+        const next = { academyId: 'main', month: v.month, rows, ...(old.snapshot && !v.confirm ? { snapshot: old.snapshot } : {}), revision: (old.revision || 0) + 1, updatedAt: now, updatedBy: actor.uid, ...(v.confirm ? { confirmedAt: now, confirmedBy: actor.uid, confirmedByName: actor.name || '' } : { confirmedAt: old.confirmedAt || null, confirmedBy: old.confirmedBy || null, confirmedByName: old.confirmedByName || null }) };
         tx.set(ref, next);
         tx.set(db.collection('tuitionMonthHistory').doc(`${v.month}:${next.revision}`), { month: v.month, before: old.rows || {}, after: rows, prices: Object.fromEntries(prices), by: actor.uid, at: now, confirm: Boolean(v.confirm) });
         return { revision: next.revision, confirmedAt: next.confirmedAt };
     });
+    // What was confirmed, so later lesson changes that move a bill can be pointed out.
+    if (v.confirm) {
+        const sheet = await readTuitionMonth(db, actor, v.month, now);
+        const snapshot = Object.fromEntries(sheet.rows.map((r: any) => [r.key, { name: r.name, subject: r.subject, written: r.written, charged: r.charged, amount: r.amount ?? null }]));
+        await db.runTransaction(async (tx: any) => { const cur = (await tx.get(ref)).data(); if (cur && cur.revision === result.revision) tx.set(ref, { ...cur, snapshot }); });
+    }
+    return result;
 }
