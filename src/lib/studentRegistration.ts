@@ -1,7 +1,8 @@
 import {emptyAdmission,type AdmissionInput} from './studentAdmission.js';
 // Shared types only: browser code must never import the server module or node:crypto.
 export const registrationSubjects = ['영어', '수학', '국어', '과학', '한국사'] as const;
-export const registrationGrades = ['초1', '초2', '초3', '초4', '초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3'] as const;
+// Highest grade first: most students are high-school.
+export const registrationGrades = ['고3', '고2', '고1', '중3', '중2', '중1', '초6', '초5', '초4', '초3', '초2', '초1'] as const;
 export type RegistrationSubject = typeof registrationSubjects[number];
 export interface RegistrationInput {
     purpose?: 'new' | 'additional';
@@ -25,6 +26,7 @@ export interface RegistrationInput {
         endDate: string | null;
         teacherUid?: string | null;
         classIds?: string[];
+        tuition?: number | null;
     }[];
 }
 export type RegistrationSyncStatus = 'pending' | 'syncing' | 'synced' | 'failed' | 'uncertain';
@@ -61,3 +63,9 @@ export interface RegistrationOptions {
     classes: {id:string;name:string;subject:RegistrationSubject;teacherUids:string[]}[];
 }
 
+
+/** Student 수강료 (8회 기준): the per-subject prices added up, or the single legacy value. */
+export function registrationTuitionTotal(value: { tuition: number | null; enrollments: { tuition?: number | null }[] }) {
+    const parts = value.enrollments.map(e => e.tuition).filter((n): n is number => typeof n === 'number');
+    return parts.length ? parts.reduce((a, b) => a + b, 0) : value.tuition;
+}

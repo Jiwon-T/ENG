@@ -16,3 +16,10 @@ test('without management rights there is no 신입생·상담 chip or add button
  const html=renderToStaticMarkup(<StudentMasterPanel students={students} value="" onSelect={()=>{}}/>);
  assert.doesNotMatch(html,/신입생·상담/);
 });
+
+test('student rows show the student\'s picked icon on the left and their pet beside the name',()=>{
+ const list=[{...students[0],look:{icon:'🦊',pet:{name:'뭉치',level:3,character:'dog'}}},{studentKey:'b',studentDisplayName:'김규림 (용죽고1)',subjects:[{subject:'영어',status:'등록'}],linkedFirebaseUid:null,hasGuardianContact:true}];
+ const html=renderToStaticMarkup(<StudentMasterPanel students={list} value="" onSelect={()=>{}}/>);
+ assert.match(html,/smr-icon[^>]*>🦊</);assert.match(html,/smr-pet-art[^>]*>(<div[^>]*>)*<svg/,'the pet is drawn as a small picture');assert.match(html,/뭉치<b>Lv\.3<\/b>/);
+ assert.match(html,/smr-icon[^>]*>김</,'no icon: first letter of the name');
+});

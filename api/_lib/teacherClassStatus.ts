@@ -1,5 +1,5 @@
 const book=(b:any)=>[b.id,b.linkedPlanId||null,b.title,b.status,b.progress||null];
-const slot=(s:any)=>[s.id,s.weekday,s.start,s.end];
+const slot=(s:any)=>[s.id,s.weekday,s.start,s.end,s.kind||'lesson',s.students||null,s.study||null];
 const same=(a:any,b:any)=>JSON.stringify(a)===JSON.stringify(b);
 export function classStatusOnlyChange(old:any,next:any) {
  if(!old?.notionPageId||old.archived||old.deleteRequested||old.notionSyncStage&&old.notionSyncStage!=='synced')return false;

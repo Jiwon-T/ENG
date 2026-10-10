@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edu-manager-v15';
+const CACHE_NAME = 'edu-manager-v17-branding-20261010b';
 const ASSET_CACHE = CACHE_NAME + '-assets';
 const urlsToCache = [
   '/',
@@ -46,3 +46,4 @@ self.addEventListener('fetch', event => {
       .catch(() => caches.match(event.request))
   );
 });
+

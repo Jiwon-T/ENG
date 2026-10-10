@@ -16,9 +16,9 @@ export default function TeacherManager({data,request,act,busy,refresh}:{data:any
  const unassigned=students.filter(s=>!assigned.has(s.studentKey));
  return <section className="panel rv">
   <div className="rv-head"><h2>선생님 관리<small>{teachers.length}명</small></h2></div>
-  <p className="gs-note">선생님을 누르면 담당 학생·과목, 직책, 사용 여부를 바로 바꿀 수 있습니다. 저장하면 앱에만 저장됩니다.</p>
+  <p className="gs-note">선생님을 누르면 담당 학생·과목, 직책, 연결 여부를 바로 바꿀 수 있습니다. 새 선생님은 아래 ‘앱 사용자’에서 선생님 권한을 먼저 주세요.</p>
   <div className="rv-stats">
-   <div className="rv-stat"><b>{teachers.filter(t=>!t.disabled).length}</b><span>사용 중인 선생님</span></div>
+   <div className="rv-stat"><b>{teachers.filter(t=>!t.disabled).length}</b><span>재직 중인 선생님</span></div>
    <div className="rv-stat"><b>{teachers.filter(t=>!t.disabled&&!t.scopes.length).length}</b><span>담당 미설정</span></div>
    <div className="rv-stat"><b>{assigned.size}</b><span>담당이 있는 학생</span></div>
    <button type="button" className="rv-stat warn" aria-pressed={showUnassigned} onClick={()=>setShowUnassigned(v=>!v)}><b>{unassigned.length}</b><span>담당 선생님 없는 학생</span></button>
@@ -29,12 +29,12 @@ export default function TeacherManager({data,request,act,busy,refresh}:{data:any
     <span className="rv-card-top"><strong className="rv-who">{t.label}</strong><span className="rv-grade">{t.role==='principal'?'원장':'선생님'}</span></span>
     <span className="rv-sub">{bySubject.length?bySubject.map(([s,n])=>`${s} ${n}명`).join(' · '):'담당 학생 없음'}</span>
     {names.length>0&&<span className="rv-sub" style={{display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{names.slice(0,6).map(nameOf).join(', ')}{names.length>6?` 외 ${names.length-6}명`:''}</span>}
-    <StatusBadge kind={t.disabled?'failed':t.scopes.length?'done':'unwritten'} text={t.disabled?'사용 중지':t.scopes.length?'사용 중':'담당 미설정'}/>
+    <StatusBadge kind={t.disabled?'failed':t.scopes.length?'done':'unwritten'} text={t.disabled?'연결 해제됨':t.scopes.length?'재직 중':'담당 미설정'}/>
    </button>;})}</div>
   {notice&&<p role="status" className="gs-note">{notice}</p>}
   {editing&&<Fragment key={editing.uid}><TeacherEditor teacher={editing} data={data} busy={busy} onClose={()=>setEditing(null)}
    onSave={async value=>act(async()=>{await request('grant',value);setEditing(null);await refresh();setNotice(`${value.workspaceLabel||editing.name} 선생님의 담당을 저장했습니다.`);})}
-   onAccess={async disabled=>act(async()=>{await request('teacher-access',{uid:editing.uid,disabled});setEditing(null);await refresh();setNotice(`${editing.label} 선생님을 ${disabled?'사용 중지':'다시 사용'}로 바꿨습니다.`);})}/></Fragment>}
+   onAccess={async disabled=>act(async()=>{await request('teacher-access',{uid:editing.uid,disabled});setEditing(null);await refresh();setNotice(`${editing.label} 선생님을 ${disabled?'연결 해제':'다시 연결'}했습니다.`);})}/></Fragment>}
  </section>;
 }
 function TeacherEditor({teacher,data,busy,onClose,onSave,onAccess}:{teacher:any;data:any;busy:boolean;onClose:()=>void;onSave:(v:any)=>Promise<void>;onAccess:(disabled:boolean)=>Promise<void>}){
@@ -49,7 +49,7 @@ function TeacherEditor({teacher,data,busy,onClose,onSave,onAccess}:{teacher:any;
  const canAccess=data.admin&&teacher.profile&&teacher.uid!==data.uid;
  const save=()=>onSave({uid:teacher.uid,scopes,notionTeacherPageId:teacher.profile?.notionTeacherPageId||null,workspaceLabel:label.trim(),workspaceRole:role,academyId:data.academyId||'main',assignmentRevision:teacher.profile?.assignmentRevision||0,academyStudents:[...new Set(scopes.map(s=>s.studentKey))]});
  return <WorkspaceDialog open title={`${teacher.label} 선생님`} onClose={()=>{if(busy)return;if(changed&&!window.confirm('저장하지 않은 변경을 닫을까요?'))return;onClose();}}><section className="gs">
-  {teacher.disabled&&<p className="rv-missing"><AlertCircle size={16} aria-hidden="true"/>사용 중지된 선생님입니다. 담당은 보관되어 있으며 다시 사용하면 그대로 돌아옵니다.</p>}
+  {teacher.disabled&&<p className="rv-missing"><AlertCircle size={16} aria-hidden="true"/>선생님방 연결이 해제된 선생님입니다. 담당은 보관되어 있으며 다시 연결하면 그대로 돌아옵니다.</p>}
   <section className="gs-sec"><h3><span className="gs-num">1</span>기본 정보</h3>
    <label><span className="gs-lbl">화면에 보일 이름 <span className="gs-opt">(비우면 계정 이름 “{teacher.name}”)</span></span><input value={label} maxLength={100} disabled={busy} onChange={e=>setLabel(e.target.value)} placeholder={teacher.name}/></label>
    <div className="gs-seg" role="group" aria-label="직책">{([['teacher','선생님'],['principal','원장 선생님']] as const).map(([k,l])=><button key={k} type="button" aria-pressed={role===k} disabled={busy||!data.admin} onClick={()=>setRole(k)}>{l}</button>)}</div>
@@ -67,6 +67,6 @@ function TeacherEditor({teacher,data,busy,onClose,onSave,onAccess}:{teacher:any;
     {!shown.length&&<p className="rv-empty">조건에 맞는 학생이 없습니다.</p>}</div>
    <p className="gs-note">{SUBJECTS.map(s=>[s,scopes.filter(x=>x.subject===s).length] as const).filter(([,n])=>n).map(([s,n])=>`${s} ${n}명`).join(' · ')||'담당 학생이 없습니다.'}</p>
   </section>
-  <div className="gs-foot">{canAccess&&<button type="button" className="gs-quiet" disabled={busy} onClick={()=>{if(window.confirm(teacher.disabled?'이 선생님을 다시 사용하게 할까요? 보관된 담당이 그대로 돌아옵니다.':'이 선생님의 선생님방 사용을 중지할까요? 담당과 작성한 자료는 보관됩니다.'))void onAccess(!teacher.disabled);}}><UserCog size={14} aria-hidden="true"/> {teacher.disabled?'다시 사용':'사용 중지'}</button>}<span className="gs-grow"/><button type="button" className="small-button" disabled={busy} onClick={onClose}>닫기</button><button type="button" className="primary-button" disabled={busy||!changed||teacher.disabled} onClick={()=>void save()}>저장</button></div>
+  <div className="gs-foot">{canAccess&&<button type="button" className="gs-quiet" disabled={busy} onClick={()=>{if(window.confirm(teacher.disabled?'이 선생님을 다시 연결할까요? 보관된 담당이 그대로 돌아옵니다.':'이 선생님의 선생님방 연결을 해제할까요? 담당과 작성한 자료는 보관됩니다.'))void onAccess(!teacher.disabled);}}><UserCog size={14} aria-hidden="true"/> {teacher.disabled?'다시 연결':'연결 해제'}</button>}<span className="gs-grow"/><button type="button" className="small-button" disabled={busy} onClick={onClose}>닫기</button><button type="button" className="primary-button" disabled={busy||!changed||teacher.disabled} onClick={()=>void save()}>저장</button></div>
  </section></WorkspaceDialog>;
 }

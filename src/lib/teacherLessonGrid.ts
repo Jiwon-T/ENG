@@ -10,7 +10,7 @@ export function applyCommonLesson<T extends ReturnType<typeof newGridLesson>>(le
 export function gridScore(correct: number | null, total: number | null) { return correct === null || total === null || total <= 0 || correct < 0 || correct > total ? null : Math.round(correct / total * 10000) / 100; }
 /** Reopen an exact saved lesson, never another teacher's or another time slot. */
 export function matchingSavedLesson(records:readonly any[],input:any,ownerUid:string,matchEnd=true) {
- return records.filter(r=>r.ownerUid===ownerUid&&!r.archived&&!r.deleteRequested&&r.stage!=='new'&&r.data&&['studentKey','subject','date','start',...(matchEnd?['end']:[])].every(key=>r.data[key]===input[key]))
+ return records.filter(r=>r.ownerUid===ownerUid&&!r.archived&&!r.deleteRequested&&r.stage!=='new'&&r.data&&['studentKey','subject','date','start',...(matchEnd?['end']:[]),...(input.classSession==='없음'?['classSession','selfStudyStart']:[])].every(key=>r.data[key]===input[key]))
  .sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0)||Number(b.revision||0)-Number(a.revision||0))[0];
 }
 export function gridCanPublish(row: {

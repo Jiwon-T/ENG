@@ -28,6 +28,8 @@ export const studentRegistrationSchema = z.object({
         startDate: calendarDate, endDate: calendarDate.nullable().default(null),
         teacherUid: z.string().min(1).max(128).nullable().default(null),
         classIds: z.array(z.string().uuid().transform(value=>value.toLowerCase())).max(20).default([]),
+        // 8-session price for this subject; the student's 수강료 is the sum.
+        tuition: z.number().int().nonnegative().max(100_000_000).nullable().default(null),
     }).strict().superRefine((value, ctx) => {
         if (new Set(value.classIds).size !== value.classIds.length) ctx.addIssue({code:'custom',message:'반을 중복 선택할 수 없습니다.'});
         if (value.classIds.length && (value.status !== '등록' || !value.teacherUid)) ctx.addIssue({code:'custom',message:'반 배정에는 등록 상태와 담당 선생님이 필요합니다.'});

@@ -15,8 +15,18 @@ export function excelTextParts(value:string,width:number,font=14):string[]{
  }
  parts.push(part);return parts;
 }
+/** Lines Excel shows for wrapped text. Excel breaks at spaces, so a word that does not fit moves whole to the next line;
+ *  only a word longer than the cell breaks by character. Counting by character alone left rows too short. */
 export function excelTextLines(value:string,width:number,font=14){
- const capacity=Math.max(1,width-2);let lines=1,used=0;
- for(const ch of value.replace(/\r\n/g,'\n').replace(/\r/g,'\n')){if(ch==='\n'){lines++;used=0;continue;}const size=glyphWidth(ch,font);if(used>0&&used+size>capacity){lines++;used=0;}used+=size;}return lines;
+ const capacity=Math.max(1,width-2.5);let lines=0;
+ for(const paragraph of value.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n')){
+  lines++;let used=0;
+  for(const word of paragraph.split(/(?<= )/)){
+   const size=[...word].reduce((n,ch)=>n+glyphWidth(ch,font),0),core=size-(word.endsWith(' ')?glyphWidth(' ',font):0);
+   if(used>0&&used+core>capacity){lines++;used=0;}
+   if(core>capacity){for(const ch of word){const w=glyphWidth(ch,font);if(used>0&&used+w>capacity){lines++;used=0;}used+=w;}}else used+=size;
+  }
+ }
+ return Math.max(1,lines);
 }
-export function lessonExcelRowHeight(values:string[],widths=lessonExcelWidths){return Math.max(21,...values.map((v,i)=>excelTextLines(v,widths[i],lessonExcelFontSizes[i])*lineHeight(lessonExcelFontSizes[i])+6));}
+export function lessonExcelRowHeight(values:string[],widths=lessonExcelWidths){return Math.min(409,Math.max(21,...values.map((v,i)=>excelTextLines(v,widths[i],lessonExcelFontSizes[i])*lineHeight(lessonExcelFontSizes[i])+10)));}

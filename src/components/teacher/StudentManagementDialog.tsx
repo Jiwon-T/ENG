@@ -6,8 +6,8 @@ export const studentManagementTabs = (canManage: boolean) => [
  { id: 'review', label: '리포트 확인' }, { id: 'lesson', label: '수업 작성' }, { id: 'message', label: '보호자 문자' },
  ...(canManage ? [{ id: 'profile', label: '정보 수정' }, { id: 'enrollment', label: '수강·담당·반 관리' }] : []),
 ];
-export default function StudentManagementDialog({ name, canManage, onClose, onSelect, render, notice, busy = false, initialTab = 'review', inline = false, registerAttempt }: {
- name: string; canManage: boolean; onClose: () => void; onSelect: (tab: string) => void;
+export default function StudentManagementDialog({ name, canManage, onClose, onSelect, render, notice, busy = false, initialTab = 'review', inline = false, registerAttempt, headerExtra }: {
+ name: string; canManage: boolean; headerExtra?: ReactNode; onClose: () => void; onSelect: (tab: string) => void;
  render: (tab: string, leave: () => void, headerId: string) => ReactNode; notice?: string; busy?: boolean; initialTab?: string; inline?: boolean; registerAttempt?: (attempt:(action:()=>void)=>void)=>()=>void;
 }) {
  const id = useId(), tabs = studentManagementTabs(canManage);
@@ -29,5 +29,5 @@ export default function StudentManagementDialog({ name, canManage, onClose, onSe
    <WorkspaceDialogEmbedding.Provider value={{registerClose}}><div key={active}>{render(active, leave, `${id}-report-tools`)}</div></WorkspaceDialogEmbedding.Provider>
   </div>
  </>;
- return inline?<section className="student-detail-panel"><header className="student-detail-header"><h2>{name}</h2><div id={`${id}-report-tools`} className="student-detail-tools"/><button type="button" className="small-button" onClick={()=>attempt(onClose)}>닫기</button></header>{content}</section>:<WorkspaceDialog open title={`${name} · 학생 관리`} onClose={()=>attempt(onClose)}>{content}</WorkspaceDialog>;
+ return inline?<section className="student-detail-panel"><header className="student-detail-header"><h2>{name}</h2>{headerExtra}<div id={`${id}-report-tools`} className="student-detail-tools"/><button type="button" className="small-button" onClick={()=>attempt(onClose)}>닫기</button></header>{content}</section>:<WorkspaceDialog open title={`${name} · 학생 관리`} onClose={()=>attempt(onClose)}>{content}</WorkspaceDialog>;
 }

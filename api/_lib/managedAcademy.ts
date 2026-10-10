@@ -1,7 +1,7 @@
 import {migrationBatchSize} from './migrationTransport.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
-import {subjects,timetableSlotSchema,canAccessOwned,canTeach} from './teacherWorkspacePolicy.js';
+import {subjects,timetableSlotSchema,canAccessOwned,canTeach, normalizeSlotTargets } from './teacherWorkspacePolicy.js';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {registrationNotion,type RegistrationNotion} from './teacherStudentRegistrationNotion.js';
 import {coreActive} from './academyCore.js';
@@ -80,7 +80,7 @@ export async function activateManaged(db:any,actor:any){
   tx.set(db.collection(CLASS_AUTHORITY).doc('main'),{active:true,by:actor.uid,at:Date.now(),sources:plan.sources.map(s=>s.key)});return {active:true};
  });
 }
-export async function readManaged(db:any,actor:any){const out:any={classes:[],curricula:[],issues:[],sources:[]};for(const kind of ['classes','curricula'] as Kind[]){const q=await db.collection(collection(kind)).where('academyId','==',actor.academyId).limit(501).get();if(q.docs.length>500)throw Error('CORE_CUTOVER_LIMIT');out[kind]=q.docs.map((d:any)=>({id:d.id,...d.data()})).filter((r:any)=>!r.archived&&(canAccessOwned(actor,r.ownerUid,r.academyId)||(r.assignedUids||[]).includes(actor.uid)));}return out;}
+export async function readManaged(db:any,actor:any){const out:any={classes:[],curricula:[],issues:[],sources:[]};const kinds=['classes','curricula'] as Kind[];const results=await Promise.all(kinds.map(kind=>db.collection(collection(kind)).where('academyId','==',actor.academyId).limit(501).get()));for(const [i,kind] of kinds.entries()){const q=results[i];if(q.docs.length>500)throw Error('CORE_CUTOVER_LIMIT');out[kind]=q.docs.map((d:any)=>({id:d.id,...d.data()})).filter((r:any)=>!r.archived&&(canAccessOwned(actor,r.ownerUid,r.academyId)||(r.assignedUids||[]).includes(actor.uid)));}return out;}
 export async function saveManaged(db:any,actor:any,kind:Kind,input:any){
  if(!await coreActive(db,actor))throw Error('CORE_NOT_READY');
  const value=kind==='classes'?classSchema.parse(input.data):planSchema.parse(input.data),id=input.id?z.string().uuid().parse(input.id):randomUUID(),ref=db.collection(collection(kind)).doc(id);
@@ -90,7 +90,7 @@ export async function saveManaged(db:any,actor:any,kind:Kind,input:any){
   if(kind==='classes'){
    const v:any=value;if(new Set(v.students).size!==v.students.length)throw Error('INVALID_INPUT');if(v.students.some((key:string)=>!canTeach(actor,key,v.subject)))throw Error('FORBIDDEN');
    const books=[];for(const b of v.books||[]){if(b.linkedPlanId){const linked=(await tx.get(db.collection('teacherCurricula').doc(b.linkedPlanId))).data();if(!linked||linked.archived||linked.academyId!==actor.academyId||linked.subject!==v.subject||!linked.isCommon)throw Error('FORBIDDEN');books.push({...b,id:b.linkedPlanId,title:linked.title});}else books.push({...b,id:b.id||randomUUID()});}if(new Set(books.map(b=>b.id)).size!==books.length)throw Error('INVALID_INPUT');
-   const status=v.status||old?.status||'진행 중',slots=v.slots.map((s:any)=>({...s,id:s.id||randomUUID(),status:status==='중단'?'중단':s.status||'진행 중'}));if(new Set(slots.map((s:any)=>s.id)).size!==slots.length)throw Error('INVALID_INPUT');prepared={...v,status,slots,books};
+   const status=v.status||old?.status||'진행 중',slots=v.slots.map((s:any)=>normalizeSlotTargets({...s,id:s.id||randomUUID(),status:status==='중단'?'중단':s.status||'진행 중'},v.students||[]));if(new Set(slots.map((s:any)=>s.id)).size!==slots.length)throw Error('INVALID_INPUT');prepared={...v,status,slots,books};
    for(const key of [...new Set<string>([...(old?.students||[]),...v.students])]){const sr=db.collection(DIRECTORY_ROWS).doc(directoryRowKey('students',key)),s=(await tx.get(sr)).data(),member=(await tx.get(db.collection('academyStudentMemberships').doc(key))).data();if(!s||s.issue||s.fields.archived||!member||member.academyId!==actor.academyId)throw Error('FORBIDDEN');const aliases=new Set([id,old?.notionPageId].filter(Boolean)),links=(s.fields.properties['소속반']?.relation||[]).map((v:any)=>uuid(v.id)).filter((key:string)=>!aliases.has(key));if(v.students.includes(key))links.push(id);studentChanges.push({ref:sr,old:s,links});}
   }else{const v:any=value;if(v.classId){const c=(await tx.get(db.collection('teacherClasses').doc(v.classId))).data();if(!c||c.archived||c.subject!==v.subject||!canAccessOwned(actor,c.ownerUid,c.academyId))throw Error('FORBIDDEN');}prepared={...v,isCommon:!v.classId};}
   const at=Date.now(),next={...old,...prepared,ownerUid:old?.ownerUid||actor.uid,academyId:actor.academyId,sourceMode:'firestore',notionSyncStage:'app_saved',notionSyncRequired:false,revision:(old?.revision||0)+1,updatedAt:at};tx.set(ref,next);tx.set(db.collection(MANAGED_HISTORY).doc(`${collection(kind)}:${id}:${next.revision}`),{before:old||null,after:next,by:actor.uid,at,reason:'app-edit'});

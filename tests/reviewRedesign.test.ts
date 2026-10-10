@@ -102,3 +102,20 @@ test('review and grade lists return counts for every row while a status filter n
     const missing = await get(f.db, teacher, { action: 'academic-records', page: '1', kind: '학교 내신', submission: '미제출' });
     assert.deepEqual(missing.records.map((r: any) => r.id), ['세교중2-2기말']); assert.equal(missing.stats.count, 3);
 });
+
+test('lesson review: teachers see only their own lessons; admins see everyone', async () => {
+    const f = templateFirestore();
+    f.rows.set('academyCoreAuthority/main', { active: true }); f.rows.set('academyClassAuthority/main', { active: true });
+    f.rows.set('lessonAppAuthority/main', { active: true, schemaVersion: 1, verifiedRunId: 'l', verificationHash: 'h' }); f.rows.set('lessonVerificationRuns/l', { verified: true, academyId: 'main', hash: 'h' });
+    f.rows.set('teacherWorkspaceAccess/t', { academyId: 'main', scopes: [{ studentKey: S, subject: '영어' }] });
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+    f.rows.set('teacherLessonDrafts/mine', { ownerUid: 't', academyId: 'main', stage: 'draft', revision: 1, data: { date: day, studentKey: S, subject: '영어' } });
+    f.rows.set('teacherLessonDrafts/theirs', { ownerUid: 'other', academyId: 'main', stage: 'published', revision: 1, assignedUids: ['t'], data: { date: day, studentKey: S, subject: '영어' } });
+    const teacher = { uid: 't', academyId: 'main', admin: false, principal: false, coreMode: true, scopes: [{ studentKey: S, subject: '영어' }], teachingScopes: [{ studentKey: S, subject: '영어' }] };
+    teacherReadCache.clear();
+    const mine = await get(f.db, teacher, { action: 'academy-lessons', page: '1', period: '7' });
+    assert.equal(mine.status, 200, mine.error); assert.deepEqual(mine.records.map((r: any) => r.id), ['mine']);
+    teacherReadCache.clear();
+    const all = await get(f.db, { uid: 'admin', academyId: 'main', admin: true, principal: false, coreMode: true, scopes: [], teachingScopes: [] }, { action: 'academy-lessons', page: '1', period: '7' });
+    assert.equal(all.total, 2);
+});

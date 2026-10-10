@@ -14,7 +14,7 @@ function fixture(){const f=registrationFirestore(),actor={uid:'teacher',admin:fa
  const template:any={id:templateId,parent:{database_id:'ec10d0f1-c79a-8312-946b-811e86041ee2'},properties:{유형:{title:[{plain_text:'인사'}]},'내용(문자본문)':{rich_text:[{plain_text:'{{학생 호칭}} 안녕하세요'}]}}};
  const notion=async(path:string,method='GET',body?:any)=>{if(path.endsWith('/query'))return {results:[template],has_more:false};if(path===`pages/${templateId}`)return template;if(path===`pages/${key}`){if(method==='PATCH'){patches++;if(fail){fail=false;throw Error('NOTION_502');}Object.assign(page.properties,body.properties);}return structuredClone(page);}throw Error(path);};
  const input={action:'prepare-message',id:randomUUID(),studentKey:key,subject:'영어',templateId,lessonId:null,body:'안녕하세요\n수업 안내입니다.'};return {...f,actor,page,notion,input,get patches(){return patches;},failBackup:()=>{fail=true;}};}
-test('template escaping and line breaks, zero scores, missing variables',()=>{const vars=messageVariables({displayName:'학생',tuition:0},{correct:0,total:10});assert.equal(vars['단어'],0);assert.equal(vars['수강료'],'0');assert.deepEqual(renderTeacherMessage('\\{\\{학생 호칭\\}\\}<br>{{단어}}점\n{{미상}}',vars),{body:'학생\n0점\n{{미상}}',missing:['미상']});assert.equal(vars['내신 대비 점수'],undefined);});
+test('template escaping and line breaks, zero scores, missing variables',()=>{const vars=messageVariables({displayName:'학생',tuition:0},{correct:0,total:10});assert.equal(vars['단어'],0);assert.equal(vars['수강료'],'0');assert.deepEqual(renderTeacherMessage('\\{\\{학생 호칭\\}\\}<br>{{단어}}점\n{{미상}}',vars),{body:'학생\n0점\n{{미상}}',missing:['미상'],dropped:[]});assert.equal(vars['내신 대비 점수'],undefined);});
 test('prepare only writes selected template and body, no sends',async()=>{const f=fixture();const r=await prepareTeacherMessage(f.db,f.actor,f.input,f.notion);assert.equal(r?.status,'ready');assert.deepEqual(Object.keys(f.page.properties).sort(),['학생','보호자연락처','메시지템플릿선택','완성된 문자본문'].sort());assert.equal(f.patches,1);await prepareTeacherMessage(f.db,f.actor,f.input,f.notion);assert.equal(f.patches,1);});
 test('backup failure resumes immutable request and rejects changed input',async()=>{const f=fixture();f.failBackup();await assert.rejects(prepareTeacherMessage(f.db,f.actor,f.input,f.notion),/NOTION_502/);assert.equal(f.rows.get('teacherMessages/'+f.input.id).status,'prepared');await assert.rejects(prepareTeacherMessage(f.db,f.actor,{...f.input,body:'다른 내용'},f.notion),/MESSAGE_CONFLICT/);assert.equal((await prepareTeacherMessage(f.db,f.actor,f.input,f.notion))?.status,'ready');});
 test('permission, wrong source, unresolved placeholders and missing contact reject',async()=>{const f=fixture();await assert.rejects(prepareTeacherMessage(f.db,{...f.actor,scopes:[]},f.input,f.notion),/FORBIDDEN/);await assert.rejects(prepareTeacherMessage(f.db,f.actor,{...f.input,body:'{{학생}}'},f.notion),/MESSAGE_VARIABLE_REQUIRED/);f.page.parent.database_id=templateId;await assert.rejects(prepareTeacherMessage(f.db,f.actor,f.input,f.notion),/NOTION_SOURCE_MISMATCH/);f.page.parent.database_id=studentDB;f.page.properties.보호자연락처.phone_number='';await assert.rejects(prepareTeacherMessage(f.db,f.actor,f.input,f.notion),/MESSAGE_CONTACT_REQUIRED/);});
@@ -65,4 +65,14 @@ test('after the core cutover an app-registered student can be messaged with no N
   // Only the template read (template mode notion in this test) touched Notion; the student page did not.
   assert.equal(notionCalls,1);
  }finally{if(old===undefined)delete process.env.MESSAGE_TEMPLATE_READ_MODE;else process.env.MESSAGE_TEMPLATE_READ_MODE=old;}
+});
+
+test('optional score lines drop out when the lesson has no value',()=>{
+ const t='{{학생 호칭}} 수업 결과\n단어 {{단어}}점\n테스트 {{테스트}}\n내신 대비 {{내신 대비 점수}}점\n감사합니다';
+ const both=renderTeacherMessage(t,messageVariables({displayName:'민수'},{correct:9,total:10,test:'상',examCorrect:18,examTotal:20}));
+ assert.equal(both.body,'민수 수업 결과\n단어 90점\n테스트 상\n내신 대비 90점\n감사합니다');
+ const examOnly=renderTeacherMessage(t,messageVariables({displayName:'민수'},{test:'미확인',examCorrect:18,examTotal:20}));
+ assert.equal(examOnly.body,'민수 수업 결과\n내신 대비 90점\n감사합니다');assert.deepEqual(examOnly.dropped,['단어','테스트']);assert.deepEqual(examOnly.missing,[]);
+ assert.equal(renderTeacherMessage(t,messageVariables({displayName:'민수'},{})).body,'민수 수업 결과\n감사합니다');
+ assert.deepEqual(renderTeacherMessage('{{보호자이름}}님',messageVariables({displayName:'민수'},{})).missing,['보호자이름']);
 });

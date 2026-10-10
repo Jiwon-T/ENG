@@ -46,11 +46,32 @@ export function canTeach(actor: {
 export function percentage(correct: number | null, total: number | null) { return correct === null || total === null || total <= 0 ? null : Math.round(correct / total * 10000) / 100; }
 export function lessonFeedback(d: z.infer<typeof lessonDraftSchema>) { return [d.content, d.note, d.assignment ? `과제: ${d.assignment}` : ''].filter(Boolean).join('\n\n'); }
 export function continuation(previous: any) { return { examScope:previous.examScope||'', content: previous.content || '', assignment: previous.assignment || '', note: '', nextPlan: previous.nextPlan || '', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', correct: null, total: null, wrong:null,examWrong:null,examCorrect: null, examTotal: null, round: null, selfStudy: '미확인', selfStudyRound: null, selfStudyStart: '', selfStudyEnd: '', attendanceNote: '', specialNote: '' }; }
+const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+/** Self-study block attached to a regular lesson (same weekday). No students = everyone in the slot. */
+export const studyBlockSchema = z.object({
+    start: clock, end: clock,
+    students: z.array(z.string().uuid()).max(100).optional(),
+}).refine(block => block.end > block.start, { message: '자습 종료 시간은 시작 시간 뒤여야 합니다.' });
+/** One line of a class's regular timetable.
+ *  kind: 'lesson' (정규 수업, default) or 'test' (3차시: no lesson, 자습·테스트 only).
+ *  students: who this line is for (omitted = the whole class). study: self-study blocks for a lesson line. */
 export const timetableSlotSchema = z.object({
     weekday: z.number().int().min(0).max(6),
-    start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-    end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    start: clock, end: clock,
+    kind: z.enum(['lesson', 'test']).optional(),
+    students: z.array(z.string().uuid()).max(100).optional(),
+    study: z.array(studyBlockSchema).max(12).optional(),
 }).refine(slot => slot.end > slot.start, { message: '종료 시간은 시작 시간 뒤여야 합니다.' });
+/** Keep only students who are in the class, drop empty lists, and keep study blocks on lesson lines only. */
+export function normalizeSlotTargets<T extends { kind?: string; students?: string[]; study?: { students?: string[] }[] }>(slot: T, classStudents: string[]): T {
+    const inClass = (keys?: string[]) => { const list = [...new Set((keys || []).filter(key => classStudents.includes(key)))]; return list.length ? list : undefined; };
+    const next: any = { ...slot, kind: slot.kind === 'test' ? 'test' : 'lesson' };
+    const students = inClass(slot.students); if (students) next.students = students; else delete next.students;
+    const pool = students || classStudents;
+    if (next.kind === 'test' || !slot.study?.length) delete next.study;
+    else next.study = slot.study.map(block => { const keys = (block.students || []).filter(key => pool.includes(key)); const out: any = { ...block }; if (keys.length && keys.length < pool.length) out.students = [...new Set(keys)]; else delete out.students; return out; });
+    return next;
+}
 export function assertDraftEditable(old: any, revision: unknown, value: {
     studentKey: string;
     subject: string;
@@ -78,7 +99,8 @@ export const teacherScheduleSchema = z.object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
     end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-    kind: z.enum(['정규 수업', '보강', '휴강', '시험', '기타']),
+    // '시험' was renamed '테스트'; older records still saying '시험' are accepted and saved as '테스트'.
+    kind: z.preprocess(value => value === '시험' ? '테스트' : value, z.enum(['정규 수업', '보강', '휴강', '테스트', '자습', '기타'])),
     status: z.enum(['예정', '변경', '완료', '취소']),
     place: z.string().max(100), note: z.string().max(5000),
 }).superRefine((value, ctx) => {

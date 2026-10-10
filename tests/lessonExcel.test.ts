@@ -62,3 +62,15 @@ test('ordinary paragraphs preserve wrapping styles and tall rows, long notes con
  assert.ok(heights.length>1);assert.ok(heights.every(h=>h<=409&&h>21));
  assert.equal((sheet.match(/문장의 형식/g)||[]).length,40);assert.match(sheet,/r="E5" s="12"/);
 });
+
+test('excel: scores sit above 과제 and use the plain "테스트:" label',()=>{
+ const [, , , learning]=lessonExcelCells({studentDisplayName:'최준영 (한광고1)',data:{date:'2026-10-09',classSession:'있음',start:'19:20',end:'21:20',round:6,content:'실전 문제 풀이',assignment:'오답 고쳐 오기',total:20,correct:18,examTotal:55,examCorrect:42}});
+ assert.equal(learning,'실전 문제 풀이\n테스트: 18/20\n내신 대비 테스트: 42/55\n과제: 오답 고쳐 오기');
+});
+test('excel: row height follows Excel\'s word wrap, so rows are tall enough for every line',async()=>{
+ const {excelTextLines}=await import('../src/lib/lessonExcelLayout');
+ // Four 6-letter words: Excel puts one per line (4 lines); counting characters alone gave 3.
+ assert.equal(excelTextLines('가나다라마바 가나다라마바 가나다라마바 가나다라마바',24,14),4);
+ assert.equal(excelTextLines('한 줄\n두 줄\n\n네 줄',40,14),4);
+ assert.ok(lessonExcelRowHeight(['','','','23년도, 24년도, 25년도 실전 문제 풀이 연습\n과제: 오답 고쳐 오기, 교과서 변형 문제 1회씩 풀어오기\n내신 대비 테스트: 42/55','',''])>=4*21);
+});

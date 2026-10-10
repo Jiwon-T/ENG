@@ -30,6 +30,8 @@ export default function Login() {
         setError('로그인 창이 닫혔습니다. 다시 시도해 주세요.');
       } else if (error?.code === 'auth/cancelled-popup-request') {
         // Ignore duplicate requests
+      } else if (error?.code === 'auth/user-disabled') {
+        setError('이 계정은 학원에서 사용을 중지했습니다. 학원에 문의해 주세요.');
       } else if (error?.code === 'auth/network-request-failed') {
         setError('네트워크 연결이 원활하지 않습니다. 인터넷 연결을 확인해 주세요.');
       } else if (error?.code === 'auth/unauthorized-domain') {
@@ -145,6 +147,8 @@ export default function Login() {
         setError('비밀번호가 너무 취약합니다. 6자 이상으로 설정해 주세요.');
       } else if (error.code === 'auth/invalid-email') {
         setError('유효하지 않은 이메일 형식입니다.');
+      } else if (error.code === 'auth/user-disabled') {
+        setError('이 계정은 학원에서 사용을 중지했습니다. 학원에 문의해 주세요.');
       } else if (
         error.code === 'auth/user-not-found' || 
         error.code === 'auth/wrong-password' ||

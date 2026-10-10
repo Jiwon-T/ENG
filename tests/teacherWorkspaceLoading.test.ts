@@ -98,3 +98,18 @@ test('reproduces missing today record outside the first draft page with eleven o
   assert.equal(todayLessonState(event,'s',[...first.body.records,...second.body.records]),'반영 완료');
  }finally{teacherReadCache.clear();}
 });
+
+test('lesson bootstrap carries page 1 of saved lessons when asked, so the tab needs one request',async()=>{
+ teacherReadCache.clear();const previous=globalThis.fetch,token=process.env.NOTION_INTEGRATION_TOKEN,database=process.env.NOTION_STUDENT_DATABASE_ID;
+ process.env.NOTION_INTEGRATION_TOKEN='test';process.env.NOTION_STUDENT_DATABASE_ID='test';
+ globalThis.fetch=async()=>new Response(JSON.stringify({results:[],has_more:false}),{status:200});
+ const drafts=Array.from({length:9},(_,i)=>({id:`d${i}`,ownerUid:uid,updatedAt:100-i,archived:false,stage:'draft',data:{studentKey:'s',date:'2026-10-06',subject:'영어'}}));
+ const db:any={getAll:async(...refs:any[])=>refs.map(r=>({id:r.id,exists:true,data:()=>drafts.find(d=>d.id===r.id)})),collection:(name:string)=>{const q:any={where:()=>q,select:()=>q,limit:()=>q,orderBy:()=>q,get:async()=>({docs:name==='teacherLessonDrafts'?drafts.map(d=>({id:d.id,data:()=>d})):[]}),doc:(id:string)=>({id,get:async()=>({exists:false,data:()=>undefined})})};return q;}};
+ try{
+  const withList=await run('/api/teacher/workspace?action=bootstrap&section=lesson&draftsSize=6',db,{admin:false});
+  assert.equal(withList.status,200,JSON.stringify(withList.body));assert.equal(withList.body.draftsPage.records.length,6);assert.equal(withList.body.draftsPage.total,9);assert.equal(withList.body.draftsPage.records[0].id,'d0');
+  teacherReadCache.clear();
+  const without=await run('/api/teacher/workspace?action=bootstrap&section=lesson',db,{admin:false});
+  assert.equal('draftsPage' in without.body,false);
+ }finally{globalThis.fetch=previous;if(token===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=token;if(database===undefined)delete process.env.NOTION_STUDENT_DATABASE_ID;else process.env.NOTION_STUDENT_DATABASE_ID=database;teacherReadCache.clear();}
+});

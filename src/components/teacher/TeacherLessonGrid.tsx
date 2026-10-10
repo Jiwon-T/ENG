@@ -14,7 +14,7 @@ import {lessonRecordStatus} from '../../lib/lessonPresentation';
 import {canRetryPublication} from '../../lib/teacherPublicationRecovery';
 import OptionalMark from './OptionalMark';
 import TeacherTodayLessons from './TeacherTodayLessons';
-import {applyPreviousLesson,type TodayLesson} from '../../lib/teacherTodayLessons';
+import {applyPreviousLesson,type TodayLesson,sessionSeed} from '../../lib/teacherTodayLessons';
 import WorkspaceDialog from './WorkspaceDialog';
 import LessonTests from './LessonTests';
 import LessonAcademyFields from './LessonAcademyFields';
@@ -83,9 +83,9 @@ export default function TeacherLessonGrid({ headingActions,data, busy, request, 
         const next=removeGridSelection(rows,id,activeStudent);if(!next.removed)return;
         setRows(next.rows);setActiveStudent(next.index);setChecked(previous=>previous.filter(key=>key!==id));setSelection(previous=>previous.filter(key=>key!==row.data.studentKey));dismissNotice();if(!next.rows.length)setEditorOpen(false);
     }
-    async function addStudents(keys=selection,settings={subject,date,start,end},matchEnd=true) {
+    async function addStudents(keys=selection,settings:{subject:string;date:string;start:string;end:string;event?:TodayLesson}={subject,date,start,end},matchEnd=true) {
         const added = keys.filter(key => !rows.some(r => r.data.studentKey === key && r.data.subject === settings.subject && r.data.date === settings.date&&r.data.start===settings.start&&(!matchEnd||r.data.end===settings.end)));
-        const next:Row[] = added.map(key => {const seed=newGridLesson(key,settings.subject,settings.date,settings.start,settings.end);const saved=matchingSavedLesson([...(data.drafts||[]),...removedSavedRows.current.values()],seed,data.uid,matchEnd);return saved?{...saved,data:structuredClone(saved.data),savedData:structuredClone(saved.data),loading:false,touched:[]}: {id:crypto.randomUUID(),stage:'new',loading:true,data:seed};});
+        const next:Row[] = added.map(key => {const seed={...newGridLesson(key,settings.subject,settings.date,settings.start,settings.end),...(settings.event?sessionSeed(settings.event,key):{})};const saved=matchingSavedLesson([...(data.drafts||[]),...removedSavedRows.current.values()],seed,data.uid,matchEnd);return saved?{...saved,data:structuredClone(saved.data),savedData:structuredClone(saved.data),loading:false,touched:[]}: {id:crypto.randomUUID(),stage:'new',loading:true,data:seed};});
         setRows(previous => [...previous, ...next]);
         setChecked(previous => [...previous, ...next.map(r => r.id)]);
         setSelection([]);setActiveStudent(next.length?rows.length:Math.max(0,rows.findIndex(r=>keys.includes(r.data.studentKey)&&r.data.subject===settings.subject&&r.data.date===settings.date&&r.data.start===settings.start&&(!matchEnd||r.data.end===settings.end))));setEditorOpen(true);
@@ -97,7 +97,7 @@ export default function TeacherLessonGrid({ headingActions,data, busy, request, 
     }
     function chooseGroup(event:TodayLesson){
         setClassId('');setSubject(event.subject);setDate(event.date);setStart(event.start);setEnd(event.end);
-        void addStudents(event.students,{subject:event.subject,date:event.date,start:event.start,end:event.end},false);
+        void addStudents(event.students,{subject:event.subject,date:event.date,start:event.start,end:event.end,event},false);
     }
     return <div className="grid lg:grid-cols-[240px_minmax(0,1fr)] gap-4"><aside className="min-w-0"><TeacherTodayLessons selection={rows[activeStudent]?.data} onNewLesson={()=>{setSelection([]);setEditorOpen(false);setSearch('');}} data={data} records={rows.filter(row=>row.savedData).map(row=>({...row,data:row.savedData}))} date={date} onDate={setDate} request={request} active={active} disabled={false} onGroup={chooseGroup}/></aside><section className="panel lesson-grid min-w-0"><div className="flex flex-wrap justify-between gap-2 mb-3"><h2 className="!mb-0">여러 학생 함께 작성</h2>{headingActions}<span className="text-xs text-slate-500">학생마다 별도 기록으로 저장됩니다. 탭을 바꿔도 입력은 유지됩니다.</span></div><fieldset>
  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2"><label>과목<select value={subject} onChange={e => { setSubject(e.target.value); setSelection([]); }}>{['영어', '수학', '국어', '과학', '한국사'].map(s => <option key={s}>{s}</option>)}</select></label><label>날짜<input type="date" value={date} onChange={e => setDate(e.target.value)}/></label><label>시작<input type="time" value={start} onChange={e => setStart(e.target.value)}/></label><label>종료<input type="time" value={end} onChange={e => setEnd(e.target.value)}/></label></div>

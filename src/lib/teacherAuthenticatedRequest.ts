@@ -1,4 +1,5 @@
 import { safeFetchJson } from './safeFetchJson';
+import { actionOf, recordTiming, serverStages } from './requestTimings';
 
 interface TeacherAuth {
   authStateReady(): Promise<void>;
@@ -17,9 +18,10 @@ export async function teacherAuthenticatedRequest<T>(auth: TeacherAuth, endpoint
   const pause=quotaPauses.get(auth);
   if(pause?.user===user&&pause.until>Date.now())return {ok:false,status:429,error:'FIRESTORE_RESOURCE_EXHAUSTED',data:pause.data as T,userMessage:pause.message};
   if(pause)quotaPauses.delete(auth);
+  const started=performance.now();let tokenMs=0;
   const send = async (refresh = false) => {
     const headers = new Headers(init.headers);
-    const token=await user.getIdToken(refresh);if(!sameUser(auth.currentUser))throw new Error('로그인 계정이 변경되었습니다.');
+    const tokenAt=performance.now();const token=await user.getIdToken(refresh);tokenMs+=performance.now()-tokenAt;if(!sameUser(auth.currentUser))throw new Error('로그인 계정이 변경되었습니다.');
     headers.set('Authorization', `Bearer ${token}`);
     return safeFetchJson<T>(endpoint, { ...init, headers, cache: 'no-store' });
   };
@@ -27,6 +29,7 @@ export async function teacherAuthenticatedRequest<T>(auth: TeacherAuth, endpoint
   if(!sameUser(auth.currentUser))throw new Error('로그인 계정이 변경되었습니다.');
   if (result.status === 401 && result.error === 'UNAUTHORIZED') result = await send(true);
   if(!sameUser(auth.currentUser))throw new Error('로그인 계정이 변경되었습니다.');
+  recordTiming({at:Date.now(),action:actionOf(endpoint,init),ms:Math.round(performance.now()-started),token:Math.round(tokenMs),status:result.status,server:serverStages(endpoint)});
   if(result.error==='FIRESTORE_RESOURCE_EXHAUSTED'){
     const body=result.data as any;
     quotaPauses.set(auth,{user,until:Date.now()+30_000,message:result.userMessage,data:{ok:false,error:'FIRESTORE_RESOURCE_EXHAUSTED',message:result.userMessage,diagnosticId:body?.diagnosticId}});

@@ -10,14 +10,14 @@ export function MessageTemplateEditor({record,busy,onSave,onRetry,onResolve,onDi
  const [title,setTitle]=useState(record.title),[body,setBody]=useState(record.body);
  const locked=busy||record.status==='conflict'||record.archived;
  return <div className="message-template-editor">
-  <div className="message-template-toolbar"><StatusBadge kind={kind(record.status)} text={record.status==='app'?'앱 저장 완료':record.status==='conflict'?'양쪽 수정 · 확인 필요':record.status==='synced'?'Notion 동기화 완료':record.status==='failed'?'앱 저장 유지 · 동기화 실패':'앱 저장 완료 · Notion 대기'}/>{record.lastSuccessAt&&<span className="text-xs">마지막 성공 {new Date(record.lastSuccessAt).toLocaleString('ko-KR')}</span>}</div>
+  {!appOnly&&<div className="message-template-toolbar"><StatusBadge kind={kind(record.status)} text={record.status==='app'?'앱 저장 완료':record.status==='conflict'?'양쪽 수정 · 확인 필요':record.status==='synced'?'Notion 동기화 완료':record.status==='failed'?'앱 저장 유지 · 동기화 실패':'앱 저장 완료 · Notion 대기'}/>{record.lastSuccessAt&&<span className="text-xs">마지막 성공 {new Date(record.lastSuccessAt).toLocaleString('ko-KR')}</span>}</div>}
   <label>템플릿 이름<input value={title} maxLength={300} disabled={locked} onChange={e=>{setTitle(e.target.value);onDirty?.(e.target.value!==record.title||body!==record.body);}}/></label>
   <p className="text-xs">대상: {record.target||'지정 없음'}{record.archived?' · 원본 보관됨':''}</p>
   <label>문자 템플릿 본문<AutoTextarea value={body} maxLength={10000} maxRows={10} disabled={locked} onChange={e=>{setBody(e.target.value);onDirty?.(e.target.value!==record.body||title!==record.title);}}/></label>
   {record.error&&<p role="status" className="text-xs">{record.error}</p>}
-  {record.sourceWarning&&<p role="status" className="text-xs">원본 접근 확인 필요: {record.sourceWarning} · 앱 자료는 유지됩니다.</p>}
-  {record.remote&&<div className="message-template-conflict" role="status"><strong>Notion에서 수정된 내용</strong><p>{record.remote.title}</p><pre>{record.remote.body}</pre><div className="message-template-toolbar"><button type="button" className="small-button" disabled={busy} onClick={()=>onResolve('notion')}>Notion 내용 가져오기</button><button type="button" className="small-button" disabled={busy||record.remote.archived} onClick={()=>onResolve('app')}>앱 내용으로 다시 반영 요청</button></div></div>}
-  <div className="message-template-toolbar"><button type="button" className="primary-button" disabled={locked||!title.trim()||title.trim()===record.title&&body===record.body} onClick={()=>onSave({title,body})}>{appOnly?'앱에 저장':'앱에 저장 · 동기화 요청'}</button>{record.status==='failed'&&!appOnly&&<button type="button" className="small-button" disabled={busy} onClick={onRetry}>동기화 다시 시도</button>}</div>
+  {!appOnly&&record.sourceWarning&&<p role="status" className="text-xs">원본 접근 확인 필요: {record.sourceWarning} · 앱 자료는 유지됩니다.</p>}
+  {!appOnly&&record.remote&&<div className="message-template-conflict" role="status"><strong>Notion에서 수정된 내용</strong><p>{record.remote.title}</p><pre>{record.remote.body}</pre><div className="message-template-toolbar"><button type="button" className="small-button" disabled={busy} onClick={()=>onResolve('notion')}>Notion 내용 가져오기</button><button type="button" className="small-button" disabled={busy||record.remote.archived} onClick={()=>onResolve('app')}>앱 내용으로 다시 반영 요청</button></div></div>}
+  <div className="message-template-toolbar"><button type="button" className="primary-button" disabled={locked||!title.trim()||title.trim()===record.title&&body===record.body} onClick={()=>onSave({title,body})}>{appOnly?'저장':'앱에 저장 · 동기화 요청'}</button>{record.status==='failed'&&!appOnly&&<button type="button" className="small-button" disabled={busy} onClick={onRetry}>동기화 다시 시도</button>}</div>
   <p className="text-xs">템플릿만 수정합니다. 실제 문자는 발송하지 않습니다.</p>
  </div>;
 }

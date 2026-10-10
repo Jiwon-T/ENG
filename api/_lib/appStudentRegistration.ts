@@ -41,6 +41,9 @@ export async function commitAppStudentRegistration(db:any,actor:any,idInput:unkn
   tx.set(sr,student);tx.set(er,enrollment);
   for(const [target,row] of [[sr,student],[er,enrollment]])tx.set(db.collection(DIRECTORY_HISTORY).doc(target.id+':1'),{sourceKey:row.sourceKey,entityId:row.entityId,notionPageId:null,revision:1,before:null,after:row.fields,pointer,by:actor.uid,at,reason:'app-registration'});
   tx.set(mr,{internalStudentId,studentKey,studentDisplayName:title,notionStudentPageId:null,origin:'app',sourceMode:'firestore',firebaseUid:null,createdAt:stamp,updatedAt:stamp});
+  // Per-subject 8-session prices for the tuition sheet; 수강료 on the student stays the total.
+  const subjectTuition=Object.fromEntries(value.enrollments.filter(e=>typeof e.tuition==='number').map(e=>[e.subject,e.tuition]));
+  if(Object.keys(subjectTuition).length)tx.set(db.collection('studentTuition').doc(studentKey),{academyId:'main',studentKey,subjects:subjectTuition,updatedAt:at,updatedBy:actor.uid,source:'registration'});
   tx.set(member,{academyId:'main',studentKey,internalStudentId,disabled:false,origin:'app',sourceMode:'firestore',createdAt:at,updatedAt:at});
   tx.set(projected,{internalStudentId,studentKey,sourceUpdatedAt:stamp,removed:false,subjects:value.enrollments.map(e=>({subject:e.subject,status:e.status,startAt:e.startDate,endAt:e.endDate})),appSource:'firestore',notionPageId:null});
   for(const update of teacherUpdates.values())tx.set(update.ref,{...update.profile,assignmentRevision:(update.profile.assignmentRevision||0)+1,assignmentSource:'firestore'});

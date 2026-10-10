@@ -1,14 +1,18 @@
-import {useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import {SyncStatus,ScheduleStatus,ClassStatus} from './ScheduleStatus';
 const SCHEDULE_STATUSES=['예정','변경','완료','취소'];
 export interface ScheduleEventCardProps {time:string;title:string;subtitle:string;subtitleFull?:string;kindBadge?:string;scheduleStatus?:string;syncStatus?:string;cancelled?:boolean;onOpen:()=>void;notionUrl?:string;variant?:'dated'|'regular';classState?:string;disabled?:boolean;onStatus?:(status:string)=>void}
 export default function ScheduleEventCard({time,title,subtitle,subtitleFull,kindBadge,scheduleStatus,syncStatus,cancelled=false,onOpen,notionUrl,variant='dated',classState,disabled=false,onStatus}:ScheduleEventCardProps){
- const [picking,setPicking]=useState(false);
+ const [picking,setPicking]=useState<{top:number;left:number}|null>(null),pickRef=useRef<HTMLButtonElement>(null);
+ // The menu is fixed to the viewport so day columns (which clip overflow) never hide it; it closes on scroll or outside click.
+ useEffect(()=>{if(!picking)return;const close=(e:Event)=>{if(e.type==='scroll'||!(e.target as HTMLElement)?.closest?.('.schedule-status-menu,.schedule-status-button'))setPicking(null);};window.addEventListener('scroll',close,true);window.addEventListener('pointerdown',close);return()=>{window.removeEventListener('scroll',close,true);window.removeEventListener('pointerdown',close);};},[picking]);
+ const togglePick=()=>{if(picking){setPicking(null);return;}const r=pickRef.current?.getBoundingClientRect();if(!r)return;const below=window.innerHeight-r.bottom>180;setPicking({top:below?r.bottom+4:Math.max(8,r.top-176),left:Math.max(8,Math.min(window.innerWidth-128,r.right-120))});};
  const isCancelled=cancelled||scheduleStatus==='취소';
  const separator=subtitle.lastIndexOf(' · '),summary=separator<0?subtitle:subtitle.slice(0,separator),subject=separator<0?'':subtitle.slice(separator+3);
  return <article className={`schedule-event-card variant-${variant}${isCancelled?' is-cancelled':''}`}><button type="button" className="schedule-event-open" disabled={disabled} onClick={onOpen} aria-label={`${title} · ${time} · ${scheduleStatus||classState||''} 열기`}><span className="schedule-event-top"><strong className="schedule-event-time">{time}</strong>{kindBadge&&<span className="schedule-kind">{kindBadge}</span>}</span><span className="schedule-event-title-row"><strong className="schedule-event-title">{title}</strong><SyncStatus value={syncStatus}/></span><span className="schedule-event-bottom"><span className="schedule-event-subtitle" title={subtitleFull||subtitle}><span className="schedule-student-summary">{summary}</span>{subject&&<span className="schedule-event-subject">· {subject}</span>}</span>{variant==='regular'?<ClassStatus value={classState}/>:!onStatus&&<ScheduleStatus value={scheduleStatus}/>}</span></button>
   {/* Status is changed right on the card (saved and published at once) without opening the editor. */}
-  {variant!=='regular'&&onStatus&&<div className="schedule-status-pick"><button type="button" className="schedule-status-button" disabled={disabled} aria-haspopup="menu" aria-expanded={picking} aria-label={`${title} 진행 상태 ${scheduleStatus||''} 바꾸기`} onClick={()=>setPicking(v=>!v)}><ScheduleStatus value={scheduleStatus}/></button>
-   {picking&&<div className="schedule-status-menu" role="menu">{SCHEDULE_STATUSES.map(s=><button key={s} type="button" role="menuitemradio" aria-checked={s===scheduleStatus} disabled={s===scheduleStatus} onClick={()=>{setPicking(false);onStatus(s);}}><ScheduleStatus value={s}/></button>)}</div>}</div>}
+  {variant!=='regular'&&onStatus&&<div className="schedule-status-pick"><button ref={pickRef} type="button" className="schedule-status-button" disabled={disabled} aria-haspopup="menu" aria-expanded={Boolean(picking)} aria-label={`${title} 진행 상태 ${scheduleStatus||''} 바꾸기`} onClick={togglePick}><ScheduleStatus value={scheduleStatus}/></button>
+   {picking&&typeof document!=='undefined'&&createPortal(<div className="schedule-status-menu schedule-status-portal" role="menu" style={{position:'fixed',top:picking.top,left:picking.left}}>{SCHEDULE_STATUSES.map(s=><button key={s} type="button" role="menuitemradio" aria-checked={s===scheduleStatus} disabled={s===scheduleStatus} onClick={()=>{setPicking(null);onStatus(s);}}><ScheduleStatus value={s}/></button>)}</div>,document.body)}</div>}
  </article>;
 }

@@ -29,12 +29,19 @@ import StudentManagementDialog from './StudentManagementDialog';
 import TeacherAssignmentManager from './TeacherAssignmentManager';
 import TeacherManager from './TeacherManager';
 import AppTemplateManager from './AppTemplateManager';
+import AppUserManager from './AppUserManager';
+import WorkspaceToast from './WorkspaceToast';
+import TuitionCalculator from './TuitionCalculator';
+import TeacherPayroll from './TeacherPayroll';
+import StudentAccountLink from './StudentAccountLink';
+import SpeedCheckPanel from './SpeedCheckPanel';
+import {recordTiming} from '../../lib/requestTimings';
 import LessonConflictReview from './LessonConflictReview';
 import {canRetryPublication} from '../../lib/teacherPublicationRecovery';
 import {teacherCachedRead,teacherCacheRead,teacherReadGeneration,invalidateTeacherReads} from '../../lib/teacherReadCache';
 import OptionalMark from './OptionalMark';
 import TeacherTodayLessons from './TeacherTodayLessons';
-import { applyPreviousLesson } from '../../lib/teacherTodayLessons';
+import { applyPreviousLesson,sessionSeed} from '../../lib/teacherTodayLessons';
 import { loadTeacherSection } from '../../lib/loadTeacherSection';
 import WorkspaceDialog from './WorkspaceDialog';
 import WorkspaceSyncPanel from './WorkspaceSyncPanel';
@@ -67,6 +74,11 @@ import TeacherScheduleEditor from './TeacherScheduleEditor';
 const subjects = ['영어', '수학', '국어', '과학', '한국사'];
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
 const emptyLesson = () => ({ studentKey: '', subject: '영어', date: today(), start: '14:00', end: '15:30', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', content: '', assignment: '', note: '', nextPlan: '', wrong:null as number | null,examWrong:null as number | null,correct: null, total: null, examCorrect: null, examTotal: null, round: null, classSession: '있음', selfStudy: '미확인', selfStudyStart: '', selfStudyEnd: '', selfStudyRound: null, attendanceNote: '', specialNote: '' });
+// After the app-only switch the quick preview request costs as much as the full one; remember that and send only one.
+// A per-browser hint holding no personal data; storage may be blocked, so failures just keep the old behaviour.
+const APP_ONLY_HINT='teacherWorkspaceAppOnly';
+function appOnlyKnown(){try{return localStorage.getItem(APP_ONLY_HINT)==='1';}catch{return false;}}
+function rememberAppOnly(){try{localStorage.setItem(APP_ONLY_HINT,'1');}catch{}}
 const errors: any = { UNAUTHORIZED: '로그인 인증이 만료되었습니다. 다시 로그인해 주세요.', SESSION_REVOKED: '로그인이 해제되었습니다. 다시 로그인해 주세요.', TEACHER_NOTION_LINK_REQUIRED: '관리자 설정에서 선생님 정보를 확인해 주세요.', TEACHER_NOT_CONFIGURED: '관리자가 담당 학생과 과목을 연결하면 사용할 수 있습니다.', SOURCE_IDENTITY_LOCKED: '반영된 기록의 학생·과목은 바꿀 수 없습니다. 새 수업으로 작성해 주세요.', INVALID_INPUT: '입력한 날짜, 시간, 점수와 필수 항목을 확인해 주세요.', FORBIDDEN: '이 자료에 접근할 권한이 없습니다.', DRAFT_CONFLICT: '다른 화면에서 수정되었습니다. 새로고침 후 확인해 주세요.', PUBLISH_IN_PROGRESS: '반영 중입니다. 잠시 후 새로고침해 주세요.', NOTION_SCHEMA_SETUP_REQUIRED: '관리자 설정에서 수업 일지 연결을 준비해 주세요.', MAKE_SUBJECT_NOT_CONFIGURED: '이 과목은 아직 반영 연결이 준비되지 않았습니다.', MAKE_TRIGGER_NOT_CONFIGURED: '수업 일지의 반영 연결을 확인해야 합니다.' };
 export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     onNavigate?: (view: any) => void;
@@ -160,11 +172,14 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     }
     function workspaceSection(value:string){return ['lesson','students','schedule','curriculum','settings'].includes(value)?value:'base';}
     function mergeData(fresh:any){setData((old:any)=>({...{classes:[],curricula:[],drafts:[],schedules:[],reflectedSchedules:[],staff:[],access:[],notionSources:[],notionIssues:[]},...old,...fresh,students:fresh.students?.map((s:any)=>({...old?.students?.find((student:any)=>student.studentKey===s.studentKey),...s}))||old?.students||[]}));}
+    // Page 1 of saved lessons comes with the lesson bootstrap; later pages and refreshes still ask for drafts-page.
+    const draftsViaBootstrap=useRef(false);
+    function applyDraftsPage(r:any,uid:string,generation:number){if(draftPage!==1)return;draftVersion.current++;setDraftLoading(false);setDraftList(r);teacherCacheRead(uid,'drafts-page:1',r,generation);setData((old:any)=>old?{...old,drafts:[...r.records,...(old.drafts||[]).filter((d:any)=>!r.records.some((row:any)=>row.id===d.id))]}:old);}
     async function loadDrafts(force=false){
         const version=++draftVersion.current;setDraftLoading(true);await auth.authStateReady();
         const key='drafts-page:'+draftPage,uid=auth.currentUser?.uid||'';
         const cached=teacherCachedRead(uid,key),generation=teacherReadGeneration();if(cached)setDraftList(cached);
-        try{const r=await request('read:drafts-page',{page:draftPage,force:force?'1':undefined});if(version!==draftVersion.current)return;setDraftList(r);teacherCacheRead(uid,key,r,generation);setData((old:any)=>old?{...old,drafts:[...r.records,...old.drafts.filter((d:any)=>!r.records.some((row:any)=>row.id===d.id))]}:old);}finally{if(version===draftVersion.current)setDraftLoading(false);}
+        try{const r=await request('read:drafts-page',{page:draftPage,size:'6',force:force?'1':undefined});if(version!==draftVersion.current)return;setDraftList(r);teacherCacheRead(uid,key,r,generation);setData((old:any)=>old?{...old,drafts:[...r.records,...old.drafts.filter((d:any)=>!r.records.some((row:any)=>row.id===d.id))]}:old);}finally{if(version===draftVersion.current)setDraftLoading(false);}
     }
     async function refresh() {
         const changes=[...dirtyResources.current];dirtyResources.current.clear();
@@ -181,24 +196,26 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     }
     useEffect(() => {
         const version=++loadVersion.current;let live=true;
-        const section=workspaceSection(tab);setSectionLoading(true);
+        const section=workspaceSection(tab);setSectionLoading(true);const shownFrom=performance.now();let shown=false;const markShown=()=>{if(shown)return;shown=true;recordTiming({at:Date.now(),action:`화면 표시 · ${section}`,ms:Math.round(performance.now()-shownFrom),token:0,status:200,server:[]});};if(section==='lesson')draftsViaBootstrap.current=true;
         (async()=>{
             await auth.authStateReady();const uid=auth.currentUser?.uid||'';if(!uid)throw new Error('로그인 인증이 만료되었습니다.');
             const cached=teacherCachedRead(uid,'workspace:'+section),generation=teacherReadGeneration();
-            if(cached&&live&&version===loadVersion.current){mergeData(cached);setSectionLoading(false);}
+            if(cached&&live&&version===loadVersion.current){mergeData(cached);setSectionLoading(false);markShown();}
             await loadTeacherSection({
-                fast:cached?undefined:()=>request('read:bootstrap-fast',{section}),
-                fresh:()=>request('read:bootstrap',{section}),
+                fast:cached||appOnlyKnown()?undefined:()=>request('read:bootstrap-fast',{section}),
+                fresh:()=>request('read:bootstrap',section==='lesson'?{section,draftsSize:'6'}:{section}),
                 apply:(value,isFresh)=>{
                     if(!live||version!==loadVersion.current||auth.currentUser?.uid!==uid)return;
-                    mergeData(value);setSectionLoading(false);setBootstrapError('' );
-                    if(isFresh)teacherCacheRead(uid,'workspace:'+section,value,generation);
+                    mergeData(value);setSectionLoading(false);setBootstrapError('' );markShown();
+                    if((value as any)?.draftsPage)applyDraftsPage((value as any).draftsPage,uid,generation);
+                    else if(isFresh&&section==='lesson')void loadDrafts().catch(()=>{}); // a server without the bundled list still gets one
+                    if(isFresh){teacherCacheRead(uid,'workspace:'+section,value,generation);if((value as any)?.coreMode)rememberAppOnly();}
                 },
             });
         })().catch(e=>{if(live&&version===loadVersion.current){setBootstrapError(e.message);setMessage(e.message);}}).finally(()=>{if(live&&version===loadVersion.current)setSectionLoading(false);});
         return()=>{live=false;};
     },[tab,authEpoch]);
-    useEffect(()=>{if(tab==='lesson')void loadDrafts().catch(e=>setMessage(e.message));return()=>{draftVersion.current++;};},[tab,draftPage]);
+    useEffect(()=>{if(tab!=='lesson')return;if(draftPage===1&&draftsViaBootstrap.current){draftsViaBootstrap.current=false;const uid=auth.currentUser?.uid||'',cached=uid?teacherCachedRead(uid,'drafts-page:1'):null;if(cached)setDraftList(cached);return;}void loadDrafts().catch(e=>setMessage(e.message));return()=>{draftVersion.current++;};},[tab,draftPage]);
     async function act(callback:()=>Promise<any>,options:WorkspaceActionOptions={}){
         const account=auth.currentUser?.uid,context=operationContext;
         const sectionLabel=({lesson:'수업 일지',academy:'일지 조회',schedule:'시간표·일정',students:'학생 관리',academic:'성적 관리',curriculum:'커리큘럼',word:'학습 세트',settings:'관리자 설정'} as Record<string,string>)[tab]||'자료';
@@ -270,12 +287,12 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
     return <div className={`teacher-workspace max-w-6xl mx-auto px-4 py-5 md:p-8 ${tab==='lesson'?'lesson-writing':''} ${tab==='schedule'?'schedule-active':''}`}>
   <WorkspaceNavigation tab={tab} onTab={next=>{if(tab==='students'&&studentAttemptRef.current)studentAttemptRef.current(()=>setTab(next));else setTab(next);}} admin={data?.admin} principal={data?.principal} date={today()} history={workspaceHistory}/>
 
-  {sectionLoading&&data&&<p role="status" className="text-sm text-slate-500 mb-3">자료를 불러오는 중…</p>}{message && <div role="status" className="workspace-toast"><span>{message}</span><button type="button" aria-label="알림 닫기" onClick={dismissMessage}>×</button></div>}{jobs.some(job=>job.status==='running')&&<p role="status" className="workspace-job-status">처리 중: {jobs.filter(job=>job.status==='running').map(job=>job.label).join(' · ')} · 다른 기록을 작업할 수 있습니다.</p>}
+  {sectionLoading&&data&&<p role="status" className="text-sm text-slate-500 mb-3">자료를 불러오는 중…</p>}{message && <WorkspaceToast message={message} onClose={dismissMessage}/>}{jobs.some(job=>job.status==='running')&&<p role="status" className="workspace-job-status">처리 중: {jobs.filter(job=>job.status==='running').map(job=>job.label).join(' · ')} · 다른 기록을 작업할 수 있습니다.</p>}
   {!data ? <div className="panel text-sm text-slate-500">{bootstrapError ? <><p>{bootstrapError}</p><button className="small-button mt-3" disabled={busy} onClick={() => act(refresh)}>다시 불러오기</button>{auth.currentUser?.email === 'lizzieshere1@gmail.com' && <button className="small-button mt-3 ml-2" onClick={onAccounts}>기존 계정·리포트 관리</button>}</> : '선생님방을 불러오는 중…'}</div> : <>
   <div hidden={tab !== 'lesson'}><div hidden={lessonMode !== 'grid'}><TeacherLessonGrid headingActions={modeSwitch} isRecordBusy={id=>operations.busy('lesson-record:'+id)} active={tab==='lesson'&&lessonMode==='grid'} data={data} busy={busy} request={request} refresh={refresh} act={act}/></div></div>
   
   {((tab === 'lesson' && lessonMode === 'single') || lessonDialogOpen) && <div className="lesson-writing-layout">
-   <aside hidden={lessonDialogOpen} className="space-y-3 lesson-writing-sidebar"><TeacherTodayLessons selection={lesson} onNewLesson={resetLesson} data={data} date={lessonDay} onDate={setLessonDay} onEvents={receiveTodayLessons} active={tab==='lesson'&&lessonMode==='single'&&!lessonDialogOpen} request={request} disabled={false} onStudent={(key,event)=>void selectStudent(key,{date:event.date,subject:event.subject,start:event.start,end:event.end},false)}/>
+   <aside hidden={lessonDialogOpen} className="space-y-3 lesson-writing-sidebar"><TeacherTodayLessons selection={lesson} onNewLesson={resetLesson} data={data} date={lessonDay} onDate={setLessonDay} onEvents={receiveTodayLessons} active={tab==='lesson'&&lessonMode==='single'&&!lessonDialogOpen} request={request} disabled={false} onStudent={(key,event)=>void selectStudent(key,{date:event.date,subject:event.subject,start:event.start,end:event.end,...sessionSeed(event,key)},false)}/>
 
     <section className="panel"><h2>저장한 기록</h2><button onClick={() => { resetLesson(); }} className="small-button">+ 새 수업</button>{draftLoading&&<p role="status" className="text-xs text-slate-500">저장한 기록을 불러오는 중…</p>}{savedDrafts.map((d: any) => <button key={d.id} className="saved-lesson-row" onClick={() => openDraft(d)}><span className="saved-lesson-name" title={students.find((s:any)=>s.studentKey===d.data.studentKey)?.studentDisplayName}>{students.find((s: any) => s.studentKey === d.data.studentKey)?.studentDisplayName}</span><span className="saved-lesson-date">{d.data.date}</span><StatusBadge kind={statusKind(lessonRecordStatus(d))} text={stageLabel[d.stage]}/></button>)}<div className="review-pagination"><button disabled={draftLoading||currentDraftPage===1} onClick={()=>setDraftPage(currentDraftPage-1)}>이전</button><span>{currentDraftPage} / {draftPages}</span><button disabled={draftLoading||currentDraftPage===draftPages} onClick={()=>setDraftPage(currentDraftPage+1)}>다음</button></div></section>
    </aside>
@@ -290,7 +307,7 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
   {tab==='students'&&<div className="student-view-switch"><div className="rv-seg" role="group" aria-label="학생 관리 보기"><button type="button" aria-pressed={studentView==='students'} onClick={()=>setStudentView('students')}>학생</button><button type="button" aria-pressed={studentView==='classes'} onClick={()=>setStudentView('classes')}>반 관리 <b>{data.classes?.length||0}</b></button></div>{studentView==='classes'&&<button type="button" className="primary-button" disabled={busy} onClick={()=>studentClassRef.current?.()}>+ 새 반</button>}</div>}
   {/* 반 관리 is reachable from 학생 관리 too: the same class cards and editor as the schedule tab. */}
   {tab==='students'&&studentView==='classes'&&<TeacherClassManager view="classes" createRef={studentClassRef} data={data} busy={busy} request={request} refresh={refresh} act={act} active mode="schedule"/>}
-  {tab==='students'&&studentView==='students'&&<section ref={studentListRef} className="student-dashboard-shell"><div className="student-dashboard"><aside className="student-master-panel"><StudentMasterPanel registrations={data.admin||data.principal?{count:intakeCount,onAdd:()=>setIntakeStart(n=>n+1),render:(query,active)=><Suspense fallback={<p className="report-caption">상담·신입생을 불러오는 중…</p>}><StudentRegistrationManager query={query} active={active} startSignal={intakeStart} onCount={setIntakeCount} coreMode={Boolean(data.coreMode)} students={students} key={data.uid + ':' + data.academyId} onSynced={async()=>{invalidateTeacherReads('sync-student-registration');const fresh=await request('read:bootstrap',{section:'students',force:'1'});mergeData(fresh);teacherCacheRead(auth.currentUser?.uid||'','workspace:students',fresh);}}/></Suspense>}:undefined} students={students} value={managementStudentKey} onSelect={key=>{const change=()=>{setMessage('');setManagementInitialTab('review');setManagementStudentKey(key);};if(key===managementStudentKey)return;if(studentAttemptRef.current)studentAttemptRef.current(change);else change();}}/></aside><div className="student-dashboard-detail">  {tab==='students' && managementStudentKey && students.some((s:any)=>s.studentKey===managementStudentKey) ? <div key={data.uid+':'+managementStudentKey}><StudentManagementDialog inline registerAttempt={registerStudentAttempt} initialTab={managementInitialTab} name={students.find((s:any)=>s.studentKey===managementStudentKey)?.studentDisplayName||'학생'} canManage={Boolean(data.admin||data.principal)} busy={busy||autoLoading} notice={message} onClose={()=>{autoVersion.current++;setAutoLoading(false);setManagementStudentKey('');}} onSelect={next=>{if(next==='lesson'){const student=students.find((s:any)=>s.studentKey===managementStudentKey);void selectStudent(managementStudentKey,{subject:data.teachingScopes?.find((s:any)=>s.studentKey===managementStudentKey)?.subject||data.scopes?.find((s:any)=>s.studentKey===managementStudentKey)?.subject||student?.subjects?.[0]?.subject||'영어'});}}} render={(active,leave,headerId)=><Suspense fallback={<p role="status" className="text-sm text-slate-500">학생 관리 정보를 불러오는 중…</p>}>
+  {tab==='students'&&studentView==='students'&&<section ref={studentListRef} className="student-dashboard-shell"><div className="student-dashboard"><aside className="student-master-panel"><StudentMasterPanel registrations={data.admin||data.principal?{count:intakeCount,onAdd:()=>setIntakeStart(n=>n+1),render:(query,active)=><Suspense fallback={<p className="report-caption">상담·신입생을 불러오는 중…</p>}><StudentRegistrationManager query={query} active={active} startSignal={intakeStart} onCount={setIntakeCount} coreMode={Boolean(data.coreMode)} students={students} key={data.uid + ':' + data.academyId} onSynced={async()=>{invalidateTeacherReads('sync-student-registration');const fresh=await request('read:bootstrap',{section:'students',force:'1'});mergeData(fresh);teacherCacheRead(auth.currentUser?.uid||'','workspace:students',fresh);}}/></Suspense>}:undefined} students={students} value={managementStudentKey} onSelect={key=>{const change=()=>{setMessage('');setManagementInitialTab('review');setManagementStudentKey(key);};if(key===managementStudentKey)return;if(studentAttemptRef.current)studentAttemptRef.current(change);else change();}}/></aside><div className="student-dashboard-detail">  {tab==='students' && managementStudentKey && students.some((s:any)=>s.studentKey===managementStudentKey) ? <div key={data.uid+':'+managementStudentKey}><StudentManagementDialog inline registerAttempt={registerStudentAttempt} headerExtra={data.admin&&data.academyId==='main'?<StudentAccountLink studentKey={managementStudentKey} studentName={students.find((s:any)=>s.studentKey===managementStudentKey)?.studentDisplayName||'학생'} linkedUid={students.find((s:any)=>s.studentKey===managementStudentKey)?.linkedFirebaseUid||null} onChanged={async()=>{invalidateTeacherReads('student-link');const fresh=await request('read:bootstrap',{section:'students',force:'1'});mergeData(fresh);teacherCacheRead(auth.currentUser?.uid||'','workspace:students',fresh);}}/>:undefined} initialTab={managementInitialTab} name={students.find((s:any)=>s.studentKey===managementStudentKey)?.studentDisplayName||'학생'} canManage={Boolean(data.admin||data.principal)} busy={busy||autoLoading} notice={message} onClose={()=>{autoVersion.current++;setAutoLoading(false);setManagementStudentKey('');}} onSelect={next=>{if(next==='lesson'){const student=students.find((s:any)=>s.studentKey===managementStudentKey);void selectStudent(managementStudentKey,{subject:data.teachingScopes?.find((s:any)=>s.studentKey===managementStudentKey)?.subject||data.scopes?.find((s:any)=>s.studentKey===managementStudentKey)?.subject||student?.subjects?.[0]?.subject||'영어'});}}} render={(active,leave,headerId)=><Suspense fallback={<p role="status" className="text-sm text-slate-500">학생 관리 정보를 불러오는 중…</p>}>
   {active==='profile' && (data.admin||data.principal) ? <StudentProfileEditor key={data.uid+':'+profileStudentKey} studentKey={profileStudentKey} onClose={leave} onSaved={profile=>{const key=profileStudentKey;setProfileStudentKey('');invalidateTeacherReads('save-student-profile');setData((old:any)=>({...old,students:old.students.map((s:any)=>s.studentKey===key?{...s,studentDisplayName:profile.displayName,hasGuardianContact:Boolean(profile.guardianPhone)}:s)}));setMessage('학생 정보를 저장했습니다. 보호자 번호를 바꾼 경우 새 번호 뒤 4자리로 인증해 주세요.');const uid=auth.currentUser?.uid||'',generation=teacherReadGeneration(),load=++loadVersion.current;void request('read:bootstrap',{section:'students',force:'1'}).then(fresh=>{if(auth.currentUser?.uid!==uid || loadVersion.current!==load || teacherReadGeneration()!==generation)return;mergeData(fresh);teacherCacheRead(auth.currentUser?.uid||'','workspace:students',fresh);}).catch(()=>{if(auth.currentUser?.uid===uid && loadVersion.current===load)setMessage('학생 정보는 반영됐지만 목록을 갱신하지 못했습니다. 새로고침해 주세요.');});}}/> : null}
   {active==='enrollment' && (data.admin||data.principal) ? <StudentEnrollmentEditor key={data.uid+':'+enrollmentStudentKey} studentKey={enrollmentStudentKey} onClose={leave} onSaved={()=>{setEnrollmentStudentKey('');invalidateTeacherReads('save-student-enrollment');setMessage('수강·담당·소속반 변경을 저장했습니다.');const uid=auth.currentUser?.uid||'',generation=teacherReadGeneration(),load=++loadVersion.current;void request('read:bootstrap',{section:'students',force:'1'}).then(fresh=>{if(auth.currentUser?.uid!==uid || loadVersion.current!==load || teacherReadGeneration()!==generation)return;mergeData(fresh);teacherCacheRead(uid,'workspace:students',fresh);}).catch(()=>{if(auth.currentUser?.uid===uid && loadVersion.current===load)setMessage('수강 변경은 반영됐지만 목록을 갱신하지 못했습니다. 새로고침해 주세요.');});}}/> : null}
   {active==='message' ? <TeacherMessageComposer key={data.uid+':'+messageStudentKey} studentKey={messageStudentKey} subjects={students.find((s:any)=>s.studentKey===messageStudentKey)?.subjects?.map((s:any)=>s.subject)||[]} onClose={leave}/> : null}
@@ -299,12 +316,15 @@ export default function TeacherWorkspace({ onNavigate, onAccounts }: {
   </Suspense>}/></div> : <div className="student-detail-empty">왼쪽에서 학생을 선택하세요</div>}
 </div></div></section>}
   {tab === 'curriculum' && <TeacherClassManager data={data} busy={busy} request={request} refresh={refresh} act={act} mode="curriculum"/>}
-  {tab === 'word' && <section className="panel"><h2>내 학습 세트 관리</h2><div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="관리할 세트 종류">{([['word', '단어장'], ['grammar', '문법 세트'], ['exam', '시험기간']] as const).map(([value, label]) => <button key={value} className={setCategory === value ? 'primary-button' : 'small-button'} aria-pressed={setCategory === value} onClick={() => setSetCategory(value)}>{label}</button>)}</div><Suspense fallback={<p className="text-sm text-slate-500">세트를 불러오는 중…</p>}><WordbookManager key={setCategory} category={setCategory}/></Suspense></section>}
+  {tab === 'word' && <section className="panel"><h2>내 학습 세트 관리</h2><div className="set-tabs" role="tablist" aria-label="관리할 세트 종류">{([['word', '단어장', '단어 암기·테스트'], ['grammar', '문법 세트', '문법 개념·문제'], ['exam', '시험기간', '시험 대비 묶음']] as const).map(([value, label, hint]) => <button key={value} type="button" role="tab" className="set-tab" aria-selected={setCategory === value} onClick={() => setSetCategory(value)}><strong>{label}</strong><small>{hint}</small></button>)}</div><Suspense fallback={<p className="text-sm text-slate-500">세트를 불러오는 중…</p>}><WordbookManager key={setCategory} category={setCategory}/></Suspense></section>}
   {/* After the app-only switch the settings tab is for everyday management; migration tools move into one collapsed section. */}
   {tab === 'settings' && (data.admin || data.principal) && data.coreMode && <>
    <TeacherManager data={data} request={request} act={act} busy={busy} refresh={refresh}/>
+   {(data.admin||data.principal) && data.academyId==='main' && <TuitionCalculator busy={busy} request={request} act={act}/>}
+   {(data.admin||data.principal) && data.academyId==='main' && <TeacherPayroll busy={busy} request={request} act={act}/>}
+   {data.admin && data.academyId==='main' && <AppUserManager busy={busy} request={request} act={act} refresh={refresh}/>}
    {data.admin && data.academyId==='main' && <AppTemplateManager busy={busy} request={request} act={act}/>}
-   <details className="panel rv-admin"><summary>정리·점검 · 관리자용</summary><p className="gs-note my-2">외부 연결 정리 단계와 연결 점검입니다. 평소에는 열 필요가 없습니다.</p>
+   <details className="panel rv-admin"><summary>정리·점검 · 관리자용</summary><SpeedCheckPanel/><p className="gs-note my-2">외부 연결 정리 단계와 연결 점검입니다. 평소에는 열 필요가 없습니다.</p>
     {data.admin && data.academyId==='main' && <NotionDisconnectPanel request={request}/>}
     <Suspense fallback={<p>점검 화면을 불러오는 중…</p>}><TeacherIntegrityAudit key={data.uid+':'+data.academyId}/></Suspense>
     {data.admin && onAccounts && <button type="button" className="small-button mt-3" onClick={onAccounts}>기존 계정·리포트 관리</button>}

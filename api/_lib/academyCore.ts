@@ -30,8 +30,9 @@ function changed(tx:any,db:any,ref:any,old:any,properties:any,by:string,at:numbe
  tx.set(ref,next);tx.set(db.collection(DIRECTORY_HISTORY).doc(`${ref.id}:${next.revision}`),{sourceKey:old.sourceKey,notionPageId:old.notionPageId,entityId:old.entityId||old.notionPageId,revision:next.revision,before:old.fields,after:fields,pointer:old.pointer,by,at,reason:'app-edit'});return next;
 }
 export async function readCoreScopes(db:any,profile:any){
- if(profile.academyId!=='main')throw Error('FORBIDDEN');await guard({get:(r:any)=>r.get()},db);
- const live=(await db.collection('teacherWorkspaceAccess').doc(profile.uid).get()).data();
+ if(profile.academyId!=='main')throw Error('FORBIDDEN');
+ // The authority check and the live profile read do not depend on each other: one round trip instead of two.
+ const [,liveDoc]=await Promise.all([guard({get:(r:any)=>r.get()},db),db.collection('teacherWorkspaceAccess').doc(profile.uid).get()]);const live=liveDoc.data();
  if(live){if(live.disabled||live.academyId!=='main'||live.workspaceRole!==profile.workspaceRole)throw Error('TEACHER_NOT_CONFIGURED');profile={...live,uid:profile.uid};}
  else if(profile.uid!==process.env.ADMIN_UID)throw Error('TEACHER_NOT_CONFIGURED');
  if(profile.notionTeacherPageId){const row=valid((await refFor(db,'teachers',profile.notionTeacherPageId).get()).data(),'teachers');if(row.pointer?.teacherUid!==profile.uid)throw Error('CORE_LINK_REQUIRED');if(['중단','휴직'].includes(choice(row.fields.properties['상태'])))throw Error('TEACHER_NOT_CONFIGURED');}

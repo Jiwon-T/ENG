@@ -411,5 +411,17 @@ service cloud.firestore {
     match /teacherStudentRegistrations/{id} { allow read, write: if false; }
     match /teacherStudentSnapshots/{id} { allow read, write: if false; }
     match /teacherWorkspaceConfig/{id} { allow read, write: if false; }
+    // Tuition and teacher pay: server only (pay shares are admin-only and never sent to teachers).
+    match /studentTuition/{id} { allow read, write: if false; }
+    match /studentTuitionHistory/{id} { allow read, write: if false; }
+    match /tuitionMonths/{id} { allow read, write: if false; }
+    match /tuitionMonthHistory/{id} { allow read, write: if false; }
+    match /payrollSettings/{id} { allow read, write: if false; }
+    match /payrollRates/{id} { allow read, write: if false; }
+    match /payrollRateHistory/{id} { allow read, write: if false; }
+    match /payrollMonths/{id} { allow read, write: if false; }
+    match /payrollMonthHistory/{id} { allow read, write: if false; }
+    match /appUserRoleHistory/{id} { allow read, write: if false; }
+    match /appUserRemovals/{id} { allow read, write: if false; }
   }
 }

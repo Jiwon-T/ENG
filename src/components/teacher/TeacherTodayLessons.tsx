@@ -3,7 +3,7 @@ import {X} from 'lucide-react';
 import {subscribeTodayVisibility,hiddenTodayLessons,setTodayVisibility} from '../../lib/todayLessonVisibility';
 import StatusBadge from './StatusBadge';
 import {ArrowRight,CalendarDays,Plus} from 'lucide-react';
-import {todayLessonState,todayLessonProgress,todayProgressRatios,nextUnwrittenLesson} from '../../lib/todayLessonProgress';
+import {todayLessonState,todayLessonProgress,todayProgressRatios,nextUnwrittenLesson,lessonStartOf} from '../../lib/todayLessonProgress';
 import {useEffect,useRef,useState,useSyncExternalStore} from 'react';
 import {todayLessons,type TodayLesson} from '../../lib/teacherTodayLessons';
 import {koreanDay} from '../../lib/teacherWeekCalendar';
@@ -35,7 +35,7 @@ export default function TeacherTodayLessons({data,date,onDate,onStudent,onGroup,
  const loaded=[...records,...(data.drafts||[])];const progress=todayLessonProgress(events,loaded);
  const ratios=todayProgressRatios(progress),next=nextUnwrittenLesson(events,loaded,selection);
  const open=(key:string,event:TodayLesson)=>onGroup?onGroup(event):onStudent?.(key,event);
- const activeEvent=(event:TodayLesson,key?:string)=>selection?.date===event.date&&selection?.subject===event.subject&&selection?.start===event.start&&(!key||selection?.studentKey===key);
+ const activeEvent=(event:TodayLesson,key?:string)=>selection?.date===event.date&&selection?.subject===event.subject&&lessonStartOf(selection)===event.start&&(!key||selection?.studentKey===key);
  return <section className="panel today-lessons-panel"><h2>{date===koreanDay()?'오늘 수업':'선택한 날짜의 수업'}</h2><div className="today-dashboard-strip"><DateStepper date={date} onDate={onDate} disabled={disabled}/><div className="today-dashboard-progress"><div className="today-progress-track" role="progressbar" aria-label="오늘 수업 반영 진행률" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(ratios.done)} aria-valuetext={`반영 ${progress.published} · 저장 ${progress.saved} · 미작성 ${progress.empty}`}><span className="progress-done" style={{width:ratios.done+'%'}}/><span className="progress-saved" style={{width:ratios.saved+'%'}}/><span className="progress-unwritten" style={{width:ratios.unwritten+'%'}}/></div><div className="today-progress-counts"><StatusBadge kind="done" text={`반영 ${progress.published}`}/><StatusBadge kind="saved" text={`저장 ${progress.saved}`}/><StatusBadge kind="unwritten" text={`미작성 ${progress.empty}`}/></div></div></div><p className="today-progress-scope">현재 불러온 기록 기준</p>{hidden.size>0&&<button type="button" className="small-button" disabled={hiding} onClick={()=>void changeVisibility()}>숨긴 수업 {hidden.size}개 다시 표시</button>}
  <button type="button" className="today-next-button" disabled={disabled||!next} onClick={()=>{if(next)open(next.key,next.event);}}><ArrowRight size={14} aria-hidden="true"/>다음 미작성 수업</button>
  {error&&<p role="alert" className="text-xs text-rose-600 mt-2">{error}<button type="button" className="small-button ml-2" onClick={()=>setReload(value=>value+1)}>다시 불러오기</button></p>}

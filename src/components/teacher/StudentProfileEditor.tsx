@@ -12,6 +12,8 @@ export default function StudentProfileEditor({studentKey,onClose,onSaved}:{stude
     const [record,setRecord]=useState<StudentProfileRecord|null>(null),[value,setValue]=useState<StudentProfileInput|null>(null);
     const [intent,setIntent]=useState<Intent|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[message,setMessage]=useState(''),[dirty,setDirty]=useState(false);
     const version=useRef(0),writing=useRef(false);
+    // Per-subject prices live beside the profile (studentTuition); null = not loaded, so the single 수강료 field stays.
+    const [prices,setPrices]=useState<{subjects:string[];values:Record<string,number|null>}|null>(null),[pricesDirty,setPricesDirty]=useState(false);
     async function read(){
         const r=await teacherAuthenticatedRequest<Result>(auth,'/api/teacher/workspace?'+new URLSearchParams({action:'student-profile',studentKey}));
         if(!r.ok || !r.data?.ok || !r.data.record)throw Error(errorMessage(r));return r.data.record;
@@ -19,6 +21,7 @@ export default function StudentProfileEditor({studentKey,onClose,onSaved}:{stude
     useEffect(()=>{
         const current=++version.current,uid=auth.currentUser?.uid;let live=true;
         const unsubscribe=onAuthStateChanged(auth,user=>{if(user?.uid!==uid){version.current++;setRecord(null);setValue(null);setIntent(null);}});
+        teacherAuthenticatedRequest<any>(auth,'/api/teacher/workspace?'+new URLSearchParams({action:'student-tuition',studentKey})).then(r=>{if(live&&current===version.current&&r.ok&&r.data?.ok&&r.data.subjects?.length)setPrices({subjects:r.data.subjects,values:r.data.prices||{}});}).catch(()=>{});
         read().then(saved=>{
             if(!live || current!==version.current || auth.currentUser?.uid!==uid)return;
             setRecord(saved);setValue(saved.pending?.data || saved.data);
@@ -44,6 +47,10 @@ export default function StudentProfileEditor({studentKey,onClose,onSaved}:{stude
                 }catch{}
                 return;
             }
+            if(prices&&pricesDirty){const t=await teacherAuthenticatedRequest<any>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save-student-tuition',studentKey,prices:Object.fromEntries(prices.subjects.map(subject=>[subject,prices.values[subject]??null]))})});
+                if(current!==version.current)return;
+                if(!t.ok||!t.data?.ok){setDirty(false);setIntent(null);setMessage('학생 정보는 저장했지만 과목별 수강료를 저장하지 못했습니다. 다시 저장해 주세요.');setPricesDirty(true);return;}
+                setPricesDirty(false);}
             setDirty(false);setIntent(null);onSaved(r.data.profile || request.data);
         }catch(error){if(current===version.current)setMessage(error instanceof Error?error.message:'저장 결과를 확인하지 못했습니다. 같은 요청으로 다시 확인해 주세요.');}
         finally{writing.current=false;if(current===version.current)setBusy(false);}
@@ -69,7 +76,7 @@ export default function StudentProfileEditor({studentKey,onClose,onSaved}:{stude
         {loading?<p role="status" className="text-sm">학생 정보를 불러오는 중…</p>:null}
         {message?<p role="status" className="text-sm text-rose-600 mb-3">{message}</p>:null}
         {intent?<p className="text-xs text-slate-500 mb-3">수정 요청의 입력을 보존하고 있습니다. 창을 닫아도 서버에 접수한 요청은 유지됩니다.</p>:null}
-        {value?<StudentProfileForm value={value} busy={busy} disabled={Boolean(intent)} retrying={Boolean(intent)} onChange={next=>{setValue(next);setDirty(true);}} onSubmit={()=>void save()}/>:null}
+        {value?<StudentProfileForm value={value} busy={busy} disabled={Boolean(intent)} retrying={Boolean(intent)} onChange={next=>{setValue(next);setDirty(true);}} onSubmit={()=>void save()} prices={prices} onPrices={values=>{if(!prices)return;const list=prices.subjects.map(subject=>values[subject]).filter((n):n is number=>typeof n==='number');setPrices({...prices,values});setPricesDirty(true);setDirty(true);setValue(old=>old&&{...old,tuition:list.length?list.reduce((a,b)=>a+b,0):null});}}/>:null}
         {record?.pending?.canDiscard?<button type="button" disabled={busy} className="small-button mt-3" onClick={()=>void discard()}>미반영 수정 요청 취소</button>:null}
     </WorkspaceDialog>;
 }
