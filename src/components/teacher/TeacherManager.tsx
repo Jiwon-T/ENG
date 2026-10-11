@@ -16,7 +16,7 @@ export default function TeacherManager({data,request,act,busy,refresh}:{data:any
  const unassigned=students.filter(s=>!assigned.has(s.studentKey));
  return <section className="panel rv">
   <div className="rv-head"><h2>선생님 관리<small>{teachers.length}명</small></h2></div>
-  <p className="gs-note">선생님을 누르면 담당 학생·과목, 직책, 연결 여부를 바로 바꿀 수 있습니다. 새 선생님은 아래 ‘앱 사용자’에서 선생님 권한을 먼저 주세요.</p>
+  <p className="gs-note">선생님을 누르면 담당 학생·과목, 직책, 연결 여부를 바로 바꿀 수 있습니다. 새 선생님은 ‘앱 사용자’ 메뉴에서 선생님 권한을 먼저 주세요.</p>
   <div className="rv-stats">
    <div className="rv-stat"><b>{teachers.filter(t=>!t.disabled).length}</b><span>재직 중인 선생님</span></div>
    <div className="rv-stat"><b>{teachers.filter(t=>!t.disabled&&!t.scopes.length).length}</b><span>담당 미설정</span></div>

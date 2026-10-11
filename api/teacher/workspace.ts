@@ -41,6 +41,15 @@ async function workspaceStudents(db:any,actor:any,force:boolean,saveSnapshot=fal
     // Students come from the app directory (cached briefly; "새로고침" passes force). An academy that has not switched gets a clear error instead of Notion.
     return teacherReadCache.get(teacherReadKey(actor,'students'),async()=>{if(!directoryStudentReads(actor))throw new Error('CORE_NOT_READY');return readDirectoryStudents(db,actor);},force);
 }
+// The enrollment collection read by most bootstrap sections, cached briefly per actor like the other teacherReadCache
+// entries ("새로고침" and the reloads after saves pass force; any workspace change clears it). Student links are NOT cached:
+// they change through other endpoints and devices (link, unlink, 탈퇴, link codes) and must show right away.
+function cachedEnrollmentDocs(db:any,actor:any,force:boolean){return teacherReadCache.get(teacherReadKey(actor,'enrollment-docs'),async()=>(await db.collection('studentEnrollments').get()).docs.map((d:any)=>d.data()),force);}
+/** Own lessons of one day, summary fields only (what 오늘 수업 progress compares: student, subject, start, stage). */
+async function readDayLessons(db:any,actor:any,day:string){
+    const snap=await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).where('data.date','==',day).select('stage','archived','deleteRequested','updatedAt','revision','data.studentKey','data.date','data.subject','data.start','data.classSession','data.selfStudyStart').get();
+    return snap.docs.map((d:any)=>{const r=d.data();return {id:d.id,stage:r.stage,archived:Boolean(r.archived),deleteRequested:Boolean(r.deleteRequested),updatedAt:r.updatedAt,revision:r.revision,data:{studentKey:r.data?.studentKey,date:r.data?.date,subject:r.data?.subject,start:r.data?.start,classSession:r.data?.classSession,selfStudyStart:r.data?.selfStudyStart}};});
+}
 async function reportReview(db:any,actor:any,studentKey:string,audience:'parent'|'student',values:any) {
     if(values.section==='online'){if(audience!=='student')throw Error('FORBIDDEN');return loadTeacherOnlineLearning(db,actor,studentKey,values.subject,values.cursor);}
     if(!values.section)return loadTeacherReportReview(db,actor,studentKey,audience);
@@ -136,13 +145,15 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(action==='app-users'){failureStage='app-users';const {listAppUsers}=await import('../_lib/appUsers.js');return sendJson(res,200,{ok:true,...await listAppUsers(db,actor)});}
             if(action==='archived-lessons'){failureStage='lesson-restore';return sendJson(res,200,{ok:true,appMode:await lessonAppActive(db,actor),...(await lessonAppActive(db,actor)?await (await import('../_lib/appLessonRestore.js')).listArchivedAppLessons(db,actor):{records:[]})});}
             if (action === 'academic-records'||action==='academic-records-fast') {
+                // The visible students are needed for names and by the full source read: start once, share, in parallel.
+                const studentsPromise=params.has('page')||action==='academic-records'?teacherReadCache.get(teacherReadKey(actor,'academic-firestore-students'),()=>appAcademicStudents(db,actor),force):null;studentsPromise?.catch(()=>{});
                 const localPromise=teacherReadCache.get(teacherReadKey(actor,'academic-local'),async()=>{const saved=actor.admin ? await db.collection('teacherAcademicDrafts').get() : actor.principal ? await db.collection('teacherAcademicDrafts').where('academyId','==',actor.academyId).get() : await db.collection('teacherAcademicDrafts').where('ownerUid','==',actor.uid).get();return saved.docs.map(d=>({id:d.id,...d.data()})).filter((r:any)=>canViewAcademyRecord(actor,r));},force);
-                const sourcePromise=action==='academic-records-fast'?Promise.resolve([]):teacherReadCache.get(teacherReadKey(actor,'academic-firestore-source:'+JSON.stringify([params.get('student'),params.get('subject')])),()=>listAppAcademicSources(db,actor,{studentKey:params.get('student')||undefined,subject:params.get('subject')||undefined}),force);
+                const sourcePromise=action==='academic-records-fast'?Promise.resolve([]):teacherReadCache.get(teacherReadKey(actor,'academic-firestore-source:'+JSON.stringify([params.get('student'),params.get('subject')])),()=>listAppAcademicSources(db,actor,{studentKey:params.get('student')||undefined,subject:params.get('subject')||undefined,students:studentsPromise||undefined}),force);
                 const [appRecords,source]=await Promise.all([localPromise,sourcePromise]);
                 const records=(action==='academic-records-fast'?appRecords:mergeNotionRows(appRecords,source)).filter((r:any)=>!r.archived);
                 if (!params.has('page')) return sendJson(res,200,{ok:true,records});
                 const {examPeriod}=await import('../../src/lib/academicExamPeriod.js');
-                const students=await teacherReadCache.get(teacherReadKey(actor,'academic-firestore-students'),()=>appAcademicStudents(db,actor),force);const names=new Map(students.map(s=>[s.studentKey,s.studentDisplayName]));
+                const students=await studentsPromise!;const names=new Map(students.map(s=>[s.studentKey,s.studentDisplayName]));
                 const filtered=records.filter((r:any)=>(!params.get('teacher')||r.ownerUid===params.get('teacher')||r.teacherUids?.includes(params.get('teacher')))&&(!params.get('student')||r.data.studentKey===params.get('student'))&&(!params.get('kind')||r.data.examType===params.get('kind'))&&(!params.get('subject')||r.data.subject===params.get('subject'))&&(!params.get('period')||examPeriod(r.data)?.key===params.get('period'))&&(!params.get('search')||[names.get(r.data.studentKey),r.data.title,r.data.subject,r.data.note].join(' ').toLowerCase().includes(params.get('search')!.toLowerCase()))).sort((a:any,b:any)=>b.data.examDate.localeCompare(a.data.examDate)||a.id.localeCompare(b.id));
                 // Stats cover every filter except the 미제출 shortcut, so its count stays visible while it is selected.
                 const shown=params.get('submission')==='미제출'?filtered.filter((r:any)=>r.data.submissionStatus==='미제출'):filtered;
@@ -162,8 +173,9 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 let records:any[],source:any[];
                 if(narrowsLessonSlice(slice)){
                     // The quick first paint shows app lessons only (as before), now also limited to the slice.
-                    source=action==='academy-lessons-fast'?[]:await readAppSourceLessons(db,actor,slice);
-                    records=await lessonDraftSlice(db,actor,slice,source);
+                    // The source read and the day queries run together; only the link lookup waits for the source rows.
+                    const sourcePromise=action==='academy-lessons-fast'?Promise.resolve([] as any[]):readAppSourceLessons(db,actor,slice);sourcePromise.catch(()=>{});
+                    records=await lessonDraftSlice(db,actor,slice,sourcePromise);source=await sourcePromise;
                 }else{
                 const recordsPromise=teacherReadCache.get(teacherReadKey(actor,'academy-local'),async()=>{const saved=actor.admin ? await db.collection('teacherLessonDrafts').get() : actor.principal ? await db.collection('teacherLessonDrafts').where('academyId','==',actor.academyId).get() : await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).get();return saved.docs.map(d=>({id:d.id,...d.data()}));},force);
                 [records,source]=await Promise.all([recordsPromise,action==='academy-lessons-fast'?Promise.resolve([]):teacherReadCache.get(teacherReadKey(actor,'academy-app-source'),()=>readAppSourceLessons(db,actor),force)]);
@@ -200,8 +212,9 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 ]);
                 const records=local.docs.map(d=>({id:d.id,...d.data()}));
                 const day=params.get('day');if(day&&!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new Error('INVALID_INPUT');
-                const hiddenTodayLessons=day?await readTodayVisibility(db,actor.uid,day):[];
-                return sendJson(res,200,{ok:true,hiddenTodayLessons,schedules:mergeNotionRows(records,remote).filter((r:any)=>!r.archived&&(!day||r.data?.date===day)),reflectedSchedules:teacherReflectedSchedules(reflected.map(d=>d.data()),mappings,actor).filter((r:any)=>!day||r.date===day)});
+                // 오늘 수업 progress needs every own lesson of that day, not just the first page of saved lessons.
+                const [hiddenTodayLessons,dayLessons]=day?await Promise.all([readTodayVisibility(db,actor.uid,day),readDayLessons(db,actor,day)]):[[],undefined];
+                return sendJson(res,200,{ok:true,hiddenTodayLessons,...(dayLessons?{dayLessons}:{}),schedules:mergeNotionRows(records,remote).filter((r:any)=>!r.archived&&(!day||r.data?.date===day)),reflectedSchedules:teacherReflectedSchedules(reflected.map(d=>d.data()),mappings,actor).filter((r:any)=>!day||r.date===day)});
             }
             if(action==='managed-record') {
                 const kind=z.enum(['lesson','academic','schedule','class','curriculum']).parse(params.get('kind'));
@@ -231,22 +244,24 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const resourcesOnly=params.get('resourcesOnly')==='1'&&section==='curriculum';
                 if(!['all','lesson','students','schedule','curriculum','settings','base'].includes(section))throw new Error('INVALID_INPUT');
                 const needs=(...sections:string[])=>section==='all'||sections.includes(section);
-                const empty={docs:[]};const range=scheduleRange(),managedMode=await classesActive(db,actor);
-                const mappingsPromise=resourcesOnly?Promise.resolve(new Map()):readStudentDirectoryMappings(db);
-                // Mode flags are independent of the batch below; start them now so they add no extra round trip at the end.
+                const empty={docs:[]};const range=scheduleRange();
                 const early=<T,>(p:Promise<T>|null)=>{p?.catch(()=>{});return p;};
+                const mappingsPromise=resourcesOnly?Promise.resolve(new Map()):readStudentDirectoryMappings(db);
+                // Classes/curricula from the app store, only for the sections that show them (the class switch is read in parallel, not first).
+                const managedPromise=early(needs('lesson','schedule','curriculum','settings')?classesActive(db,actor).then(on=>on?import('../_lib/managedAcademy.js').then(m=>m.readManaged(db,actor)):null):null);
+                // Mode flags are independent of the batch below; start them now so they add no extra round trip at the end.
                 // The lesson tab's saved-lesson list rides along with its bootstrap instead of a second request.
                 const draftsEarly=early(section==='lesson'&&params.get('draftsSize')?readDraftsPage(db,actor,1,Number(params.get('draftsSize')),force):null);
                 const lessonModeEarly=early(needs('lesson')?lessonAppActive(db,actor):null),scheduleOnlyEarly=early(actor.admin&&actor.academyId==='main'&&needs('schedule')?appSchedulesActive(db,actor):null),academicOnlyEarly=early(actor.admin&&actor.academyId==='main'&&(section==='base'||needs('settings'))?academicAppActive(db):null);
                 timing.mark('prepare');
                 const [notion, mappings, enrollments, curricula, drafts, classes, schedules, reflected, sourceWorkspace, sourceEnrollments, sourceSchedules] = await Promise.all([
-                    resourcesOnly?Promise.resolve([]):workspaceStudents(db,actor,force),mappingsPromise, !resourcesOnly&&needs('lesson','students','schedule','curriculum')?db.collection('studentEnrollments').get():Promise.resolve(empty),
+                    resourcesOnly?Promise.resolve([]):workspaceStudents(db,actor,force),mappingsPromise, !resourcesOnly&&needs('lesson','students','schedule','curriculum')?cachedEnrollmentDocs(db,actor,force):Promise.resolve([] as any[]),
                     !needs('schedule','curriculum','settings')?Promise.resolve(empty):actor.admin ? db.collection('teacherCurricula').get() : actor.principal ? db.collection('teacherCurricula').where('academyId','==',actor.academyId).get() : db.collection('teacherCurricula').where('ownerUid', '==', actor.uid).get(),
                     section==='all'?(actor.admin ? db.collection('teacherLessonDrafts').get() : db.collection('teacherLessonDrafts').where('ownerUid', '==', actor.uid).get()):Promise.resolve(empty),
                     !needs('lesson','schedule','curriculum','settings')?Promise.resolve(empty):actor.admin ? db.collection('teacherClasses').get() : actor.principal ? db.collection('teacherClasses').where('academyId','==',actor.academyId).get() : db.collection('teacherClasses').where('ownerUid', '==', actor.uid).get(),
                     !needs('schedule')?Promise.resolve(empty):readManagedScheduleRange(db,actor,range),
                     needs('schedule')?mappingsPromise.then(m=>readReflectedRange(db,actor,m,range)):Promise.resolve([]),// Classes/curricula, enrollments and schedules come from the app; there is no Notion source to merge any more.
-                    managedMode?import('../_lib/managedAcademy.js').then(m=>m.readManaged(db,actor)):Promise.resolve({classes:[],curricula:[],issues:[],sources:[]}),fast||!needs('students')?Promise.resolve(new Map()):teacherReadCache.get(teacherReadKey(actor,'enrollments'),()=>readCoreEnrollmentSummaries(db,actor),force),Promise.resolve([] as any[]),
+                    (managedPromise||Promise.resolve(null)).then(m=>m||{classes:[],curricula:[],issues:[],sources:[]}),fast||!needs('students')?Promise.resolve(new Map()):teacherReadCache.get(teacherReadKey(actor,'enrollments'),()=>readCoreEnrollmentSummaries(db,actor),force),Promise.resolve([] as any[]),
                 ]);
                 timing.mark('read');
                 const localClasses=classes.docs.map(d=>({id:d.id,...d.data()}));const mergedClasses=fast?localClasses:mergeNotionRows(localClasses,sourceWorkspace.classes);
@@ -255,7 +270,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const students = directory.filter(s => actor.admin || actor.scopes.some((scope: any) => scope.studentKey === s.studentKey)).map(s => {
                     const mapping = mappings.get(s.studentKey);
                     if(!needs('lesson','students','schedule','curriculum'))return {...s,linkedFirebaseUid:mapping?.firebaseUid||null};
-                    const cachedSubjects = enrollments.docs.filter(d => !d.data().removed && d.data().internalStudentId === mapping?.internalStudentId).flatMap(d => d.data().subjects || []).filter(subject => actor.admin || actor.scopes.some((scope: any) => scope.studentKey === s.studentKey && scope.subject === subject.subject));
+                    const cachedSubjects = enrollments.filter((e:any) => !e.removed && e.internalStudentId === mapping?.internalStudentId).flatMap((e:any) => e.subjects || []).filter(subject => actor.admin || actor.scopes.some((scope: any) => scope.studentKey === s.studentKey && scope.subject === subject.subject));
                     const subjects=(sourceEnrollments.get(s.studentKey)||cachedSubjects).filter((entry:any)=>actor.admin||actor.scopes.some((scope:any)=>scope.studentKey===s.studentKey&&scope.subject===entry.subject));
                     return { ...s, linkedFirebaseUid: mapping?.firebaseUid || null, subjects };
                 });

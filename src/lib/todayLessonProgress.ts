@@ -9,6 +9,19 @@ export function todayLessonState(event:TodayLesson,studentKey:string,records:rea
  const record=matches.sort((a,b)=>timestamp(b.updatedAt)-timestamp(a.updatedAt))[0];
  return !record?'미작성':record.stage==='published'?'반영 완료':'저장됨';
 }
+const revisionOf=(r:any)=>typeof r?.revision==='number'&&Number.isFinite(r.revision)?r.revision:-1;
+/** True when `a` is a newer copy of the same lesson than `b`: higher revision, then later updatedAt. */
+function newer(a:any,b:any){const ra=revisionOf(a),rb=revisionOf(b);if(ra!==rb)return ra>rb;return timestamp(a?.updatedAt)>timestamp(b?.updatedAt);}
+/** The day's own lessons from the server (all of them, not only the first saved-lesson page) merged by id with the
+ *  copies already in memory, keeping the newer copy (revision, then updatedAt). A lesson just saved, published or
+ *  deleted here carries the revision the server returned, so it is never older than the day read; on a tie the
+ *  memory copy (this device's latest action) is kept. A newer save, publish or delete from another device wins. */
+export function todayRecords(server:readonly any[]|undefined,memory:readonly any[]){
+ const byId=new Map<string,any>();
+ for(const r of memory)if(r?.id){const kept=byId.get(r.id);if(!kept||!newer(kept,r))byId.set(r.id,r);}
+ for(const r of server||[])if(r?.id){const kept=byId.get(r.id);if(!kept||newer(r,kept))byId.set(r.id,r);}
+ return [...byId.values()];
+}
 export function todayLessonProgress(events:readonly TodayLesson[],records:readonly any[]){
  const states=events.flatMap(event=>event.students.map(key=>todayLessonState(event,key,records)));
  return {total:states.length,published:states.filter(state=>state==='반영 완료').length,saved:states.filter(state=>state==='저장됨').length,empty:states.filter(state=>state==='미작성').length};

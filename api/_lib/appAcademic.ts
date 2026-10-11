@@ -90,7 +90,9 @@ for (let i = 0; i < live.length; i++) {
 export async function listAppAcademicSources(db: any, actor: any, options?: {
     studentKey?: string;
     subject?: string;
-}) { const students = (await appAcademicStudents(db, actor)).filter(s => !options?.studentKey || s.studentKey === options.studentKey), records = [];
+    /** The same actor's appAcademicStudents result, when the caller already has it (avoids reading it twice). */
+    students?: Promise<Awaited<ReturnType<typeof appAcademicStudents>>>;
+}) { const students = (await (options?.students || appAcademicStudents(db, actor))).filter(s => !options?.studentKey || s.studentKey === options.studentKey), records = [];
 // Per-student queries run in parallel; results are still processed in order with the same limits.
 const results = await Promise.all(students.map(student => { let query = db.collection('academicRecords').where('internalStudentId', '==', student.internalStudentId); if (options?.subject) query = query.where('subject', '==', options.subject); return query.limit(501).get(); }));
 for (let si = 0; si < students.length; si++) { const student = students[si];

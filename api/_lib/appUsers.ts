@@ -1,6 +1,14 @@
 import { z } from 'zod';
+import { hashStudentKey } from './security.js';
+import { normalizeNotionPageId } from './notionPageId.js';
 // App accounts for the admin: everyone signs up as a student; the admin grants teacher access here.
 function admin(actor: any) { if (!actor.admin || actor.academyId !== 'main') throw Error('FORBIDDEN'); }
+
+/** The account's sign-up time (users.createdAt: a Firestore Timestamp, or an ISO string on older records). */
+function joinedAt(v: any): string | null {
+    const ms = v?.toMillis?.() ?? (typeof v?.seconds === 'number' ? v.seconds * 1000 : typeof v === 'string' ? Date.parse(v) : NaN);
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
 
 export async function listAppUsers(db: any, actor: any) {
     admin(actor);
@@ -10,8 +18,9 @@ export async function listAppUsers(db: any, actor: any) {
     return {
         users: users.docs.map((d: any) => {
             const u = d.data() || {}, p: any = profiles.get(d.id);
-            return { uid: d.id, name: String(u.alias || u.name || '').slice(0, 80), email: String(u.email || '').slice(0, 120), role: u.role || 'student', linkedStudent: Boolean(u.notionStudentKey), isAdmin: d.id === process.env.ADMIN_UID, workspace: p ? { disabled: Boolean(p.disabled), role: p.workspaceRole || 'teacher' } : null };
-        }).sort((a: any, b: any) => Number(b.role !== 'student') - Number(a.role !== 'student') || a.name.localeCompare(b.name, 'ko')),
+            return { uid: d.id, name: String(u.alias || u.name || '').slice(0, 80), email: String(u.email || '').slice(0, 120), role: u.role || 'student', linkedStudent: Boolean(u.notionStudentKey), isAdmin: d.id === process.env.ADMIN_UID, workspace: p ? { disabled: Boolean(p.disabled), role: p.workspaceRole || 'teacher' } : null, joinedAt: joinedAt(u.createdAt) };
+        // Newest sign-ups first (they are the ones to look at); accounts without a sign-up time go last.
+        }).sort((a: any, b: any) => (b.joinedAt ? Date.parse(b.joinedAt) : 0) - (a.joinedAt ? Date.parse(a.joinedAt) : 0) || a.name.localeCompare(b.name, 'ko')),
     };
 }
 
@@ -59,7 +68,9 @@ export async function setAppUserName(db: any, actor: any, input: unknown) {
 /** 탈퇴: remove a student account's app record (as the old teacher room did) and, by default, block sign-in for that
  *  account (Firebase "disabled" + sessions revoked), so it cannot come back as a new student. Blocking is reversible
  *  (allowSignIn). A copy of the record is kept in appUserRemovals so a mistake can be undone.
- *  Teachers go back to student first, and an account linked to a registered student is unlinked first. */
+ *  Teachers go back to student first. An account linked to a registered student (graduated or left) is unlinked in the
+ *  same transaction, exactly like 학생 관리 › 계정 연결 해제: the student record, its reports, parent address and PIN stay;
+ *  only the link to this account goes. The removed copy notes which student it was linked to. */
 export async function removeAppUser(db: any, actor: any, input: unknown, auth?: any) {
     admin(actor);
     const v = z.object({ uid: z.string().min(1).max(200), blockSignIn: z.boolean().default(true) }).strict().parse(input);
@@ -70,8 +81,19 @@ export async function removeAppUser(db: any, actor: any, input: unknown, auth?: 
         const [user, evaluation, access] = [(await tx.get(userRef)).data(), (await tx.get(evaluationRef)).data(), (await tx.get(accessRef)).data()];
         if (!user) throw Error('APP_USER_NOT_FOUND');
         if (user.role === 'teacher' || user.role === 'principal' || access && !access.disabled) throw Error('APP_USER_TEACHER_REMOVE');
-        if (user.notionStudentKey) throw Error('APP_USER_LINKED_REMOVE');
-        tx.set(copyRef, { uid: v.uid, user, evaluation: evaluation || null, by: actor.uid, at, signInBlocked: false });
+        // Linked student account: find the student link (canonical record first) that still points at this account.
+        let link: any = null;
+        if (user.notionStudentKey) {
+            let mappingRef = db.collection('notionStudentMappings').doc(hashStudentKey(user.notionStudentKey)), mapping = await tx.get(mappingRef);
+            if (mapping.exists && mapping.data()?.notionStudentPageId) {
+                let canonicalKey = ''; try { canonicalKey = normalizeNotionPageId(mapping.data().notionStudentPageId); } catch { canonicalKey = ''; }
+                const canonicalRef = canonicalKey ? db.collection('notionStudentMappings').doc(hashStudentKey(canonicalKey)) : null, canonical = canonicalRef ? await tx.get(canonicalRef) : null;
+                if (canonical?.exists) { mappingRef = canonicalRef; mapping = canonical; }
+            }
+            if (mapping.exists && mapping.data()?.firebaseUid === v.uid) link = { ref: mappingRef, data: mapping.data() };
+        }
+        tx.set(copyRef, { uid: v.uid, user, evaluation: evaluation || null, by: actor.uid, at, signInBlocked: false, unlinkedStudentKey: user.notionStudentKey || null });
+        if (link) tx.set(link.ref, { ...link.data, firebaseUid: null, updatedAt: new Date(at).toISOString() });
         tx.delete(userRef);
         if (evaluation) tx.delete(evaluationRef);
     });

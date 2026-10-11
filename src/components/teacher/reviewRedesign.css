@@ -574,3 +574,37 @@
 .teacher-workspace .plc-form input{flex:1;min-width:0;min-height:34px!important;height:34px!important;margin:0!important;padding:4px 8px!important}
 .teacher-workspace .plc-form .primary-button{margin:0;min-height:34px}
 .teacher-workspace .student-detail-header .sal+.sal{margin-left:4px}
+
+/* 관리자 설정 dashboard: a menu on the left (a scrolling chip row on narrow screens) and the chosen tool on the right. */
+.teacher-workspace .admin-dash{display:grid;grid-template-columns:248px minmax(0,1fr);gap:20px;align-items:start}
+.teacher-workspace .admin-dash-nav{display:block;position:sticky;top:12px;background:var(--workspace-surface);border:1px solid var(--workspace-neutral-border);border-radius:var(--workspace-radius-card);padding:12px;box-shadow:var(--workspace-shadow-small)}
+.teacher-workspace .admin-dash-title{margin:4px 10px 10px;font-size:12px;font-weight:800;letter-spacing:.02em;color:var(--workspace-muted)}
+.teacher-workspace .admin-dash-nav ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.teacher-workspace .admin-dash-item{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;padding:10px 12px;border:1px solid transparent;border-radius:14px;background:transparent;box-shadow:none;text-align:left;color:var(--workspace-text);cursor:pointer;transition:background .15s,border-color .15s}
+.teacher-workspace .admin-dash-item:not(.is-active):hover:not(:disabled){background:var(--workspace-neutral-bg)}
+.teacher-workspace .admin-dash-item:focus-visible{outline:2px solid var(--workspace-focus);outline-offset:2px}
+.teacher-workspace .admin-dash-item:disabled{opacity:.55;cursor:default}
+.teacher-workspace .admin-dash-item.is-active{background:var(--workspace-brand-soft-hover,var(--workspace-brand-bg));border-color:var(--workspace-brand-border);color:var(--workspace-brand-fg);box-shadow:inset 3px 0 0 var(--workspace-brand-dot)}
+.teacher-workspace .admin-dash-icon{display:inline-flex;align-items:center;justify-content:center;flex:none;width:36px;height:36px;border-radius:12px;background:var(--workspace-neutral-bg);color:var(--workspace-muted)}
+.teacher-workspace .admin-dash-item.is-active .admin-dash-icon{background:var(--workspace-surface);color:var(--workspace-brand-fg);box-shadow:var(--workspace-shadow-small)}
+.teacher-workspace .admin-dash-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.teacher-workspace .admin-dash-text strong{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:800;color:inherit}
+.teacher-workspace .admin-dash-text small{font-size:12px;font-weight:500;color:var(--workspace-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.teacher-workspace .admin-dash-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--workspace-pending-dot)}
+.teacher-workspace .admin-dash-body{display:grid;gap:16px;min-width:0}
+.teacher-workspace .admin-dash-body>.panel{margin:0}
+@media (max-width:900px){
+ .teacher-workspace .admin-dash{grid-template-columns:minmax(0,1fr);gap:12px}
+ .teacher-workspace .admin-dash-nav{position:static;padding:8px;border-radius:16px}
+ .teacher-workspace .admin-dash-title{display:none}
+ /* All menus visible at once: a compact grid instead of a scrolling row. */
+ .teacher-workspace .admin-dash-nav ul{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+ .teacher-workspace .admin-dash-item{min-height:48px;padding:6px 10px;gap:8px;border-radius:12px;border-color:var(--workspace-neutral-border)}
+ .teacher-workspace .admin-dash-icon{width:30px;height:30px;border-radius:10px}
+ .teacher-workspace .admin-dash-item.is-active{box-shadow:none}
+ .teacher-workspace .admin-dash-text small{display:none}
+}
+@media (max-width:420px){
+ .teacher-workspace .admin-dash-nav ul{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .teacher-workspace .admin-dash-text strong{font-size:13px}
+}

@@ -51,3 +51,24 @@ test('late browser responses cannot refill invalidated caches and unrelated list
  invalidateTeacherReads('save-draft');teacherCacheRead('one','drafts-page:1',{records:['stale']},generation);
  assert.equal(teacherCachedRead('one','drafts-page:1'),undefined);assert.deepEqual(teacherCachedRead('one','academic-records:1'),{records:['grade']});clearTeacherReads();
 });
+test('cache age tells how recently a section was fetched, per account, so a quick switch back can reuse it', async () => {
+ const { teacherCacheRead, teacherCachedRead, teacherCacheAge, clearTeacherReads, invalidateTeacherReads } = await import('../src/lib/teacherReadCache.ts');
+ clearTeacherReads();
+ assert.equal(teacherCacheAge('a', 'workspace:base'), Infinity);
+ teacherCachedRead('a', 'workspace:base'); teacherCacheRead('a', 'workspace:base', { students: [] });
+ assert.ok(teacherCacheAge('a', 'workspace:base') < 1000);
+ assert.equal(teacherCacheAge('b', 'workspace:base'), Infinity, 'another account never sees it');
+ invalidateTeacherReads('save-student-profile');
+ assert.equal(teacherCacheAge('a', 'workspace:base'), Infinity, 'own saves clear it, so the next switch fetches again');
+});
+test('saving or publishing a lesson drops the lesson tab bootstrap (with its bundled saved-lesson page) but keeps other sections', async () => {
+ const { teacherCacheRead, teacherCachedRead, teacherCacheAge, clearTeacherReads, invalidateTeacherReads } = await import('../src/lib/teacherReadCache.ts');
+ for (const action of ['save-draft', 'publish']) {
+  clearTeacherReads();
+  for (const key of ['workspace:lesson', 'workspace:base', 'drafts-page:1']) { teacherCachedRead('a', key); teacherCacheRead('a', key, { draftsPage: { records: [{ id: 'x', revision: 1 }] } }); }
+  invalidateTeacherReads(action);
+  assert.equal(teacherCacheAge('a', 'workspace:lesson'), Infinity, action + ': no stale draftsPage on the next visit');
+  assert.equal(teacherCacheAge('a', 'drafts-page:1'), Infinity);
+  assert.ok(teacherCacheAge('a', 'workspace:base') < 1000, 'unrelated sections stay');
+ }
+});

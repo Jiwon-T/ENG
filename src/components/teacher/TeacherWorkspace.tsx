@@ -1,4 +1,5 @@
 import LessonRestorePanel from './LessonRestorePanel';
+import AdminDashboard from './AdminDashboard';
 import StudentMasterPanel from './StudentMasterPanel';
 import ScheduleViewHeader,{type ScheduleView} from './ScheduleViewHeader';
 import WorkspaceNavigation from './WorkspaceNavigation';
@@ -23,19 +24,13 @@ import {upsertWorkspaceRecord} from '../../lib/workspaceRecords';
 import {useWorkspaceNotice} from '../../lib/useWorkspaceNotice';
 import StudentManagementCard from './StudentManagementCard';
 import StudentManagementDialog from './StudentManagementDialog';
-import TeacherManager from './TeacherManager';
-import AppTemplateManager from './AppTemplateManager';
-import AppUserManager from './AppUserManager';
 import WorkspaceToast from './WorkspaceToast';
-import TuitionCalculator from './TuitionCalculator';
-import TeacherPayroll from './TeacherPayroll';
 import StudentAccountLink from './StudentAccountLink';
 import ParentLinkControl from './ParentLinkControl';
-import SpeedCheckPanel from './SpeedCheckPanel';
-import AdminHistoryPanel from './AdminHistoryPanel';
+const RECENT_SECTION_MS=45_000;
 import {recordTiming} from '../../lib/requestTimings';
 import {canRetryPublication} from '../../lib/teacherPublicationRecovery';
-import {teacherCachedRead,teacherCacheRead,teacherReadGeneration,invalidateTeacherReads} from '../../lib/teacherReadCache';
+import {teacherCachedRead,teacherCacheRead,teacherCacheAge,teacherReadGeneration,invalidateTeacherReads} from '../../lib/teacherReadCache';
 import OptionalMark from './OptionalMark';
 import TeacherTodayLessons from './TeacherTodayLessons';
 import { applyPreviousLesson,sessionSeed} from '../../lib/teacherTodayLessons';
@@ -192,6 +187,9 @@ export default function TeacherWorkspace({ onNavigate }: {
             await auth.authStateReady();const uid=auth.currentUser?.uid||'';if(!uid)throw new Error('로그인 인증이 만료되었습니다.');
             const cached=teacherCachedRead(uid,'workspace:'+section),generation=teacherReadGeneration();
             if(cached&&live&&version===loadVersion.current){mergeData(cached);setSectionLoading(false);markShown();}
+            // Switching back to a section fetched moments ago reuses it instead of asking again (e.g. 성적 → 일지 조회 → 학습 세트
+            // all use 'base'). Own saves clear these entries and 새로고침 forces a fresh read, so this only skips repeats.
+            if(cached&&teacherCacheAge(uid,'workspace:'+section)<RECENT_SECTION_MS){if(live&&version===loadVersion.current&&(cached as any).draftsPage)applyDraftsPage((cached as any).draftsPage,uid,generation);return;}
             await loadTeacherSection({
                 fresh:()=>request('read:bootstrap',section==='lesson'?{section,draftsSize:'6'}:{section}),
                 apply:(value,isFresh)=>{
@@ -308,17 +306,7 @@ export default function TeacherWorkspace({ onNavigate }: {
   {tab === 'curriculum' && <TeacherClassManager data={data} busy={busy} request={request} refresh={refresh} act={act} mode="curriculum"/>}
   {tab === 'word' && <section className="panel"><h2>내 학습 세트 관리</h2><div className="set-tabs" role="tablist" aria-label="관리할 세트 종류">{([['word', '단어장', '단어 암기·테스트'], ['grammar', '문법 세트', '문법 개념·문제'], ['exam', '시험기간', '시험 대비 묶음']] as const).map(([value, label, hint]) => <button key={value} type="button" role="tab" className="set-tab" aria-selected={setCategory === value} onClick={() => setSetCategory(value)}><strong>{label}</strong><small>{hint}</small></button>)}</div><Suspense fallback={<p className="text-sm text-slate-500">세트를 불러오는 중…</p>}><WordbookManager key={setCategory} category={setCategory}/></Suspense></section>}
   {/* After the app-only switch the settings tab is for everyday management; migration tools move into one collapsed section. */}
-  {tab === 'settings' && (data.admin || data.principal) && data.coreMode && <>
-   <TeacherManager data={data} request={request} act={act} busy={busy} refresh={refresh}/>
-   {(data.admin||data.principal) && data.academyId==='main' && <TuitionCalculator busy={busy} request={request} act={act}/>}
-   {(data.admin||data.principal) && data.academyId==='main' && <TeacherPayroll busy={busy} request={request} act={act}/>}
-   {(data.admin||data.principal) && data.academyId==='main' && <AdminHistoryPanel busy={busy} request={request} act={act}/>}
-   {data.admin && data.academyId==='main' && <AppUserManager busy={busy} request={request} act={act} refresh={refresh}/>}
-   {data.admin && data.academyId==='main' && <AppTemplateManager busy={busy} request={request} act={act}/>}
-   <details className="panel rv-admin"><summary>점검 · 관리자용</summary><SpeedCheckPanel/>
-    
-   </details>
-  </>}
+  {tab === 'settings' && (data.admin || data.principal) && data.coreMode && <AdminDashboard data={data} request={request} act={act} busy={busy} refresh={refresh}/>}
   {tab === 'settings' && !data.coreMode && (data.admin || data.principal) && <LessonRestorePanel request={request} act={act} busy={busy} students={data.students} staff={data.staff} onRestored={refresh}/>}
   </>}
  </div>;

@@ -1,5 +1,5 @@
 import { safeFetchJson } from './safeFetchJson';
-import { actionOf, recordTiming, serverStages } from './requestTimings';
+import { actionOf, recordTiming, parseServerTiming } from './requestTimings';
 
 interface TeacherAuth {
   authStateReady(): Promise<void>;
@@ -29,7 +29,7 @@ export async function teacherAuthenticatedRequest<T>(auth: TeacherAuth, endpoint
   if(!sameUser(auth.currentUser))throw new Error('로그인 계정이 변경되었습니다.');
   if (result.status === 401 && result.error === 'UNAUTHORIZED') result = await send(true);
   if(!sameUser(auth.currentUser))throw new Error('로그인 계정이 변경되었습니다.');
-  recordTiming({at:Date.now(),action:actionOf(endpoint,init),ms:Math.round(performance.now()-started),token:Math.round(tokenMs),status:result.status,server:serverStages(endpoint)});
+  recordTiming({at:Date.now(),action:actionOf(endpoint,init),ms:Math.round(performance.now()-started),token:Math.round(tokenMs),status:result.status,server:parseServerTiming(result.serverTiming)});
   if(result.error==='FIRESTORE_RESOURCE_EXHAUSTED'){
     const body=result.data as any;
     quotaPauses.set(auth,{user,until:Date.now()+30_000,message:result.userMessage,data:{ok:false,error:'FIRESTORE_RESOURCE_EXHAUSTED',message:result.userMessage,diagnosticId:body?.diagnosticId}});

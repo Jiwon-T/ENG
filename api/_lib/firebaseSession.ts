@@ -26,10 +26,19 @@ export async function lookupFirebaseSession(token:string,decoded:DecodedIdToken,
  if(!Number.isFinite(validSince)||validSince<0||!Number.isFinite(decoded.auth_time))throw Error('AUTH_SERVER_CONFIG_ERROR');
  if(decoded.auth_time<validSince)throw authFailure('auth/id-token-revoked');
 }
+// When the Admin SDK may not read accounts (no IAM role), every request used to try that first, fail after a round
+// trip, and then do the REST lookup. Remember the missing permission for a while and go straight to the REST lookup;
+// it checks disabled/revoked/deleted accounts on every request just the same. Re-tried every 10 minutes in case the
+// permission is granted later.
+const LOOKUP_RETRY_MS=10*60*1000;
+const adminLookupUnavailableUntil=new WeakMap<object,number>();
 /** Preserve revoked/disabled checks without requiring a new Admin Auth IAM role. */
 async function checkFirebaseSession(auth:Pick<Auth,'verifyIdToken'>,token:string,lookup=lookupFirebaseSession){
- try{return await auth.verifyIdToken(token,true);}catch(error){
-  if(!accountLookupPermissionFailure(error))throw error;
+ if(Date.now()>=(adminLookupUnavailableUntil.get(auth)||0)){
+  try{return await auth.verifyIdToken(token,true);}catch(error){
+   if(!accountLookupPermissionFailure(error))throw error;
+   adminLookupUnavailableUntil.set(auth,Date.now()+LOOKUP_RETRY_MS);
+  }
  }
  // Verify signature, expiry, issuer and audience before using the user REST API.
  const decoded=await auth.verifyIdToken(token,false);

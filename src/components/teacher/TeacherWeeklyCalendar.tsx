@@ -11,11 +11,14 @@ export default function TeacherWeeklyCalendar({data,busy,onAdd,onEdit,onRegular,
     const [remote,setRemote]=useState<any>(null),[loading,setLoading]=useState(false),[error,setError]=useState('');
     const requestRef=useRef(request);requestRef.current=request;
     const from=mondayOfWeek(date),to=addCalendarDays(from,6);
-    useEffect(()=>{if(!active||!requestRef.current)return;let live=true;setLoading(true);setError('');
+    // The schedule tab's bootstrap already carries this week (same Monday–Sunday range), so only other weeks are
+    // requested; that removes the extra schedule-records calls each time the bootstrap repaints data.schedules.
+    const bootstrapWeek=from===mondayOfWeek(koreanDay())&&Array.isArray(data.schedules);
+    useEffect(()=>{if(!active||!requestRef.current||bootstrapWeek)return;let live=true;setLoading(true);setError('');
         requestRef.current('read:schedule-records',{from,to}).then(value=>{if(live)setRemote({uid:data.uid,from,to,...value});}).catch(e=>{if(live)setError(e.message);}).finally(()=>{if(live)setLoading(false);});
         return()=>{live=false;};
-    },[active,from,to,data.uid,data.schedules]);
-    const source=remote?.uid===data.uid&&remote.from===from&&remote.to===to?remote:data;
+    },[active,from,to,data.uid,data.schedules,bootstrapWeek]);
+    const source=!bootstrapWeek&&remote?.uid===data.uid&&remote.from===from&&remote.to===to?remote:data;
     const week = weeklyBoardEvents(date, source.schedules || [], [], source.reflectedSchedules || []), today = koreanDay();
     const short = (value: string) => `${Number(value.slice(5, 7))}/${Number(value.slice(8, 10))}`;
  const [filtersOpen,setFiltersOpen]=useState(false);
