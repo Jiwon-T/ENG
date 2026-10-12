@@ -6,6 +6,7 @@ import {hashStudentKey} from './security.js';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {reviewSubjects} from './teacherReportReview.js';
 import {encodeReportCursor,decodeReportCursor} from './parentReportPage.js';
+import {lessonReportId,assignmentContentHash} from './reportAudienceDTO.js';
 const text=(v:any,max=1200)=>typeof v==='string'?v.slice(0,max):'';
 const number=(v:any)=>typeof v==='number'&&Number.isFinite(v)?v:null;
 function date(v:any){const ms=v?.toMillis?.()??(typeof v?.seconds==='number'?v.seconds*1000+Math.floor((v.nanoseconds||0)/1e6):Date.parse(v));return Number.isFinite(ms)?new Date(ms).toISOString():null;}
@@ -30,10 +31,12 @@ export async function loadTeacherOnlineLearning(db:any,actor:any,keyInput:unknow
  if(cursor){const c=decodeReportCursor(cursor,binding),t=z.object({seconds:z.number().int(),nanoseconds:z.number().int().min(0).max(999999999)}).strict().parse(JSON.parse(c.date));query=query.startAfter(new Timestamp(t.seconds,t.nanoseconds),c.id);}
  const [sessions,allWords,learned,assignments,evaluation]=await Promise.all([
   query.limit(21).get(),db.collection('wordProgress').where('uid','==',uid).count().get(),db.collection('wordProgress').where('uid','==',uid).where('status','==','learned').count().get(),
-  db.collection('assignments').where('studentUid','==',uid).orderBy('createdAt','desc').limit(10).get(),
+  cursor?Promise.resolve({docs:[]}):db.collection('assignments').where('studentUid','==',uid).orderBy('createdAt','desc').limit(10).get(),
   // The teacher's short evaluation (shown on the student's own 학습 리포트), with the first page only.
   cursor?Promise.resolve(null):db.collection('evaluations').doc(uid).get(),
  ]);
+ // 과제 (first page only) is read before the final link check below, so a link changed meanwhile returns nothing.
+ const tasks=cursor?undefined:await assignmentList(db,uid,mapping.internalStudentId,assignments.docs);
  const latest=await deps.readStudentMapping(db,key),latestUser=(await db.collection('users').doc(uid).get()).data();
  if(latest?.firebaseUid!==uid||latest?.internalStudentId!==mapping.internalStudentId||latestUser?.notionStudentKey!==user.notionStudentKey||latestUser?.disabled||latestUser?.role!=='student')return empty('account-link-mismatch');
  const docs=sessions.docs.slice(0,20),rows=docs.filter((d:any)=>d.data().uid===uid&&(!d.data().subject||d.data().subject==='영어')).map((d:any)=>{const r=d.data(),answers=Array.isArray(r.incorrectAnswers)?r.incorrectAnswers:[];return {
@@ -43,8 +46,41 @@ export async function loadTeacherOnlineLearning(db:any,actor:any,keyInput:unknow
  const last=docs.at(-1),ts=last?.data().createdAt;
  const nextCursor=sessions.docs.length>20&&last&&typeof ts?.seconds==='number'?encodeReportCursor(binding,JSON.stringify({seconds:ts.seconds,nanoseconds:ts.nanoseconds||0}),last.id):null;
  const saved=evaluation?.exists?evaluation.data():null;
- return {...empty('',true),online:{reason:'',evaluation:cursor?undefined:{text:text(saved?.evaluation,1000),updatedAt:date(saved?.updatedAt)},progress:{recorded:allWords.data().count,learned:learned.data().count},sessions:rows,nextCursor,
-  assignments:assignments.docs.filter((d:any)=>d.data().studentUid===uid&&(!d.data().subject||d.data().subject==='영어')).map((d:any)=>({id:d.id,content:text(d.data().content,5000),isDone:Boolean(d.data().isDone),createdAt:date(d.data().createdAt)}))}};
+ return {...empty('',true),online:{reason:'',evaluation:cursor?undefined:{text:text(saved?.evaluation,1000),updatedAt:date(saved?.updatedAt)},progress:{recorded:allWords.data().count,learned:learned.data().count},sessions:rows,nextCursor,assignments:tasks}};
+}
+const english=(r:any)=>!r.subject||r.subject==='영어';
+const TASK_FIELDS=['internalStudentId','subject','lessonDateStart','derivedAssignment','reportIdentity','notionPageId'],TASK_PAGE=20,TASK_PAGES=5;
+const hasTask=(r:any,internalStudentId:string)=>r.internalStudentId===internalStudentId&&english(r)&&typeof r.derivedAssignment==='string'&&Boolean(r.derivedAssignment.trim());
+/** The newest English lessons with a 과제 for this student, newest first: pages of 20 by lesson date (only the fields
+ *  needed), stopping at 10 found or after 100 lessons, so a long history is never walked. Subject and 과제 are checked
+ *  per page because older reports may have no subject field (= English), which a query cannot match.
+ *  Needs the lessonReports (internalStudentId, lessonDateStart desc) index; until it exists, falls back to one
+ *  field-limited read of this student's reports. */
+async function recentLessonTasks(db:any,internalStudentId:string){
+ const base=db.collection('lessonReports').where('internalStudentId','==',internalStudentId).orderBy('lessonDateStart','desc').orderBy(FieldPath.documentId(),'desc').select(...TASK_FIELDS);
+ const found:any[]=[];let after:any[]|null=null;
+ try{
+  for(let page=0;page<TASK_PAGES&&found.length<10;page++){
+   const snap=await (after?base.startAfter(...after):base).limit(TASK_PAGE).get();
+   for(const d of snap.docs){const r={...d.data(),notionPageId:d.data().notionPageId||d.id};if(hasTask(r,internalStudentId))found.push(r);}
+   const last=snap.docs.at(-1);if(snap.docs.length<TASK_PAGE||!last)break;after=[last.data().lessonDateStart,last.id];
+  }
+  return found;
+ }catch(error:any){
+  if(error?.code!==9&&!/index/i.test(String(error?.message||'')))throw error;
+  const all=await db.collection('lessonReports').where('internalStudentId','==',internalStudentId).select(...TASK_FIELDS).get();
+  return all.docs.map((d:any)=>({...d.data(),notionPageId:d.data().notionPageId||d.id})).filter((r:any)=>hasTask(r,internalStudentId));
+ }
+}
+/** One 과제 list, as the student app shows it: the lesson log's 과제 plus notes left by the retired 과제 메모, newest first.
+ *  A lesson 과제 is done when the student's completion matches the current wording (same rule as the student app). */
+async function assignmentList(db:any,uid:string,internalStudentId:string,legacy:any[]){
+ const old=legacy.filter((d:any)=>d.data().studentUid===uid&&english(d.data())).map((d:any)=>({id:d.id,content:text(d.data().content,5000),isDone:Boolean(d.data().isDone),createdAt:date(d.data().createdAt)}));
+ const fromLog=(await recentLessonTasks(db,internalStudentId)).sort((a:any,b:any)=>Date.parse(b.lessonDateStart)-Date.parse(a.lessonDateStart)).slice(0,10);
+ const refs=fromLog.map((r:any)=>db.collection('users').doc(uid).collection('assignmentCompletions').doc(lessonReportId(r)));
+ const done=!refs.length?[]:typeof db.getAll==='function'?await db.getAll(...refs):await Promise.all(refs.map((r:any)=>r.get()));
+ const log=fromLog.map((r:any,i:number)=>({id:'lesson-'+lessonReportId(r),content:text(r.derivedAssignment,5000),isDone:Boolean(done[i]?.exists)&&done[i].data().contentHash===assignmentContentHash(r),createdAt:date(r.lessonDateStart)}));
+ return [...log,...old].sort((a,b)=>(Date.parse(b.createdAt||'')||0)-(Date.parse(a.createdAt||'')||0)).slice(0,10);
 }
 
 /** 학습 성취도 평가: a short note on how the student is doing in the online learning app. Same access as viewing the

@@ -27,5 +27,12 @@ test('student rows show the student\'s picked icon on the left and their pet bes
 test('teachers see linked/unlinked without the account UID',()=>{
  const render=(accountLinked:boolean)=>renderToStaticMarkup(<StudentMasterPanel students={[{...students[0],linkedFirebaseUid:null,accountLinked}]} value="" onSelect={()=>{}}/>);
  assert.doesNotMatch(render(true),/앱 계정 미연결/);
- assert.match(render(false),/앱 계정 미연결/);
+ assert.match(render(false),/smr-quiet">앱 계정 미연결/,'shown as a quiet note, not a badge');
+});
+
+test('today marks put an unwritten lesson log first in the row',()=>{
+ const html=renderToStaticMarkup(<StudentMasterPanel students={[{...students[0],accountLinked:false}]} today={{lesson:new Set([students[0].studentKey]),unwritten:new Set([students[0].studentKey])}} value="" onSelect={()=>{}}/>);
+ assert.ok(html.indexOf('오늘 일지 미작성')>0&&html.indexOf('오늘 일지 미작성')<html.indexOf('앱 계정 미연결'));
+ const written=renderToStaticMarkup(<StudentMasterPanel students={students} today={{lesson:new Set([students[0].studentKey]),unwritten:new Set()}} value="" onSelect={()=>{}}/>);
+ assert.ok(written.includes('오늘 수업')&&!written.includes('미작성'));
 });

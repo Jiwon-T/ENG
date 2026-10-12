@@ -28,3 +28,8 @@ test('old panel cleanup cannot remove the new guard and standalone close still c
  let accepted=false,closed=0;const n=createStudentDialogNavigation(()=>closed++),old=n.registerClose(()=>n.leave());n.registerClose(()=>{});old();n.attempt(()=>{accepted=true;});assert.equal(accepted,false);
  const cleanup=n.registerClose(()=>n.leave());n.attempt(()=>{accepted=true;});assert.equal(accepted,true);cleanup();n.leave();assert.equal(closed,1);
 });
+test('inline, closing 수업 작성 goes back to the report; closing the report closes the student',()=>{
+ const run=(initialTab:string)=>{let closed=0,leave=()=>{};renderToStaticMarkup(<StudentManagementDialog inline name="학생" canManage={false} initialTab={initialTab} onClose={()=>{closed++;}} onSelect={()=>{}} render={(_tab,l)=>{leave=l;return null;}}/>);leave();return closed;};
+ assert.equal(run('lesson'),0,'수업 작성 returns to the report');
+ assert.equal(run('review'),1);
+});

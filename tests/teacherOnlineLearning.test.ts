@@ -14,20 +14,55 @@ function fixture(n=23){
  const value=(r:any,key:any,id:string)=>typeof key==='string'?r[key]:id;
  const cmp=(a:any,b:any)=>a?.toMillis&&b?.toMillis?a.seconds-b.seconds||a.nanoseconds-b.nanoseconds:a===b?0:a<b?-1:1;
  const query=(name:string,filters:any[]=[],orders:any[]=[],cursor?:any[],max=Infinity):any=>({
-  doc:(id:string)=>({get:async()=>{reads.push(name);return {data:()=>rows[name]?.[id],exists:Boolean(rows[name]?.[id])};},set:async(v:any)=>{(rows[name]=rows[name]||{})[id]=v;}}),where:(...f:any[])=>query(name,[...filters,f],orders,cursor,max),orderBy:(k:any,dir:string)=>query(name,filters,[...orders,[k,dir]],cursor,max),startAfter:(...v:any[])=>query(name,filters,orders,v,max),limit:(v:number)=>query(name,filters,orders,cursor,v),
-  get:async()=>{reads.push(name);let records=Object.entries(rows[name]||{}).filter(([,r]:any)=>filters.every(([k,op,v])=>op==='=='?r[k]===v:false));
+  doc:(id:string)=>({get:async()=>{reads.push(name);hooks.onRead?.(name);return {data:()=>rows[name]?.[id],exists:Boolean(rows[name]?.[id])};},set:async(v:any)=>{(rows[name]=rows[name]||{})[id]=v;},collection:(sub:string)=>query(name+'/'+id+'/'+sub)}),where:(...f:any[])=>query(name,[...filters,f],orders,cursor,max),orderBy:(k:any,dir:string)=>query(name,filters,[...orders,[k,dir]],cursor,max),startAfter:(...v:any[])=>query(name,filters,orders,v,max),limit:(v:number)=>query(name,filters,orders,cursor,v),select:()=>query(name,filters,orders,cursor,max),
+  get:async()=>{reads.push(name);hooks.onRead?.(name,orders);let records=Object.entries(rows[name]||{}).filter(([,r]:any)=>filters.every(([k,op,v])=>op==='=='?r[k]===v:false));
    const compare=(a:any,b:any)=>{for(let i=0;i<orders.length;i++){const [k,dir]=orders[i],d=cmp(value(a[1],k,a[0]),value(b[1],k,b[0]));if(d)return dir==='desc'?-d:d;}return 0;};records.sort(compare);
    if(cursor)records=records.filter(([id,r])=>{for(let i=0;i<orders.length;i++){const [k,dir]=orders[i],d=cmp(value(r,k,id),cursor[i]);if(d)return dir==='desc'?d<0:d>0;}return false;});return {docs:records.slice(0,max).map(([id,r])=>({id,data:()=>r}))};},
   count:()=>({get:async()=>{const r=await query(name,filters).get();return {data:()=>({count:r.docs.length})};}}),
  });
  rows.users.teacher={role:'teacher'};rows.teacherWorkspaceAccess={teacher:{academyId:'main',workspaceRole:'teacher',scopes:[{studentKey:key,subject:'영어'}]}};rows.academyStudentMemberships={[key]:{academyId:'main'}};
- const hooks:{beforeTransaction?:()=>void}={};
+ const hooks:{beforeTransaction?:()=>void;onRead?:(name:string,orders?:any[])=>void}={};
  const db:any={collection:(name:string)=>query(name),runTransaction:async(fn:any)=>{hooks.beforeTransaction?.();return fn({get:(ref:any)=>ref.get(),set:(ref:any,v:any)=>ref.set(v)});}},actor={uid:'teacher',admin:false,academyId:'main',scopes:[{studentKey:key,subject:'영어'}],db};
  const deps:any={readStudentMapping:async()=>rows.notionStudentMappings[hashStudentKey(key)]};return {db,actor,deps,rows,reads,hooks};
 }
 test('linked student online records include zero scores, activity, mistakes and progress; never foreign records or private IDs',async()=>{
  const f=fixture();const r=await loadTeacherOnlineLearning(f.db,f.actor,key,'',undefined,f.deps);assert.equal(r.online.sessions.length,20);assert.equal(r.online.sessions[0].score,0);assert.equal(r.online.progress?.recorded,2);assert.equal(r.online.progress?.learned,1);assert.equal(r.online.assignments[0].isDone,true);
- assert.ok(r.online.nextCursor);assert.ok(!JSON.stringify(r).includes('FOREIGN'));assert.ok(!JSON.stringify(r).includes('firebaseUid'));assert.ok(!f.reads.includes('lessonReports'));assert.equal(r.online.sessions[0].incorrectAnswers[0].correctAnswer,'정답');
+ assert.ok(r.online.nextCursor);assert.ok(!JSON.stringify(r).includes('FOREIGN'));assert.ok(!JSON.stringify(r).includes('firebaseUid'));assert.equal(r.online.sessions[0].incorrectAnswers[0].correctAnswer,'정답');
+});
+test('과제 is one list: lesson-log 과제 (English only, completion by current wording) and old 과제 메모, newest first; first page only',async()=>{
+ const f=fixture();
+ const lesson=(id:string,subject:string,day:string,task:string)=>({internalStudentId:'internal',reportIdentity:id,notionPageId:id,subject,lessonDateStart:day+'T14:00:00+09:00',derivedAssignment:task});
+ f.rows.lessonReports={r1:lesson('r1','영어','2026-10-08','교재 3과 풀기'),r2:lesson('r2','영어','2026-10-01','단어 시험 준비'),m:lesson('m','수학','2026-10-09','MATH TASK'),e:lesson('e','영어','2026-10-05',''),x:{...lesson('x','영어','2026-10-09','OTHER STUDENT'),internalStudentId:'foreign'}};
+ const {lessonReportId,assignmentContentHash}=await import('../api/_lib/reportAudienceDTO.js');
+ const completions:any=f.rows['users/student/assignmentCompletions']={};
+ const done=(r:any,hash:string)=>{completions[lessonReportId(r)]={contentHash:hash};};
+ done(f.rows.lessonReports.r1,assignmentContentHash(f.rows.lessonReports.r1));done(f.rows.lessonReports.r2,'old-wording');
+ const r=await loadTeacherOnlineLearning(f.db,f.actor,key,'',undefined,f.deps),list=r.online.assignments as any[];
+ assert.deepEqual(list.map(a=>a.content),['교재 3과 풀기','단어 시험 준비','앱 과제']);
+ assert.deepEqual(list.map(a=>a.isDone),[true,false,true],'a completion for older wording does not count');
+ assert.ok(!JSON.stringify(r).includes('MATH TASK')&&!JSON.stringify(r).includes('OTHER STUDENT'));
+ const next=await loadTeacherOnlineLearning(f.db,f.actor,key,'',r.online.nextCursor,f.deps);assert.equal(next.online.assignments,undefined);
+});
+test('과제 reads lessons newest first in pages and never walks a long history',async()=>{
+ const lessons=(n:number,task:(i:number)=>string)=>Object.fromEntries(Array.from({length:n},(_,i)=>['l'+String(i).padStart(3,'0'),{internalStudentId:'internal',reportIdentity:'l'+i,subject:'영어',lessonDateStart:new Date(Date.UTC(2026,0,1)+(1000-i)*86400000).toISOString(),derivedAssignment:task(i)}]));
+ const pages=(f:any)=>f.reads.filter((r:string)=>r==='lessonReports').length;
+ let f=fixture();f.rows.lessonReports=lessons(120,i=>'과제 '+i);
+ let r=await loadTeacherOnlineLearning(f.db,f.actor,key,'',undefined,f.deps);
+ assert.equal(pages(f),1,'10 found in the first page of 20');assert.deepEqual((r.online.assignments as any[]).slice(0,2).map(a=>a.content),['과제 0','과제 1']);
+ f=fixture();f.rows.lessonReports=lessons(150,i=>i===2||i===110?'과제 '+i:'');
+ r=await loadTeacherOnlineLearning(f.db,f.actor,key,'',undefined,f.deps);
+ assert.equal(pages(f),5,'stops after 100 lessons');assert.deepEqual((r.online.assignments as any[]).map(a=>a.content),['과제 2','앱 과제'],'a 과제 older than the newest 100 lessons is not read');
+});
+test('without the lesson date index, 과제 falls back to one field-limited read of this student',async()=>{
+ const f=fixture();f.rows.lessonReports={a:{internalStudentId:'internal',reportIdentity:'a',subject:'영어',lessonDateStart:'2026-10-08T14:00:00+09:00',derivedAssignment:'교재 풀기'}};
+ f.hooks.onRead=(name,orders)=>{if(name==='lessonReports'&&orders?.length)throw Object.assign(Error('The query requires an index.'),{code:9});};
+ const r=await loadTeacherOnlineLearning(f.db,f.actor,key,'',undefined,f.deps);assert.equal((r.online.assignments as any[])[0].content,'교재 풀기');
+});
+test('a link removed while 과제 completions are read returns no records of the old account',async()=>{
+ const f=fixture();f.rows.lessonReports={a:{internalStudentId:'internal',reportIdentity:'a',subject:'영어',lessonDateStart:'2026-10-08T14:00:00+09:00',derivedAssignment:'교재 풀기'}};
+ f.hooks.onRead=name=>{if(name==='users/student/assignmentCompletions')f.rows.notionStudentMappings[hashStudentKey(key)]={...f.rows.notionStudentMappings[hashStudentKey(key)],firebaseUid:null};};
+ const r=await loadTeacherOnlineLearning(f.db,f.actor,key,'',undefined,f.deps);
+ assert.equal(r.online.reason,'account-link-mismatch');assert.deepEqual(r.online.sessions,[]);assert.deepEqual(r.online.assignments,[]);assert.ok(!JSON.stringify(r).includes('교재 풀기'));
 });
 test('cursor uses timestamp precision and stable doc tie ordering without overlap; foreign actor/filter cursors fail',async()=>{
  const f=fixture();const first=await loadTeacherOnlineLearning(f.db,f.actor,key,'',undefined,f.deps),second=await loadTeacherOnlineLearning(f.db,f.actor,key,'',first.online.nextCursor,f.deps);assert.equal(second.online.sessions.length,3);assert.equal(new Set([...first.online.sessions,...second.online.sessions].map(r=>r.id)).size,23);

@@ -13,7 +13,7 @@ export default function TeacherTodayLessons({data,date,onDate,onStudent,onGroup,
  onStudent?:(key:string,event:TodayLesson)=>void;onGroup?:(event:TodayLesson)=>void;
  records?:readonly any[];
  selection?:{studentKey?:string;subject?:string;date?:string;start?:string};onNewLesson?:()=>void;
- onEvents?:(events:TodayLesson[],uid:string,date:string)=>void;
+ onEvents?:(events:TodayLesson[],uid:string,date:string,dayLessons?:any[])=>void;
  request:(action?:string,body?:any)=>Promise<any>;disabled?:boolean;active?:boolean;
 }) {
  const [reload,setReload]=useState(0);
@@ -30,7 +30,7 @@ export default function TeacherTodayLessons({data,date,onDate,onStudent,onGroup,
  },[active,date,data.uid,reload]);
  const source=remote?.uid===data.uid&&remote.date===date?remote:data;
  const events=todayLessons(data,date,source.schedules||[],source.reflectedSchedules||[]).filter(event=>!hidden.has(event.id));
- useEffect(()=>{onEvents?.(events,data.uid,date);},[source,data,date,onEvents,hidden]);
+ useEffect(()=>{onEvents?.(events,data.uid,date,remote?.uid===data.uid&&remote.date===date?remote.dayLessons:undefined);},[source,remote,data,date,onEvents,hidden]);
  async function changeVisibility(eventId?:string){visibilityVersion.current++;setHiding(true);try{const result=await requestRef.current('today-lesson-visibility',{date,...(eventId?{eventId}:{restore:true})});setTodayVisibility(data.uid,date,result.hiddenTodayLessons);setExclude(null);}catch(e){setError(e instanceof Error?e.message:'수업 목록 변경 실패');}finally{setHiding(false);}}
  const loaded=[...records,...(data.drafts||[])];const progress=todayLessonProgress(events,loaded);
  const ratios=todayProgressRatios(progress),next=nextUnwrittenLesson(events,loaded,selection);

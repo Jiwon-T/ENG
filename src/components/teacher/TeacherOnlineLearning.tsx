@@ -14,7 +14,7 @@ const modes:Record<string,string>={quiz:'객관식 퀴즈',flashcard:'플래시�
 const date=(v:string|null,options:any={month:'long',day:'numeric',weekday:'short'})=>v?new Date(v).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',...options}):'날짜 미상';
 /** 학습 성취도 평가: a short note on how the student is doing in the online app; the student sees it in their own 학습 리포트. */
 function OnlineEvaluation({studentKey,initial,onDirty}:{key?:string;studentKey:string;initial:{text:string;updatedAt:string|null};onDirty?:(dirty:boolean)=>void}){
- const [text,setText]=useState(initial.text),[saved,setSaved]=useState(initial),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
+ const [text,setText]=useState(initial.text),[saved,setSaved]=useState(initial),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[open,setOpen]=useState(false);
  const dirty=busy||text.trim()!==saved.text;
  // Report the unsaved state to the screen's guards, and warn before the browser tab closes.
  useEffect(()=>{onDirty?.(dirty);},[dirty]);
@@ -23,12 +23,20 @@ function OnlineEvaluation({studentKey,initial,onDirty}:{key?:string;studentKey:s
  const save=async()=>{setBusy(true);setMessage('');
   try{const r=await teacherAuthenticatedRequest<any>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save-online-evaluation',studentKey,text,expectedUpdatedAt:saved.updatedAt})});
    if(!r.ok||!r.data?.ok){setMessage(r.data?.message||'평가를 저장하지 못했습니다. 다시 시도해 주세요.');return;}
-   setSaved(r.data.evaluation);setText(r.data.evaluation.text);setMessage(r.data.evaluation.text?'저장했습니다. 학생의 학습 리포트에 보입니다.':'평가를 지웠습니다.');
+   setSaved(r.data.evaluation);setText(r.data.evaluation.text);setOpen(false);setMessage(r.data.evaluation.text?'저장했습니다. 학생의 학습 리포트에 보입니다.':'평가를 지웠습니다.');
   }finally{setBusy(false);}};
+ const when=saved.updatedAt?date(saved.updatedAt,{month:'long',day:'numeric'}):'';
+ // Rarely used: a one-line summary at the bottom of the report; the editor opens only when asked.
+ if(!open)return <section className="report-online-evaluation is-compact" aria-label="학습 성취도 평가">
+  <div className="report-online-evaluation-row"><h4>학습 성취도 평가</h4><p className={saved.text?'':'report-caption'}>{saved.text||'아직 남긴 평가가 없습니다.'}</p>
+   <button type="button" className="small-button" onClick={()=>{setOpen(true);setMessage('');}}>{saved.text?'수정':'평가 쓰기'}</button></div>
+  {(when||message)&&<p role="status" className="report-caption">{message||`${when} 저장 · 학생 학습 리포트에 보입니다.`}</p>}
+ </section>;
  return <section className="report-online-evaluation" aria-label="학습 성취도 평가"><h4>학습 성취도 평가</h4>
-  <AutoTextarea aria-label="학습 성취도 평가" value={text} maxLength={1000} maxRows={6} disabled={busy} placeholder="온라인 학습을 잘하고 있는지 간단히 남겨 주세요. 예: 단어 복습을 꾸준히 하고 있어요." onChange={e=>{setText(e.target.value);setMessage('');}}/>
+  <AutoTextarea autoFocus aria-label="학습 성취도 평가" value={text} maxLength={1000} maxRows={6} disabled={busy} placeholder="온라인 학습을 잘하고 있는지 간단히 남겨 주세요. 예: 단어 복습을 꾸준히 하고 있어요." onChange={e=>{setText(e.target.value);setMessage('');}}/>
   <div className="report-online-evaluation-foot"><span className="report-caption">{saved.updatedAt?`마지막 저장 ${date(saved.updatedAt,{month:'long',day:'numeric',hour:'numeric',minute:'2-digit'})}`:'아직 남긴 평가가 없습니다.'} · 학생 학습 리포트에 보입니다.</span>
-   <button type="button" className="primary-button" disabled={busy||text.trim()===saved.text} onClick={()=>void save()}>{busy?'저장 중…':'평가 저장'}</button></div>
+   <span className="report-online-evaluation-actions"><button type="button" className="gs-quiet" disabled={busy} onClick={()=>{if(text.trim()!==saved.text&&!window.confirm('저장하지 않은 평가를 버릴까요?'))return;setText(saved.text);setOpen(false);setMessage('');}}>취소</button>
+   <button type="button" className="primary-button" disabled={busy||text.trim()===saved.text} onClick={()=>void save()}>{busy?'저장 중…':'평가 저장'}</button></span></div>
   {message&&<p role="status" className="report-caption">{message}</p>}
  </section>;
 }
@@ -41,7 +49,6 @@ export default function TeacherOnlineLearning({data,page,onPrevious,onNext,loadi
  const latest=[...loadedTests].sort((a:any,b:any)=>Date.parse(b.createdAt)-Date.parse(a.createdAt))[0]?.percentage??null,average=tests.length?Math.round(tests.reduce((sum:number,s:any)=>sum+s.percentage,0)/tests.length*10)/10:null;
  const visible=filteredActivities<any>(sessions,filter,wrongOnly);const labels=filters.map(([key,label])=>`${label} ${sessions.filter((s:any)=>sessionMatches(s,key)).length}`);const wrongIds=visible.filter((s:any)=>s.incorrectCount>0).map((s:any)=>s.id),allOpen=wrongOnly||wrongIds.length>0&&wrongIds.every((id:string)=>expanded.includes(id));
  return <div className="review-section report-online"><div className="report-online-caption"><span>온라인 학습 · 기록은 읽기 전용</span><span tabIndex={0} title="학습 기록의 완료·오답·포인트 상태는 변경하지 않습니다. 평가만 남길 수 있습니다." aria-label="온라인 학습 안내">ⓘ</span></div>
- {data.evaluation&&studentKey&&<OnlineEvaluation key={studentKey+':'+(data.evaluation.updatedAt||'')} studentKey={studentKey} initial={data.evaluation} onDirty={onEvaluationDirty}/>}
  <div className="report-stats"><StatCard label="학습 단어 기록" value={<><BookOpen size={16}/>{data.progress?.recorded??'—'}개</>}/><StatCard label="암기 완료" value={<><CheckCircle2 size={16}/>{data.progress?.learned??'—'}개</>}/><StatCard label="최근 단어 테스트" value={<><Trophy size={16}/>{latest===null?'—':`${latest}%`}</>}/><StatCard label="평균" value={<><TrendingUp size={16}/>{average===null?'—':`${average}%`}</>}/></div><p className="report-caption">최근 {loadedTests.length}회 기준</p>
  <ScoreTrend points={[...tests].sort((a:any,b:any)=>Date.parse(a.createdAt)-Date.parse(b.createdAt)).map((s:any)=>({id:s.id,value:s.percentage,date:date(s.createdAt,{month:'numeric',day:'numeric'})}))}/>
  <div className="report-learning-filters"><div className="report-filter-chips"><ChipGroup label="활동 유형" options={labels} value={labels[filters.findIndex(([key])=>key===filter)]} onChange={label=>setFilter(filters[labels.indexOf(label)][0])}/></div><span tabIndex={0} title="건수와 필터는 현재 불러온 페이지 기준입니다." aria-label="현재 페이지 필터 안내">ⓘ</span><label className="report-wrong-toggle"><input type="checkbox" checked={wrongOnly} onChange={e=>setWrongOnly(e.target.checked)}/>오답만 보기</label><button type="button" className="report-expand-all" disabled={!wrongIds.length} onClick={()=>{setWrongOnly(false);setExpanded(allOpen?[]:wrongIds);}}>{allOpen?'모두 접기':'모두 펼치기'}</button></div>
@@ -50,6 +57,7 @@ export default function TeacherOnlineLearning({data,page,onPrevious,onNext,loadi
  {open&&s.incorrectCount>0&&<div id={`wrong-${s.id}`} className="report-wrong-grid">{(s.incorrectAnswers||[]).map((a:any,i:number)=><div key={i}><strong>{a.word}</strong> <span>{a.meaning}</span>{a.quizSentence&&<p>{a.quizSentence}</p>}<p><span className="report-answer status-danger">선택한 답: {a.userChoice||'미선택'}</span> → <span className="report-answer status-success">정답: {a.correctAnswer}</span></p><small>{a.isReviewed?'복습 확인됨':'복습 미확인'}</small></div>)}{s.incorrectCount>(s.incorrectAnswers?.length||0)&&<p>오답이 많아 앞 {s.incorrectAnswers?.length||0}개를 표시합니다.</p>}</div>}
  </SessionRow></div>;})}
  <div className="review-pagination"><button type="button" disabled={loading||page===0} onClick={onPrevious}>이전</button><span>{page+1}페이지</span><button type="button" disabled={loading||!data.nextCursor} onClick={onNext}>다음</button></div>
- <section className="report-online-assignments"><h4>앱 과제 · 최근 10개</h4>{(data.assignments||[]).map((a:any)=><article key={a.id} className="report-assignment"><p>{date(a.createdAt)} <StatusBadge kind={a.isDone?'done':'saved'} text={a.isDone?'완료':'미완료'}/></p><p>{a.content}</p></article>)}{!data.assignments?.length&&<p className="report-caption">앱 과제가 없습니다. 수업 일지 과제는 수업 기록에서 확인할 수 있습니다.</p>}</section>
+ {Array.isArray(data.assignments)&&<section className="report-online-assignments"><h4>과제 · 최근 10개</h4>{(data.assignments||[]).map((a:any)=><article key={a.id} className="report-assignment"><p>{date(a.createdAt)} <StatusBadge kind={a.isDone?'done':'saved'} text={a.isDone?'완료':'미완료'}/></p><p>{a.content}</p></article>)}{!data.assignments.length&&<p className="report-caption">남긴 과제가 없습니다.</p>}</section>}
+ {data.evaluation&&studentKey&&<OnlineEvaluation key={studentKey+':'+(data.evaluation.updatedAt||'')} studentKey={studentKey} initial={data.evaluation} onDirty={onEvaluationDirty}/>}
  </div>;
 }
