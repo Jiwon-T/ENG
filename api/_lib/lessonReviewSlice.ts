@@ -33,15 +33,18 @@ function draftScope(db: any, actor: any) {
 }
 function inScope(actor: any, d: any) { return actor.admin || (actor.principal ? d.academyId === actor.academyId : d.ownerUid === actor.uid); }
 
-export async function lessonDraftSlice(db: any, actor: any, filter: LessonSliceFilter, sourceRows: any[]) {
+/** sourceRows may still be loading: the day queries start first and run in parallel (results kept in chunk order). */
+export async function lessonDraftSlice(db: any, actor: any, filter: LessonSliceFilter, sourceInput: any[] | Promise<any[]>) {
     const found = new Map<string, any>();
-    for (const chunk of filter.days ? dayChunks(filter.days) : [null]) {
+    const daySnaps = await Promise.all((filter.days ? dayChunks(filter.days) : [null]).map(chunk => {
         let q = draftScope(db, actor);
         if (filter.day) q = q.where('data.date', '==', filter.day);
         if (chunk) q = q.where('data.date', 'in', chunk);
         if (filter.student) q = q.where('data.studentKey', '==', filter.student);
-        for (const d of (await q.get()).docs) found.set(d.id, { id: d.id, ...d.data() });
-    }
+        return q.get();
+    }));
+    for (const snap of daySnaps) for (const d of snap.docs) found.set(d.id, { id: d.id, ...d.data() });
+    const sourceRows = await sourceInput;
     // Only source rows not already matched by a loaded app lesson need the link lookup; chunks run in parallel.
     const linkedAlready = new Set([...found.values()].map(d => d.notionPageId).filter(Boolean));
     const pageIds = [...new Set(sourceRows.map(r => r.notionPageId).filter(id => id && !linkedAlready.has(id)))];

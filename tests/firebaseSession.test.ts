@@ -38,3 +38,10 @@ test('simultaneous authentication is deduplicated without caching completed acco
  const first=verifyFirebaseSession(auth,'same'),second=verifyFirebaseSession(auth,'same');assert.equal(count,1);complete(decoded);await Promise.all([first,second]);
  const next=verifyFirebaseSession(auth,'same');assert.equal(count,2);complete(decoded);await next;
 });
+test('a known missing Admin permission is not retried on every request, while each request still checks the account',async()=>{
+ const checks:boolean[]=[],auth:any={verifyIdToken:async(_token:string,revoked:boolean)=>{checks.push(revoked);if(revoked)throw {code:'auth/insufficient-permission'};return decoded;}};
+ let disabled=false,lookups=0;const lookup=async(token:string,value:any)=>{lookups++;await lookupFirebaseSession(token,value,response({users:[{localId:'user',disabled,validSince:'100'}]}) as any);};
+ await verifyFirebaseSession(auth,'first',lookup);await verifyFirebaseSession(auth,'second',lookup);
+ assert.deepEqual(checks,[true,false,false],'the failing Admin attempt happens once, then only signature checks');assert.equal(lookups,2,'the account is looked up on every request');
+ disabled=true;await assert.rejects(verifyFirebaseSession(auth,'third',lookup),/user-disabled/);
+});

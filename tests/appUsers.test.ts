@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { templateFirestore } from './helpers/templateFirestore.js';
 import { listAppUsers, setAppUserRole, removeAppUser, listRemovedUsers, setRemovedSignIn, setAppUserName } from '../api/_lib/appUsers.js';
 import { readAdminHistory } from '../api/_lib/adminHistory.js';
+import { hashStudentKey } from '../api/_lib/security.js';
 
 const admin = { uid: 'admin', admin: true, academyId: 'main' };
 function seed() {
@@ -14,12 +15,16 @@ function seed() {
     return f;
 }
 
-test('app users: admin lists accounts, teachers first', async () => {
+test('app users: admin lists accounts, newest sign-up first', async () => {
     const f = seed();
+    f.rows.get('users/admin').createdAt = { seconds: Date.parse('2026-01-01T00:00:00Z') / 1000, nanoseconds: 0 };
+    f.rows.get('users/new').createdAt = { seconds: Date.parse('2026-10-10T00:00:00Z') / 1000, nanoseconds: 0 };
+    f.rows.get('users/kid').createdAt = '2026-05-01T00:00:00.000Z';
     const r = await listAppUsers(f.db, admin);
     assert.equal(r.users.length, 3);
-    assert.equal(r.users[0].uid, 'admin');
-    assert.equal(r.users[0].isAdmin, true);
+    assert.deepEqual(r.users.map((u: any) => u.uid), ['new', 'kid', 'admin']);
+    assert.equal(r.users[0].joinedAt, '2026-10-10T00:00:00.000Z');
+    assert.equal(r.users.find((u: any) => u.uid === 'admin').isAdmin, true);
     assert.equal(r.users.find((u: any) => u.uid === 'kid').linkedStudent, true);
     await assert.rejects(listAppUsers(f.db, { uid: 'admin', admin: false, academyId: 'main' }), /FORBIDDEN/);
 });
@@ -51,10 +56,9 @@ test('app users: refuses linked students, the admin, self, and unknown accounts'
     await assert.rejects(setAppUserRole(f.db, admin, { uid: 'ghost', role: 'teacher' }), /APP_USER_NOT_FOUND/);
 });
 
-test('app users: 탈퇴 removes a student account record (copy kept); teachers, linked students, admin and self are refused', async () => {
+test('app users: 탈퇴 removes a student account record (copy kept); teachers, admin and self are refused', async () => {
     const f = seed();
     f.rows.set('evaluations/new', { note: 'x' });
-    await assert.rejects(removeAppUser(f.db, admin, { uid: 'kid' }), /APP_USER_LINKED_REMOVE/);
     await setAppUserRole(f.db, admin, { uid: 'new', role: 'teacher' });
     await assert.rejects(removeAppUser(f.db, admin, { uid: 'new' }), /APP_USER_TEACHER_REMOVE/);
     await setAppUserRole(f.db, admin, { uid: 'new', role: 'student' });
@@ -105,4 +109,24 @@ test('app users: the admin corrects an app name (trimmed, recorded in 관리 기
     assert.equal([...f.rows.keys()].filter(k => k.startsWith('appUserNameHistory/')).length, 1);
     const history = await readAdminHistory(f.db, admin, 'account');
     assert.ok(history.entries.some((e: any) => e.area === '회원' && e.text.endsWith('→ 새 이름 · 앱 이름 바꾸기')));
+});
+test('app users: a graduated student linked account can be removed; the link goes, the student record and reports stay', async () => {
+    const f = seed();
+    f.rows.set('notionStudentMappings/' + hashStudentKey('sk'), { studentKey: 'sk', internalStudentId: 'internal', firebaseUid: 'kid' });
+    f.rows.set('reportSlugs/kid-url', { internalStudentId: 'internal', parentPhonePinHash: 'pin', authVersion: 3 });
+    const slug = JSON.stringify(f.rows.get('reportSlugs/kid-url'));
+    const r = await removeAppUser(f.db, admin, { uid: 'kid', blockSignIn: false });
+    assert.equal(r.removed, true);
+    assert.equal(f.rows.has('users/kid'), false, 'the account record is removed');
+    const mapping = f.rows.get('notionStudentMappings/' + hashStudentKey('sk'));
+    assert.equal(mapping.firebaseUid, null, 'only the link to this account is cleared');
+    assert.equal(mapping.internalStudentId, 'internal'); assert.equal(mapping.studentKey, 'sk');
+    assert.equal(JSON.stringify(f.rows.get('reportSlugs/kid-url')), slug, 'parent address and PIN unchanged');
+    const copy = [...f.rows.entries()].find(([k]) => k.startsWith('appUserRemovals/kid:'))![1];
+    assert.equal(copy.unlinkedStudentKey, 'sk'); assert.equal(copy.user.notionStudentKey, 'sk');
+    // A link that already points to another account is left alone.
+    const g = seed();
+    g.rows.set('notionStudentMappings/' + hashStudentKey('sk'), { studentKey: 'sk', internalStudentId: 'internal', firebaseUid: 'someone-else' });
+    await removeAppUser(g.db, admin, { uid: 'kid', blockSignIn: false });
+    assert.equal(g.rows.get('notionStudentMappings/' + hashStudentKey('sk')).firebaseUid, 'someone-else');
 });

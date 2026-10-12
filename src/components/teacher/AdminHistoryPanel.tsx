@@ -1,10 +1,11 @@
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 import {History} from 'lucide-react';
 const groups=[['all','전체'],['account','회원'],['tuition','수강료'],['payroll','정산'],['class','반·커리큘럼']] as const;
 /** 관리자 설정 › 관리 기록 (admin and principal): who changed what, newest first. */
-export default function AdminHistoryPanel({busy,request,act}:{busy:boolean;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>}){
+export default function AdminHistoryPanel({busy,request,act,autoLoad=false}:{busy:boolean;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;autoLoad?:boolean}){
  const [group,setGroup]=useState<string>('all'),[entries,setEntries]=useState<any[]|null>(null);
  const load=async(g=group)=>{const r=await request('read:admin-history',{group:g});setEntries(r.entries||[]);setGroup(g);};
+ useEffect(()=>{if(autoLoad)void act(()=>load());},[]);
  let lastDay='';
  return <section className="panel rv ah">
   <div className="rv-head"><h2>관리 기록{entries&&<small>최근 {entries.length}건</small>}</h2>{!entries&&<button type="button" className="small-button" disabled={busy} onClick={()=>act(()=>load())}><History size={16} aria-hidden="true"/>기록 열기</button>}</div>

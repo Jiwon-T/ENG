@@ -1,15 +1,19 @@
-import {Fragment,useState} from 'react';
-import {ChevronLeft,ChevronRight,Download,Eye,EyeOff,Lock,Wallet} from 'lucide-react';
+import {Fragment,useEffect,useState} from 'react';
+import {ChevronLeft,ChevronRight,Download,Eye,EyeOff,Wallet} from 'lucide-react';
 import {tuitionCsv} from '../../lib/tuition';
 const won=(n:number|null|undefined)=>n==null?'—':`${n.toLocaleString('ko-KR')}원`;
 const shift=(m:string,d:number)=>{const [y,mo]=m.split('-').map(Number),t=new Date(Date.UTC(y,mo-1+d,1));return `${t.getUTCFullYear()}-${String(t.getUTCMonth()+1).padStart(2,'0')}`;};
 const thisMonth=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date()).slice(0,7);
 const digits=(text:string,max:number)=>{const neg=text.trim().startsWith('-'),d=text.replace(/\D/g,'').slice(0,max);return d===''?null:(neg?-1:1)*Number(d);};
 /** 관리자 설정 > 선생님 정산 (admin and principal only). Shares are hidden until 비율 보기, so the screen can be open near others. */
-export default function TeacherPayroll({busy,request,act}:{busy:boolean;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>}){
+export default function TeacherPayroll({busy,request,act,autoLoad=false,onDirty}:{busy:boolean;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;autoLoad?:boolean;onDirty?:(dirty:boolean)=>void}){
  const [month,setMonth]=useState(thisMonth()),[data,setData]=useState<any>(null),[reveal,setReveal]=useState(false),[editShares,setEditShares]=useState<null|{defaultShare:number;shares:Record<string,number|null>}>(null);
  const [adjust,setAdjust]=useState<Record<string,{amount:number|null;note:string}>>({}),[notice,setNotice]=useState('');
  const load=async(m=month)=>{const r=await request('read:teacher-payroll',{month:m});setData(r);setMonth(m);setAdjust({});setNotice('');};
+ useEffect(()=>{if(autoLoad)void act(()=>load());},[]);
+ const unsaved=Object.keys(adjust).length>0||Boolean(editShares);
+ useEffect(()=>{onDirty?.(unsaved);},[unsaved]);
+ useEffect(()=>()=>onDirty?.(false),[]);
  const go=(m:string)=>{if(Object.keys(adjust).length&&!window.confirm('저장하지 않은 조정이 있습니다. 다른 달로 옮길까요?'))return;void act(()=>load(m));};
  const pct=(n:number)=>reveal?`${n}%`:'••%';
  const saveAdjust=()=>void act(async()=>{await request('save-payroll-adjust',{month,revision:data.revision,adjust:Object.fromEntries(Object.entries(adjust).map(([uid,a]:[string,{amount:number|null;note:string}])=>[uid,a.amount==null&&!a.note?null:{amount:a.amount??0,note:a.note}]))});await load(month);setNotice('조정 금액을 저장했습니다.');});
@@ -18,14 +22,14 @@ export default function TeacherPayroll({busy,request,act}:{busy:boolean;request:
   for(const t of data.teachers){for(const r of t.rows)rows.push([t.name,r.name,r.subject,r.charged,r.amount,r.revenue,t.share,r.pay]);rows.push([t.name,'조정','',null,null,null,null,t.adjust]);rows.push([t.name,'합계','',null,t.revenue,null,t.share,t.total]);}
   const url=URL.createObjectURL(new Blob([tuitionCsv(rows)],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=`선생님정산_${month}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  return <section className="panel rv pay">
-  <div className="rv-head"><h2>선생님 정산<span className="pay-lock"><Lock size={12} aria-hidden="true"/>관리자·원장님만 보임</span></h2>{!data&&<button type="button" className="small-button" disabled={busy} onClick={()=>act(()=>load())}><Wallet size={16} aria-hidden="true"/>이번 달 정산 보기</button>}</div>
+  <div className="rv-head"><h2>선생님 정산</h2>{!data&&<button type="button" className="small-button" disabled={busy} onClick={()=>act(()=>load())}><Wallet size={16} aria-hidden="true"/>이번 달 정산 보기</button>}</div>
   {data&&<>
    <div className="tu-bar">
     <div className="tu-month"><button type="button" aria-label="이전 달" disabled={busy} onClick={()=>go(shift(month,-1))}><ChevronLeft size={18}/></button><strong>{Number(month.slice(0,4))}년 {Number(month.slice(5))}월</strong><button type="button" aria-label="다음 달" disabled={busy} onClick={()=>go(shift(month,1))}><ChevronRight size={18}/></button></div>
     <div className="tu-stats"><span>원비 합계 <strong>{won(data.revenue)}</strong></span><span>선생님 지급 <strong>{won(data.teacherTotal)}</strong></span><span className="ok">학원 <strong>{won(data.academy)}</strong></span></div>
    </div>
    {data.sheetConfirmedAt&&data.sheetChangedSinceConfirm>0&&<p className="pay-warn">수강료를 확정한 뒤 일지가 바뀌어 청구가 달라진 학생이 {data.sheetChangedSinceConfirm}명 있습니다. 위 ‘수강료 계산’에서 확인하고 다시 확정해 주세요.</p>}
-   {!data.sheetConfirmedAt&&<p className="pay-warn">이 달 수강료가 아직 확정되지 않아 예상 금액입니다. 위 ‘수강료 계산’에서 확정하면 정산도 확정 금액이 됩니다.</p>}
+   {!data.sheetConfirmedAt&&<p className="pay-warn">이 달 수강료가 아직 확정되지 않아 예상 금액입니다. ‘수강료 계산’에서 확정하면 정산도 확정 금액이 됩니다.</p>}
    <div className="pay-tools"><button type="button" className="gs-quiet" onClick={()=>setReveal(!reveal)}>{reveal?<EyeOff size={14} aria-hidden="true"/>:<Eye size={14} aria-hidden="true"/>}{reveal?'비율 숨기기':'비율 보기'}</button>
     <button type="button" className="gs-quiet" onClick={()=>{setReveal(true);setEditShares({defaultShare:data.defaultShare,shares:Object.fromEntries(data.staff.map((s:any)=>[s.uid,s.share]))});}}>비율 설정</button><span className="gs-grow"/><span className="gs-note">기본 선생님 {pct(data.defaultShare)} · 학원 {reveal?`${100-data.defaultShare}%`:'••%'}</span></div>
    {editShares&&<div className="pay-shares">

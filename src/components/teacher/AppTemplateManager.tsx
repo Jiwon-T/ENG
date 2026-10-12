@@ -1,12 +1,15 @@
-import {Fragment,useRef,useState} from 'react';
+import {Fragment,useEffect,useRef,useState} from 'react';
 import {MessageSquareText} from 'lucide-react';
 import {MessageTemplateEditor} from './MessageTemplateManager';
 /** App-only text templates: pick one, edit, save. No Notion sync controls (templates live only in the app now). */
-export default function AppTemplateManager({busy,request,act}:{busy:boolean;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>}){
+export default function AppTemplateManager({busy,request,act,autoLoad=false,onDirty}:{busy:boolean;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;autoLoad?:boolean;onDirty?:(dirty:boolean)=>void}){
  const [list,setList]=useState<any[]|null>(null),[selected,setSelected]=useState<any>(null),[dirty,setDirty]=useState(false),[notice,setNotice]=useState('');
  const operation=useRef<{fingerprint:string;id:string}|null>(null);
  const command=(data:any)=>{const fingerprint=JSON.stringify(data);if(operation.current?.fingerprint!==fingerprint)operation.current={fingerprint,id:crypto.randomUUID()};return operation.current.id;};
  async function load(){const all:any[]=[];let cursor:string|undefined;for(let i=0;i<20;i++){const r=await request('template-list',cursor?{cursor}:{});all.push(...(r.records||[]));cursor=r.cursor||undefined;if(!cursor)break;}setList(all.filter(t=>!t.archived));}
+ useEffect(()=>{if(autoLoad)void act(load);},[]);
+ useEffect(()=>{onDirty?.(dirty);},[dirty]);
+ useEffect(()=>()=>onDirty?.(false),[]);
  function choose(t:any){if(dirty&&!window.confirm('저장하지 않은 편집을 닫을까요?'))return;setSelected(t);setDirty(false);setNotice('');}
  return <section className="panel rv">
   <div className="rv-head"><h2>문자 템플릿{list&&<small>{list.length}개</small>}</h2>{!list&&<button type="button" className="small-button" disabled={busy} onClick={()=>act(load)}><MessageSquareText size={16} aria-hidden="true"/>템플릿 열기</button>}</div>

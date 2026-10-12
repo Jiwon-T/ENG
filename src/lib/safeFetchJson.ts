@@ -4,6 +4,8 @@ export interface SafeFetchResult<T> {
   data: T | null;
   error?: string;
   userMessage: string;
+  /** The response's Server-Timing header (stage names and milliseconds only), for 속도 점검. */
+  serverTiming?: string;
 }
 
 /**
@@ -19,11 +21,13 @@ export async function safeFetchJson<T = any>(
 ): Promise<SafeFetchResult<T>> {
   try {
     const res = await fetch(input, init);
+    const serverTiming = res.headers.get('server-timing') || undefined;
     const contentType = res.headers.get('content-type') || '';
     const rawText = await res.text();
 
     if (!rawText || !rawText.trim()) {
       return {
+        serverTiming,
         ok: res.ok,
         status: res.status,
         data: null,
@@ -35,6 +39,7 @@ export async function safeFetchJson<T = any>(
       try {
         const parsed = JSON.parse(rawText);
         return {
+          serverTiming,
           ok: res.ok && parsed.ok !== false,
           status: res.status,
           data: parsed,
@@ -43,6 +48,7 @@ export async function safeFetchJson<T = any>(
         };
       } catch (parseErr) {
         return {
+          serverTiming,
           ok: false,
           status: res.status,
           data: null,
@@ -54,6 +60,7 @@ export async function safeFetchJson<T = any>(
 
     // JSON이 아닌 일반 텍스트나 HTML 에러 페이지인 경우 (Unexpected token 'A' 방지)
     return {
+      serverTiming,
       ok: false,
       status: res.status,
       data: null,

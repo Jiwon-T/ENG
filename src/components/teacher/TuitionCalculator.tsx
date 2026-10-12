@@ -1,4 +1,4 @@
-import {useMemo,useState} from 'react';
+import {useEffect,useMemo,useState} from 'react';
 import {Calculator,ChevronLeft,ChevronRight,Download,Search} from 'lucide-react';
 import {matchesKoreanSearch} from '../../lib/koreanSearch';
 import {tuitionCharge,tuitionCsv,TUITION_SESSIONS} from '../../lib/tuition';
@@ -7,9 +7,14 @@ const won=(n:number|null|undefined)=>n==null?'—':`${n.toLocaleString('ko-KR')}
 const shift=(m:string,d:number)=>{const [y,mo]=m.split('-').map(Number),t=new Date(Date.UTC(y,mo-1+d,1));return `${t.getUTCFullYear()}-${String(t.getUTCMonth()+1).padStart(2,'0')}`;};
 const thisMonth=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date()).slice(0,7);
 /** 관리자 설정 > 수강료 계산: monthly tuition sheet built from 일지 + timetable; the admin corrects rows, saves and confirms. */
-export default function TuitionCalculator({busy,request,act}:{busy:boolean;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>}){
+export default function TuitionCalculator({busy,request,act,autoLoad=false,onDirty}:{busy:boolean;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;autoLoad?:boolean;onDirty?:(dirty:boolean)=>void}){
  const [month,setMonth]=useState(thisMonth()),[sheet,setSheet]=useState<any>(null),[edits,setEdits]=useState<Record<string,Edit>>({}),[query,setQuery]=useState(''),[filter,setFilter]=useState<'all'|'missing'|'edited'|'left'|'changed'>('all'),[notice,setNotice]=useState('');
  const load=async(m=month)=>{const r=await request('read:tuition-month',{month:m});setSheet(r);setEdits({});setMonth(m);setNotice('');};
+ // Opened from the 관리자 설정 menu: load this month right away; unsaved edits are reported so the menu can ask first.
+ useEffect(()=>{if(autoLoad)void act(()=>load());},[]);
+ const unsaved=Object.keys(edits).length>0;
+ useEffect(()=>{onDirty?.(unsaved);},[unsaved]);
+ useEffect(()=>()=>onDirty?.(false),[]);
  const go=(m:string)=>{if(Object.keys(edits).length&&!window.confirm('저장하지 않은 수정이 있습니다. 다른 달로 옮길까요?'))return;void act(()=>load(m));};
  const rows=useMemo(()=>(sheet?.rows||[]).map((r:any)=>{const e=edits[r.key]||{};const sessions=e.sessions!==undefined?(e.sessions??r.expected):r.sessions,free=e.free!==undefined?(e.free??0):r.free,tuition=e.tuition!==undefined?e.tuition:r.tuition;return {...r,sessions,free,tuition,dirty:Boolean(edits[r.key]),...tuitionCharge(tuition,sessions,free)};}),[sheet,edits]);
  const shown=rows.filter((r:any)=>(filter==='all'||filter==='missing'&&r.tuition==null||filter==='edited'&&(r.edited||r.dirty)||filter==='left'&&r.left||filter==='changed'&&r.changedSinceConfirm)&&matchesKoreanSearch(r.name,query));
