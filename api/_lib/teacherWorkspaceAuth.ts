@@ -29,6 +29,8 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     workspaceStage='workspace-account';
     if (!process.env.ADMIN_UID) throw new Error('CONFIG_ERROR');
     const admin = uid === process.env.ADMIN_UID;
+    // The academy switch (core authority) does not depend on the account: read it in the same round trip.
+    const mainAuthority=coreActive(db,{academyId:'main'});mainAuthority.catch(()=>{});
     const [userDoc,profileDoc]=await workspaceInflightRead(db,'account:'+uid,()=>Promise.all([db.collection('users').doc(uid).get(),db.collection('teacherWorkspaceAccess').doc(uid).get()]));
     const user = userDoc.data();
     if (!admin && !['teacher', 'principal'].includes(user?.role)) throw new Error('FORBIDDEN');
@@ -42,10 +44,12 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     if(!academyId)throw new Error('TEACHER_NOT_CONFIGURED');
     stage('account');
     workspaceStage='workspace-scope';
-    const coreMode=await coreActive(db,{academyId});
+    const coreMode=academyId==='main'?await mainAuthority:await coreActive(db,{academyId});
     // App-only: assignments come from the app. An academy that never switched gets a clear error instead of a Notion lookup.
     if(!coreMode)throw new Error('CORE_NOT_READY');
-    let teachingScopes = await readCoreScopes(db,{...profile,uid,academyId,scopes:profile?.scopes||[]});
+    // A principal sees every active student of the academy: that list is read alongside the own assignments.
+    const academyMembers=principal?db.collection('academyStudentMemberships').where('academyId', '==', academyId).get():null;academyMembers?.catch(()=>{});
+    let teachingScopes = await readCoreScopes(db,{...profile,uid,academyId,scopes:profile?.scopes||[]},{live:profile});
     // readCoreScopes already keeps only active memberships of 'main' (the only core academy), so this pass is for the other paths.
     if(!coreMode&&!profile?.notionTeacherPageId&&teachingScopes.length){
         const checked=await Promise.all(teachingScopes.map(async(s:any)=>{const m=(await db.collection('academyStudentMemberships').doc(s.studentKey).get()).data();return m&&!m.disabled&&m.academyId===academyId?s:null;}));
@@ -53,7 +57,7 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     }
     let scopes = teachingScopes;
     if (principal) {
-        const members = await db.collection('academyStudentMemberships').where('academyId', '==', academyId).get();
+        const members = await academyMembers!;
         scopes = members.docs.filter(d => !d.data().disabled).flatMap(d => subjects.map(subject => ({studentKey: d.id, subject})));
     }
     stage('scopes');

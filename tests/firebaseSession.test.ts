@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import config from '../firebase-applet-config.json' with {type:'json'};
-import {verifyFirebaseSession,lookupFirebaseSession} from '../api/_lib/firebaseSession.js';
+import {verifyFirebaseSession,lookupFirebaseSession,forgetFirebaseSessions} from '../api/_lib/firebaseSession.js';
 import {teacherActor} from '../api/_lib/teacherWorkspaceAuth.js';
 const decoded:any={uid:'user',sub:'user',auth_time:100,aud:config.projectId,iss:`https://securetoken.google.com/${config.projectId}`};
 const response=(body:any,status=200)=>async()=>new Response(JSON.stringify(body),{status});
@@ -44,4 +44,27 @@ test('a known missing Admin permission is not retried on every request, while ea
  await verifyFirebaseSession(auth,'first',lookup);await verifyFirebaseSession(auth,'second',lookup);
  assert.deepEqual(checks,[true,false,false],'the failing Admin attempt happens once, then only signature checks');assert.equal(lookups,2,'the account is looked up on every request');
  disabled=true;await assert.rejects(verifyFirebaseSession(auth,'third',lookup),/user-disabled/);
+});
+test('a passed check is remembered up to 60 seconds, never past the token expiry, and forgotten when the account is removed',async()=>{
+ const clock=Date.now;let now=1_000_000_000_000;Date.now=()=>now;
+ try{
+  let count=0;const auth:any={verifyIdToken:async()=>{count++;return {...decoded,uid:'kept',exp:Math.floor(now/1000)+3600};}};
+  await verifyFirebaseSession(auth,'kept-token');await new Promise(r=>setImmediate(r));
+  await verifyFirebaseSession(auth,'kept-token');assert.equal(count,1,'remembered within a minute');
+  now+=61_000;await verifyFirebaseSession(auth,'kept-token');assert.equal(count,2,'checked again after a minute');
+  await new Promise(r=>setImmediate(r));forgetFirebaseSessions('kept');await verifyFirebaseSession(auth,'kept-token');assert.equal(count,3,'forgotten on removal');
+  let soon=0;const expiring:any={verifyIdToken:async()=>{soon++;return {...decoded,uid:'soon',exp:Math.floor(now/1000)+10};}};
+  await verifyFirebaseSession(expiring,'soon-token');await new Promise(r=>setImmediate(r));now+=11_000;await verifyFirebaseSession(expiring,'soon-token');assert.equal(soon,2,'never past the token expiry');
+  const other:any={verifyIdToken:async()=>{count++;return {...decoded,uid:'kept',exp:Math.floor(now/1000)+3600};}};
+  await verifyFirebaseSession(other,'kept-token');assert.equal(count,4,'remembered per Firebase instance only');
+ }finally{Date.now=clock;}
+});
+test('a check that started before forget neither refills the memory nor serves requests after it',async()=>{
+ const slowAuth=()=>{let count=0;const releases:any[]=[];return {get count(){return count;},release:()=>releases.shift()(),auth:{verifyIdToken:()=>{count++;return new Promise(r=>releases.push(()=>r({...decoded,uid:'late',exp:Math.floor(Date.now()/1000)+3600})));}} as any};};
+ // delayed check started -> forget -> check completes -> the next request is checked again
+ let s=slowAuth();const late=verifyFirebaseSession(s.auth,'late-token');forgetFirebaseSessions('late');s.release();await late;await new Promise(r=>setImmediate(r));
+ const next=verifyFirebaseSession(s.auth,'late-token');assert.equal(s.count,2,'the late result was not remembered');s.release();await next;
+ // a request made after forget does not join the check started before it
+ s=slowAuth();const before=verifyFirebaseSession(s.auth,'join-token');forgetFirebaseSessions('late');const after=verifyFirebaseSession(s.auth,'join-token');
+ assert.equal(s.count,2,'a new check is started');s.release();s.release();await Promise.all([before,after]);
 });

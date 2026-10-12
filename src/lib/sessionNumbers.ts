@@ -30,10 +30,25 @@ export function sessionHasIncrement(d:any,kind:SessionKind):boolean {
  const minutes=sessionMinutes(kind==='lesson'?d.start:d.selfStudyStart,kind==='lesson'?d.end:d.selfStudyEnd);
  return enabled&&!absent(d)&&minutes!==null&&(sessionIncrement(kind,minutes)||0)>0;
 }
+/** The record the next counter builds on: the latest earlier attended record with a counter. An absent record
+ *  (결석·보강 결석, normally +0) counts too when the teacher raised its counter by hand, but only within one lesson's
+ *  worth above the counter before it (e.g. 2 -> 3 for an 80-minute lesson); any other number on an absent record
+ *  (a typo or an old imported value) is ignored, as before. With sameMonth the walk restarts at 0 each month. */
 function latestSessionRecord(records:readonly any[],input:any,kind:SessionKind,sameMonth:boolean):any {
- return records.filter(r=>!r.archived&&!r.deleteRequested&&r.stage!=='new').map(r=>({... (r.data??r),_updatedAt:r.updatedAt??r._updatedAt??0,_id:r.id??r._id??''}))
- .filter(d=>d.studentKey===input.studentKey&&d.subject===input.subject&&(d.date<input.date||d.date===input.date&&(kind==='lesson'?d.start:d.selfStudyStart)<(kind==='lesson'?input.start:input.selfStudyStart))&&(!sameMonth||d.date.slice(0,7)===input.date.slice(0,7))&&sessionHasIncrement(d,kind)&&numberTenths(kind==='lesson'?d.round:d.selfStudyRound)!==null)
- .sort((a,b)=>b.date.localeCompare(a.date)||(kind==='lesson'?b.start:b.selfStudyStart).localeCompare(kind==='lesson'?a.start:a.selfStudyStart)||Number(b._updatedAt)-Number(a._updatedAt)||String(b._id).localeCompare(String(a._id)))[0];
+ const startOf=(d:any)=>(kind==='lesson'?d.start:d.selfStudyStart)||'',roundOf=(d:any)=>numberTenths(kind==='lesson'?d.round:d.selfStudyRound);
+ const earlier=records.filter(r=>!r.archived&&!r.deleteRequested&&r.stage!=='new').map(r=>({... (r.data??r),_updatedAt:r.updatedAt??r._updatedAt??0,_id:r.id??r._id??''}))
+ .filter(d=>d.studentKey===input.studentKey&&d.subject===input.subject&&(d.date<input.date||d.date===input.date&&startOf(d)<startOf(input))&&(!sameMonth||d.date.slice(0,7)===input.date.slice(0,7))&&roundOf(d)!==null)
+ .sort((a,b)=>a.date.localeCompare(b.date)||startOf(a).localeCompare(startOf(b))||Number(a._updatedAt)-Number(b._updatedAt)||String(a._id).localeCompare(String(b._id)));
+ let base:any,month='';
+ for(const d of earlier){
+  if(sameMonth&&d.date.slice(0,7)!==month){month=d.date.slice(0,7);base=undefined;}
+  if(sessionHasIncrement(d,kind)){base=d;continue;}
+  const enabled=(kind==='lesson'?d.classSession:d.selfStudy)==='있음',minutes=sessionMinutes(startOf(d),kind==='lesson'?d.end:d.selfStudyEnd);
+  if(!absent(d)||!enabled||minutes===null)continue;
+  const before=base?roundOf(base)!:0,raised=roundOf(d)!;
+  if(raised>before&&raised<=before+(sessionIncrement(kind,minutes)||0))base=d;
+ }
+ return base;
 }
 /** Monthly counters only accumulate within the same year and month. */
 export function sessionBase(records:readonly any[],input:any,kind:SessionKind):any {

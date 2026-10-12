@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { forgetFirebaseSessions } from './firebaseSession.js';
 import { hashStudentKey } from './security.js';
 import { normalizeNotionPageId } from './notionPageId.js';
 // App accounts for the admin: everyone signs up as a student; the admin grants teacher access here.
@@ -97,6 +98,7 @@ export async function removeAppUser(db: any, actor: any, input: unknown, auth?: 
         tx.delete(userRef);
         if (evaluation) tx.delete(evaluationRef);
     });
+    forgetFirebaseSessions(v.uid);
     if (!v.blockSignIn || !auth) return { uid: v.uid, removed: true, signInBlocked: false };
     // The record is already gone; if blocking fails the admin is told and can retry from 탈퇴한 계정.
     try { await auth.updateUser(v.uid, { disabled: true }); await auth.revokeRefreshTokens(v.uid); }
@@ -120,7 +122,7 @@ export async function setRemovedSignIn(db: any, actor: any, input: unknown, auth
     const ref = db.collection('appUserRemovals').doc(v.id), row = (await ref.get()).data();
     if (!row) throw Error('APP_USER_NOT_FOUND');
     if (row.uid === process.env.ADMIN_UID || row.uid === actor.uid) throw Error('FORBIDDEN');
-    try { await auth.updateUser(row.uid, { disabled: v.block }); if (v.block) await auth.revokeRefreshTokens(row.uid); }
+    try { await auth.updateUser(row.uid, { disabled: v.block }); if (v.block) { await auth.revokeRefreshTokens(row.uid); forgetFirebaseSessions(row.uid); } }
     catch (e: any) { if (String(e?.code) === 'auth/user-not-found') throw Error('APP_USER_NOT_FOUND'); throw Error('APP_USER_SIGNIN_UPDATE_FAILED'); }
     await mergeRemoval(db, ref, { signInBlocked: v.block, signInChangedAt: Date.now(), signInChangedBy: actor.uid });
     return { id: v.id, signInBlocked: v.block };

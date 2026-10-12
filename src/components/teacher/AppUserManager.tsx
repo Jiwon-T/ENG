@@ -17,8 +17,8 @@ export default function AppUserManager({busy,request,act,refresh,autoLoad=false}
   void act(async()=>{const r=await request('set-user-name',{uid:u.uid,name});setRenaming(null);await load();setNotice(r.unchanged?'이름이 그대로입니다.':`앱 이름을 ‘${name}’(으)로 바꿨습니다.`);});};
  const [removed,setRemoved]=useState<any[]|null>(null);
  const loadRemoved=async()=>{const r=await request('read:removed-users');setRemoved(r.removed||[]);};
- const remove=(u:any)=>{if(!window.confirm(`${u.name||u.email} 계정을 탈퇴시킬까요?\n\n앱에 저장된 이 계정의 정보가 지워지고, 이 계정으로는 더 이상 로그인할 수 없습니다.${u.linkedStudent?'\n학생과 연결된 계정이라 연결도 함께 해제됩니다. 학생 기록·리포트·학부모 주소는 그대로 남습니다.':''} 실수였다면 아래 ‘탈퇴한 계정’에서 로그인을 다시 허용할 수 있습니다.`))return;
-  void act(async()=>{const r=await request('remove-app-user',{uid:u.uid,blockSignIn:true});await load();if(removed)await loadRemoved();setNotice(r.signInBlocked?`${u.name||u.email} 계정을 탈퇴시키고 로그인을 막았습니다.`:`${u.name||u.email} 계정을 탈퇴시켰지만 로그인 차단은 하지 못했습니다. ‘탈퇴한 계정’에서 다시 막아 주세요.`);});};
+ const remove=(u:any)=>{if(!window.confirm(`${u.name||u.email} 계정을 탈퇴시킬까요?\n\n앱에 저장된 이 계정의 정보가 지워집니다. 같은 계정으로 다시 로그인하면 새 학생 계정으로 시작합니다.${u.linkedStudent?'\n학생과 연결된 계정이라 연결도 함께 해제됩니다. 학생 기록·리포트·학부모 주소는 그대로 남습니다.':''} 다시 가입하지 못하게 하려면 아래 ‘탈퇴한 계정’에서 로그인을 막을 수 있습니다.`))return;
+  void act(async()=>{await request('remove-app-user',{uid:u.uid,blockSignIn:false});await load();if(removed)await loadRemoved();setNotice(`${u.name||u.email} 계정을 탈퇴시켰습니다. 다시 로그인하면 새 학생 계정으로 시작합니다.`);});};
  const signIn=(r:any,block:boolean)=>{if(!window.confirm(block?`${r.name||r.email} 계정의 로그인을 막을까요?`:`${r.name||r.email} 계정의 로그인을 다시 허용할까요? 다시 로그인하면 새 학생 계정으로 시작합니다.`))return;
   void act(async()=>{await request('removed-user-signin',{id:r.id,block});await loadRemoved();setNotice(block?'로그인을 막았습니다.':'로그인을 다시 허용했습니다.');});};
  return <section className="panel rv">

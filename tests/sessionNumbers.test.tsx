@@ -117,3 +117,13 @@ test('absence keeps the preceding counters without increment and automatic sessi
  const enabled=autoSessionNumbers({...cleared.data,classSession:'있음'},[row()],['classSession']);assert.equal(enabled.data.round,13);
 });
 
+test('an absent lesson raised by hand by one lesson counts as the base for the next one; other numbers are ignored',()=>{
+ const lesson=(date:string,patch:any={})=>({id:date,stage:'published',updatedAt:1,data:{...input,date,start:'16:40',end:'18:00',attendance:'출석',selfStudy:'없음',selfStudyStart:'',selfStudyEnd:'',selfStudyRound:null,...patch}});
+ const next={...input,date:'2026-10-13',start:'16:40',end:'18:00',attendance:'출석',selfStudy:'없음',selfStudyStart:'',selfStudyEnd:''};
+ const raised=[lesson('2026-10-06',{round:2}),lesson('2026-10-09',{attendance:'보강 결석',round:3})];
+ const auto=autoSessionNumbers(next,raised);
+ assert.equal(auto.data.round,4,'2 -> absent raised to 3 by hand -> next lesson 4');assert.match(auto.hints.round,/직전 3회차\(10\/09\)/);
+ assert.equal(nextSessionNumbers([lesson('2026-10-06',{round:2}),lesson('2026-10-09',{attendance:'결석',round:2})],next).lesson,3,'an absent lesson left at +0 changes nothing');
+ assert.equal(nextSessionNumbers([lesson('2026-10-06',{round:2}),lesson('2026-10-09',{attendance:'보강 결석',round:9})],next).lesson,3,'a number beyond one lesson is ignored');
+ assert.equal(nextSessionNumbers([lesson('2026-09-29',{round:8}),lesson('2026-10-02',{attendance:'결석',round:1})],{...next,date:'2026-10-06'}).lesson,2,'first lesson of the month raised to 1 counts');
+});

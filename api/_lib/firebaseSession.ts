@@ -1,5 +1,6 @@
 import firebaseConfig from '../../firebase-applet-config.json' with {type:'json'};
 import type {Auth,DecodedIdToken} from 'firebase-admin/auth';
+import {createHash} from 'node:crypto';
 
 const authFailure=(code:string)=>Object.assign(new Error(code),{code});
 export function accountLookupPermissionFailure(error:any){
@@ -45,13 +46,36 @@ async function checkFirebaseSession(auth:Pick<Auth,'verifyIdToken'>,token:string
  await lookup(token,decoded);
  return decoded;
 }
-// Only simultaneous requests share verification; account state is never TTL cached.
+// Simultaneous requests share verification. A passed check (signature, expiry, disabled/revoked account) is then
+// remembered for up to 60 seconds on this server instance, never past the token's own expiry, so moving between
+// screens does not ask Google again each time. Trade-off (approved): an account disabled elsewhere can keep an open
+// screen for up to a minute; removing or blocking an account here forgets it at once. Roles and workspace access are
+// still read on every request by the callers.
+const SESSION_MEMORY_MS=60_000,SESSION_MEMORY_MAX=500;
 const pendingSessions=new WeakMap<object,Map<string,Promise<DecodedIdToken>>>();
+const recentSessions=new Map<string,{auth:object;decoded:DecodedIdToken;until:number}>();
+const tokenKey=(token:string)=>createHash('sha256').update(token).digest('hex');
+// Bumped by every forget: a check that started before it may not refill the memory, and requests after it never join
+// a check started before it (the account is unknown until the token is decoded, so this applies to all accounts).
+let forgetGeneration=0;
+/** Forget remembered checks for this account (it was removed or its sign-in was blocked). */
+export function forgetFirebaseSessions(uid:string){forgetGeneration++;for(const [key,row] of recentSessions)if(row.decoded.uid===uid)recentSessions.delete(key);}
 export function verifyFirebaseSession(auth:Pick<Auth,'verifyIdToken'>,token:string,lookup=lookupFirebaseSession){
  if(lookup!==lookupFirebaseSession)return checkFirebaseSession(auth,token,lookup);
+ const key=tokenKey(token),now=Date.now(),known=recentSessions.get(key);
+ if(known&&known.auth===auth&&known.until>now)return Promise.resolve(known.decoded);
+ if(known)recentSessions.delete(key);
+ const generation=forgetGeneration,pendingKey=generation+':'+token;
  let pending=pendingSessions.get(auth);if(!pending){pending=new Map();pendingSessions.set(auth,pending);}
- const existing=pending.get(token);if(existing)return existing;
- const request=checkFirebaseSession(auth,token,lookup);pending.set(token,request);
- const cleanup=()=>{if(pending!.get(token)===request)pending!.delete(token);};request.then(cleanup,cleanup);
+ const existing=pending.get(pendingKey);if(existing)return existing;
+ const request=checkFirebaseSession(auth,token,lookup);pending.set(pendingKey,request);
+ const cleanup=()=>{if(pending!.get(pendingKey)===request)pending!.delete(pendingKey);};request.then(cleanup,cleanup);
+ request.then(decoded=>{
+  if(generation!==forgetGeneration)return;
+  const expires=Number(decoded?.exp)*1000;if(!Number.isFinite(expires))return;
+  const until=Math.min(Date.now()+SESSION_MEMORY_MS,expires);if(until<=Date.now())return;
+  if(recentSessions.size>=SESSION_MEMORY_MAX)recentSessions.delete(recentSessions.keys().next().value!);
+  recentSessions.set(key,{auth,decoded,until});
+ },()=>{});
  return request;
 }

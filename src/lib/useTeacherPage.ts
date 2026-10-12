@@ -15,7 +15,7 @@ export function useTeacherPage(uid:string,action:string,filters:Record<string,st
         try{
             let records:any[]=[];
             await loadTeacherSection<any>({
-                fast:!cached&&!force?()=>current.request('read:'+action+'-fast',current.filters):undefined,
+                // One request per load: a separate quick first request doubled the sign-in checks and often woke a second server.
                 fresh:()=>current.request('read:'+action,{...current.filters,force:force?'1':undefined}),
                 apply:(value,fresh)=>{if(sequence!==version.current)return;setResult(value);if(fresh){records=value.records;teacherCacheRead(current.uid,current.key,value,generation);}},
             });
