@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { templateFirestore } from './helpers/templateFirestore.js';
 import { DIRECTORY_ROWS, directorySourceKey, directoryRowKey } from '../api/_lib/academyDirectorySource.js';
-import { readTuitionMonth, saveTuitionMonth, tuitionCharge } from '../api/_lib/tuitionMonth.js';
+import { readTuitionMonth, saveTuitionMonth, tuitionCharge, taughtSessions } from '../api/_lib/tuitionMonth.js';
 
 const A = '11111111-1111-4111-8111-111111111111', B = '22222222-2222-4222-8222-222222222222', C = '33333333-3333-4333-8333-333333333333';
 const admin = { uid: 'admin', admin: true, principal: false, academyId: 'main', scopes: [] };
@@ -16,7 +16,8 @@ function seed() {
     enrol(A, ['영어']); enrol(B, ['영어']); enrol(C, ['영어', '수학']);
     put(`studentTuition/${A}`, { academyId: 'main', studentKey: A, subjects: { '영어': 320000 } });
     put('teacherClasses/k1', { academyId: 'main', name: '중2 월목', subject: '영어', status: '진행 중', students: [A], slots: [{ weekday: 1, start: '18:00', end: '19:20' }, { weekday: 4, start: '18:00', end: '19:20' }] });
-    let n = 0; const lesson = (key: string, date: string, extra: any = {}) => put(`teacherLessonDrafts/l${n++}`, { academyId: 'main', stage: 'published', archived: false, ...extra.top, data: { studentKey: key, subject: '영어', date, classSession: '있음', round: n, ...extra.data } });
+    // 회차 run per student within the month, as the lesson form fills them (one 80-minute lesson = +1).
+    let n = 0; const rounds: Record<string, number> = {}; const lesson = (key: string, date: string, extra: any = {}) => put(`teacherLessonDrafts/l${n++}`, { academyId: 'main', stage: 'published', archived: false, ...extra.top, data: { studentKey: key, subject: '영어', date, classSession: '있음', round: rounds[key + date.slice(0, 7)] = (rounds[key + date.slice(0, 7)] || 0) + 1, ...extra.data } });
     for (const d of ['01', '05', '08', '12', '15', '19']) lesson(A, `2026-10-${d}`);
     lesson(A, '2026-10-16', { data: { classSession: '없음' } }); lesson(A, '2026-10-17', { top: { archived: true } }); lesson(A, '2026-09-30');
     lesson(B, '2026-10-03'); lesson(B, '2026-10-10');
@@ -106,8 +107,8 @@ test('tuition month: after confirming, a lesson edit that moves a bill is flagge
     await saveTuitionMonth(f.db, admin, { month: '2026-10', revision: 0, rows: {}, confirm: true }, NOW);
     let r = await readTuitionMonth(f.db, admin, '2026-10', NOW);
     assert.equal(r.changedSinceConfirm, 0);
-    // One of B's two lessons is deleted after confirmation.
-    const [path, row] = [...f.rows].find(([p, v]) => p.startsWith('teacherLessonDrafts/') && v.data.studentKey === B)!;
+    // B's latest lesson (회차 2) is deleted after confirmation, so the month's 회차 drops to 1.
+    const [path, row] = [...f.rows].filter(([p, v]) => p.startsWith('teacherLessonDrafts/') && v.data.studentKey === B).sort((x, y) => y[1].data.round - x[1].data.round)[0]!;
     f.rows.set(path, { ...row, archived: true });
     r = await readTuitionMonth(f.db, admin, '2026-10', NOW);
     const b = r.rows.find((x: any) => x.studentKey === B);
@@ -119,4 +120,15 @@ test('tuition month: after confirming, a lesson edit that moves a bill is flagge
     assert.equal(r.changedSinceConfirm, 1);
     await saveTuitionMonth(f.db, admin, { month: '2026-10', revision: r.revision, rows: {}, confirm: true }, NOW);
     assert.equal((await readTuitionMonth(f.db, admin, '2026-10', NOW)).changedSinceConfirm, 0);
+});
+test('sessions taught use the latest 회차 of the month rounded down from 2026-10; no 회차 or earlier months count 일지', async () => {
+    assert.equal(taughtSessions('2026-10', { count: 2, round: 7.1 }), 7, '2 logs this month but 회차 7.1 (earlier lessons kept elsewhere)');
+    assert.equal(taughtSessions('2026-10', { count: 2, round: 7.9 }), 7, 'rounded down');
+    assert.equal(taughtSessions('2026-10', { count: 3, round: 3 }), 3);
+    assert.equal(taughtSessions('2026-10', { count: 2, round: null }), 2, 'no 회차: count the logs');
+    assert.equal(taughtSessions('2026-09', { count: 2, round: 7.1 }), 2, 'earlier months keep the confirmed basis');
+    const f = seed();
+    f.rows.set('teacherLessonDrafts/long1', { academyId: 'main', stage: 'published', archived: false, data: { studentKey: B, subject: '영어', date: '2026-10-14', classSession: '있음', round: 4.6 } });
+    const b = (await readTuitionMonth(f.db, admin, '2026-10', NOW)).rows.find((r: any) => r.studentKey === B && r.subject === '영어');
+    assert.deepEqual([b.written, b.lastRound, b.taught, b.planned, b.sessions, b.charged], [3, 4.6, 4, 0, 4, 4], 'three logs, 회차 4.6 → 4 sessions charged');
 });

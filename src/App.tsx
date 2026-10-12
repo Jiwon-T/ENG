@@ -8,6 +8,7 @@ import { doc, getDoc, onSnapshot, collection, query, where, setDoc } from 'fireb
 import { Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, ArrowRight, AlertTriangle, RefreshCw, Menu, History, BarChart3, Users, Download, Share, Smartphone, X as CloseIcon, Info, Plus, Dog, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { RecentLearning } from './lib/recentLearning';
+import { AppChrome } from './lib/appChrome';
 import type { AnalysisResult, QuestionType } from './lib/gemini';
 
 function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
@@ -412,7 +413,8 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen pb-20 bg-[#fafafa]">
-      {/* Global Navigation Bar */}
+      {/* Global Navigation Bar (the teacher room shows these controls in its own header row) */}
+      {currentView !== 'teacher-room' && (
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex justify-between items-center no-print">
         <div className="flex items-center gap-2 cursor-pointer group" onClick={goHome}>
           <div className="w-8 h-8 bg-pastel-pink-100 rounded-lg flex items-center justify-center text-sm group-hover:bg-pastel-pink-200 transition-colors">
@@ -449,6 +451,7 @@ export default function App() {
           </button>
         </div>
       </nav>
+      )}
 
       {/* Side Menu Overlay */}
       <AnimatePresence>
@@ -859,7 +862,9 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
             >
-              <TeacherRoom onNavigate={setCurrentView} />
+              <AppChrome.Provider value={{ home: goHome, openMenu: () => setIsMenuOpen(true), name: profile?.alias || profile?.name || '', photo: profile?.photoURL, alert: hasNewAssignment }}>
+                <TeacherRoom onNavigate={setCurrentView} />
+              </AppChrome.Provider>
             </motion.div>
           ) : currentView === 'vocab' || currentView === 'grammar' || currentView === 'exam' ? (
             <motion.div

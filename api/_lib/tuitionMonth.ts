@@ -17,6 +17,11 @@ function daysOf(m: string) { const [y, mo] = m.split('-').map(Number), n = new D
 const weekday = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay();
 const plainTitle = (p: any) => { const t = p?.['학생'] || p?.['학생 이름'] || p?.['이름 및 일지'] || Object.values(p || {}).find((v: any) => v?.type === 'title'); return (t?.title || []).map((v: any) => v.plain_text ?? v.text?.content ?? '').join(''); };
 export const rowKey = (studentKey: string, subject: string) => `${studentKey}|${subject}`;
+// From this month on, sessions already taught = the month's latest 회차 (it grows by lesson length and resets each
+// month), rounded down (decided 2026-10-12); a subject whose lessons carry no 회차 falls back to the number of 일지.
+// Earlier months keep counting 일지 so bills already confirmed are not reported as changed.
+export const ROUND_BASIS_FROM = '2026-10';
+export const taughtSessions = (m: string, w: { count: number; round: number | null }) => m >= ROUND_BASIS_FROM && typeof w.round === 'number' ? Math.floor(w.round + 1e-9) : w.count;
 
 export async function readTuitionMonth(db: any, actor: any, monthInput: unknown, now = Date.now()) {
     allowed(actor);
@@ -65,10 +70,11 @@ export async function readTuitionMonth(db: any, actor: any, monthInput: unknown,
         const own = bySubject.get(key)?.[subject], fallback = subjectCount === 1 ? person.tuition : null;
         const edit = saved.rows?.[k] || {};
         const price = typeof edit.tuition === 'number' ? edit.tuition : typeof own === 'number' ? own : fallback;
-        const sessions = typeof edit.sessions === 'number' ? edit.sessions : w.count + planned, free = typeof edit.free === 'number' ? edit.free : 0;
+        const taught = taughtSessions(m, w);
+        const sessions = typeof edit.sessions === 'number' ? edit.sessions : taught + planned, free = typeof edit.free === 'number' ? edit.free : 0;
         if (e?.status === '중단' && !w.count && !planned && !saved.rows?.[k]) continue; // stopped before teaching anything this month
         const status = e?.status || '기록만', left = e?.status === '중단' || !e || person.archived || /퇴원|탈퇴|중단/.test(person.enrollment);
-        rows.push({ key: k, studentKey: key, name: person.name, subject, status, left, enrollment: person.enrollment, endDate: e?.endDate || null, classes: mine.map((c: any) => c.name).filter(Boolean), written: w.count, writers: w.writers, lastRound: w.round, planned, expected: w.count + planned, sessions, free, tuition: price, tuitionSource: typeof edit.tuition === 'number' ? 'edited' : typeof own === 'number' ? 'subject' : fallback != null ? 'student' : 'missing', note: String(edit.note || ''), edited: Boolean(edit.sessions != null || edit.free != null || edit.tuition != null), ...tuitionCharge(price, sessions, free) });
+        rows.push({ key: k, studentKey: key, name: person.name, subject, status, left, enrollment: person.enrollment, endDate: e?.endDate || null, classes: mine.map((c: any) => c.name).filter(Boolean), written: w.count, writers: w.writers, lastRound: w.round, taught, planned, expected: taught + planned, sessions, free, tuition: price, tuitionSource: typeof edit.tuition === 'number' ? 'edited' : typeof own === 'number' ? 'subject' : fallback != null ? 'student' : 'missing', note: String(edit.note || ''), edited: Boolean(edit.sessions != null || edit.free != null || edit.tuition != null), ...tuitionCharge(price, sessions, free) });
     }
     rows.sort((a, b) => a.name.localeCompare(b.name, 'ko') || a.subject.localeCompare(b.subject, 'ko'));
     // After the month is confirmed, flag rows whose bill no longer matches what was confirmed (a lesson edited, added or removed).

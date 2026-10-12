@@ -1766,10 +1766,10 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
             </div>
           </div>
 
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+          <div className="wb-detail bg-white p-5 rounded-[1.75rem] border border-slate-100 shadow-sm">
+            <div className="wb-detail-head">
+              <div className="wb-detail-title">
+                <h2 className="text-xl font-black text-slate-900 flex items-center gap-2 min-w-0">
                   <BookOpen className={
                     selectedWordbook.category === 'exam' ? 'text-amber-500' : selectedWordbook.category === 'grammar' ? 'text-purple-600' : 'text-pastel-pink-500'
                   } />
@@ -1783,44 +1783,45 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                       setEditWbCategoryValue(selectedWordbook.category || (selectedWordbook.type === 'irregular' ? 'grammar' : 'word'));
                       setEditWbTypeValue(selectedWordbook.type === 'sentence-order' ? 'sentence-order' : 'standard');
                     }}
-                    className="p-2 text-slate-300 hover:text-pastel-pink-500 transition-colors"
+                    className="p-1.5 text-slate-300 hover:text-pastel-pink-500 transition-colors"
                     title="단어장 설정 및 카테고리 수정"
                   >
                     <Edit3 size={18} />
                   </button>
                 </h2>
-                <div 
-                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold hover:bg-white transition-all"
+                <label 
+                  className="wb-tab-pill"
                   title="소속 탭(카테고리) 변경"
                 >
-                  <span className="text-[10px] text-slate-400">소속 탭:</span>
+                  <span>소속 탭</span>
                   <select
                     value={selectedWordbook.category || (selectedWordbook.type === 'irregular' ? 'grammar' : 'word')}
                     onChange={(e) => {
                       const newCat = e.target.value as 'word' | 'grammar' | 'exam';
                       handleMoveWordbookCategory(selectedWordbook.id, newCat, selectedWordbook.title);
                     }}
-                    className="font-bold text-xs text-slate-700 bg-transparent outline-none cursor-pointer"
+                    aria-label="소속 탭"
+                    className="wb-inline-select"
                   >
                     <option value="word">📘 단어장</option>
                     <option value="grammar">🎓 문법 세트</option>
                     <option value="exam">🎯 시험기간</option>
                   </select>
-                </div>
+                </label>
               </div>
               <button disabled={wordsLoading || Boolean(wordLoadError)}
                 onClick={() => setDeleteTarget({ id: selectedWordbook.id, title: selectedWordbook.title, type: 'wordbook' })}
-                className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl text-sm font-bold flex items-center gap-2 transition-all"
+                className="wb-delete"
               >
-                <Trash2 size={16} />
+                <Trash2 size={14} />
                 단어장 전체 삭제
               </button>
             </div>
 
             {/* DAY / Passage Filter Tabs & Batch Selection Bar */}
-            <div className="mb-6 space-y-3 pb-6 border-b border-slate-100">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-1.5 overflow-x-auto py-1 max-w-full custom-scrollbar">
+            <div className="wb-days-block">
+              <div className="wb-days-row">
+                <div className="wb-days custom-scrollbar">
                   <span className="text-xs font-black text-slate-400 mr-1 flex items-center gap-1">
                     {selectedWordbook.type === 'sentence-order' ? '🧩 지문 선택:' : <><Calendar size={14} /> DAY 선택:</>}
                   </span>
@@ -1852,7 +1853,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   })}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="wb-days-tools">
                   {selectedWordbook.type === 'sentence-order' && typeof activeDayFilter === 'number' && (
                     <button disabled={wordsLoading || Boolean(wordLoadError)}
                       onClick={() => handleDeletePassage(activeDayFilter)}
@@ -1934,7 +1935,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 items={displayedWords.map(w => w.id)}
                 strategy={rectSortingStrategy}
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="wb-word-grid">
                   {!wordsLoading && !wordLoadError && displayedWords.map((word, index) => (
                     <SortableWordCard
                       key={word.id}

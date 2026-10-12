@@ -58,3 +58,21 @@ export async function processLessonRows<R extends {
     }
     return { succeeded, failed };
 }
+const openable=(r:any,ownerUid:string)=>Boolean(r&&r.ownerUid===ownerUid&&!r.archived&&!r.deleteRequested&&r.stage!=='new'&&r.data);
+/** The saved lesson a today-list card is matched to, by its id: the loaded copy, otherwise read by id (a lesson outside
+ *  the first page). The id always wins over a lesson at the same time. Null when it is gone or not the teacher's. */
+export async function resolveSavedLesson(records:readonly any[],ownerUid:string,savedId:string,read:(id:string)=>Promise<any[]>){
+ const loaded=records.find(r=>r.id===savedId);
+ if(loaded)return openable(loaded,ownerUid)?loaded:null;
+ const found=(await read(savedId)).find(r=>r?.id===savedId);
+ return openable(found,ownerUid)?found:null;
+}
+/** What a card or a student choice opens. With the card's lesson id: that lesson only (loaded, or read by id and then
+ *  added to the loaded list); 'failed' when the read fails, so the caller stops with a retry instead of starting a new
+ *  lesson; 'new' only when that lesson is gone. Without an id: the loaded lesson at the same time, else 'new'. */
+export async function openTodayLesson(records:readonly any[],input:any,ownerUid:string,matchEnd:boolean,savedId:string|undefined,read:(id:string)=>Promise<any[]>):Promise<{kind:'saved';record:any;add:boolean}|{kind:'new'}|{kind:'failed'}>{
+ if(!savedId){const loaded=matchingSavedLesson(records,input,ownerUid,matchEnd);return loaded?{kind:'saved',record:loaded,add:false}:{kind:'new'};}
+ let found:any;try{found=await resolveSavedLesson(records,ownerUid,savedId,read);}catch{return {kind:'failed'};}
+ if(!found)return {kind:'new'};
+ return {kind:'saved',record:found,add:!records.some(r=>r.id===found.id)};
+}

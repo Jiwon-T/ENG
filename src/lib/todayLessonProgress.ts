@@ -3,10 +3,30 @@ export type TodayLessonState='미작성'|'저장됨'|'반영 완료';
 const timestamp=(value:any)=>typeof value==='number'?value:typeof value?.toMillis==='function'?value.toMillis():typeof value==='string'?Date.parse(value)||0:0;
 /** The time a lesson record is anchored on: its class start, or its self-study start on a no-class (테스트·자습) day. */
 export const lessonStartOf=(d:any)=>d?.classSession==='없음'?d?.selfStudyStart||'':d?.start||'';
-/** Never fetch: the supplied records are only those already available in memory. */
-export function todayLessonState(event:TodayLesson,studentKey:string,records:readonly any[]):TodayLessonState{
- const matches=records.filter(record=>!record.archived&&!record.deleteRequested&&record.stage!=='new'&&record.data?.studentKey===studentKey&&record.data.date===event.date&&record.data.subject===event.subject&&lessonStartOf(record.data)===event.start);
- const record=matches.sort((a,b)=>timestamp(b.updatedAt)-timestamp(a.updatedAt))[0];
+const sameDay=(record:any,event:TodayLesson,studentKey:string)=>!record.archived&&!record.deleteRequested&&record.stage!=='new'&&record.data?.studentKey===studentKey&&record.data.date===event.date&&record.data.subject===event.subject;
+const newest=(list:any[])=>list.sort((a,b)=>timestamp(b.updatedAt)-timestamp(a.updatedAt))[0];
+const minutes=(t:string)=>/^\d{2}:\d{2}$/.test(t||'')?Number(t.slice(0,2))*60+Number(t.slice(3)):NaN;
+/** The saved lesson for this student in this event. Same start time first. With the day's events, a lesson whose
+ *  time was changed just for today (no event of that student+subject starts then) still belongs to the event it
+ *  came from: such lessons go to that student's events of the day that have no exact match, nearest start first,
+ *  one lesson per event. Never fetch: the supplied records are only those already available in memory. */
+export function todayLessonRecord(event:TodayLesson,studentKey:string,records:readonly any[],events?:readonly TodayLesson[]):any{
+ const exact=newest(records.filter(r=>sameDay(r,event,studentKey)&&lessonStartOf(r.data)===event.start));
+ if(exact||!events)return exact;
+ const siblings=events.filter(e=>e.date===event.date&&e.subject===event.subject&&e.students.includes(studentKey));
+ const starts=new Set(siblings.map(e=>e.start));
+ const moved=records.filter(r=>sameDay(r,event,studentKey)&&!starts.has(lessonStartOf(r.data)));
+ if(!moved.length)return undefined;
+ const open=siblings.filter(e=>!records.some(r=>sameDay(r,e,studentKey)&&lessonStartOf(r.data)===e.start));
+ // Newest copy per lesson id, then nearest-start pairing between moved lessons and events without a lesson.
+ const byId=new Map<any,any>();for(const r of moved){const k=r.id??r;const kept=byId.get(k);if(!kept||timestamp(r.updatedAt)>timestamp(kept.updatedAt))byId.set(k,r);}
+ const pairs=[...byId.values()].flatMap(r=>open.map(e=>({r,e,d:Math.abs(minutes(lessonStartOf(r.data))-minutes(e.start))||0}))).sort((a,b)=>a.d-b.d);
+ const usedR=new Set<any>(),usedE=new Set<TodayLesson>();
+ for(const p of pairs){if(usedR.has(p.r)||usedE.has(p.e))continue;usedR.add(p.r);usedE.add(p.e);if(p.e===event)return p.r;}
+ return undefined;
+}
+export function todayLessonState(event:TodayLesson,studentKey:string,records:readonly any[],events?:readonly TodayLesson[]):TodayLessonState{
+ const record=todayLessonRecord(event,studentKey,records,events);
  return !record?'미작성':record.stage==='published'?'반영 완료':'저장됨';
 }
 const revisionOf=(r:any)=>typeof r?.revision==='number'&&Number.isFinite(r.revision)?r.revision:-1;
@@ -23,7 +43,7 @@ export function todayRecords(server:readonly any[]|undefined,memory:readonly any
  return [...byId.values()];
 }
 export function todayLessonProgress(events:readonly TodayLesson[],records:readonly any[]){
- const states=events.flatMap(event=>event.students.map(key=>todayLessonState(event,key,records)));
+ const states=events.flatMap(event=>event.students.map(key=>todayLessonState(event,key,records,events)));
  return {total:states.length,published:states.filter(state=>state==='반영 완료').length,saved:states.filter(state=>state==='저장됨').length,empty:states.filter(state=>state==='미작성').length};
 }
 export const todayStateTone=(state:TodayLessonState)=>state==='반영 완료'?'green':state==='저장됨'?'pink':'grey';
@@ -33,8 +53,9 @@ export function todayProgressRatios(progress:{total:number;published:number;save
 }
 export function nextUnwrittenLesson(events:readonly TodayLesson[],records:readonly any[],selection?:{studentKey?:string;subject?:string;date?:string;start?:string;classSession?:string;selfStudyStart?:string}){
  const ordered=[...events].sort((a,b)=>a.start.localeCompare(b.start)).flatMap(event=>event.students.map(key=>({event,key})));
- const current=ordered.findIndex(({event,key})=>selection?.date===event.date&&selection.subject===event.subject&&lessonStartOf(selection)===event.start&&(!selection.studentKey||selection.studentKey===key));
+ // The selected lesson may carry a time changed just for today: it is the event its saved lesson is matched to.
+ const current=ordered.findIndex(({event,key})=>selection?.date===event.date&&selection.subject===event.subject&&(!selection.studentKey||selection.studentKey===key)&&(lessonStartOf(selection)===event.start||lessonStartOf(todayLessonRecord(event,key,records,events)?.data)===lessonStartOf(selection)));
  // Search after the selected lesson, then wrap once; never select the same lesson.
  const candidates=current<0?ordered:[...ordered.slice(current+1),...ordered.slice(0,current)];
- return candidates.find(({event,key})=>todayLessonState(event,key,records)==='미작성');
+ return candidates.find(({event,key})=>todayLessonState(event,key,records,events)==='미작성');
 }

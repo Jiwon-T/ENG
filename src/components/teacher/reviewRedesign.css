@@ -880,3 +880,67 @@
 .teacher-workspace .adm-conflict p{margin:0}
 .teacher-workspace .adm-conflict div{display:flex;flex-wrap:wrap;gap:6px}
 .teacher-workspace .adm-conflict button{min-height:44px}
+/* 단어장 상세: one-line header, DAY strip with select-all on the same row, compact word cards */
+.teacher-workspace .wb-detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.teacher-workspace .wb-detail-title{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap}
+.teacher-workspace .wb-detail-title h2{margin:0}
+.teacher-workspace .wb-tab-pill{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 4px 0 10px;border:1px solid #e2e8f0;border-radius:999px;background:#f8fafc;white-space:nowrap;cursor:pointer;margin:0}
+.teacher-workspace .wb-tab-pill>span{font-size:11px;font-weight:700;color:#94a3b8}
+.teacher-workspace .wb-tab-pill:hover{background:#fff;border-color:#cbd5e1}
+.teacher-workspace .wb-inline-select,.teacher-workspace .wb-day-select{display:inline-block!important;width:auto!important;min-height:0!important;height:auto!important;margin:0!important;box-shadow:none!important;outline:none;cursor:pointer;font-weight:800}
+.teacher-workspace .wb-inline-select{padding:2px 22px 2px 6px!important;border:0!important;border-radius:999px!important;background-color:transparent!important;background-position:right 6px center!important;font-size:12px;color:#334155}
+.teacher-workspace .wb-day-select{padding:2px 22px 2px 8px!important;border:1px solid #c7d2fe!important;border-radius:8px!important;background-color:#eef2ff!important;background-position:right 6px center!important;font-size:12px;color:#4338ca}
+.teacher-workspace .wb-day-select:hover{background-color:#e0e7ff!important}
+.teacher-workspace .wb-delete{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:0 10px;border:0;border-radius:10px;background:none;font-size:12px;font-weight:700;color:#ef4444}
+.teacher-workspace .wb-delete:hover:not(:disabled){background:#fef2f2}
+.teacher-workspace .wb-days-block{display:grid;gap:8px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #f1f5f9}
+.teacher-workspace .wb-days-row{display:flex;align-items:center;gap:8px;min-width:0}
+.teacher-workspace .wb-days{display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0;overflow-x:auto;padding:2px 0 6px}
+.teacher-workspace .wb-days>span{flex:none;white-space:nowrap}.teacher-workspace .wb-days>button{flex:none;padding:4px 10px!important;border-radius:999px!important}
+.teacher-workspace .wb-days-tools{flex:none;display:flex;align-items:center;gap:6px}
+.teacher-workspace .wb-days-tools button{white-space:nowrap}
+.teacher-workspace .wb-word-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
+.teacher-workspace .wb-word-card .text-lg{font-size:16px;line-height:1.35}
+.teacher-workspace .wb-word-card .text-sm{font-size:13px}
+@media(max-width:640px){.teacher-workspace .wb-detail-head{align-items:flex-start}.teacher-workspace .wb-days-row{flex-wrap:wrap}.teacher-workspace .wb-days{flex-basis:100%}}
+/* Centered confirmation (askConfirm): mounted on body, so not scoped to .teacher-workspace */
+.confirm-modal{width:min(400px,calc(100vw - 32px));max-height:calc(100vh - 32px);margin:auto;padding:0;border:0;border-radius:22px;background:#fff;color:#1f2937;box-shadow:0 24px 60px rgba(43,35,38,.22);overflow:auto;font-family:inherit}
+.confirm-modal::backdrop{background:rgba(30,23,26,.38);backdrop-filter:blur(2px)}
+.confirm-modal[open]{animation:confirm-in .16s ease-out}
+.confirm-modal-body{display:grid;justify-items:center;gap:8px;padding:26px 24px 18px;text-align:center}
+.confirm-modal-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:16px;background:#fff1f3;color:#be185d}
+.confirm-modal h2{margin:4px 0 0;font-size:18px;font-weight:800;color:#1e293b}
+.confirm-modal p{margin:0;font-size:14px;line-height:1.55;color:#64748b}
+.confirm-modal ul{list-style:none;width:100%;margin:6px 0 0;padding:8px 10px;max-height:180px;overflow:auto;border-radius:14px;background:#f8fafc;display:grid;gap:4px;text-align:left}
+.confirm-modal li{font-size:13px;font-weight:600;color:#334155}
+.confirm-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 20px 20px}
+.confirm-modal-actions button{min-height:44px;border:0;border-radius:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit}
+.confirm-modal-cancel{background:#f1f5f9;color:#475569}
+.confirm-modal-cancel:hover{background:#e2e8f0}
+.confirm-modal-ok{background:#f472b6;color:#fff;box-shadow:0 6px 16px rgba(244,114,182,.35)}
+.confirm-modal-ok:hover{background:#ec4899}
+.confirm-modal-actions button:focus-visible{outline:2px solid #be185d;outline-offset:2px}
+@keyframes confirm-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.confirm-modal[open]{animation:none}}
+/* 오늘만 바뀐 수업 시간 */
+.teacher-workspace .today-lesson-time s{color:#94a3b8;font-weight:500}
+.teacher-workspace .today-moved{display:inline-block;margin-left:2px;padding:0 6px;border-radius:999px;background:#fef3c7;color:#b45309;font-size:11px;font-weight:800;white-space:nowrap}
+/* 1단계: one header row (home + teacher room menu + profile), compact lesson top row and 출결·평가 chips */
+.teacher-workspace .workspace-home{flex:none;display:grid;place-items:center;width:34px;height:34px;min-height:34px;padding:0;border:0;border-radius:11px;background:#fff1f3;font-size:16px;cursor:pointer}
+.teacher-workspace .workspace-home:hover{background:#fce7f3}
+.teacher-workspace .workspace-profile{position:relative;flex:none;display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:3px 10px 3px 4px;border:1px solid #f1f5f9;border-radius:999px;background:#fff;color:#94a3b8;cursor:pointer}
+.teacher-workspace .workspace-profile:hover{background:#f8fafc}
+.teacher-workspace .workspace-profile-face{display:grid;place-items:center;width:26px;height:26px;overflow:hidden;border-radius:9px;background:#fff1f3;font-size:14px}
+.teacher-workspace .workspace-profile-face img{width:100%;height:100%;object-fit:cover}
+.teacher-workspace .workspace-profile-name{font-size:12px;font-weight:700;color:#475569;white-space:nowrap}
+.teacher-workspace .workspace-profile-dot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border:2px solid #fff;border-radius:999px;background:#ef4444}
+@media(max-width:760px){.teacher-workspace .workspace-profile-name{display:none}.teacher-workspace .workspace-profile{padding-right:6px}}
+.teacher-workspace .lesson-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.teacher-workspace .lesson-title-row{display:flex;align-items:center;gap:8px}
+.teacher-workspace .lesson-title-row h2{margin:0}
+.teacher-workspace .lesson-title-row .lesson-new-button{min-height:30px;padding:0 10px;font-size:12px}
+@container lesson-input (min-width:520px){.teacher-workspace .lesson-area-basics .lesson-top-fields{grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)}}
+.teacher-workspace .lesson-area-basics .lesson-top-fields input,.teacher-workspace .lesson-area-basics .lesson-top-fields select{min-height:40px;height:40px}
+.teacher-workspace .lesson-area-basics .lesson-top-fields label{font-size:12px}
+.teacher-workspace .lesson-evaluation-fields{gap:6px}
+@media(min-width:641px){.teacher-workspace .lesson-evaluation-fields .lesson-option-chip{min-height:32px;min-width:32px;padding:4px 9px}}

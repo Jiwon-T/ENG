@@ -40,7 +40,7 @@ export default function TuitionCalculator({busy,request,act,autoLoad=false,onDir
     <tbody>{shown.map((r:any)=><tr key={r.key} className={r.changedSinceConfirm?'is-changed':r.dirty?'is-dirty':r.edited?'is-edited':''}>
      <th scope="row"><span className="tu-name">{r.name}</span>{r.classes.length>0&&<small>{r.classes.join(', ')}</small>}</th>
      <td>{r.subject}{r.left&&<small className="warn">{/퇴원|탈퇴/.test(r.enrollment||'')?r.enrollment:r.status==='기록만'?'수강 정보 없음':'중단'}{r.endDate?` · ${Number(r.endDate.slice(5,7))}/${Number(r.endDate.slice(8))}`:''}</small>}</td>
-     <td className="num">{r.written}{r.lastRound!=null&&<small>마지막 {r.lastRound}회</small>}</td>
+     <td className="num">{r.written}{r.lastRound!=null&&<small>마지막 {r.lastRound}회{typeof r.taught==='number'&&r.taught!==r.written?` · ${r.taught}회 반영`:''}</small>}</td>
      <td className="num">{r.planned}</td>
      <td><input className="tu-in" inputMode="numeric" aria-label={`${r.name} ${r.subject} 수업 횟수`} value={r.sessions} onChange={e=>edit(r.key,'sessions',e.target.value)}/>{r.sessions!==r.expected&&<small>예상 {r.expected}</small>}</td>
      <td><input className="tu-in" inputMode="numeric" aria-label={`${r.name} ${r.subject} 무료 보강`} value={r.free||''} placeholder="0" onChange={e=>edit(r.key,'free',e.target.value)}/></td>

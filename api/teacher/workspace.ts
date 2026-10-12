@@ -47,8 +47,8 @@ async function workspaceStudents(db:any,actor:any,force:boolean,saveSnapshot=fal
 function cachedEnrollmentDocs(db:any,actor:any,force:boolean){return teacherReadCache.get(teacherReadKey(actor,'enrollment-docs'),async()=>(await db.collection('studentEnrollments').get()).docs.map((d:any)=>d.data()),force);}
 /** Own lessons of one day, summary fields only (what 오늘 수업 progress compares: student, subject, start, stage). */
 async function readDayLessons(db:any,actor:any,day:string){
-    const snap=await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).where('data.date','==',day).select('stage','archived','deleteRequested','updatedAt','revision','data.studentKey','data.date','data.subject','data.start','data.classSession','data.selfStudyStart').get();
-    return snap.docs.map((d:any)=>{const r=d.data();return {id:d.id,stage:r.stage,archived:Boolean(r.archived),deleteRequested:Boolean(r.deleteRequested),updatedAt:r.updatedAt,revision:r.revision,data:{studentKey:r.data?.studentKey,date:r.data?.date,subject:r.data?.subject,start:r.data?.start,classSession:r.data?.classSession,selfStudyStart:r.data?.selfStudyStart}};});
+    const snap=await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).where('data.date','==',day).select('stage','archived','deleteRequested','updatedAt','revision','data.studentKey','data.date','data.subject','data.start','data.end','data.classSession','data.selfStudyStart','data.selfStudyEnd').get();
+    return snap.docs.map((d:any)=>{const r=d.data();return {id:d.id,stage:r.stage,archived:Boolean(r.archived),deleteRequested:Boolean(r.deleteRequested),updatedAt:r.updatedAt,revision:r.revision,data:{studentKey:r.data?.studentKey,date:r.data?.date,subject:r.data?.subject,start:r.data?.start,end:r.data?.end,classSession:r.data?.classSession,selfStudyStart:r.data?.selfStudyStart,selfStudyEnd:r.data?.selfStudyEnd}};});
 }
 async function reportReview(db:any,actor:any,studentKey:string,audience:'parent'|'student',values:any) {
     if(values.section==='online'){if(audience!=='student')throw Error('FORBIDDEN');return loadTeacherOnlineLearning(db,actor,studentKey,values.subject,values.cursor);}

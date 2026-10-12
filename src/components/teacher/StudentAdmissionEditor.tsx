@@ -10,7 +10,8 @@ import OptionalMark from './OptionalMark';
 type Value={admission:AdmissionInput;guardianName:string;guardianSalutation:string};
 const failure=(r:any)=>r.data?.error==='NOTION_EDIT_CONFLICT'?'다른 곳에서 먼저 저장했어요. 입력하신 내용은 그대로 두었어요.':`${r.data?.message||r.userMessage||'저장하지 못했습니다.'}${r.data?.diagnosticId?` (오류 ID: ${r.data.diagnosticId})`:''}`;
 
-/** 입학·상담 정보 (admin/principal): the answers given at registration, viewable and editable afterwards. */
+/** 입학·상담 정보 (admin/principal): the answers given at registration, viewable and editable afterwards.
+ *  보호자 이름·호칭 are not asked at counselling, so they have no field; their stored values are sent back unchanged. */
 export default function StudentAdmissionEditor({studentKey,onClose}:{studentKey:string;onClose:()=>void}){
  const [value,setValue]=useState<Value|null>(null),[editedAt,setEditedAt]=useState(''),[dirty,setDirty]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[loading,setLoading]=useState(true);
  const operation=useRef<string|null>(null),version=useRef(0);
@@ -43,10 +44,6 @@ export default function StudentAdmissionEditor({studentKey,onClose}:{studentKey:
     <div><button type="button" className="small-button" disabled={busy} onClick={()=>{setValue(conflict.data);setEditedAt(conflict.editedAt);setConflict(null);setDirty(false);setMessage('최신 내용을 불러왔어요.');}}>최신 내용 불러오기 (내 입력 버림)</button>
     <button type="button" className="primary-button" disabled={busy} onClick={()=>{if(!window.confirm('다른 곳에서 저장한 내용 위에 지금 입력한 내용을 저장할까요? 다른 사람이 바꾼 칸도 지금 화면의 값으로 바뀝니다.'))return;setEditedAt(conflict.editedAt);setConflict(null);setDirty(true);setMessage('최신 버전 위에 저장할 준비가 됐어요. 저장 버튼을 눌러 주세요.');}}>내 입력으로 저장</button></div></div>}
    {value&&<fieldset disabled={busy} className="adm-edit-form">
-    <section className="admission-section"><h3>보호자</h3><div className="adm-grid">
-     <label>보호자 이름<OptionalMark/><input maxLength={80} value={value.guardianName} onChange={e=>change({...value,guardianName:e.target.value})}/></label>
-     <label>보호자 호칭<OptionalMark/><input maxLength={80} placeholder="예: 어머님" value={value.guardianSalutation} onChange={e=>change({...value,guardianSalutation:e.target.value})}/></label>
-    </div></section>
     <section className="admission-section"><h3>입학 정보</h3><div className="adm-grid"><StudentAdmissionFields section="basic" value={value.admission} onChange={admission=>change({...value,admission})}/></div></section>
     <StudentAdmissionFields section="learning" value={value.admission} onChange={admission=>change({...value,admission})}/>
     <StudentAdmissionFields section="consent" value={value.admission} onChange={admission=>change({...value,admission})}/>

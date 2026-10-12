@@ -175,7 +175,7 @@ export function SortableWordCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-6 rounded-2xl border flex justify-between items-center gap-3 relative transition-all ${
+      className={`wb-word-card px-4 py-3 rounded-2xl border flex justify-between items-center gap-3 relative transition-all ${
         isSelected ? 'bg-indigo-50/40 border-indigo-200 shadow-sm' : 'bg-slate-50 border-slate-100 hover:border-slate-200'
       }`}
     >
@@ -203,7 +203,7 @@ export function SortableWordCard({
                 value={currentDay}
                 onChange={(e) => onDayChange(parseInt(e.target.value))}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black text-xs py-0.5 px-2 rounded-lg cursor-pointer transition-all border border-indigo-200 outline-none"
+                className="wb-day-select"
                 title={selectedWordbook.type === 'sentence-order' ? "지문 번호 변경" : "단어 소속 DAY 변경"}
               >
                 {!availableDays.includes(currentDay) && (
