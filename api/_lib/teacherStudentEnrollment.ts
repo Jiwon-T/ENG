@@ -8,11 +8,14 @@ import { invalidateTeacherMutation } from './teacherReadCache.js';
 import {coreActive,readCoreEnrollment,saveCoreEnrollment} from './academyCore.js';
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => Number.isFinite(Date.parse(v + 'T00:00:00Z')) && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v);
 const ids = z.array(z.string().uuid().transform(uuid)).max(100).refine(v => new Set(v).size === v.length);
-export const enrollmentEditSchema = z.object({ subject: z.enum(registrationSubjects), status: z.enum(['등록', '대기', '중단']), startDate: date, endDate: date.nullable(), addTeacherUid: z.string().min(1).max(128).nullable(), removeTeacherIds: ids, classIds: ids }).strict().superRefine((v, c) => {
+export const enrollmentEditSchema = z.object({ subject: z.enum(registrationSubjects), status: z.enum(['등록', '대기', '중단']), startDate: date, endDate: date.nullable(), addTeacherUid: z.string().min(1).max(128).nullable(), removeTeacherIds: ids, classIds: ids, plannedEndDate: date.nullable().default(null) }).strict().superRefine((v, c) => {
     if (v.status === '중단' ? !v.endDate : Boolean(v.endDate))
         c.addIssue({ code: 'custom', message: '중단 상태에는 중단일이 필요합니다.' });
     if (v.endDate && v.endDate < v.startDate)
         c.addIssue({ code: 'custom', message: '중단일을 확인해 주세요.' });
+    // 중단 예약: a planned stop date for a subject that is still 등록; it is only a reminder until the stop is confirmed.
+    if (v.plannedEndDate && (v.status !== '등록' || v.plannedEndDate < v.startDate))
+        c.addIssue({ code: 'custom', message: '중단 예약일을 확인해 주세요.' });
     if (v.status === '대기' && v.classIds.length)
         c.addIssue({ code: 'custom', message: '대기 상태에는 반 배정을 해제해 주세요.' });
 });

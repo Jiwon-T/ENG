@@ -113,7 +113,7 @@ export async function readCoreEnrollment(db:any,actor:any,keyInput:any){
  for(const id of members(s.fields.properties['소속반']))classes.push({id,...await classRecord(db,id,true)});
  const entries=[];for(const subject of subjects){const p=e.fields.properties,teachers=[];
   for(const id of members(p[subject+' 담당'])){const t=valid((await refFor(db,'teachers',id).get()).data(),'teachers');teachers.push({id,name:name(t)});}
-  entries.push({subject,status:choice(p[subject]),startDate:p[subject+' 시작일']?.date?.start||null,endDate:p[subject+' 중단일']?.date?.start||null,teachers,
+  entries.push({subject,status:choice(p[subject]),startDate:p[subject+' 시작일']?.date?.start||null,endDate:p[subject+' 중단일']?.date?.start||null,plannedEndDate:p[subject+' 중단 예정일']?.date?.start||null,teachers,
    classes:classes.filter(c=>c.row.subject===subject).map(c=>({id:c.id,name:c.row.name,withdrawalReview:!c.row.archived&&c.row.status==='진행 중'&&c.row.students?.length===1&&uuid(c.row.students[0])===key}))});
  }return {studentKey:key,enrollmentId:e.entityId||e.notionPageId,studentEditedAt:stamp(s),enrollmentEditedAt:stamp(e),subjects:entries,pending:null};
 }
@@ -121,7 +121,7 @@ export async function readCoreEnrollmentSummaries(db:any,actor:any){
  const q=await db.collection(DIRECTORY_ROWS).where('sourceKey','==',directorySourceKey('enrollments')).limit(501).get();if(q.docs.length>500)throw Error('DIRECTORY_PAGE_LIMIT');
  const result=new Map<string,any[]>();for(const d of q.docs){const r=d.data();if(r.fields?.archived)continue;valid(r,'enrollments');if(result.has(r.studentKey))throw Error('NOTION_DUPLICATE_ENROLLMENT');
   if(!actor.admin&&!actor.scopes.some((s:any)=>uuid(s.studentKey)===r.studentKey))continue;
-  result.set(r.studentKey,subjects.filter(subject=>choice(r.fields.properties[subject])).map(subject=>({subject,status:choice(r.fields.properties[subject]),startDate:r.fields.properties[subject+' 시작일']?.date?.start||null,endDate:r.fields.properties[subject+' 중단일']?.date?.start||null})));
+  result.set(r.studentKey,subjects.filter(subject=>choice(r.fields.properties[subject])).map(subject=>({subject,status:choice(r.fields.properties[subject]),startDate:r.fields.properties[subject+' 시작일']?.date?.start||null,endDate:r.fields.properties[subject+' 중단일']?.date?.start||null,plannedEndDate:r.fields.properties[subject+' 중단 예정일']?.date?.start||null})));
  }return result;
 }
 export async function coreRegistrationOptions(db:any,actor:any){
@@ -153,14 +153,14 @@ export async function saveCoreEnrollment(db:any,actor:any,keyInput:any,request:a
   if(input.status!=='중단'&&input.classIds.some((id:string)=>{const r=classes.find(c=>c.id===id)!.row;return r.status!=='진행 중'||!(r.teacherUids||[r.ownerUid]).some((uid:string)=>teacherUids.includes(uid));}))throw Error('NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');
   const projectedRef=db.collection('studentEnrollments').doc(e.entityId||e.notionPageId),projected=(await tx.get(projectedRef)).data();
   if(projected?.internalStudentId&&projected.internalStudentId!==s.pointer.internalStudentId)throw Error('STUDENT_MAPPING_CONFLICT');
-  const retained=classes.filter(c=>classIds.includes(c.id)&&c.row.subject!==input.subject).map(c=>c.id),at=Date.now(),p={...e.fields.properties,[input.subject]:{status:{name:input.status}},[input.subject+' 시작일']:{date:{start:input.startDate}},[input.subject+' 중단일']:{date:input.endDate?{start:input.endDate}:null},[input.subject+' 담당']:{relation:teachers.map(id=>({id}))}};
+  const retained=classes.filter(c=>classIds.includes(c.id)&&c.row.subject!==input.subject).map(c=>c.id),at=Date.now(),p={...e.fields.properties,[input.subject]:{status:{name:input.status}},[input.subject+' 시작일']:{date:{start:input.startDate}},[input.subject+' 중단일']:{date:input.endDate?{start:input.endDate}:null},[input.subject+' 중단 예정일']:{date:input.plannedEndDate?{start:input.plannedEndDate}:null},[input.subject+' 담당']:{relation:teachers.map(id=>({id}))}};
   const next=changed(tx,db,enrollment.ref,e,p,actor.uid,at);
   const starts=subjects.map(subject=>p[subject+' 시작일']?.date?.start).filter(Boolean).sort();
   changed(tx,db,sr,s,{...s.fields.properties,'소속반':{relation:[...retained,...input.classIds].map(id=>({id}))},'등록상태':{status:{name:subjects.some(subject=>choice(p[subject])==='등록')?'등록':subjects.some(subject=>choice(p[subject])==='대기')?'대기':'중단'}},'강의명':{multi_select:subjects.filter(subject=>choice(p[subject])==='등록').map(name=>({name}))},'수강시작일':{date:starts.length?{start:starts[0]}:null}},actor.uid,at);
   for(const c of classes)if(c.row.subject===input.subject){const wanted=input.classIds.includes(c.id),keys=(c.row.students||[]).filter((id:string)=>uuid(id)!==key);if(wanted)keys.push(key);if(JSON.stringify([...keys].sort())!==JSON.stringify([...(c.row.students||[])].sort()))tx.set(c.ref,{...c.row,students:keys,revision:(c.row.revision||0)+1,updatedAt:at});}
   for(const d of profiles){const profile=d.data();if(!profile.notionTeacherPageId)continue;const id=uuid(profile.notionTeacherPageId),scopes=(profile.scopes||[]).filter((v:any)=>uuid(v.studentKey)!==key||v.subject!==input.subject);if(teachers.includes(id))scopes.push({studentKey:key,subject:input.subject});
    const keys=(items:any[])=>items.map(v=>uuid(v.studentKey)+':'+v.subject).sort();if(JSON.stringify(keys(scopes))!==JSON.stringify(keys(profile.scopes||[])))tx.set(d.ref,{...profile,scopes,assignmentRevision:(profile.assignmentRevision||0)+1,assignmentSource:'firestore'});}
-  tx.set(projectedRef,{...projected,internalStudentId:s.pointer.internalStudentId,studentKey:key,sourceUpdatedAt:stamp(next),removed:false,subjects:subjects.filter(subject=>choice(p[subject])).map(subject=>({subject,status:choice(p[subject]),startAt:p[subject+' 시작일']?.date?.start||null,endAt:p[subject+' 중단일']?.date?.start||null})),appSource:'firestore'});
+  tx.set(projectedRef,{...projected,internalStudentId:s.pointer.internalStudentId,studentKey:key,sourceUpdatedAt:stamp(next),removed:false,subjects:subjects.filter(subject=>choice(p[subject])).map(subject=>({subject,status:choice(p[subject]),startAt:p[subject+' 시작일']?.date?.start||null,endAt:p[subject+' 중단일']?.date?.start||null,plannedEndDate:p[subject+' 중단 예정일']?.date?.start||null})),appSource:'firestore'});
   const result={status:'synced',alreadySaved:false,sourceMode:'firestore'};tx.set(cr,{fingerprint,result,at});return result;
  });
 }

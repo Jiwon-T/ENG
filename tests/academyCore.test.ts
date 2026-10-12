@@ -171,3 +171,13 @@ test('입학·상담 정보: admin reads and saves only admission properties; te
  const stale=await workspaceCall(f,'POST',{...request,operationId:randomUUID(),data:{...data,guardianName:'덮어쓰기'}});assert.notEqual(stale.status,200,'a stale screen cannot overwrite');
  assert.equal((await read()).data.guardianName,'김보호');
 });
+test('중단 예약: saved only while 등록 and not before the start, read back, kept in the projection, cleared when left out',async()=>{
+ const f=fixture();await f.setup();
+ const save=async(extra:any)=>{const e=await readStudentEnrollment(f.db,f.actor,sid);return workspaceCall(f,'POST',{action:'save-student-enrollment',studentKey:sid,operationId:randomUUID(),studentEditedAt:e.studentEditedAt,enrollmentEditedAt:e.enrollmentEditedAt,data:{subject:'영어',status:'등록',startDate:'2026-10-02',endDate:null,addTeacherUid:null,removeTeacherIds:[],classIds:[],...extra}});};
+ assert.equal((await save({plannedEndDate:'2026-12-31'})).status,200);
+ const read=await readStudentEnrollment(f.db,f.actor,sid);assert.equal(read.subjects.find((s:any)=>s.subject==='영어')!.plannedEndDate,'2026-12-31');assert.equal(read.subjects.find((s:any)=>s.subject==='영어')!.status,'등록','still 등록 until the stop is confirmed');
+ const projected=[...f.rows.entries()].find(([k])=>k.startsWith('studentEnrollments/'))![1];assert.equal(projected.subjects.find((s:any)=>s.subject==='영어').plannedEndDate,'2026-12-31','the lesson-tab list sees it too');
+ assert.equal((await save({status:'중단',endDate:'2026-12-31',plannedEndDate:'2026-12-31'})).status,400,'no reservation on a stopped subject');
+ assert.equal((await save({plannedEndDate:'2026-09-01'})).status,400,'not before the start date');
+ assert.equal((await save({})).status,200);assert.equal((await readStudentEnrollment(f.db,f.actor,sid)).subjects.find((s:any)=>s.subject==='영어')!.plannedEndDate,null,'left out = cleared');
+});

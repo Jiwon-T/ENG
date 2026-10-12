@@ -843,3 +843,40 @@
 .teacher-workspace .msg-fill{display:flex;flex-basis:100%;flex-wrap:wrap;align-items:center;gap:6px}
 .teacher-workspace .msg-fill input{flex:1 1 180px;min-width:0;margin:0}
 .teacher-workspace .msg-fill .gs-quiet,.teacher-workspace .msg-stale .gs-quiet,.teacher-workspace .msg-rewrite{min-height:32px;padding:0 10px;border:0;border-radius:999px;background:none;font-size:12px;font-weight:700;color:#64748b}.teacher-workspace .msg-fill .gs-quiet:hover,.teacher-workspace .msg-stale .gs-quiet:hover{background:#fff}.teacher-workspace .msg-revert{min-height:32px;padding:0 4px;border:0;background:none;justify-self:start;font-size:12px;font-weight:700;color:#64748b}
+/* 중단 예약 */
+.teacher-workspace .enr-plan{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.teacher-workspace .enr-plan input{width:auto!important;margin:0!important}
+.teacher-workspace .enr-plan span{font-size:13px;font-weight:700;color:#b45309}
+.teacher-workspace .enr-plan .gs-quiet{min-height:32px;padding:0 10px;border:0;border-radius:999px;background:none;font-size:12px;font-weight:700;color:#64748b}
+.teacher-workspace .enr-plan-add{justify-self:start;border-style:dashed}
+.teacher-workspace .enr-planned{display:block;margin-top:2px;font-style:normal;font-size:12px;font-weight:800;color:#b45309}
+.teacher-workspace .smr-stop{font-size:11px;font-weight:700;color:#b45309}
+.teacher-workspace .smr-stop.is-due{padding:1px 8px;border-radius:999px;background:#fef3c7}
+.teacher-workspace .student-summary-chip.is-stop{background:#fef3c7;color:#b45309;font-weight:700}
+.teacher-workspace .stop-banner{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px;padding:10px 14px;border-radius:14px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:13px;font-weight:600}
+.teacher-workspace .stop-banner b{font-weight:800}
+.teacher-workspace .stop-reminders{display:grid;gap:10px}
+.teacher-workspace .stop-due{padding:14px 16px;border-radius:18px;background:#fffbeb;border:1px solid #fde68a}
+.teacher-workspace .stop-due h3{display:flex;align-items:center;gap:6px;margin:0 0 10px;font-size:14px;font-weight:800;color:#92400e}
+.teacher-workspace .stop-due h3 b{padding:0 8px;border-radius:999px;background:#fde68a}
+.teacher-workspace .stop-due ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.teacher-workspace .stop-due li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#fff}
+.teacher-workspace .stop-who{display:flex;flex-direction:column;min-width:0}
+.teacher-workspace .stop-who strong{font-size:14px;color:#1e293b}
+.teacher-workspace .stop-who small{font-size:12px;color:#b45309;font-weight:700}
+.teacher-workspace .stop-ask{font-size:13px;font-weight:700;color:#475569}
+.teacher-workspace .stop-actions{display:flex;gap:6px}
+.teacher-workspace .stop-actions button{min-height:40px}
+.teacher-workspace .stop-upcoming{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 12px;border-radius:14px;background:#fff;border:1px solid #f1e4e7}
+.teacher-workspace .stop-upcoming-title{font-size:12px;font-weight:800;color:#475569;margin-right:4px}
+.teacher-workspace .stop-chip{padding:3px 10px;border-radius:999px;background:#fef9ec;border:1px solid #fde68a;font-size:12px;font-weight:600;color:#92400e}
+.teacher-workspace .stop-chip b{font-weight:800}
+.teacher-workspace .stop-message{margin:0;font-size:13px;color:#047857}
+@media(max-width:640px){.teacher-workspace .stop-due li{grid-template-columns:1fr}.teacher-workspace .stop-ask{display:none}}
+/* 44px touch targets for the 수강 관리 · 보호자 문자 · 입학·상담 controls */
+.teacher-workspace .enr-seg button,.teacher-workspace .enr-chip,.teacher-workspace .msg-seg button,.teacher-workspace .msg-missing>button,.teacher-workspace .enr-plan .gs-quiet,.teacher-workspace .msg-fill .gs-quiet,.teacher-workspace .msg-stale .gs-quiet,.teacher-workspace .msg-bubble-foot .gs-quiet,.teacher-workspace .msg-revert,.teacher-workspace .msg-rewrite,.teacher-workspace .stop-actions button{min-height:44px}
+.teacher-workspace .enr-add{min-height:44px!important;height:44px!important}
+.teacher-workspace .adm-conflict{display:grid;gap:8px;margin:0 0 12px;padding:12px 14px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:13px}
+.teacher-workspace .adm-conflict p{margin:0}
+.teacher-workspace .adm-conflict div{display:flex;flex-wrap:wrap;gap:6px}
+.teacher-workspace .adm-conflict button{min-height:44px}

@@ -2,7 +2,7 @@ import React from 'react';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {studentOverview,gradeOf} from '../src/lib/studentOverview';
+import {studentOverview,gradeOf,plannedStops,plannedStopOf} from '../src/lib/studentOverview';
 import StudentOverview from '../src/components/teacher/StudentOverview';
 
 const s=(i:number,name:string,subjects:any[],look:any=null)=>({studentKey:'k'+i,studentDisplayName:name,subjects,look});
@@ -33,4 +33,12 @@ test('the overview renders cards, the chart and the empty-date note',()=>{
  const html=renderToStaticMarkup(<StudentOverview students={students} intakeCount={2} today="2026-10-12"/>);
  for(const text of ['학원 한눈에 보기','재원생','이번 달 신규','이번 달 중단','신입생·상담','월별 신규 등록 · 중단','과목 · 학년 구성','재원 기간','펫 랭킹','등록일이 비어 있는 재원생 1명'])assert.ok(html.includes(text),text);
  assert.ok(!renderToStaticMarkup(<StudentOverview students={students} today="2026-10-12"/>).includes('신입생·상담'),'no intake card without management rights');
+});
+test('중단 예약: due from the planned day until decided, upcoming within 30 days, only for subjects still 등록',()=>{
+ const list=[s(1,'가 (평여중1)',[{subject:'영어',status:'등록',plannedEndDate:'2026-10-01'},{subject:'수학',status:'등록',plannedEndDate:'2026-11-05'}]),
+  s(2,'나',[{subject:'영어',status:'등록',plannedEndDate:'2026-10-12'}]),s(3,'다',[{subject:'영어',status:'중단',plannedEndDate:'2026-10-01'}]),s(4,'라',[{subject:'영어',status:'등록',plannedEndDate:'2027-01-01'}])];
+ const {due,upcoming}=plannedStops(list,'2026-10-12');
+ assert.deepEqual(due.map(d=>d.name+d.subject),['가영어','나영어'],'a past planned date stays due on later visits; today counts');
+ assert.deepEqual(upcoming.map(d=>d.name+d.subject),['가수학']);
+ assert.equal(plannedStopOf(list[0]),'2026-10-01');assert.equal(plannedStopOf(list[2]),null);
 });

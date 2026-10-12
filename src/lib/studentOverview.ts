@@ -39,3 +39,13 @@ export function studentOverview(students:readonly any[],today:string,months=12){
   pets,
  };
 }
+
+/** 중단 예약 per subject still 등록: due (the planned date has come) and upcoming (within the next 30 days). */
+export function plannedStops(students:readonly any[],today:string){
+ const soon=new Date(Date.parse(today+'T00:00:00Z')+30*86400000).toISOString().slice(0,10);
+ const items=students.flatMap(s=>(s.subjects||[]).filter((x:any)=>x.status==='등록'&&day(x.plannedEndDate)).map((x:any)=>({studentKey:s.studentKey,name:shortName(s.studentDisplayName||'학생'),subject:x.subject,plannedEndDate:day(x.plannedEndDate) as string})))
+  .sort((a,b)=>a.plannedEndDate.localeCompare(b.plannedEndDate)||a.name.localeCompare(b.name,'ko'));
+ return {due:items.filter(i=>i.plannedEndDate<=today),upcoming:items.filter(i=>i.plannedEndDate>today&&i.plannedEndDate<=soon)};
+}
+/** The nearest 중단 예약 of one student, for list badges. */
+export function plannedStopOf(student:any){return ((student?.subjects||[]).filter((x:any)=>x.status==='등록').map((x:any)=>day(x.plannedEndDate)).filter(Boolean) as string[]).sort()[0]||null;}

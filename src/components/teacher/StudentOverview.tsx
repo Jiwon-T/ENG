@@ -2,6 +2,7 @@ import {useMemo} from 'react';
 import {CalendarClock,TrendingDown,TrendingUp,Trophy,UserPlus,Users} from 'lucide-react';
 import {studentOverview} from '../../lib/studentOverview';
 import {PetCharacter} from '../pet/PetCharacters';
+import StopReminders from './StopReminders';
 
 // Same stages as PetService.getStage (see StudentMasterPanel).
 const petStage=(level:number|null)=>level==null||level<=20?'baby':level<=40?'child':level<=60?'teen':level<=99?'adult':'master';
@@ -9,7 +10,7 @@ const todayKst=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).form
 
 /** 학생 관리 main screen before a student is chosen: monthly joins and leaves, the academy's make-up and app activity,
  *  all from the student list already loaded. */
-export default function StudentOverview({students,intakeCount,today=todayKst()}:{students:any[];intakeCount?:number;today?:string}){
+export default function StudentOverview({students,intakeCount,today=todayKst(),onEnrollmentChanged}:{students:any[];intakeCount?:number;today?:string;onEnrollmentChanged?:()=>Promise<void>|void}){
  const o=useMemo(()=>studentOverview(students,today),[students,today]);
  const peak=Math.max(1,...o.bars.flatMap(b=>[b.joined.length,b.left.length]));
  const W=640,H=180,top=22,bottom=30,step=W/o.bars.length,bar=Math.min(16,step/3.2),scale=(n:number)=>(H-top-bottom)*n/peak;
@@ -22,6 +23,7 @@ export default function StudentOverview({students,intakeCount,today=todayKst()}:
  ];
  return <section className="so" aria-label="학원 한눈에 보기">
   <header className="so-head"><div><h2>학원 한눈에 보기</h2><p>왼쪽에서 학생을 고르면 리포트와 수업 기록을 볼 수 있어요.</p></div></header>
+  {onEnrollmentChanged&&<StopReminders students={students} today={today} onChanged={onEnrollmentChanged}/>}
   <div className="so-cards">{cards.map(c=>{const Icon=c.icon;return <div key={c.label} className={`so-card is-${c.tone}`}><span className="so-card-icon" aria-hidden="true"><Icon size={18}/></span><span className="so-card-label">{c.label}</span><strong>{c.value}<small>{c.unit}</small></strong></div>;})}</div>
   <div className="so-panel so-chart">
    <div className="so-panel-head"><h3>월별 신규 등록 · 중단</h3><span className="so-legend"><i className="is-joined"/>신규<i className="is-left"/>중단</span></div>
