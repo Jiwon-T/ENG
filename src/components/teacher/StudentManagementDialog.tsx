@@ -4,7 +4,7 @@ import WorkspaceDialog from './WorkspaceDialog';
 import { WorkspaceDialogEmbedding } from './WorkspaceDialogEmbedding';
 export const studentManagementTabs = (canManage: boolean) => [
  { id: 'review', label: '리포트 확인' }, { id: 'lesson', label: '수업 작성' }, { id: 'message', label: '보호자 문자' },
- ...(canManage ? [{ id: 'profile', label: '정보 수정' }, { id: 'enrollment', label: '수강·담당·반 관리' }] : []),
+ ...(canManage ? [{ id: 'profile', label: '정보 수정' }, { id: 'admission', label: '입학·상담' }, { id: 'enrollment', label: '수강·담당·반 관리' }] : []),
 ];
 export default function StudentManagementDialog({ name, canManage, onClose, onSelect, render, notice, busy = false, initialTab = 'review', inline = false, registerAttempt, headerExtra, summary }: {
  name: string; canManage: boolean; headerExtra?: ReactNode; summary?: ReactNode; onClose: () => void; onSelect: (tab: string) => void;

@@ -21,3 +21,21 @@ export function admissionNotionProperties(a:AdmissionInput,guardianSalutation=''
  for(const subject of admissionSubjects){const row=a.levels.find(r=>r.subject===subject);p[subject+' 입학 내신 점수']={number:row?.schoolScore??null};p[subject+' 입학 내신 등급']=richProperty(row?.schoolGrade||'');p[subject+' 입학 모평 점수']={number:row?.mockScore??null};p[subject+' 입학 모평 등급']=richProperty(row?.mockGrade||'');p[subject+' 입학 진단평가']=richProperty(row?.diagnostic||'');}
  return p;
 }
+
+const plain=(p:any)=>(p?.rich_text||p?.title||[]).map((v:any)=>v.plain_text??v.text?.content??'').join('');
+/** The admission answers kept on the student row (written at registration by admissionNotionProperties), decoded for
+ *  viewing and editing after registration. Missing properties read as empty. */
+export function admissionFromProperties(p:any={}){
+ const levels=admissionSubjects.map(subject=>({subject,schoolScore:typeof p[subject+' 입학 내신 점수']?.number==='number'?p[subject+' 입학 내신 점수'].number:null,schoolGrade:plain(p[subject+' 입학 내신 등급']),
+  mockScore:typeof p[subject+' 입학 모평 점수']?.number==='number'?p[subject+' 입학 모평 점수'].number:null,mockGrade:plain(p[subject+' 입학 모평 등급']),diagnostic:plain(p[subject+' 입학 진단평가'])}));
+ const consent=p['개인정보 동의']?.select?.name;
+ const admission:AdmissionInput={birthDate:p['생년월일']?.date?.start||'',address:plain(p['주소']),referral:plain(p['알게 된 경로']),previousPeriod:plain(p['이전 학습 기간']),previousAcademy:plain(p['이전 학원명']),
+  previousBooks:plain(p['사용 교재']),previousContent:plain(p['이전 학습 내용']),levels,goal:plain(p['학습 목표']),availableDays:(p['수업 가능 요일']?.multi_select||[]).map((v:any)=>v.name).filter((d:any)=>['월','화','수','목','금','토','일'].includes(d)),
+  availableTimes:plain(p['수업 가능 시간']),notes:plain(p['상담 참고 사항']),consent:consent==='동의'||consent==='미동의'?consent:'미확인',consentDate:p['동의 확인일']?.date?.start||'',signerName:plain(p['서명자 이름']),signedPaper:p['서명 원서 보관']?.checkbox===true};
+ return {admission,guardianName:plain(p['보호자이름']),guardianSalutation:plain(p['보호자 호칭'])};
+}
+export const admissionEditSchema=z.object({admission:admissionSchema,guardianName:text(80),guardianSalutation:text(80)}).strict();
+/** Only the admission and guardian-name properties; every other property on the row is left as it is. */
+export function admissionEditProperties(v:{admission?:AdmissionInput;guardianName:string;guardianSalutation:string}){
+ return {...admissionNotionProperties(v.admission??emptyAdmission(),v.guardianSalutation),'보호자이름':richProperty(v.guardianName)};
+}

@@ -152,3 +152,22 @@ test('학생 정보·수강 read and save through the workspace with no Notion s
   assert.equal((await registrationAssignmentOptions(f.db,f.actor)).teachers.length,1);
  }finally{globalThis.fetch=original;if(token!==undefined)process.env.NOTION_INTEGRATION_TOKEN=token;if(database!==undefined)process.env.NOTION_STUDENT_DATABASE_ID=database;}
 });
+test('입학·상담 정보: admin reads and saves only admission properties; teachers are refused; stale or replayed saves are safe',async()=>{
+ const f=fixture();await f.setup();
+ assert.equal((await workspaceCall(f,'GET',{action:'student-admission',studentKey:sid},ordinary(f))).status,403);
+ const read=async()=>(await workspaceCall(f,'GET',{action:'student-admission',studentKey:sid})).body.record;
+ const first=await read();assert.equal(first.data.admission.birthDate,'');assert.equal(first.data.admission.levels.length,4);
+ const profileBefore=await readStudentProfile(f.db,f.actor,sid);
+ const data={guardianName:'김보호',guardianSalutation:'어머님',admission:{...first.data.admission,birthDate:'2012-03-04',address:'평택시',referral:'지인 소개',goal:'내신 1등급',availableDays:['월','수'],notes:'긴 메모 '.repeat(500).trim(),
+  levels:first.data.admission.levels.map((l:any)=>l.subject==='영어'?{...l,schoolScore:88,schoolGrade:'2',diagnostic:'문법 약함'}:l),consent:'동의',consentDate:'2026-10-01',signerName:'김보호',signedPaper:true}};
+ const request={action:'save-student-admission',studentKey:sid,operationId:randomUUID(),expectedEditedAt:first.editedAt,data};
+ assert.equal((await workspaceCall(f,'POST',request,ordinary(f))).status,403,'an ordinary teacher cannot save');
+ assert.equal((await workspaceCall(f,'POST',{...request,data:{...data,displayName:'hijack'}})).status,400,'only admission fields are accepted');
+ const saved=await workspaceCall(f,'POST',request);assert.equal(saved.status,200);
+ const again=await read();assert.deepEqual(again.data,data,'read back exactly, long notes included');assert.equal(again.editedAt,saved.body.editedAt);
+ const profileAfter=await readStudentProfile(f.db,f.actor,sid);
+ assert.deepEqual({...profileAfter.data,guardianName:undefined},{...profileBefore.data,guardianName:undefined},'profile fields are untouched');assert.equal(profileAfter.data.guardianName,'김보호');
+ const replay=await workspaceCall(f,'POST',request);assert.equal(replay.status,200);assert.equal(replay.body.alreadySaved,true,'the same operation is answered once');
+ const stale=await workspaceCall(f,'POST',{...request,operationId:randomUUID(),data:{...data,guardianName:'덮어쓰기'}});assert.notEqual(stale.status,200,'a stale screen cannot overwrite');
+ assert.equal((await read()).data.guardianName,'김보호');
+});

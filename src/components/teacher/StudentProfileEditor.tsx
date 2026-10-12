@@ -5,6 +5,7 @@ import {teacherAuthenticatedRequest} from '../../lib/teacherAuthenticatedRequest
 import type {StudentProfileInput,StudentProfileRecord} from '../../lib/studentProfile';
 import WorkspaceDialog from './WorkspaceDialog';
 import StudentProfileForm from './StudentProfileForm';
+import EnrollmentDates from './EnrollmentDates';
 interface Intent {operationId:string;expectedEditedAt:string;data:StudentProfileInput}
 interface Result {ok:boolean;record?:StudentProfileRecord;profile?:StudentProfileInput;status?:string;message?:string;diagnosticId?:string}
 function errorMessage(result:any){return `${result.data?.message || result.userMessage || '처리 결과를 확인하지 못했습니다.'}${result.data?.diagnosticId?` (오류 ID: ${result.data.diagnosticId})`:''}`;}
@@ -73,6 +74,7 @@ export default function StudentProfileEditor({studentKey,onClose,onSaved}:{stude
         onClose();
     }
     return <WorkspaceDialog open title="학생 정보 수정" onClose={close}>
+        <EnrollmentDates studentKey={studentKey}/>
         {loading?<p role="status" className="text-sm">학생 정보를 불러오는 중…</p>:null}
         {message?<p role="status" className="text-sm text-rose-600 mb-3">{message}</p>:null}
         {intent?<p className="text-xs text-slate-500 mb-3">수정 요청의 입력을 보존하고 있습니다. 창을 닫아도 서버에 접수한 요청은 유지됩니다.</p>:null}

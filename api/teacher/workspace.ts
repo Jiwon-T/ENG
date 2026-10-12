@@ -11,7 +11,7 @@ import {getFirebaseAdmin} from '../_lib/firebaseAdmin.js';
 import {timingSafeCompare} from '../_lib/security.js';
 import {saveAppAcademic,publishAppAcademic,archiveAppAcademic,listAppAcademicSources,appAcademicStudents} from '../_lib/appAcademic.js';
 import { directoryStudentReads, readDirectoryStudents, applyDirectoryStudentSummary } from '../_lib/academyDirectorySource.js';
-import {coreActive,readCoreScopes,saveCoreGrant,restoreCoreProfile,readCoreEnrollmentSummaries} from '../_lib/academyCore.js';
+import {coreActive,readCoreScopes,saveCoreGrant,restoreCoreProfile,readCoreEnrollmentSummaries,readCoreAdmission,saveCoreAdmission} from '../_lib/academyCore.js';
 import {studentProfileSchema,profileFromPage,profileProperties} from '../_lib/teacherStudentProfile.js';
 import { classesActive, saveManaged, archiveManaged } from '../_lib/managedAcademy.js';
 import {readTodayVisibility,changeTodayVisibility} from '../_lib/teacherTodayVisibility.js';
@@ -120,6 +120,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(action==='messages'){failureStage='message-read';return sendJson(res,200,{ok:true,...await (await import('../_lib/teacherMessages.js')).readTeacherMessages(db,actor,params.get('studentKey'),params.get('subject'))});}
             if(action==='student-enrollment'){failureStage='student-enrollment-read';return sendJson(res,200,{ok:true,record:await readStudentEnrollment(db,actor,params.get('studentKey'))});}
             if(action==='student-school'){failureStage='student-school';const {readStudentSchool}=await import('../_lib/studentSchool.js');return sendJson(res,200,{ok:true,...await readStudentSchool(db,actor,params.get('studentKey'))});}
+            if(action==='student-admission'){failureStage='student-admission-read';if(!await coreActive(db,actor))throw Error('CORE_NOT_READY');return sendJson(res,200,{ok:true,record:await readCoreAdmission(db,actor,params.get('studentKey'))});}
             if(action==='student-profile'){failureStage='student-profile-read';return sendJson(res,200,{ok:true,record:await readStudentProfile(db,actor,params.get('studentKey'))});}
             if (action === 'registration-options') {
                 failureStage='student-registration-options';
@@ -340,6 +341,11 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             failureStage='student-enrollment-discard';
             const v=z.object({action:z.literal('discard-student-enrollment'),studentKey:z.string().uuid(),operationId:z.string().uuid()}).strict().parse(body);
             return sendJson(res,200,{ok:true,...await discardStudentEnrollment(db,actor,v.studentKey,v.operationId)});
+        }
+        if(body.action==='save-student-admission') {
+            const v=z.object({action:z.literal('save-student-admission'),studentKey:z.string().uuid(),operationId:z.string().uuid(),expectedEditedAt:z.string().datetime(),data:z.unknown()}).strict().parse(body);
+            if(!await coreActive(db,actor))throw Error('CORE_NOT_READY');
+            return sendJson(res,200,{ok:true,...await saveCoreAdmission(db,actor,v.studentKey,v.operationId,v.expectedEditedAt,v.data)});
         }
         if(body.action==='save-student-profile') {
             failureStage='student-profile-save';

@@ -18,3 +18,33 @@ export function renderTeacherMessage(template:string,variables:Record<string,unk
  });return {body,missing:[...new Set(missing)],dropped:[...new Set(dropped)]};
 }
 export function unresolvedMessage(body:string){return /\{\{|\}\}|\\[{}]/.test(body);}
+
+export type MessagePart={text:string;kind:'plain'|'filled'|'missing';key?:string};
+const token=/\{\{\s*([^{}]+?)\s*\}\}/g;
+/** Parts for any body (also after edits): only the still-empty {{변수}} are marked. */
+export function missingParts(body:string):MessagePart[]{
+ const parts:MessagePart[]=[];let last=0;
+ for(const m of body.matchAll(token)){if(m.index!>last)parts.push({text:body.slice(last,m.index),kind:'plain'});parts.push({text:m[0],kind:'missing',key:m[1]});last=m.index!+m[0].length;}
+ if(last<body.length)parts.push({text:body.slice(last),kind:'plain'});return parts;
+}
+/** The same result as renderTeacherMessage, split into parts so the preview can colour the values that came from the
+ *  student or lesson ('filled') and the ones still empty ('missing'). Joining the parts gives the same body. */
+export function renderTeacherMessageParts(template:string,variables:Record<string,unknown>):MessagePart[]{
+ const {body}=renderTeacherMessage(template,variables);
+ // Same template with every non-blank value swapped for a marker: the same lines drop and the same {{변수}} stay.
+ const marked=renderTeacherMessage(template,new Proxy(variables,{get:(target,key)=>{const k=String(key),v=(target as any)[k];return blank(k,v)?v:`\u0000${k}\u0000`;}})).body;
+ const parts:MessagePart[]=[];
+ for(const piece of marked.split(/(\u0000[^\u0000]*\u0000)/)){
+  if(!piece)continue;const marker=piece.match(/^\u0000([^\u0000]*)\u0000$/);
+  if(marker)parts.push({text:String(variables[marker[1]]),kind:'filled',key:marker[1]});else parts.push(...missingParts(piece));
+ }
+ return parts.map(p=>p.text).join('')===body?parts:missingParts(body);
+}
+export function missingKeys(body:string){return [...new Set([...body.matchAll(token)].map(m=>m[1]))];}
+/** Put a value into every {{key}} of the body. */
+export function fillMessageVariable(body:string,key:string,value:string){return body.replace(token,(whole,name:string)=>name===key?value:whole);}
+/** Korean SMS length: 2 bytes per non-ASCII letter; up to 90 bytes is 단문 (SMS), longer is 장문 (LMS, up to 2000 bytes). */
+export function messageSize(body:string){
+ const bytes=[...body.replace(/\r\n/g,'\n')].reduce((n,c)=>n+(c.charCodeAt(0)<128?1:2),0);
+ return {bytes,kind:bytes<=90?'SMS' as const:'LMS' as const,limit:bytes<=90?90:2000,over:bytes>2000};
+}

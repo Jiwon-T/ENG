@@ -1,5 +1,6 @@
 /** Existing stored strings, in their original order. */
-export const attendanceOptions = ['미확인','출석','결석','지각','보강 출석','보강 결석','보강 지각'] as const;
+// 출석 -> 지각 -> 결석, and the same order for 보강.
+export const attendanceOptions = ['미확인','출석','지각','결석','보강 출석','보강 지각','보강 결석'] as const;
 export const attitudeOptions = ['미확인','미참여','하','중하','중','중상','상','최상'] as const;
 export const evaluationOptions = ['없는 날','미확인','미제출','최하','하','중하','중','중상','상','최상'] as const;
 export const lessonOptionGroups = [

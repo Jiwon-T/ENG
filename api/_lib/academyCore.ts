@@ -5,6 +5,7 @@ import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {hashPin,hashStudentKey} from './security.js';
 import {subjects} from './teacherWorkspacePolicy.js';
 import {workspaceInflightRead} from './workspaceInflightRead.js';
+import {admissionEditSchema,admissionEditProperties,admissionFromProperties} from './studentAdmission.js';
 export const CORE_AUTHORITY=DIRECTORY_CORE_AUTHORITY,CORE_COMMANDS='academyCoreCommands';
 const digest=(v:any)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const stateRef=(db:any)=>db.collection(CORE_AUTHORITY).doc('main');
@@ -85,6 +86,20 @@ export async function saveCoreProfile(db:any,actor:any,keyInput:any,operation:an
   if(report)tx.set(reportRef,{...report,studentKey:key,updatedAt:new Date(at).toISOString()});
   for(const d of slugs.docs){const s=d.data();tx.set(d.ref,{...s,studentDisplayName:data.displayName,studentKey:key,...(contactChanged?{parentPhonePinHash:pin||'',authVersion:(s.authVersion||1)+1,contactUpdateOperationId:null,failedAttempts:0,lockedUntil:null}:{}),updatedAt:new Date(at).toISOString()});}
   const result={studentKey:key,status:'synced',alreadySaved:false,profile:data,sourceMode:'firestore'};tx.set(receipt,{fingerprint,targetKey:key,originRevision:old.revision,result,at});return result;
+ });
+}
+/** 입학·상담 정보 after registration (admin/principal, same checks as the profile): read, and save only those
+ *  properties in one transaction with the version check, an idempotent receipt and directory history. */
+export async function readCoreAdmission(db:any,actor:any,keyInput:any){return readCoreProfile(db,actor,keyInput,(page:any)=>admissionFromProperties(page.properties));}
+export async function saveCoreAdmission(db:any,actor:any,keyInput:any,operation:any,expected:any,input:any){
+ manage(actor);const key=uuid(z.string().uuid().parse(keyInput)),op=z.string().uuid().parse(operation),time=z.string().datetime().parse(expected),data=admissionEditSchema.parse(input);
+ const ref=refFor(db,'students',key),receipt=db.collection(CORE_COMMANDS).doc(digest(['admission',actor.uid,op])),fingerprint=digest([key,time,data]);
+ return db.runTransaction(async(tx:any)=>{
+  await guard(tx,db);await member(tx,db,actor,key);const old=valid((await tx.get(ref)).data(),'students'),command=(await tx.get(receipt)).data();
+  if(command){if(command.fingerprint!==fingerprint)throw Error('STUDENT_PROFILE_REQUEST_CONFLICT');return {...command.result,alreadySaved:true};}
+  if(stamp(old)!==time)throw Error('NOTION_EDIT_CONFLICT');
+  const next=changed(tx,db,ref,old,{...old.fields.properties,...admissionEditProperties(data)},actor.uid,Date.now());
+  const result={studentKey:key,editedAt:stamp(next),data:admissionFromProperties(next.fields.properties)};tx.set(receipt,{fingerprint,targetKey:key,originRevision:old.revision,result,at:Date.now()});return result;
  });
 }
 async function enrollmentRow(db:any,key:string){const q=await db.collection(DIRECTORY_ROWS).where('sourceKey','==',directorySourceKey('enrollments')).where('studentKey','==',key).limit(2).get();if(q.docs.length!==1)throw Error('NOTION_DUPLICATE_ENROLLMENT');return {ref:q.docs[0].ref,row:valid(q.docs[0].data(),'enrollments')};}
