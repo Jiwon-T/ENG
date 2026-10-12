@@ -9,6 +9,8 @@ export function teacherCachedRead(uid: string, key: string) {
     if(entry&&Date.now()-entry.at>300_000){entries.delete(key);return undefined;}
     return entry?.value;
 }
+/** How long ago this entry was fetched (Infinity when missing or for another account). */
+export function teacherCacheAge(uid: string, key: string) { const entry = account === uid ? entries.get(key) : undefined; return entry ? Date.now() - entry.at : Infinity; }
 export function teacherCacheRead(uid: string, key: string, value: any, expectedGeneration?:number) {
     if(expectedGeneration!==undefined&&expectedGeneration!==generation)return;
     teacherCachedRead(uid, key);
@@ -18,7 +20,8 @@ export function teacherCacheRead(uid: string, key: string, value: any, expectedG
 export function clearTeacherReads() { entries.clear(); account = '';generation++; }
 
 export function invalidateTeacherReads(action:string) {
-    const resources=action==='save-draft'||action==='publish'?['drafts-page:','academy-lessons:','["report"']:
+    // A lesson save/publish also drops the lesson tab's bootstrap, whose bundled draftsPage would otherwise come back.
+    const resources=action==='save-draft'||action==='publish'?['drafts-page:','academy-lessons:','workspace:lesson','["report"']:
         action==='save-academic'||action==='publish-academic'?['academic-records:','["report"']:
         action.includes('schedule')?['workspace:schedule','["report"']:null;
     if(!resources){clearTeacherReads();return;}

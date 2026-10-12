@@ -3,8 +3,8 @@ import {X} from 'lucide-react';
 import {subscribeTodayVisibility,hiddenTodayLessons,setTodayVisibility} from '../../lib/todayLessonVisibility';
 import StatusBadge from './StatusBadge';
 import {ArrowRight,CalendarDays,Plus} from 'lucide-react';
-import {todayLessonState,todayLessonProgress,todayProgressRatios,nextUnwrittenLesson,lessonStartOf} from '../../lib/todayLessonProgress';
-import {useEffect,useRef,useState,useSyncExternalStore} from 'react';
+import {todayRecords,todayLessonState,todayLessonProgress,todayProgressRatios,nextUnwrittenLesson,lessonStartOf} from '../../lib/todayLessonProgress';
+import {useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {todayLessons,type TodayLesson} from '../../lib/teacherTodayLessons';
 import {koreanDay} from '../../lib/teacherWeekCalendar';
 import DateStepper from './DateStepper';
@@ -32,7 +32,10 @@ export default function TeacherTodayLessons({data,date,onDate,onStudent,onGroup,
  const events=todayLessons(data,date,source.schedules||[],source.reflectedSchedules||[]).filter(event=>!hidden.has(event.id));
  useEffect(()=>{onEvents?.(events,data.uid,date,remote?.uid===data.uid&&remote.date===date?remote.dayLessons:undefined);},[source,remote,data,date,onEvents,hidden]);
  async function changeVisibility(eventId?:string){visibilityVersion.current++;setHiding(true);try{const result=await requestRef.current('today-lesson-visibility',{date,...(eventId?{eventId}:{restore:true})});setTodayVisibility(data.uid,date,result.hiddenTodayLessons);setExclude(null);}catch(e){setError(e instanceof Error?e.message:'수업 목록 변경 실패');}finally{setHiding(false);}}
- const loaded=[...records,...(data.drafts||[])];const progress=todayLessonProgress(events,loaded);
+ // The day's own lessons from the server (all of them, not only the first saved-lesson page), overridden by the copies
+ // already in memory (just saved, published or deleted here), which are newer.
+ const loaded=useMemo(()=>todayRecords(remote?.uid===data.uid&&remote.date===date?remote.dayLessons:undefined,[...(data.drafts||[]),...records]),[remote,data.uid,data.drafts,date,records]);
+ const progress=todayLessonProgress(events,loaded);
  const ratios=todayProgressRatios(progress),next=nextUnwrittenLesson(events,loaded,selection);
  const open=(key:string,event:TodayLesson)=>onGroup?onGroup(event):onStudent?.(key,event);
  const activeEvent=(event:TodayLesson,key?:string)=>selection?.date===event.date&&selection?.subject===event.subject&&lessonStartOf(selection)===event.start&&(!key||selection?.studentKey===key);

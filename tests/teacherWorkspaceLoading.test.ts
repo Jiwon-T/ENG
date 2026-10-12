@@ -82,21 +82,23 @@ test('class and curriculum refresh skips student directory, schedules and settin
  assert.equal(status,200);assert.deepEqual(reads.sort(),['academyClassAuthority','teacherClasses','teacherCurricula']);assert.equal('students' in body,false);assert.equal('staff' in body,false);assert.equal('schedules' in body,false);teacherReadCache.clear();
 });
 
-test('reproduces missing today record outside the first draft page with eleven owned drafts',async()=>{
+test('오늘 수업 progress sees a today lesson outside the first saved-lesson page (eleven own drafts, one from another teacher)',async()=>{
  const {todayLessonState}=await import('../src/lib/todayLessonProgress');
  teacherReadCache.clear();
  const event={id:'today',date:'2026-10-07',subject:'영어',start:'17:00',end:'18:00',students:['s'],title:'정규',kind:'정규'};
- const values=Array.from({length:11},(_,i)=>({id:`draft-${i}`,ownerUid:uid,updatedAt:11-i,stage:i===10?'published':'draft',data:{studentKey:'s',date:i===10?event.date:'2026-10-06',subject:'영어',start:event.start}}));
- const query:any={where:(key:string,_op:string,value:string)=>{assert.equal(key,'ownerUid');assert.equal(value,uid);return query;},select:()=>query,get:async()=>({docs:values.map(v=>({id:v.id,data:()=>({updatedAt:v.updatedAt})}))}),doc:(id:string)=>({id})};
- const db={collection:(name:string)=>{assert.equal(name,'teacherLessonDrafts');return query;},getAll:async(...refs:any[])=>refs.map(r=>({id:r.id,exists:true,data:()=>values.find(v=>v.id===r.id)}))};
+ const values=Array.from({length:12},(_,i)=>({id:`draft-${i}`,ownerUid:i===5?'other':uid,updatedAt:12-i,stage:i===11?'published':'draft',data:{studentKey:'s',date:i===11||i===5?event.date:'2026-10-06',subject:'영어',start:event.start,content:'본문'}}));
+ const selected:string[][]=[];
+ const query=(name:string,filters:any[]=[]):any=>({where:(key:string,_op:string,value:any)=>query(name,[...filters,[key,value]]),select:(...fields:string[])=>{selected.push(fields);return query(name,filters);},limit:()=>query(name,filters),orderBy:()=>query(name,filters),
+  get:async()=>({docs:(name==='teacherLessonDrafts'?values:[]).filter(v=>filters.every(([k,val])=>k.split('.').reduce((o:any,p:string)=>o?.[p],v)===val)).map(v=>({id:v.id,data:()=>v}))}),doc:(id:string)=>({id,get:async()=>({exists:false,data:()=>undefined})})});
+ const db:any={collection:(name:string)=>query(name),getAll:async(...refs:any[])=>refs.map(r=>({id:r.id,exists:true,data:()=>values.find(v=>v.id===r.id)}))};
  try{
-  const first=await run('/api/teacher/workspace?action=drafts-page&page=1',db,{admin:false});
-  const second=await run('/api/teacher/workspace?action=drafts-page&page=2',db,{admin:false});
-  assert.equal(first.status,200);assert.equal(first.body.total,11);assert.equal(first.body.records.length,10);
-  assert.equal(second.body.records.length,1);assert.equal(second.body.records[0].id,'draft-10');
-  // Diagnostic reproduction of the existing bug, not the desired final state.
-  assert.equal(todayLessonState(event,'s',first.body.records),'미작성');
-  assert.equal(todayLessonState(event,'s',[...first.body.records,...second.body.records]),'반영 완료');
+  const firstPage=(await run('/api/teacher/workspace?action=drafts-page&page=1',db,{admin:false})).body.records;
+  assert.equal(firstPage.length,10);assert.ok(!firstPage.some((r:any)=>r.id==='draft-11'),'the published today lesson is on page 2');
+  const day=await run('/api/teacher/workspace?action=schedule-records&day=2026-10-07',db,{admin:false});
+  assert.equal(day.status,200);
+  assert.deepEqual(day.body.dayLessons.map((r:any)=>r.id),['draft-11'],'own lessons of that day only (another teacher\'s is not included)');
+  assert.equal('content' in day.body.dayLessons[0].data,false,'summary fields only');
+  assert.equal(todayLessonState(event,'s',[...day.body.dayLessons,...firstPage]),'반영 완료');
  }finally{teacherReadCache.clear();}
 });
 
@@ -115,4 +117,43 @@ test('lesson bootstrap carries page 1 of saved lessons when asked, so the tab ne
   const without=await run('/api/teacher/workspace?action=bootstrap&section=lesson',db,{admin:false});
   assert.equal('draftsPage' in without.body,false);
  }finally{globalThis.fetch=previous;if(token===undefined)delete process.env.NOTION_INTEGRATION_TOKEN;else process.env.NOTION_INTEGRATION_TOKEN=token;if(database===undefined)delete process.env.NOTION_STUDENT_DATABASE_ID;else process.env.NOTION_STUDENT_DATABASE_ID=database;teacherReadCache.clear();}
+});
+test('repeated bootstraps reuse the enrollment read until a forced refresh, read student links fresh every time, and base reads no class data',async()=>{
+ teacherReadCache.clear();
+ const student='11111111-1111-4111-8111-111111111111';let linkedUid:string|null=null;
+ const reads:string[]=[];const db:any={collection:(name:string)=>{reads.push(name);const q:any={where:()=>q,select:()=>q,limit:()=>q,get:async()=>({docs:name==='notionStudentMappings'?[{id:'m',data:()=>({notionStudentPageId:student,studentKey:student,internalStudentId:'internal',firebaseUid:linkedUid,studentDisplayName:'학생'})}]:[]}),doc:()=>({get:async()=>({exists:false,data:()=>undefined})})};return q;}};
+ const {teacherReadKey}=await import('../api/_lib/teacherReadCache.ts');await teacherReadCache.get(teacherReadKey({uid,admin:true,principal:false,academyId:'main',scopes:[],teachingScopes:[]},'students'),async()=>[{studentKey:student,studentDisplayName:'학생'}]);
+ const count=(name:string)=>reads.filter(r=>r===name).length;
+ try{
+  const first=await run('/api/teacher/workspace?action=bootstrap&section=students',db);assert.equal(first.status,200);assert.equal(first.body.students[0].accountLinked,false);
+  // Linked from another endpoint or device (another server instance never clears this process's cache): shows on the next read.
+  linkedUid='student-account';
+  const second=await run('/api/teacher/workspace?action=bootstrap&section=students',db);assert.equal(second.body.students[0].accountLinked,true,'a new link shows without force');
+  assert.equal(count('notionStudentMappings'),2,'student links are read on every bootstrap');
+  assert.equal(count('studentEnrollments'),1,'the enrollment read is reused');
+  await run('/api/teacher/workspace?action=bootstrap&section=lesson&force=1',db);assert.equal(count('studentEnrollments'),2,'새로고침 (force) reads again');
+  reads.length=0;await run('/api/teacher/workspace?action=bootstrap&section=base',db);
+  for(const name of ['teacherClasses','teacherCurricula','academyClassAuthority','studentEnrollments'])assert.equal(reads.includes(name),false,name);
+ }finally{teacherReadCache.clear();}
+});
+test('today records: the day read fills in lessons beyond the first page; copies in memory win by id', async () => {
+ const { todayRecords, todayLessonState } = await import('../src/lib/todayLessonProgress');
+ const event = { id: 'e', date: '2026-10-07', subject: '영어', start: '17:00', end: '18:00', students: ['s'], title: '정규', kind: '정규' } as any;
+ const server = [{ id: 'a', stage: 'published', updatedAt: 1, data: { studentKey: 's', date: '2026-10-07', subject: '영어', start: '17:00' } }];
+ assert.equal(todayLessonState(event, 's', todayRecords(server, [])), '반영 완료', 'a lesson only the day read knows about counts');
+ const deletedHere = [{ ...server[0], archived: true, updatedAt: 2 }];
+ assert.equal(todayLessonState(event, 's', todayRecords(server, deletedHere)), '미작성', 'deleted here: the stale server copy does not bring it back');
+ assert.equal(todayLessonState(event, 's', todayRecords(undefined, [])), '미작성');
+});
+test('today records keep the newer copy: a newer publish or delete from another device beats an older copy in memory; this device’s latest action is kept', async () => {
+ const { todayRecords, todayLessonState } = await import('../src/lib/todayLessonProgress');
+ const event = { id: 'e', date: '2026-10-07', subject: '영어', start: '17:00', end: '18:00', students: ['s'], title: '정규', kind: '정규' } as any;
+ const lesson = (patch: any) => ({ id: 'a', data: { studentKey: 's', date: '2026-10-07', subject: '영어', start: '17:00' }, ...patch });
+ const state = (server: any[], memory: any[]) => todayLessonState(event, 's', todayRecords(server, memory));
+ assert.equal(state([lesson({ revision: 2, stage: 'published', updatedAt: 20 })], [lesson({ revision: 1, stage: 'draft', updatedAt: 10 })]), '반영 완료', 'published on another device');
+ assert.equal(state([lesson({ revision: 3, stage: 'archived', archived: true, updatedAt: 30 })], [lesson({ revision: 2, stage: 'published', updatedAt: 20 })]), '미작성', 'deleted on another device');
+ assert.equal(state([lesson({ revision: 2, stage: 'published', updatedAt: 20 })], [lesson({ revision: 3, stage: 'archived', archived: true, updatedAt: 30 })]), '미작성', 'just deleted here: the older day read does not bring it back');
+ assert.equal(state([lesson({ revision: 1, stage: 'draft', updatedAt: 10 })], [lesson({ revision: 2, stage: 'published', updatedAt: 20 })]), '반영 완료', 'just published here');
+ assert.equal(state([lesson({ revision: 2, stage: 'draft', updatedAt: 20 })], [lesson({ revision: 2, stage: 'published', updatedAt: 20 })]), '반영 완료', 'same version: this device’s copy is kept');
+ assert.equal(state([lesson({ stage: 'published', updatedAt: 50 })], [lesson({ stage: 'draft', updatedAt: 40 })]), '반영 완료', 'without revisions the later update wins');
 });

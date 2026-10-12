@@ -13,14 +13,16 @@ export function actionOf(endpoint: string, init?: RequestInit) {
         return `${url.pathname.replace('/api/', '')}${action ? ' · ' + action : ''}${section ? ' · ' + section : ''}`;
     } catch { return 'request'; }
 }
-/** Server stages for the latest response from this URL (Server-Timing), when the browser exposes them. */
-export function serverStages(endpoint: string) {
-    try {
-        if (typeof performance === 'undefined' || typeof location === 'undefined') return [];
-        const entries = performance.getEntriesByName(new URL(endpoint, location.href).href) as PerformanceResourceTiming[];
-        const last = entries[entries.length - 1];
-        return (last?.serverTiming || []).map(t => ({ name: t.name, ms: Math.round(t.duration), ...(t.description ? { note: t.description } : {}) }));
-    } catch { return []; }
+/** Server stages from a response's Server-Timing header, e.g. `auth;dur=12.3, cold;desc="서버 깨어남", total;dur=40`.
+ *  Read from the response itself: the browser's resource-timing list is shared by every request to the same URL
+ *  and often not filled in yet when the request finishes. */
+export function parseServerTiming(header?: string | null) {
+    if (!header) return [];
+    return header.split(',').map(part => {
+        const [name, ...params] = part.trim().split(';').map(s => s.trim());
+        const dur = params.find(p => p.startsWith('dur=')), desc = params.find(p => p.startsWith('desc='));
+        return name ? { name, ms: dur ? Math.round(Number(dur.slice(4))) || 0 : 0, ...(desc ? { note: desc.slice(5).replace(/^"|"$/g, '') } : {}) } : null;
+    }).filter(Boolean) as { name: string; ms: number; note?: string }[];
 }
 export function recordTiming(entry: RequestTiming) {
     timings.unshift(entry); if (timings.length > LIMIT) timings.length = LIMIT;
