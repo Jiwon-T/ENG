@@ -15,3 +15,16 @@ export default function LessonActionBar({status,reason,children,refresh,savedAt,
   <div className="lesson-action-buttons">{children}{more&&<details className="lesson-action-more"><summary aria-label="더보기" title="더보기"><MoreHorizontal size={18} aria-hidden="true"/></summary><div className="lesson-action-more-menu" onClick={e=>{if((e.target as HTMLElement).closest('button'))e.currentTarget.closest('details')?.removeAttribute('open');}}>{more}</div></details>}</div>{refresh&&<div className="lesson-action-refresh">{refresh}</div>}
  </div>;
 }
+
+/** Editor shortcuts: Ctrl/⌘+S saves, Ctrl/⌘+Enter publishes (the editors still ask before publishing). */
+export function lessonShortcut(e:{ctrlKey:boolean;metaKey:boolean;altKey:boolean;shiftKey:boolean;code?:string;key?:string}):'save'|'publish'|null{
+ if(!(e.ctrlKey||e.metaKey)||e.altKey||e.shiftKey)return null;
+ if(e.code==='KeyS'||e.key?.toLowerCase()==='s')return 'save';
+ if(e.key==='Enter'||e.code==='Enter'||e.code==='NumpadEnter')return 'publish';
+ return null;
+}
+const macLike=()=>typeof navigator!=='undefined'&&/Mac|iPhone|iPad/.test(navigator.platform||navigator.userAgent||'');
+/** The key shown faintly inside 저장 / 반영 (hidden on phones by CSS): "Ctrl S" / "Ctrl ↵", or ⌘ on a Mac. */
+export function ShortcutKey({keys,mac=macLike()}:{keys:'S'|'Enter';mac?:boolean}){
+ return <kbd className="lesson-kbd" aria-hidden="true">{mac?'⌘':'Ctrl '}{keys==='Enter'?'↵':'S'}</kbd>;
+}

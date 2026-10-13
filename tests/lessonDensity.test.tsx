@@ -42,5 +42,10 @@ test('successful save/publish notices do not force optional fields open; relevan
  for(const message of ['앱에 저장했습니다.','학생·학부모 리포트와 노션에 반영했습니다.']){assert.equal(fieldDisclosureError(message,'study'),false);assert.equal(fieldDisclosureError(message,'scores'),false);}
  assert.equal(fieldDisclosureError('자습 여부를 선택하고 시간과 회차를 입력해 주세요.','study'),true);assert.equal(fieldDisclosureError('오답 수와 문항 수를 확인해 주세요.','scores'),true);assert.equal(fieldDisclosureError('노션 연결 권한을 확인해 주세요.','scores'),false);
 });
+test('회차 hint: the first lesson of the month says 수업, the first 자습 says 자습',()=>{
+ const hint='자동 입력 · 2026-10 월별 시작 0 +1';
+ const html=renderToStaticMarkup(<LessonAcademyFields value={{classSession:'있음',start:'14:00',end:'15:20',round:1,selfStudy:'있음',selfStudyStart:'15:20',selfStudyEnd:'16:20',selfStudyRound:1}} onChange={()=>{}} roundHints={{round:hint,selfStudyRound:hint}}/>);
+ assert.ok(html.includes('월 첫 수업 +1'));assert.ok(html.includes('월 첫 자습 +1'));
+});
 
 

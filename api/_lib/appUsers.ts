@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { forgetFirebaseSessions } from './firebaseSession.js';
 import { hashStudentKey } from './security.js';
 import { normalizeNotionPageId } from './notionPageId.js';
+import { writeAppTeacherRow } from './offlineTeacher.js';
 // App accounts for the admin: everyone signs up as a student; the admin grants teacher access here.
 function admin(actor: any) { if (!actor.admin || actor.academyId !== 'main') throw Error('FORBIDDEN'); }
 
@@ -39,7 +40,10 @@ export async function setAppUserRole(db: any, actor: any, input: unknown) {
             // An account linked to a real student keeps being that student; give the teacher their own account instead.
             if (user.notionStudentKey) throw Error('APP_USER_LINKED_STUDENT');
             tx.set(userRef, { ...user, role: user.role === 'principal' ? 'principal' : 'teacher' });
-            tx.set(accessRef, profile ? { ...profile, disabled: false, accessChangedAt: at, accessChangedBy: actor.uid } : { academyId: 'main', scopes: [], workspaceRole: 'teacher', workspaceLabel: '', assignmentRevision: 0, notionTeacherPageId: null, assignmentSource: 'firestore', createdAt: at, createdBy: actor.uid });
+            // 명부 줄 at once, so the teacher can be picked in 수강 관리 and 원서 (담당 과목 is chosen in 선생님 관리).
+            const row = profile?.notionTeacherPageId ? null : writeAppTeacherRow(tx, db, { uid: v.uid, label: String(profile?.workspaceLabel || user.alias || user.name || '선생님').slice(0, 100), subjects: profile?.subjects || [], by: actor.uid, at });
+            const rowFields = row ? { notionTeacherPageId: row.rowId, appTeacherRow: true, subjects: profile?.subjects || [] } : {};
+            tx.set(accessRef, profile ? { ...profile, ...rowFields, disabled: false, accessChangedAt: at, accessChangedBy: actor.uid } : { academyId: 'main', scopes: [], workspaceRole: 'teacher', workspaceLabel: '', assignmentRevision: 0, notionTeacherPageId: null, assignmentSource: 'firestore', createdAt: at, createdBy: actor.uid, ...rowFields });
         } else {
             tx.set(userRef, { ...user, role: 'student' });
             if (profile) tx.set(accessRef, { ...profile, disabled: true, accessChangedAt: at, accessChangedBy: actor.uid });

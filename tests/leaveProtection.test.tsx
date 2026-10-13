@@ -23,8 +23,8 @@ test('every editor with an unsaved-input confirm also protects the tab close',()
 test('여러 학생 editor has the 3단계 save state, 반영 primary when ready, Ctrl/⌘+S; the student report confirm uses the app modal',()=>{
  const grid=fs.readFileSync(new URL('../src/components/teacher/TeacherLessonGrid.tsx',import.meta.url),'utf8');
  assert.match(grid,/<LessonSaveStatus record=\{\{stage:row\.stage/);
- assert.match(grid,/<LessonActionBar statusInTitle more=\{[^]*?\} hint=/);
- assert.match(grid,/className=\{gridCanSubmit\(row\)\?'primary-button':'small-button'\}[^>]*>[^]*?반영<\/button>/);
+ assert.match(grid,/<LessonActionBar statusInTitle more=\{[^]*?\} savedAt=/);
+ assert.match(grid,/className=\{gridCanSubmit\(row\)\?'primary-button':'small-button'\}[^>]*>[^]*?반영<ShortcutKey keys="Enter"\/><\/button>/);
  assert.match(grid,/gridSave\.current=editorOpen&&active\?/);assert.match(grid,/dialog\.confirm-modal\[open\]/);
  const report=fs.readFileSync(new URL('../src/components/student/LearningReport.tsx',import.meta.url),'utf8');
  assert.doesNotMatch(report,/window\.confirm\(/);assert.match(report,/askConfirm\(\{ title: '과제를 다 했나요\?'/);
@@ -44,7 +44,7 @@ test('여러 학생: typed 공통 입력 not yet applied also protects the tab c
  const call=grid.match(/useLeaveProtection\((.*)\);/);assert.ok(call&&call[1].includes('Object.values(common).some('),'common input counts');
  assert.ok(grid.indexOf('useLeaveProtection(')>grid.indexOf('const [common, setCommon] = useState('),'after common is declared');
  const ws=fs.readFileSync(new URL('../src/components/teacher/TeacherWorkspace.tsx',import.meta.url),'utf8');
- for(const src of [grid,ws]){assert.doesNotMatch(src,/'Ctrl\+S'\} 저장/);assert.match(src,/hint=\{<span title="저장 단축키">/);}
+ for(const src of [grid,ws]){assert.doesNotMatch(src,/'Ctrl\+S'\} 저장/);assert.doesNotMatch(src,/ShortcutHint/);assert.match(src,/저장<ShortcutKey keys="S"\/><\/button>/);assert.match(src,/반영<ShortcutKey keys="Enter"\/><\/button>/);}
 });
 test('rosy peach everywhere: no hot pink left in the teacher styles; the confirm button uses the app primary look',()=>{
  for(const f of ['reviewRedesign.css','confirmDialog.css']){const css=fs.readFileSync(new URL(`../src/components/teacher/${f}`,import.meta.url),'utf8');assert.doesNotMatch(css,/#f472b6|#ec4899|#be185d|#fce7f3|#fff1f3|#fbcfe8|#f9a8c0|#db2777/i,f);}

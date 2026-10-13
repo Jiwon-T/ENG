@@ -19,17 +19,21 @@ export async function commitAppStudentRegistration(db:any,actor:any,idInput:unkn
   const value=studentRegistrationSchema.parse(current.data);if(value.purpose!=='new'||value.intakeStage==='consultation')throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
   const teacherIds:Record<string,string>={},teacherUpdates=new Map<string,any>(),classUpdates=new Map<string,any>();
   for(const enrollment of value.enrollments){
-   if(enrollment.teacherUid){
-    const pr=db.collection('teacherWorkspaceAccess').doc(enrollment.teacherUid),profile=(await tx.get(pr)).data(),user=(await tx.get(db.collection('users').doc(enrollment.teacherUid))).data();
-    if(!profile||profile.disabled||profile.academyId!=='main'||!profile.notionTeacherPageId||enrollment.teacherUid!==process.env.ADMIN_UID&&!['teacher','principal'].includes(user?.role))throw Error('INVALID_TEACHER');
+   let teacherUid=enrollment.teacherUid;
+   if(teacherUid){
+    let pr=db.collection('teacherWorkspaceAccess').doc(teacherUid),profile=(await tx.get(pr)).data();
+    // A draft saved before an offline teacher was linked to their account names the offline record: use the account.
+    if(profile?.offline&&profile.linkedUid){teacherUid=profile.linkedUid;pr=db.collection('teacherWorkspaceAccess').doc(teacherUid);profile=(await tx.get(pr)).data();}
+    const user=(await tx.get(db.collection('users').doc(teacherUid))).data();
+    if(!profile||profile.disabled||profile.academyId!=='main'||!profile.notionTeacherPageId||teacherUid!==process.env.ADMIN_UID&&!profile.offline&&!['teacher','principal'].includes(user?.role))throw Error('INVALID_TEACHER');
     const teacher=(await tx.get(db.collection(DIRECTORY_ROWS).doc(directoryRowKey('teachers',profile.notionTeacherPageId)))).data(),p=teacher?.fields?.properties;
-    if(!teacher||teacher.academyId!=='main'||teacher.fields.archived||teacher.issue||teacher.pointer?.teacherUid!==enrollment.teacherUid||(p['상태']?.select?.name||p['상태']?.status?.name)!=='재직'||!(p['담당 과목']?.multi_select||[]).some((s:any)=>s.name===enrollment.subject))throw Error('INVALID_TEACHER');
+    if(!teacher||teacher.academyId!=='main'||teacher.fields.archived||teacher.issue||teacher.pointer?.teacherUid!==teacherUid||(p['상태']?.select?.name||p['상태']?.status?.name)!=='재직'||!(p['담당 과목']?.multi_select||[]).some((s:any)=>s.name===enrollment.subject))throw Error('INVALID_TEACHER');
     teacherIds[enrollment.subject]=profile.notionTeacherPageId;
-    const previous=teacherUpdates.get(enrollment.teacherUid)?.profile||profile,scopes=[...(previous.scopes||[]),{studentKey,subject:enrollment.subject}];teacherUpdates.set(enrollment.teacherUid,{ref:pr,profile:{...previous,scopes}});
+    const previous=teacherUpdates.get(teacherUid)?.profile||profile,scopes=[...(previous.scopes||[]),{studentKey,subject:enrollment.subject}];teacherUpdates.set(teacherUid,{ref:pr,profile:{...previous,scopes}});
    }
    for(const classId of enrollment.classIds){
     let found=await tx.get(db.collection('teacherClasses').doc(classId));if(!found.exists){const result=await tx.get(db.collection('teacherClasses').where('notionPageId','==',classId).limit(2));if(result.docs.length!==1)throw Error('CORE_CLASS_MIGRATION_REQUIRED');found=result.docs[0];}
-    const klass=found.data();if(klass.academyId!=='main'||klass.archived||klass.status!=='진행 중'||klass.subject!==enrollment.subject||klass.sourceMode!=='firestore'||!(klass.teacherUids||[klass.ownerUid]).includes(enrollment.teacherUid))throw Error('FORBIDDEN');
+    const klass=found.data();if(klass.academyId!=='main'||klass.archived||klass.status!=='진행 중'||klass.subject!==enrollment.subject||klass.sourceMode!=='firestore'||!(klass.teacherUids||[klass.ownerUid]).includes(teacherUid))throw Error('FORBIDDEN');
     classUpdates.set(found.ref.id,{ref:found.ref,row:klass});
    }
   }

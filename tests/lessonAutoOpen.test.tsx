@@ -35,3 +35,26 @@ test('auto-open happens once per teacher and day even if the list is unmounted (
  assert.match(ws,/if\(data\?\.uid\)markAutoOpenDone\(data\.uid,lessonDay\);guarded\(resetLesson\)/,'+ 새 일지 too');
  assert.match(ws,/&&!autoOpenDone\(data\.uid,lessonDay\)\}/);
 });
+test('the selected lesson is kept in view by scrolling only the list area, never the page',()=>{
+ const list=fs.readFileSync(new URL('../src/components/teacher/TeacherTodayLessons.tsx',import.meta.url),'utf8');
+ assert.match(list,/while\(box&&!\/\(auto\|scroll\)\/\.test\(getComputedStyle\(box\)\.overflowY\)\)box=box\.parentElement;if\(!box\|\|box===document\.scrollingElement\|\|box===document\.body\)return;/);
+ assert.match(list,/<section ref=\{panelRef\} className="panel today-lessons-panel"><div className="today-sticky-head"><h2>/);
+});
+test('오늘 수업: date, progress, campus chips and 다음 미작성 수업 stay on top while the list scrolls (wide layout only)',()=>{
+ const list=fs.readFileSync(new URL('../src/components/teacher/TeacherTodayLessons.tsx',import.meta.url),'utf8');
+ const head=list.slice(list.indexOf('<div className="today-sticky-head">'),list.indexOf('<div className="today-lessons-list"'));
+ for(const part of ['<DateStepper','today-progress-track','campus-chips','다음 미작성 수업</button></div>'])assert.ok(head.includes(part),part);
+ assert.match(list,/head=headBox&&getComputedStyle\(headBox\)\.position==='sticky'\?headBox\.offsetHeight:0;/,'the selected row is kept below the sticky top');
+ assert.match(list,/r\.top>=b\.top\+head\+8/);assert.match(list,/-head-\(b\.height-head-r\.height\)\/2/);
+ const css=fs.readFileSync(new URL('../src/components/teacher/teacherWorkspace.css',import.meta.url),'utf8');
+ assert.match(css,/@container workspace-shell \(min-width:960px\)\{\.teacher-workspace:not\(\.workspace-mobile\) \.lesson-writing-sidebar \.today-sticky-head\{position:sticky;top:0;/);
+});
+test('오늘 수업: hidden lessons come back from a small 숨김 chip right after 오늘, not a wide button',()=>{
+ const list=fs.readFileSync(new URL('../src/components/teacher/TeacherTodayLessons.tsx',import.meta.url),'utf8');
+ assert.match(list,/<DateStepper date=\{date\} onDate=\{onDate\} disabled=\{disabled\} extra=\{hidden\.size>0&&<button type="button" className="small-button today-hidden-chip" disabled=\{hiding\}[^>]*aria-label=\{`숨긴 수업·학생 \$\{hidden\.size\}개 다시 표시`\} onClick=\{\(\)=>void changeVisibility\(\)\}><EyeOff size=\{13\} aria-hidden="true"\/><span className="today-hidden-label">숨김<\/span>\{hidden\.size\}<\/button>\}\/>/);
+ assert.doesNotMatch(list,/개 다시 표시<\/button>/,'the old wide button is gone');
+ const stepper=fs.readFileSync(new URL('../src/components/teacher/DateStepper.tsx',import.meta.url),'utf8');
+ assert.match(stepper,/onClick=\{\(\)=>onDate\(koreanDay\(\)\)\}>오늘<\/button>\{extra\}/);
+ const css=fs.readFileSync(new URL('../src/components/teacher/teacherWorkspace.css',import.meta.url),'utf8');
+ assert.match(css,/\.lesson-date-stepper>\.today-hidden-chip\{margin-left:0;/);assert.match(css,/@container today-panel \(max-width:250px\)\{\.teacher-workspace \.today-hidden-label\{display:none;\}\}/);
+});

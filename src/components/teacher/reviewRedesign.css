@@ -1037,11 +1037,9 @@
 @media(max-width:560px){.teacher-workspace .gs-rows.is-two{grid-template-columns:1fr}}
 .teacher-workspace .tt-list .tt-dropped{color:#94a3b8;text-decoration-thickness:1.5px}
 /* Two columns: the lesson editor reaches the bottom of the 오늘 수업 column (the sticky list is capped at the
-   screen height), with the 저장·반영 bar at its bottom edge. Only when the list is the taller one. */
+   screen height); the 저장·반영 bar stays right under the content (sticky at the bottom when it is long). */
 @container workspace-shell (min-width:880px){
  .teacher-workspace .lesson-writing-layout>.lesson-editor-panel{align-self:stretch;display:flex;flex-direction:column}
- .teacher-workspace .lesson-writing-layout>.lesson-editor-panel>.lesson-action-bar{margin-top:auto}
- .teacher-workspace .lesson-writing-layout>.lesson-editor-panel>:has(+.lesson-action-bar){margin-bottom:12px}
 }
 .teacher-workspace .lesson-evaluation-heading .lesson-bulk-buttons{display:inline-flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
 /* 일지: hint while a lesson was opened by itself; next unwritten lesson after 반영 */
@@ -1065,3 +1063,25 @@
 .teacher-workspace .campus-chips>button[aria-pressed=true]{border-color:var(--workspace-brand-dot);background:var(--workspace-brand-bg);color:var(--workspace-brand-fg)}
 .teacher-workspace .campus-chips>button[aria-pressed=true] b{color:var(--workspace-brand-fg)}
 .teacher-workspace .smr-campus{display:inline-flex;align-items:center;padding:0 6px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:600}
+/* 오늘 수업 rows: badges end on the same right line as the time line's 정규·n명; the row × sits in that gutter */
+.teacher-workspace .today-student-row{padding-right:22px}
+.teacher-workspace .today-student-row>.today-lesson-student{padding-right:0}
+.teacher-workspace .today-dismiss.is-row{position:absolute;right:0;top:50%;transform:translateY(-50%)}
+@media(pointer:coarse){.teacher-workspace .today-student-row{padding-right:40px}.teacher-workspace .today-dismiss.is-row{right:0}}
+/* 학생 관리 (principal/admin): 전체 학생 / 내 담당 */
+.teacher-workspace .student-scope{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-bottom:8px;padding:3px;border-radius:12px;background:#f1f5f9}
+.teacher-workspace .student-scope>button{min-height:30px;height:30px;padding:0 8px;border:0;border-radius:9px;background:transparent;color:#64748b;font-size:12px;font-weight:700;box-shadow:none}
+.teacher-workspace .student-scope>button b{font-weight:700;color:#94a3b8}
+.teacher-workspace .student-scope>button[aria-pressed=true]{background:#fff;color:var(--workspace-brand-fg);box-shadow:0 1px 3px rgba(15,23,42,.08)}
+.teacher-workspace .student-scope>button[aria-pressed=true] b{color:var(--workspace-brand-fg)}
+/* 선생님 추가 (no app account) */
+.teacher-workspace .offline-teacher-form{display:grid;gap:10px}
+.teacher-workspace .otf-subjects{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.teacher-workspace .otf-subjects>button{min-height:32px;height:32px;padding:0 12px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;color:#64748b;font-size:13px;font-weight:600;box-shadow:none}
+.teacher-workspace .otf-subjects>button[aria-pressed=true]{border-color:var(--workspace-brand-dot);background:var(--workspace-brand-bg);color:var(--workspace-brand-fg)}
+.teacher-workspace .otf-req{color:#dc2626;font-weight:700}
+.teacher-workspace .otf-error{margin:0;font-size:12px;font-weight:600;color:#b91c1c}
+/* 앱 계정 연결 (offline teacher → signed-up account) */
+.teacher-workspace .otl{display:grid;gap:4px;padding-top:10px;border-top:1px solid #e2e8f0}
+.teacher-workspace .otl-row{display:flex;gap:6px}
+.teacher-workspace .otl-row>select{flex:1;min-width:0}

@@ -127,3 +127,42 @@ test('an absent lesson raised by hand by one lesson counts as the base for the n
  assert.equal(nextSessionNumbers([lesson('2026-10-06',{round:2}),lesson('2026-10-09',{attendance:'보강 결석',round:9})],next).lesson,3,'a number beyond one lesson is ignored');
  assert.equal(nextSessionNumbers([lesson('2026-09-29',{round:8}),lesson('2026-10-02',{attendance:'결석',round:1})],{...next,date:'2026-10-06'}).lesson,2,'first lesson of the month raised to 1 counts');
 });
+test('자습 turned on: times default to the lesson end + 60 min, the previous round shows even before times, saved lessons count a new 자습',async()=>{
+ const {withStudyDefaults,autoSessionNumbers,editedSessionNumbers,shortRoundHint}=await import('../src/lib/sessionNumbers');
+ const base:any={studentKey:'s',subject:'영어',date:'2026-10-13',classSession:'있음',start:'17:30',end:'18:50',attendance:'보강 출석',selfStudy:'있음',selfStudyStart:'',selfStudyEnd:''};
+ assert.deepEqual([withStudyDefaults(base,'selfStudy').selfStudyStart,withStudyDefaults(base,'selfStudy').selfStudyEnd],['18:50','19:50']);
+ assert.equal(withStudyDefaults({...base,selfStudyStart:'15:00'},'selfStudy').selfStudyEnd,'','times already typed are left alone');
+ assert.equal(withStudyDefaults({...base,classSession:'없음'},'selfStudy').selfStudyStart,'','no lesson end → nothing to start from');
+ assert.equal(withStudyDefaults(base,'attendance').selfStudyStart,'','only when 자습 itself changes');
+ const history=[{id:'h',stage:'published',data:{studentKey:'s',subject:'영어',date:'2026-10-06',classSession:'있음',start:'17:30',end:'18:50',round:6.7,attendance:'출석',selfStudy:'있음',selfStudyStart:'18:50',selfStudyEnd:'19:50',selfStudyRound:7.6}}];
+ const waiting=autoSessionNumbers(base,history).hints.selfStudyRound;assert.match(waiting,/직전 7\.6회차\(10\/06\) · 시간 입력 필요/);assert.equal(shortRoundHint(waiting),'직전 7.6 · 시간 입력');
+ assert.equal(autoSessionNumbers(withStudyDefaults(base,'selfStudy'),history).data.selfStudyRound,8.6,'with the default 60 min: +1');
+ const saved={...base,selfStudy:'미확인',selfStudyRound:null,round:7.7};
+ assert.equal(editedSessionNumbers(withStudyDefaults({...saved,selfStudy:'있음'},'selfStudy'),saved,['selfStudy'],history).selfStudyRound,8.6,'a saved lesson counts the newly turned-on 자습 from earlier lessons');
+ assert.equal(editedSessionNumbers({...saved,selfStudy:'있음',selfStudyStart:'18:50',selfStudyEnd:'19:50'},saved,['selfStudy']).selfStudyRound,null,'without earlier lessons nothing is guessed');
+});
+test('saved lesson: when the earlier lessons arrive after 자습 was turned on, the round is counted then (typed rounds kept)',async()=>{
+ const {editedSessionNumbers,withStudyDefaults}=await import('../src/lib/sessionNumbers');
+ const saved:any={studentKey:'s',subject:'영어',date:'2026-10-13',classSession:'있음',start:'17:30',end:'18:50',attendance:'출석',selfStudy:'미확인',selfStudyRound:null,round:7.7};
+ const history=[{id:'h',stage:'published',data:{studentKey:'s',subject:'영어',date:'2026-10-06',classSession:'있음',start:'17:30',end:'18:50',round:6.7,attendance:'출석',selfStudy:'있음',selfStudyStart:'18:50',selfStudyEnd:'19:50',selfStudyRound:7.6}}];
+ const early=editedSessionNumbers(withStudyDefaults({...saved,selfStudy:'있음'},'selfStudy'),saved,['selfStudy'],[]);
+ assert.equal(early.selfStudyRound,null,'before the records arrive nothing is counted');
+ assert.equal(editedSessionNumbers(early,saved,['selfStudy'],history).selfStudyRound,8.6,'recounted when they arrive');
+ assert.equal(editedSessionNumbers({...early,selfStudyRound:9},saved,['selfStudy','selfStudyRound'],history).selfStudyRound,9,'a round typed by hand is kept');
+ const src=(await import('node:fs')).readFileSync(new URL('../src/components/teacher/TeacherWorkspace.tsx',import.meta.url),'utf8');
+ assert.match(src,/setLesson\(\(d:any\)=>sameLessonTarget\(d,\{studentKey,subject,date\}\)\?editedSessionNumbers\(d,baseline,autoTouches\.current,history\):d\)/,'the editor recounts on arrival');
+});
+test('saved lesson: date changed while the earlier lessons were loading — records for the old date are dropped',async()=>{
+ const {sameLessonTarget}=await import('../src/lib/sessionNumbers');
+ const asked={studentKey:'s',subject:'영어',date:'2026-10-13'};
+ assert.equal(sameLessonTarget({...asked,content:'x'},asked),true,'same lesson: records kept');
+ assert.equal(sameLessonTarget({...asked,date:'2026-10-14'},asked),false,'요청 중 날짜 변경: records ignored');
+ assert.equal(sameLessonTarget({...asked,studentKey:'t'},asked),false,'another student');
+ assert.equal(sameLessonTarget({...asked,subject:'수학'},asked),false,'another subject');
+ assert.equal(sameLessonTarget(null,asked),false);assert.equal(sameLessonTarget(asked,{}),false);
+ const src=(await import('node:fs')).readFileSync(new URL('../src/components/teacher/TeacherWorkspace.tsx',import.meta.url),'utf8');
+ const body=src.slice(src.indexOf('function loadSessionHistory'),src.indexOf('function openDraft'));
+ const check=body.indexOf('!sameLessonTarget(latestLesson.current,{studentKey,subject,date}))return;'),store=body.indexOf('sessionHistory.current=history');
+ assert.ok(check>0&&store>check,'history is stored only after the open lesson is checked');
+ assert.match(src,/latestLesson\.current=lesson;/);
+});

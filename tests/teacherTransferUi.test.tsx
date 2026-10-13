@@ -75,6 +75,29 @@ test('teacher dialog asks one reason when students are taken off (not for a stop
 test('일괄 상 and 일괄 중 in both editors; the 회차 hint is short with the full text as tooltip',async()=>{
  for(const f of ['TeacherWorkspace.tsx','TeacherLessonGrid.tsx']){const src=read(f);assert.match(src,/\(\['상','중'\] as const\)\.map\(level=>/,f);assert.match(src,/attitude:level,homework:level/,f);assert.match(src,/출석·태도·숙제 일괄 \{level\}/,f);}
  const {shortRoundHint}=await import('../src/lib/sessionNumbers');
- assert.equal(shortRoundHint('자동 입력 · 직전 6.7회차(10/06) +1'),'직전 6.7 +1');assert.equal(shortRoundHint('자동 입력 · 2026-10 월별 시작 0 +0.9'),'월 첫 수업 +0.9');assert.equal(shortRoundHint(''),'');
- assert.match(read('LessonAcademyFields.tsx'),/title=\{roundHints\[round\]\|\|undefined\}>\{shortRoundHint\(roundHints\[round\]\|\|''\)\}/);
+ assert.equal(shortRoundHint('자동 입력 · 직전 6.7회차(10/06) +1'),'직전 6.7 +1');assert.equal(shortRoundHint('자동 입력 · 2026-10 월별 시작 0 +0.9'),'월 첫 수업 +0.9');assert.equal(shortRoundHint('자동 입력 · 2026-10 월별 시작 0 +1','자습'),'월 첫 자습 +1','자습 says 자습');assert.equal(shortRoundHint(''),'');
+ assert.match(read('LessonAcademyFields.tsx'),/title=\{roundHints\[round\]\|\|undefined\}>\{shortRoundHint\(roundHints\[round\]\|\|'',title\)\}/);
+});
+test('선생님 추가 (no app account): form fields, label preview, card with subjects·phone and 앱 미연결; initials helpers',async()=>{
+ const React=(await import('react')).default;const {renderToStaticMarkup}=await import('react-dom/server');
+ const {default:OfflineTeacherForm}=await import('../src/components/teacher/OfflineTeacherForm');
+ const form=renderToStaticMarkup(React.createElement(OfflineTeacherForm,{busy:false,onClose:()=>{},onSubmit:async()=>{}}));
+ for(const t of ['이름','담당 과목','연락처','메모'])assert.ok(form.includes(t),t);assert.match(form,/메모 <span class="gs-opt">\(선택\)<\/span>/);
+ const {subjectInitials,offlineTeacherLabel,shortTeacherName}=await import('../src/lib/teacherName');
+ assert.equal(subjectInitials(['수학','국어','영어']),'국영수');assert.equal(offlineTeacherLabel('박민지 ',['영어','국어']),'국영 박민지T');assert.equal(offlineTeacherLabel('박민지T',[]),'박민지T');
+ assert.equal(shortTeacherName('국영 박민지T'),'박민지T');assert.equal(shortTeacherName('영어 이지원T'),'이지원T');assert.equal(shortTeacherName('한지민T'),'한지민T','a name starting with 한 is kept');
+ const {default:TeacherManager}=await import('../src/components/teacher/TeacherManager');
+ const html=renderToStaticMarkup(React.createElement(TeacherManager,{data:{admin:true,uid:'admin',students:[],staff:[{uid:'offline-1',name:'국영 박민지T'}],access:[{uid:'offline-1',workspaceLabel:'국영 박민지T',offline:true,phone:'01012345678',subjects:['국어','영어'],scopes:[]}]},request:async()=>({transfers:[]}),act:async(f:any)=>{await f();},busy:false,refresh:async()=>{}}));
+ assert.match(html,/\+ 선생님 추가/);assert.match(html,/국어·영어 · 01012345678/);assert.match(html,/앱 미연결/);
+});
+test('앱 계정 연결: only on an offline teacher, only accounts with 선생님 권한 and no teacher record, after saving, with a confirm',async()=>{
+ const fsm=await import('node:fs'),src=fsm.readFileSync(new URL('../src/components/teacher/TeacherManager.tsx',import.meta.url),'utf8');
+ assert.match(src,/const linkable=offline&&\(data\.admin\|\|data\.principal\)\?\(\(data\.access\|\|\[\]\) as any\[\]\)\.filter\(a=>!a\.offline&&!a\.disabled&&\(!a\.notionTeacherPageId\|\|a\.appTeacherRow&&!a\.linkedOfflineUid\)&&a\.academyId==='main'&&a\.uid!==data\.uid\)/);
+ assert.match(src,/const appRow=!offline&&Boolean\(teacher\.profile\)&&\(Boolean\(teacher\.profile\?\.appTeacherRow\)\|\|!teacher\.profile\?\.notionTeacherPageId\)/,'담당 과목 for an app-made 명부 줄');
+ assert.match(src,/\.\.\.\(appRow\?\{teacherSubjects:teaches\}:\{\}\)/);
+ assert.match(src,/disabled=\{busy\|\|changed\|\|!linkTo\}/,'unsaved edits are saved first');
+ assert.match(src,/askConfirm\(\{title:'이 계정과 연결할까요\?'[\s\S]*?confirmText:'연결하기',icon:'link'\}\)\)return;await act\(async\(\)=>\{await request\('link-offline-teacher',\{offlineUid:editing\.uid,uid:account\.uid\}\);/);
+ const ws=fsm.readFileSync(new URL('../api/teacher/workspace.ts',import.meta.url),'utf8');
+ assert.match(ws,/if\(a\.offline&&!a\.linkedUid&&!staff\.some/,'a linked offline record is no longer listed as a teacher');
+ assert.match(ws,/body\.action==='link-offline-teacher'\)\{failureStage='offline-teacher-link';[\s\S]*?invalidateTeacherMutation\('grant'\);teacherReadCache\.clear\(\);/);
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {renderToStaticMarkup} from 'react-dom/server';
+import fs from 'node:fs';
 import {campusCounts,lessonCampus,studentCampusLabel,studentCampuses} from '../src/lib/campus';
 import TeacherTodayLessons from '../src/components/teacher/TeacherTodayLessons';
 import StudentMasterPanel from '../src/components/teacher/StudentMasterPanel';
@@ -30,4 +31,20 @@ test('학생 관리: campus tag per student and chips when students are at two o
  const html=renderToStaticMarkup(<StudentMasterPanel students={students} value="" onSelect={()=>{}}/>);
  assert.match(html,/class="smr-campus">영어 용죽 · 수학 이충</);assert.match(html,/class="smr-campus">이충</);
  assert.match(html,/class="campus-chips"[^]*?용죽 <b>1<\/b>[^]*?이충 <b>2<\/b>/);
+});
+test('학생 관리: all three campus chips (0 included) as soon as any student has a campus; none without campus data',()=>{
+ const one=[{studentKey:'a',studentDisplayName:'가',enrollmentStatus:'등록',subjects:[{subject:'영어',status:'등록',campus:'용죽'}]}];
+ const html=renderToStaticMarkup(<StudentMasterPanel students={one} value="" onSelect={()=>{}}/>);
+ assert.match(html,/class="campus-chips"[^]*?용죽 <b>1<\/b>[^]*?이충 <b>0<\/b>[^]*?고덕 <b>0<\/b>/);
+ const none=renderToStaticMarkup(<StudentMasterPanel students={[{studentKey:'b',studentDisplayName:'나',enrollmentStatus:'등록',subjects:[{subject:'영어',status:'등록'}]}]} value="" onSelect={()=>{}}/>);
+ assert.doesNotMatch(none,/campus-chips/);
+});
+test('학생 관리: principal/admin get 전체 학생 / 내 담당 (list and dashboard follow it); teachers only see their own anyway',()=>{
+ const withScope=renderToStaticMarkup(<StudentMasterPanel students={students} value="" onSelect={()=>{}} scope={{value:'mine',mine:2,onChange:()=>{}}}/>);
+ assert.match(withScope,/class="student-scope"[^]*?aria-pressed="false"[^>]*>전체 학생<\/button><button[^>]*aria-pressed="true"[^>]*>내 담당 <b>2<\/b>/);
+ assert.doesNotMatch(renderToStaticMarkup(<StudentMasterPanel students={students} value="" onSelect={()=>{}}/>),/student-scope/,'no switch for ordinary teachers');
+ assert.ok(withScope.indexOf('student-scope')<withScope.indexOf('student-master-mobile'),'above the mobile layout too (not inside the desktop-only part)');
+ const ws=fs.readFileSync(new URL('../src/components/teacher/TeacherWorkspace.tsx',import.meta.url),'utf8');
+ assert.match(ws,/const scopedStudents=canSeeAll&&studentScope==='mine'\?students\.filter\(\(s:any\)=>myStudentKeys\.has\(s\.studentKey\)\):students;/);
+ assert.match(ws,/students=\{scopedStudents\} today=/);assert.match(ws,/<StudentOverview students=\{scopedStudents\}/);
 });

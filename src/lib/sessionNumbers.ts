@@ -69,12 +69,16 @@ export function autoSessionNumbers<T extends Record<string,any>>(data:T,records:
   if(result[kind]!==null){next[key]=result[kind];const base=sessionBase(records,data,kind);const minutes=sessionMinutes(kind==='lesson'?data.start:data.selfStudyStart,kind==='lesson'?data.end:data.selfStudyEnd)!;
    const increment=formatSessionNumber(absent(data)?0:sessionIncrement(kind,minutes)!/10);
    hints[key]=base?`자동 입력 · 직전 ${formatSessionNumber(kind==='lesson'?base.round:base.selfStudyRound)}회차(${base.date.slice(5).replace('-','/')}) +${increment}`:`자동 입력 · ${data.date.slice(0,7)} 월별 시작 0 +${increment}`;
-  }else next[key]=null;
+  }else{next[key]=null;
+   // On but without times yet: still show the previous round so the teacher knows where it continues from.
+   const enabled=kind==='lesson'?data.classSession==='있음':data.selfStudy==='있음',base=enabled&&sessionMinutes(kind==='lesson'?data.start:data.selfStudyStart,kind==='lesson'?data.end:data.selfStudyEnd)===null?sessionBase(records,data,kind):undefined;
+   if(base)hints[key]=`자동 입력 대기 · 직전 ${formatSessionNumber(kind==='lesson'?base.round:base.selfStudyRound)}회차(${base.date.slice(5).replace('-','/')}) · 시간 입력 필요`;
+  }
  }return {data:next,hints};
 }
 
 /** Recalculate after relevant edits from the saved counter, never on opening. */
-export function editedSessionNumbers<T extends Record<string,any>>(data:T,baseline:any,touched:Iterable<string>=[]):T {
+export function editedSessionNumbers<T extends Record<string,any>>(data:T,baseline:any,touched:Iterable<string>=[],records:readonly any[]=[]):T {
  if(!baseline)return data;
  const edited=new Set(touched),next:any={...data};
  for(const [kind,key,fields] of [['lesson','round',['start','end','classSession','attendance','date']],['study','selfStudyRound',['selfStudyStart','selfStudyEnd','selfStudy','attendance','date']]] as const){
@@ -82,16 +86,33 @@ export function editedSessionNumbers<T extends Record<string,any>>(data:T,baseli
   const minutes=sessionMinutes(kind==='lesson'?data.start:data.selfStudyStart,kind==='lesson'?data.end:data.selfStudyEnd);
   const oldMinutes=sessionMinutes(kind==='lesson'?baseline.start:baseline.selfStudyStart,kind==='lesson'?baseline.end:baseline.selfStudyEnd);
   const old=numberTenths(baseline[key]);
-  if(minutes===null||oldMinutes===null||old===null||(kind==='lesson'?data.classSession:data.selfStudy)!=='있음')continue;
+  const enabled=(kind==='lesson'?data.classSession:data.selfStudy)==='있음';
+  // Newly turned on (no counter or no times before): count from the earlier lessons, as for a new lesson.
+  if(enabled&&minutes!==null&&(old===null||oldMinutes===null)){const fresh=nextSessionNumbers(records,data)[kind];if(fresh!==null)next[key]=fresh;continue;}
+  if(minutes===null||oldMinutes===null||old===null||!enabled)continue;
   const base=data.date.slice(0,7)!==baseline.date.slice(0,7)?0:old-(sessionHasIncrement(baseline,kind)?sessionIncrement(kind,oldMinutes)!:0);
   if(base<0)continue;
   next[key]=(base+(absent(data)?0:sessionIncrement(kind,minutes)!))/10;
  }
  return next;
 }
-/** Short form of a round hint for the narrow 회차 field: "직전 6.7 +1" (or "월 첫 수업 +0.9"); the full text stays as its tooltip. */
-export function shortRoundHint(hint:string){
+/** Short form of a round hint for the narrow 회차 field: "직전 6.7 +1" (or "월 첫 수업 +0.9" / "월 첫 자습 +1" by `title`); the full text stays as its tooltip. */
+export function shortRoundHint(hint:string,title:'수업'|'자습'='수업'){
  const prev=hint.match(/^자동 입력 · 직전 ([\d.]+)회차\([^)]*\) \+([\d.]+)$/);if(prev)return `직전 ${prev[1]} +${prev[2]}`;
- const first=hint.match(/^자동 입력 · \d{4}-\d{2} 월별 시작 0 \+([\d.]+)$/);if(first)return `월 첫 수업 +${first[1]}`;
+ const first=hint.match(/^자동 입력 · \d{4}-\d{2} 월별 시작 0 \+([\d.]+)$/);if(first)return `월 첫 ${title} +${first[1]}`;
+ const waiting=hint.match(/^자동 입력 대기 · 직전 ([\d.]+)회차\([^)]*\) · 시간 입력 필요$/);if(waiting)return `직전 ${waiting[1]} · 시간 입력`;
  return hint;
+}
+/** 자습 switched to 있음 with no times yet: start at the end of the lesson and last 60 minutes (the academy's usual
+ *  자습), so the round can be counted at once; the teacher can still change both times. */
+export function withStudyDefaults<T extends Record<string,any>>(next:T,key:string):T{
+ if(key!=='selfStudy'||next.selfStudy!=='있음'||next.selfStudyStart||next.selfStudyEnd)return next;
+ const end=next.classSession==='있음'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(next.end||'')?next.end:'';if(!end)return next;
+ const total=Math.min(Number(end.slice(0,2))*60+Number(end.slice(3))+60,23*60+59),hh=String(Math.floor(total/60)).padStart(2,'0'),mm=String(total%60).padStart(2,'0');
+ return {...next,selfStudyStart:end,selfStudyEnd:`${hh}:${mm}`};
+}
+/** Earlier lessons fetched for one student·subject·date belong to the open lesson only while it still has that
+ *  student, subject and date (the teacher may change the date while the request is running). */
+export function sameLessonTarget(lesson:any,target:{studentKey?:string;subject?:string;date?:string}):boolean{
+ return Boolean(lesson&&target.studentKey&&lesson.studentKey===target.studentKey&&lesson.subject===target.subject&&lesson.date===target.date);
 }

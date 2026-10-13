@@ -6,6 +6,7 @@ import {hashPin,hashStudentKey} from './security.js';
 import {subjects} from './teacherWorkspacePolicy.js';
 import {workspaceInflightRead} from './workspaceInflightRead.js';
 import {admissionEditSchema,admissionEditProperties,admissionFromProperties} from './studentAdmission.js';
+import {writeAppTeacherRow} from './offlineTeacher.js';
 export const CORE_AUTHORITY=DIRECTORY_CORE_AUTHORITY,CORE_COMMANDS='academyCoreCommands';
 const digest=(v:any)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const stateRef=(db:any)=>db.collection(CORE_AUTHORITY).doc('main');
@@ -110,7 +111,8 @@ async function classRecord(db:any,id:string,allowArchived=false){
 export async function readCoreEnrollment(db:any,actor:any,keyInput:any){
  manage(actor);const key=uuid(z.string().uuid().parse(keyInput));await member({get:(r:any)=>r.get()},db,actor,key);
  const s=valid((await refFor(db,'students',key).get()).data(),'students'),e=(await enrollmentRow(db,key)).row,classes=[];
- for(const id of members(s.fields.properties['소속반']))classes.push({id,...await classRecord(db,id,true)});
+ // A link to a class that was deleted or can no longer be found is skipped here (and kept as is on save).
+ for(const id of members(s.fields.properties['소속반'])){try{classes.push({id,...await classRecord(db,id,true)});}catch(e){if((e as Error).message!=='CORE_CLASS_MIGRATION_REQUIRED')throw e;}}
  const entries=[];for(const subject of subjects){const p=e.fields.properties,teachers=[];
   for(const id of members(p[subject+' 담당'])){const t=valid((await refFor(db,'teachers',id).get()).data(),'teachers');teachers.push({id,name:name(t)});}
   entries.push({subject,status:choice(p[subject]),startDate:p[subject+' 시작일']?.date?.start||null,endDate:p[subject+' 중단일']?.date?.start||null,plannedEndDate:p[subject+' 중단 예정일']?.date?.start||null,campus:choice(p[subject+' 캠퍼스'])||null,teachers,
@@ -126,7 +128,7 @@ export async function readCoreEnrollmentSummaries(db:any,actor:any){
 }
 export async function coreRegistrationOptions(db:any,actor:any){
  manage(actor);const profiles=(await db.collection('teacherWorkspaceAccess').where('academyId','==','main').limit(101).get()).docs;if(profiles.length>100)throw Error('CORE_CUTOVER_LIMIT');
- const teachers=[];for(const d of profiles){const p=d.data();if(p.disabled||!p.notionTeacherPageId)continue;const u=(await db.collection('users').doc(d.id).get()).data();if(d.id!==process.env.ADMIN_UID&&!['teacher','principal'].includes(u?.role))continue;
+ const teachers=[];for(const d of profiles){const p=d.data();if(p.disabled||!p.notionTeacherPageId)continue;const u=(await db.collection('users').doc(d.id).get()).data();if(d.id!==process.env.ADMIN_UID&&!p.offline&&!['teacher','principal'].includes(u?.role))continue; // offline: added without an app account
   const r=valid((await refFor(db,'teachers',p.notionTeacherPageId).get()).data(),'teachers');if(r.pointer.teacherUid!==d.id||choice(r.fields.properties['상태'])!=='재직')continue;
   teachers.push({uid:d.id,name:name(r),subjects:(r.fields.properties['담당 과목']?.multi_select||[]).map((v:any)=>v.name)});
  }
@@ -142,7 +144,11 @@ export async function saveCoreEnrollment(db:any,actor:any,keyInput:any,request:a
   if(command){if(command.fingerprint!==fingerprint)throw Error('STUDENT_ENROLLMENT_REQUEST_CONFLICT');return {...command.result,alreadySaved:true};}
   if(stamp(s)!==studentTime||stamp(e)!==enrollmentTime)throw Error('NOTION_EDIT_CONFLICT');
   const classIds=members(s.fields.properties['소속반']),classes=[];
-  for(const id of [...new Set([...classIds,...input.classIds])]){const found=await classRecord(db,id);const r=(await tx.get(found.ref)).data();if(r.academyId!=='main'||r.archived)throw Error('CORE_CLASS_MIGRATION_REQUIRED');classes.push({id,ref:found.ref,row:r});}
+  // Existing links to deleted / missing classes do not block the save and are kept untouched (no data removed);
+  // choosing such a class now is refused with a clear message.
+  const dead:string[]=[];
+  for(const id of [...new Set([...classIds,...input.classIds])]){const chosen=input.classIds.includes(id);let found:any;try{found=await classRecord(db,id);}catch(e){if((e as Error).message!=='CORE_CLASS_MIGRATION_REQUIRED')throw e;if(chosen)throw Error('CLASS_NOT_FOUND');dead.push(id);continue;}
+   const r=(await tx.get(found.ref)).data();if(!r||r.academyId!=='main'||r.archived){if(chosen)throw Error('CLASS_NOT_FOUND');dead.push(id);continue;}classes.push({id,ref:found.ref,row:r});}
   if(input.classIds.some((id:string)=>!classes.some(c=>c.id===id&&c.row.subject===input.subject)))throw Error('FORBIDDEN');
   if(input.status==='중단'&&input.classIds.some((id:string)=>!classIds.includes(id)))throw Error('NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');
   const before=members(e.fields.properties[input.subject+' 담당']),removedIds=before.filter(id=>input.removeTeacherIds.includes(id));
@@ -160,7 +166,7 @@ export async function saveCoreEnrollment(db:any,actor:any,keyInput:any,request:a
   const retained=classes.filter(c=>classIds.includes(c.id)&&c.row.subject!==input.subject).map(c=>c.id),at=Date.now(),p={...e.fields.properties,[input.subject]:{status:{name:input.status}},[input.subject+' 시작일']:{date:{start:input.startDate}},[input.subject+' 중단일']:{date:input.endDate?{start:input.endDate}:null},[input.subject+' 중단 예정일']:{date:input.plannedEndDate?{start:input.plannedEndDate}:null},...(input.campus!==undefined?{[input.subject+' 캠퍼스']:{select:input.campus?{name:input.campus}:null}}:{}),[input.subject+' 담당']:{relation:teachers.map(id=>({id}))}};
   const next=changed(tx,db,enrollment.ref,e,p,actor.uid,at);
   const starts=subjects.map(subject=>p[subject+' 시작일']?.date?.start).filter(Boolean).sort();
-  changed(tx,db,sr,s,{...s.fields.properties,'소속반':{relation:[...retained,...input.classIds].map(id=>({id}))},'등록상태':{status:{name:subjects.some(subject=>choice(p[subject])==='등록')?'등록':subjects.some(subject=>choice(p[subject])==='대기')?'대기':'중단'}},'강의명':{multi_select:subjects.filter(subject=>choice(p[subject])==='등록').map(name=>({name}))},...(input.campus!==undefined?{'캠퍼스':{multi_select:[...new Set(subjects.map(subject=>choice(p[subject+' 캠퍼스'])).filter(Boolean))].map(name=>({name}))}}:{}),'수강시작일':{date:starts.length?{start:starts[0]}:null}},actor.uid,at);
+  changed(tx,db,sr,s,{...s.fields.properties,'소속반':{relation:[...retained,...dead,...input.classIds].map(id=>({id}))},'등록상태':{status:{name:subjects.some(subject=>choice(p[subject])==='등록')?'등록':subjects.some(subject=>choice(p[subject])==='대기')?'대기':'중단'}},'강의명':{multi_select:subjects.filter(subject=>choice(p[subject])==='등록').map(name=>({name}))},...(input.campus!==undefined?{'캠퍼스':{multi_select:[...new Set(subjects.map(subject=>choice(p[subject+' 캠퍼스'])).filter(Boolean))].map(name=>({name}))}}:{}),'수강시작일':{date:starts.length?{start:starts[0]}:null}},actor.uid,at);
   for(const c of classes)if(c.row.subject===input.subject){const wanted=input.classIds.includes(c.id),keys=(c.row.students||[]).filter((id:string)=>uuid(id)!==key);if(wanted)keys.push(key);if(JSON.stringify([...keys].sort())!==JSON.stringify([...(c.row.students||[])].sort()))tx.set(c.ref,{...c.row,students:keys,revision:(c.row.revision||0)+1,updatedAt:at});}
   for(const d of profiles){const profile=d.data();if(!profile.notionTeacherPageId)continue;const id=uuid(profile.notionTeacherPageId),scopes=(profile.scopes||[]).filter((v:any)=>uuid(v.studentKey)!==key||v.subject!==input.subject);if(teachers.includes(id))scopes.push({studentKey:key,subject:input.subject});
    const keys=(items:any[])=>items.map(v=>uuid(v.studentKey)+':'+v.subject).sort();if(JSON.stringify(keys(scopes))!==JSON.stringify(keys(profile.scopes||[])))tx.set(d.ref,{...profile,scopes,assignmentRevision:(profile.assignmentRevision||0)+1,assignmentSource:'firestore'});}
@@ -186,28 +192,87 @@ export async function saveCoreGrant(db:any,actor:any,value:any,expected:number,p
   await guard(tx,db);const saved=(await tx.get(ref)).data(),user=(await tx.get(ur)).data();
   // After the switch the admin can register a teacher account that has no workspace record yet (no Notion page needed).
   const old=saved||(actor.admin&&['teacher','principal'].includes(user?.role)&&!value.notionTeacherPageId?{academyId:'main',scopes:[],assignmentRevision:0,notionTeacherPageId:null,workspaceRole:value.workspaceRole,createdAt:Date.now(),createdBy:actor.uid}:null);
-  if(!old||old.academyId!=='main'||value.uid!==process.env.ADMIN_UID&&!['teacher','principal'].includes(user?.role))throw Error('INVALID_TEACHER');
+  if(!old||old.academyId!=='main'||value.uid!==process.env.ADMIN_UID&&!old.offline&&!['teacher','principal'].includes(user?.role))throw Error('INVALID_TEACHER');
+  if(old.offline&&value.workspaceRole!=='teacher')throw Error('INVALID_TEACHER'); // no account, so never 원장
   if(old.lastCoreGrantIntent===intent)return {sourceMode:'firestore',alreadySaved:true};
   if((old.assignmentRevision||0)!==expected)throw Error('DRAFT_CONFLICT');
   if((value.notionTeacherPageId||null)!==(old.notionTeacherPageId||null))throw Error('SOURCE_IDENTITY_LOCKED');
   const keys=[...new Set<string>([...value.academyStudents,...value.scopes.map((s:any)=>uuid(s.studentKey)),...(old.scopes||[]).map((s:any)=>uuid(s.studentKey))])];if(keys.length>100)throw Error('CORE_CUTOVER_LIMIT');
   const memberships=[];for(const key of keys)memberships.push(await member(tx,db,actor,key));policy(actor,value,old,user,memberships);
   const enrollments=[];for(const key of keys){const found=await enrollmentRow(db,key),row=valid((await tx.get(found.ref)).data(),'enrollments');enrollments.push({key,ref:found.ref,row});}
-  if(old.notionTeacherPageId){const teacher=valid((await tx.get(refFor(db,'teachers',old.notionTeacherPageId))).data(),'teachers');if(teacher.pointer?.teacherUid!==value.uid||['중단','휴직'].includes(choice(teacher.fields.properties['상태'])))throw Error('INVALID_TEACHER');}
+  let teacherRow:any=null;if(old.notionTeacherPageId){const teacher=valid((await tx.get(refFor(db,'teachers',old.notionTeacherPageId))).data(),'teachers');if(teacher.pointer?.teacherUid!==value.uid||['중단','휴직'].includes(choice(teacher.fields.properties['상태'])))throw Error('INVALID_TEACHER');teacherRow=teacher;}
   // Without a Notion teacher page the app record alone holds the assignment (the app is the only store now).
   if(!actor.admin&&JSON.stringify(value.notionSources||[])!==JSON.stringify(old.notionSources||[]))throw Error('FORBIDDEN');
-  const teacherId=old.notionTeacherPageId?uuid(old.notionTeacherPageId):null,at=Date.now();
+  let teacherId=old.notionTeacherPageId?uuid(old.notionTeacherPageId):null;const at=Date.now();
   // 담당 변경 from the teacher dialog: this teacher taken off a subject that continues needs a reason, like 수강 관리.
   const keep=(key:string,subject:string)=>value.scopes.some((s:any)=>uuid(s.studentKey)===key&&s.subject===subject);
   const dropped=(old.scopes||[]).map((s:any)=>({key:uuid(s.studentKey),subject:s.subject})).filter((s:any)=>!keep(s.key,s.subject)&&(()=>{const status=choice(enrollments.find(e=>e.key===s.key)?.row.fields.properties[s.subject]);return status!=='중단';})()); // only an explicit 중단 is not a transfer (a missing status still asks, like the screen)
   if(dropped.length&&!value.transferReason)throw Error('TRANSFER_REASON_REQUIRED');
   const staff=dropped.length?(await tx.get(db.collection('teacherWorkspaceAccess').where('academyId','==','main').limit(101))).docs:[];
+  // An account approved before 명부 줄 were made automatically gets one now (writes start here, after every read).
+  const accountName=String(value.workspaceLabel||old.workspaceLabel||user?.alias||user?.name||'선생님').slice(0,100);
+  const made=!old.notionTeacherPageId&&!old.offline&&value.uid!==process.env.ADMIN_UID&&['teacher','principal'].includes(user?.role)?writeAppTeacherRow(tx,db,{uid:value.uid,label:accountName,subjects:value.teacherSubjects??old.subjects??[],by:actor.uid,at}):null;
+  if(made)teacherId=uuid(made.rowId);
   for(const e of enrollments){const p={...e.row.fields.properties};for(const subject of subjects){const ids=members(p[subject+' 담당']).filter(id=>id!==teacherId);if(teacherId&&value.scopes.some((s:any)=>uuid(s.studentKey)===e.key&&s.subject===subject))ids.push(teacherId);p[subject+' 담당']={relation:ids.map(id=>({id}))};}changed(tx,db,e.ref,e.row,p,actor.uid,at);}
-  tx.set(ref,{...old,scopes:value.scopes,workspaceLabel:value.workspaceLabel||old.workspaceLabel||'',workspaceRole:value.workspaceRole,disabled:false,assignmentRevision:(old.assignmentRevision||0)+1,assignmentSource:'firestore',notionAssignmentStage:'synced',notionSyncRequired:false,lastCoreGrantIntent:intent,...(actor.admin&&value.notionSources?{notionSources:value.notionSources}:{})});
+  // An offline teacher's 연락처 / 메모 / 담당 과목 are edited here too; the teacher row follows (name = label, 담당 과목).
+  const offlineInfo=old.offline?{phone:value.offlinePhone??old.phone??'',memo:value.offlineMemo??old.memo??'',subjects:value.offlineSubjects??old.subjects??[]}:null;
+  // A row the app made for an account (선생님 권한 or a link) follows the same way: name and 담당 과목 (Notion-era rows are left alone).
+  const appRow=!old.offline&&(old.appTeacherRow||made)?{subjects:value.teacherSubjects??old.subjects??[]}:null;
+  if((offlineInfo||appRow)&&teacherRow){const label=offlineInfo?value.workspaceLabel||old.workspaceLabel||'':accountName,list=(offlineInfo||appRow)!.subjects,props=teacherRow.fields.properties;const nextProps={...props,'선생님':{title:[{plain_text:label,text:{content:label}}]},'담당 과목':{multi_select:list.map((name:string)=>({name}))}};if(JSON.stringify(nextProps)!==JSON.stringify(props))changed(tx,db,refFor(db,'teachers',old.notionTeacherPageId),teacherRow,nextProps,actor.uid,at);}
+  tx.set(ref,{...old,...(offlineInfo||{}),...(appRow||{}),...(made?{notionTeacherPageId:made.rowId,appTeacherRow:true}:{}),scopes:value.scopes,workspaceLabel:value.workspaceLabel||old.workspaceLabel||'',workspaceRole:value.workspaceRole,disabled:false,assignmentRevision:(old.assignmentRevision||0)+1,assignmentSource:'firestore',notionAssignmentStage:'synced',notionSyncRequired:false,lastCoreGrantIntent:intent,...(actor.admin&&value.notionSources?{notionSources:value.notionSources}:{})});
   for(const d of dropped){const afterUids=staff.filter((p:any)=>p.id!==value.uid&&!p.data().disabled&&(p.data().scopes||[]).some((s:any)=>uuid(s.studentKey)===d.key&&s.subject===d.subject)).map((p:any)=>p.id);
    tx.set(db.collection('teacherTransfers').doc(digest(['grant-transfer',intent,d.key,d.subject])),{academyId:'main',studentKey:d.key,subject:d.subject,fromUids:[value.uid],toUids:[],afterUids,reason:value.transferReason,note:value.transferReason==='기타'?String(value.transferNote||'').trim().slice(0,200):'',by:actor.uid,at});}
-  if(actor.admin&&value.uid!==process.env.ADMIN_UID)tx.set(ur,{...user,role:value.workspaceRole==='principal'?'principal':'teacher'});
+  if(actor.admin&&value.uid!==process.env.ADMIN_UID&&!old.offline)tx.set(ur,{...user,role:value.workspaceRole==='principal'?'principal':'teacher'});
   for(let i=0;i<keys.length;i++)if(value.academyStudents.includes(keys[i])||value.scopes.some((s:any)=>uuid(s.studentKey)===keys[i]))tx.set(db.collection('academyStudentMemberships').doc(keys[i]),{...memberships[i],disabled:false});
   return {sourceMode:'firestore',alreadySaved:false};
+ });
+}
+// 앱 미연결 선생님 → 가입한 계정 (principal/admin): an offline teacher ("offline-<uuid>") is linked to a teacher account that
+// has signed up and been given 선생님 권한 but has no teacher row yet. Everything keyed by the offline id moves to the
+// account in one transaction: the teacher row pointer, 담당 (merged with the account's own; its enrollments get the row),
+// the name, 담당 변경 기록 and 정산 비율·조정. The offline record is kept (disabled, linkedUid) so history and registration
+// drafts saved before the link still resolve to the account.
+export async function linkOfflineTeacher(db:any,actor:any,input:unknown){
+ manage(actor);
+ const v=z.object({offlineUid:z.string().regex(/^offline-[0-9a-f-]{36}$/),uid:z.string().min(1).max(128)}).strict().parse(input);
+ if(v.uid.startsWith('offline-')||v.uid===process.env.ADMIN_UID)throw Error('TEACHER_LINK_INVALID');
+ const offRef=db.collection('teacherWorkspaceAccess').doc(v.offlineUid),ref=db.collection('teacherWorkspaceAccess').doc(v.uid);
+ return db.runTransaction(async(tx:any)=>{
+  await guard(tx,db);
+  const off=(await tx.get(offRef)).data(),target=(await tx.get(ref)).data(),user=(await tx.get(db.collection('users').doc(v.uid))).data();
+  if(off?.linkedUid===v.uid)return {uid:v.uid,label:target?.workspaceLabel||'',alreadyLinked:true};
+  if(!off||!off.offline||off.linkedUid||off.disabled||off.academyId!=='main'||!off.notionTeacherPageId)throw Error('TEACHER_LINK_INVALID');
+  if(!target||target.offline||target.disabled||target.academyId!=='main'||!['teacher','principal'].includes(user?.role))throw Error('TEACHER_LINK_INVALID');
+  // The 명부 줄 made automatically at 선생님 권한 is retired in favour of the offline teacher's row (anything else: refused).
+  let autoRow:any=null;if(target.notionTeacherPageId){const autoRef=refFor(db,'teachers',target.notionTeacherPageId),found=(await tx.get(autoRef)).data();if(!found?.autoCreated||found.pointer?.teacherUid!==v.uid||found.fields?.archived)throw Error('TEACHER_ALREADY_LINKED');autoRow={ref:autoRef,row:found,id:uuid(target.notionTeacherPageId)};}
+  const rowRef=refFor(db,'teachers',off.notionTeacherPageId),row=valid((await tx.get(rowRef)).data(),'teachers');
+  if(row.pointer?.teacherUid!==v.offlineUid)throw Error('TEACHER_LINK_INVALID');
+  const teacherId=uuid(off.notionTeacherPageId),same=(a:any,b:any)=>uuid(a.studentKey)===uuid(b.studentKey)&&a.subject===b.subject;
+  const own=(target.scopes||[]).filter((s:any)=>!(off.scopes||[]).some((o:any)=>same(o,s))),scopes=[...(off.scopes||[]),...own];
+  const keys=[...new Set<string>((autoRow?target.scopes||[]:own).map((s:any)=>uuid(s.studentKey)))];if(keys.length>100)throw Error('CORE_CUTOVER_LIMIT');
+  const enrollments=[];for(const key of keys){const found=await enrollmentRow(db,key);enrollments.push({key,ref:found.ref,row:valid((await tx.get(found.ref)).data(),'enrollments')});}
+  const transfers=new Map<string,any>();for(const field of ['fromUids','toUids','afterUids'])for(const d of (await tx.get(db.collection('teacherTransfers').where(field,'array-contains',v.offlineUid))).docs)transfers.set(d.id,d);
+  const rates=db.collection('payrollRates'),offRate=(await tx.get(rates.doc(v.offlineUid))).data(),rate=(await tx.get(rates.doc(v.uid))).data();
+  const months=(await tx.get(db.collection('payrollMonths').where('academyId','==','main'))).docs.filter((d:any)=>d.data().adjust?.[v.offlineUid]);
+  const at=Date.now(),label=off.workspaceLabel||target.workspaceLabel||'';
+  // The kept row also gets every 담당 과목 (수강 관리 / 원서 read the row, not the profile).
+  const rowSubjects=(row.fields.properties['담당 과목']?.multi_select||[]).map((s:any)=>s.name),teaches=[...new Set<string>([...rowSubjects,...(off.subjects||[]),...(target.subjects||[])])];
+  const rowFields={...row.fields,properties:{...row.fields.properties,'담당 과목':{multi_select:teaches.map(name=>({name}))}}};
+  const nextRow={...row,fields:rowFields,hash:digest(rowFields),appEditedAt:new Date(Math.max(at,Date.parse(stamp(row))+1||0)).toISOString(),pointer:{...row.pointer,teacherUid:v.uid},revision:(row.revision||0)+1,updatedAt:at};
+  tx.set(rowRef,nextRow);tx.set(db.collection(DIRECTORY_HISTORY).doc(`${rowRef.id}:${nextRow.revision}`),{sourceKey:row.sourceKey,notionPageId:row.notionPageId,entityId:row.entityId||row.notionPageId,revision:nextRow.revision,before:row.fields,after:rowFields,pointer:nextRow.pointer,by:actor.uid,at,reason:'offline-teacher-link'});
+  for(const e of enrollments){const p={...e.row.fields.properties};let touched=false;for(const subject of subjects){const ids=members(p[subject+' 담당']),next=ids.filter(id=>!autoRow||id!==autoRow.id);if(scopes.some((s:any)=>uuid(s.studentKey)===e.key&&s.subject===subject)&&!next.includes(teacherId))next.push(teacherId);if(JSON.stringify(next)!==JSON.stringify(ids)){p[subject+' 담당']={relation:next.map(id=>({id}))};touched=true;}}if(touched)changed(tx,db,e.ref,e.row,p,actor.uid,at);}
+  if(autoRow){const fields={...autoRow.row.fields,archived:true},next={...autoRow.row,fields,hash:digest(fields),revision:(autoRow.row.revision||0)+1,updatedAt:at};tx.set(autoRow.ref,next);tx.set(db.collection(DIRECTORY_HISTORY).doc(`${autoRow.ref.id}:${next.revision}`),{sourceKey:autoRow.row.sourceKey,notionPageId:null,entityId:autoRow.row.entityId,revision:next.revision,before:autoRow.row.fields,after:fields,pointer:autoRow.row.pointer,by:actor.uid,at,reason:'offline-teacher-link'});}
+  tx.set(ref,{...target,notionTeacherPageId:off.notionTeacherPageId,appTeacherRow:true,subjects:teaches,scopes,workspaceLabel:label,assignmentRevision:(target.assignmentRevision||0)+1,assignmentSource:'firestore',linkedOfflineUid:v.offlineUid,linkedAt:at,linkedBy:actor.uid});
+  tx.set(offRef,{...off,disabled:true,linkedUid:v.uid,linkedAt:at,linkedBy:actor.uid,assignmentRevision:(off.assignmentRevision||0)+1});
+  const swap=(list:string[])=>[...new Set(list.map(uid=>uid===v.offlineUid?v.uid:uid))];
+  for(const d of transfers.values()){const r=d.data();tx.set(d.ref,{...r,fromUids:swap(r.fromUids||[]),toUids:swap(r.toUids||[]),...(Array.isArray(r.afterUids)?{afterUids:swap(r.afterUids)}:{}),linkedFrom:v.offlineUid});}
+  // 정산: the offline share moves unless the account already has its own; month adjustments are added together.
+  if(offRate){if(!rate)tx.set(rates.doc(v.uid),{...offRate,updatedAt:at,updatedBy:actor.uid});tx.delete(rates.doc(v.offlineUid));
+   tx.set(db.collection('payrollRateHistory').doc(`link-${at}-${v.offlineUid}`),{before:{shares:{[v.offlineUid]:offRate.share??null,[v.uid]:rate?.share??null}},after:{shares:{[v.offlineUid]:null,[v.uid]:rate?.share??offRate.share??null}},by:actor.uid,at,reason:'offline-teacher-link'});}
+  for(const d of months){const m=d.data(),adjust={...m.adjust},a=adjust[v.offlineUid],b=adjust[v.uid];delete adjust[v.offlineUid];
+   adjust[v.uid]=b?{amount:(b.amount||0)+(a.amount||0),note:[b.note,a.note].filter(Boolean).join(' / ').slice(0,200)}:a;
+   const next={...m,adjust,revision:(m.revision||0)+1,updatedAt:at,updatedBy:actor.uid};tx.set(d.ref,next);
+   tx.set(db.collection('payrollMonthHistory').doc(`${m.month}:${next.revision}`),{before:m.adjust,after:adjust,by:actor.uid,at,reason:'offline-teacher-link'});}
+  return {uid:v.uid,label,alreadyLinked:false};
  });
 }

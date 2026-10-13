@@ -971,3 +971,17 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 /* Cards: the card radius token (20px) and a softer shadow. */
 .teacher-workspace .panel {border-radius:var(--workspace-radius-card);box-shadow:var(--workspace-shadow-small);}
 .teacher-workspace .today-dismiss:focus-visible {outline-color:var(--workspace-focus);}
+/* 오늘 수업: the date, progress, campus chips and 다음 미작성 수업 stay on top while the list scrolls (wide layout, where the sidebar scrolls). */
+@container workspace-shell (min-width:960px){.teacher-workspace:not(.workspace-mobile) .lesson-writing-sidebar .today-sticky-head{position:sticky;top:0;z-index:2;margin:calc(-1 * var(--card-pad,16px)) calc(-1 * var(--card-pad,16px)) 0;padding:var(--card-pad,16px) var(--card-pad,16px) 2px;background:white;border-bottom:1px solid var(--workspace-neutral-border);border-radius:var(--workspace-radius-card,16px) var(--workspace-radius-card,16px) 0 0;}.teacher-workspace:not(.workspace-mobile) .lesson-writing-sidebar .today-sticky-head+*{margin-top:8px;}}
+/* 오늘 수업: 숨김 chip next to 오늘 (same size, quiet); one click shows every hidden lesson again. Narrow panels keep only the icon and count. */
+.teacher-workspace .lesson-date-stepper>.today-hidden-chip{margin-left:0;gap:3px;background:white;border:1px solid var(--workspace-neutral-border);color:var(--workspace-muted);box-shadow:none;}
+.teacher-workspace .lesson-date-stepper>.today-hidden-chip:hover:not(:disabled){background:var(--workspace-brand-bg);color:var(--workspace-brand-fg);}
+@container today-panel (max-width:250px){.teacher-workspace .today-hidden-label{display:none;}}
+/* 오늘 수업 counts: one quiet line under the bar (the "현재 불러온 기록 기준" note is the bar's tooltip). */
+.teacher-workspace .today-progress-line{margin:4px 0 0;font-size:var(--workspace-font-xs);color:var(--workspace-muted);white-space:nowrap}
+.teacher-workspace .today-progress-line .tp-done{color:#0f766e;font-weight:600}
+.teacher-workspace .today-progress-line .tp-saved{color:#b45309;font-weight:600}
+/* Shortcut keys inside 저장 / 반영: desktop only (no keyboard shortcuts on phones). */
+.teacher-workspace .lesson-kbd{margin-left:6px;font:inherit;font-size:11px;font-weight:500;line-height:16px;padding:0 4px;border:1px solid currentColor;border-radius:4px;opacity:.55}
+.teacher-workspace.workspace-mobile .lesson-kbd{display:none}
+@media (pointer:coarse){.teacher-workspace .lesson-kbd{display:none}}

@@ -41,11 +41,12 @@ test('with the state in the title the bar shows only failures, the reason and th
 });
 test('single editor: 반영 is primary when ready, every lesson switch is guarded, Ctrl/⌘+S saves',()=>{
  const source=fs.readFileSync(new URL('../src/components/teacher/TeacherWorkspace.tsx',import.meta.url),'utf8');
- assert.match(source,/className=\{publishReady\?'small-button':'primary-button'\}[^>]*>[^<]*(<LoaderCircle[^>]*\/>\})?저장<\/button>/);
+ assert.match(source,/className=\{publishReady\?'small-button':'primary-button'\}[^>]*>[^<]*(<LoaderCircle[^>]*\/>\})?저장<ShortcutKey keys="S"\/><\/button>/);
  assert.match(source,/className=\{publishReady\?'primary-button':'small-button'\}/);
  for(const call of ['onChange={key=>{setPickHint(false);guarded(()=>selectStudent(key));}}','onNewLesson={()=>guarded(resetLesson)}','onStudent={(key,event,savedId)=>openDayLesson(key,event,savedId)}','{if(manual)setPickHint(false);if(data?.uid)markAutoOpenDone(data.uid,event.date);guarded(()=>selectStudent(key,','onClick={() => guarded(()=>openDraft(d))}','onClick={() => guarded(resetLesson)}','onClick={()=>{setPickHint(false);if(data?.uid)markAutoOpenDone(data.uid,lessonDay);guarded(resetLesson);}}','guarded(()=>selectStudent(lesson.studentKey,{subject}))'])assert.ok(source.includes(call),call);
  assert.match(source,/confirmText:'저장하고 이동',altText:'저장 안 하고 이동'/);
- assert.match(source,/e\.code==='KeyS'/);assert.match(source,/dialog\.confirm-modal\[open\]/);
+ assert.match(source,/const shortcut=lessonShortcut\(e\);/);assert.match(source,/dialog\.confirm-modal\[open\]/);
+ assert.match(source,/publishShortcut\.current=\(\)=>\{if\(!busy&&!autoLoading&&publishReady\)void act\(\(\)=>submitSingleLesson\('publish'\)\);\};/,'Ctrl/⌘+Enter publishes through the confirm, only when ready');
  assert.match(source,/<LessonSaveStatus record=\{currentDraft\} dirty=\{lessonDirty\}/);
 });
 test('one status icon set: every kind renders its own icon and label',async()=>{
@@ -73,4 +74,30 @@ test('no browser confirm is left in the teacher screens; unsaved input asks 계�
  const ws=fs.readFileSync(new URL('TeacherWorkspace.tsx',dir),'utf8');
  assert.match(ws,/title="수업 작성" onClose=\{async\(\)=>\{if\(!await leaveLessonGuard\(\)\)return;/,'closing 수업 작성 offers 저장하고 이동');
  assert.match(ws,/guarded\(\(\)=>selectStudent\(managementStudentKey,/,'opening 수업 작성 from 학생 관리 is guarded');
+});
+test('shortcuts: Ctrl/⌘+S saves, Ctrl/⌘+Enter publishes; the grid asks before publishing',async()=>{
+ const {lessonShortcut,ShortcutKey}=await import('../src/components/teacher/LessonActionBar');
+ const key=(k:any)=>({ctrlKey:false,metaKey:false,altKey:false,shiftKey:false,...k});
+ assert.equal(lessonShortcut(key({ctrlKey:true,code:'KeyS',key:'s'})),'save');
+ assert.equal(lessonShortcut(key({metaKey:true,code:'Enter',key:'Enter'})),'publish');
+ assert.equal(lessonShortcut(key({ctrlKey:true,code:'NumpadEnter',key:'Enter'})),'publish');
+ assert.equal(lessonShortcut(key({code:'Enter',key:'Enter'})),null,'plain Enter types a new line');
+ assert.equal(lessonShortcut(key({ctrlKey:true,shiftKey:true,code:'Enter',key:'Enter'})),null);
+ assert.equal(lessonShortcut(key({ctrlKey:true,code:'KeyD',key:'d'})),null);
+ assert.equal(renderToStaticMarkup(<ShortcutKey keys="S" mac={false}/>),'<kbd class="lesson-kbd" aria-hidden="true">Ctrl S</kbd>');
+ assert.match(renderToStaticMarkup(<ShortcutKey keys="Enter" mac/>),/>⌘↵</);
+ const css=fs.readFileSync(new URL('../src/components/teacher/teacherWorkspace.css',import.meta.url),'utf8');
+ assert.match(css,/\.teacher-workspace\.workspace-mobile \.lesson-kbd\{display:none\}/);assert.match(css,/@media \(pointer:coarse\)\{\.teacher-workspace \.lesson-kbd\{display:none\}\}/,'no shortcut keys on phones');
+ const grid=fs.readFileSync(new URL('../src/components/teacher/TeacherLessonGrid.tsx',import.meta.url),'utf8');
+ assert.match(grid,/gridPublish\.current=editorOpen&&active\?\(\)=>\{const row=rows\[activeStudent\];if\(!row\|\|row\.pending\|\|row\.loading\|\|isRecordBusy\(row\.id\)\|\|!gridCanSubmit\(row\)\)return;void askConfirm\(\{title:'리포트에 반영할까요\?'/);
+ assert.match(grid,/\.then\(ok=>\{if\(ok\)void submitRows\('publish',\[row\.id\]\);\}\);\}:null;/);
+ const ws=fs.readFileSync(new URL('../src/components/teacher/TeacherWorkspace.tsx',import.meta.url),'utf8');
+ // A held key repeats keydown: both save and publish run once; the browser's own Ctrl+S is still blocked.
+ for(const [src,save,publish] of [[ws,'saveShortcut.current?.()','publishShortcut.current?.()'],[grid,'gridSave.current()','gridPublish.current?.()']] as const){
+  const handler=src.slice(src.indexOf('const shortcut=lessonShortcut(e);'),src.indexOf("window.addEventListener('keydown',onKey)"));
+  const guard=handler.indexOf('e.preventDefault();if(e.repeat)return;');
+  assert.ok(guard>0,'repeat is dropped right after preventDefault');
+  assert.ok(handler.indexOf(save)>guard&&handler.indexOf(publish)>guard,'save and publish both come after the repeat guard');
+  assert.doesNotMatch(handler,/!e\.repeat/,'no branch-only repeat check left');
+ }
 });

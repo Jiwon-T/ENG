@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import React from 'react';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -64,4 +65,9 @@ test('여러 학생 mode: after hiding, each class card badge agrees with the to
   assert.match(html,/반영 0 · 저장 0 · 미작성 1/,hidden);
   assert.ok(html.includes('반영 0/1명')&&!html.includes('반영 1/1명'),`${hidden}: the 16:00 card stays 0/1`);
  }
+});
+test('skipping a lesson or a student asks in the same centered confirm as other actions (no wide dialog)',()=>{
+ const src=fs.readFileSync(new URL('../src/components/teacher/TeacherTodayLessons.tsx',import.meta.url),'utf8');
+ assert.doesNotMatch(src,/WorkspaceDialog/);assert.match(src,/askConfirm\(studentKey\?\{title:`\$\{who\} 학생이 오늘 이 수업에 빠지나요\?`/);
+ assert.match(src,/onClick=\{\(\)=>void askExclude\(\{events:\[event\],studentKey:key\}\)\}/);assert.match(src,/onClick=\{\(\)=>void askExclude\(\{events:group\}\)\}/);
 });

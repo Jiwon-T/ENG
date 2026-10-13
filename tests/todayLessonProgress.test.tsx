@@ -11,7 +11,7 @@ test('progress matches exact day student subject start and excludes deleted or u
 });
 test('today cards display loaded-record progress and explicit group denominator without another request',()=>{
  let calls=0;const props={data:{uid:'t',admin:true,classes:[],students:event.students.map(studentKey=>({studentKey,studentDisplayName:studentKey})),drafts:[record('a','published'),record('b','draft')],schedules:[{id:'e',data:{...event,status:'예정'}}]},date:event.date,onDate:()=>{},request:async()=>{calls++;return {};}};
- const single=renderToStaticMarkup(<TeacherTodayLessons {...props} onStudent={()=>{}}/>);assert.ok(single.includes('반영 1 · 저장 1 · 미작성 1'));assert.ok(single.includes('반영 완료'));assert.ok(single.includes('현재 불러온 기록 기준'));assert.equal(calls,0);
+ const single=renderToStaticMarkup(<TeacherTodayLessons {...props} onStudent={()=>{}}/>);assert.ok(single.includes('반영 1 · 저장 1 · 미작성 1'));assert.ok(single.includes('반영 완료'));assert.ok(single.includes('title="현재 불러온 기록 기준"'),'the note is the bar\'s tooltip');assert.ok(!single.includes('today-progress-scope'));assert.match(single,/<p class="today-progress-line"><span class="tp-done">반영 (<!-- -->)?1<\/span>/,'counts are one line of text');assert.equal(calls,0);
  const group=renderToStaticMarkup(<TeacherTodayLessons {...props} onGroup={()=>{}}/>);assert.ok(group.includes('반영 1/3명'));assert.ok(group.includes('학생 3명 불러오기'));assert.equal(calls,0);
 });
 

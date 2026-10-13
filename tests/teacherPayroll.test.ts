@@ -4,6 +4,7 @@ import { templateFirestore } from './helpers/templateFirestore.js';
 import { DIRECTORY_ROWS, directorySourceKey, directoryRowKey } from '../api/_lib/academyDirectorySource.js';
 import { readTeacherPayroll, saveTeacherShares, savePayrollAdjust, splitRow } from '../api/_lib/teacherPayroll.js';
 import { readStudentTuition, saveStudentTuition } from '../api/_lib/studentTuition.js';
+import { saveTuitionMonth } from '../api/_lib/tuitionMonth.js';
 
 const A = '11111111-1111-4111-8111-111111111111', B = '22222222-2222-4222-8222-222222222222', C = '33333333-3333-4333-8333-333333333333';
 const admin = { uid: 'admin', admin: true, principal: false, academyId: 'main', scopes: [] };
@@ -92,4 +93,14 @@ test('payroll: sessions still ahead go to the teacher assigned now', async () =>
     const r = await readTeacherPayroll(f.db, admin, '2026-10', Date.parse('2026-10-20T12:00:00+09:00'));
     const c1 = r.teachers.find((t: any) => t.uid === 't1').rows.find((x: any) => x.key === `${C}|영어`), c2 = r.teachers.find((t: any) => t.uid === 't2').rows.find((x: any) => x.key === `${C}|영어`);
     assert.deepEqual([c1.written, c1.planned, c1.revenue, c2.written, c2.planned, c2.revenue], [4, 0, 150000, 0, 2, 75000]);
+});
+test('a teacher without an app account is paid from the 수강료 계산 수업 횟수 entered by hand (no app lessons)', async () => {
+    const f = seed(), D = '44444444-4444-4444-8444-444444444444';
+    f.rows.set(`${DIRECTORY_ROWS}/${directoryRowKey('students', D)}`, { ...f.rows.get(`${DIRECTORY_ROWS}/${directoryRowKey('students', A)}`), entityId: D, fields: { archived: false, properties: { '학생': { title: [{ plain_text: '라' }] } } } });
+    f.rows.set(`${DIRECTORY_ROWS}/${directoryRowKey('enrollments', D.replace(/^./, 'e'))}`, { ...f.rows.get(`${DIRECTORY_ROWS}/${directoryRowKey('enrollments', A.replace(/^./, 'e'))}`), studentKey: D });
+    f.rows.set(`studentTuition/${D}`, { academyId: 'main', subjects: { '영어': 200000 } });
+    f.rows.set('teacherWorkspaceAccess/offline-1', { academyId: 'main', offline: true, workspaceLabel: '영 박민지T', scopes: [{ studentKey: D, subject: '영어' }] });
+    await saveTuitionMonth(f.db, admin, { month: '2026-10', revision: 0, rows: { [`${D}|영어`]: { sessions: 8 } } }, NOW);
+    const r = await readTeacherPayroll(f.db, admin, '2026-10', NOW), t = r.teachers.find((x: any) => x.uid === 'offline-1');
+    assert.ok(t, 'listed in 선생님 정산');assert.equal(t.name, '영 박민지T');assert.equal(t.revenue, 200000, '8 sessions entered by hand → the full monthly price');
 });

@@ -34,7 +34,9 @@ test('app users: granting teacher creates an empty workspace; reverting disconne
     await setAppUserRole(f.db, admin, { uid: 'new', role: 'teacher' });
     assert.equal(f.rows.get('users/new').role, 'teacher');
     const access = f.rows.get('teacherWorkspaceAccess/new');
-    assert.deepEqual([access.academyId, access.scopes, access.workspaceRole, access.notionTeacherPageId, access.disabled], ['main', [], 'teacher', null, undefined]);
+    assert.deepEqual([access.academyId, access.scopes, access.workspaceRole, access.disabled, access.appTeacherRow], ['main', [], 'teacher', undefined, true]);
+    const row = [...f.rows.entries()].find(([, r]) => r?.kind === 'teachers' && r?.pointer?.teacherUid === 'new')?.[1];
+    assert.ok(row && row.entityId === access.notionTeacherPageId && row.autoCreated, '명부 줄 is made with 선생님 권한');
     f.rows.set('teacherWorkspaceAccess/new', { ...access, scopes: [{ studentKey: 's1' }] });
     await setAppUserRole(f.db, admin, { uid: 'new', role: 'student' });
     assert.equal(f.rows.get('users/new').role, 'student');
