@@ -6,6 +6,8 @@ const ParentReport = lazy(() => import('./components/parent/ParentReportView').t
 const parentSlug = parentStartupSlug(window.location.pathname);
 if (parentSlug && window.location.pathname.startsWith('/report/')) window.history.replaceState({}, '', `/${parentSlug}`);
 import './index.css';
+// The app confirm modal (askConfirm / askDiscard) is used on teacher and student screens alike.
+import './components/teacher/confirmDialog.css';
 
 // Force HTTPS redirect
 if (typeof window !== 'undefined' && 

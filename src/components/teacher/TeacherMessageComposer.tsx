@@ -4,10 +4,13 @@ import {auth} from '../../lib/firebase';
 import {teacherAuthenticatedRequest} from '../../lib/teacherAuthenticatedRequest';
 import {messageVariables,renderTeacherMessage,renderTeacherMessageParts,missingParts,missingKeys,fillMessageVariable,messageSize,unresolvedMessage,type MessagePart} from '../../lib/teacherMessage';
 import WorkspaceDialog from './WorkspaceDialog';
+import {askConfirm,askDiscard} from './ConfirmDialog';
+import {useLeaveProtection} from '../../lib/leaveProtection';
 const labels:Record<string,string>={prepared:'저장 대기',ready:'발송 전',sending:'발송 요청 중 · 결과 확인 필요',accepted:'발송 요청 접수',uncertain:'발송 결과 불명확 · 자동 재전송 차단'};
 export default function TeacherMessageComposer({studentKey,subjects,onClose}:{studentKey:string;subjects:string[];onClose:()=>void}){
  const [subject,setSubject]=useState(subjects[0]||'영어'),[data,setData]=useState<any>(null),[templateId,setTemplateId]=useState(''),[lessonId,setLessonId]=useState(''),[body,setBody]=useState(''),[record,setRecord]=useState<any>(null),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[confirmed,setConfirmed]=useState(false);
  const version=useRef(0),working=useRef(false),intent=useRef<any>(null);
+ useLeaveProtection(Boolean(body.trim()&&!record&&!intent.current));
  // The body as the template made it (with which parts came from the data), the bubble mode, and an empty value being filled.
  const [generated,setGenerated]=useState<{body:string;parts:MessagePart[]}|null>(null),[editing,setEditing]=useState(false),[stale,setStale]=useState(false),[filling,setFilling]=useState<{key:string;value:string}|null>(null);
  async function request(action:string,values:any={},read=false){const q=new URLSearchParams({action,...values});const r=await teacherAuthenticatedRequest<any>(auth,read?`/api/teacher/workspace?${q}`:'/api/teacher/workspace',read?undefined:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...values})});if(!r.ok||!r.data?.ok)throw Error(r.data?.message||'결과를 확인하지 못했습니다. 목록에서 저장한 요청을 확인해 주세요.');return r.data;}
@@ -16,9 +19,9 @@ export default function TeacherMessageComposer({studentKey,subjects,onClose}:{st
  async function run(send=false){if(working.current)return;const generation=version.current,uid=auth.currentUser?.uid;working.current=true;setBusy(true);setMessage('');try{if(send){const r=await request('send-message',{id:record.id,confirmed:true});if(generation!==version.current||auth.currentUser?.uid!==uid)return;setRecord(r.record);setConfirmed(false);setMessage(labels[r.record.status]);}else{const v=intent.current||{id:crypto.randomUUID(),studentKey,subject,templateId,lessonId:lessonId||null,body};intent.current=v;const r=await request('prepare-message',v);if(generation!==version.current||auth.currentUser?.uid!==uid)return;setRecord(r.record);setMessage('본문을 저장했습니다. 수신자와 본문을 최종 확인해 주세요.');}}catch(e){if(generation===version.current)setMessage(e instanceof Error?e.message:'결과 확인 필요');}finally{working.current=false;if(generation===version.current)setBusy(false);}}
  // Choosing a template or a lesson shows the message right away; an edited body is kept and the change is only offered.
  useEffect(()=>{if(!data||!templateId||record||intent.current)return;if(!body.trim()||generated&&body===generated.body)generate();else setStale(true);},[templateId,lessonId,data]);
- function revert(){if(body.trim()&&generated&&body!==generated.body&&!window.confirm('고친 내용을 버리고 템플릿으로 다시 만들까요?'))return;generate();}
+ async function revert(){if(body.trim()&&generated&&body!==generated.body&&!await askConfirm({title:'템플릿으로 다시 만들까요?',message:'고친 내용은 버려집니다.',confirmText:'다시 만들기',tone:'danger',icon:'alert'}))return;generate();}
  function fill(){if(!filling||!filling.value.trim())return;setBody(b=>fillMessageVariable(b,filling.key,filling.value.trim()));setFilling(null);setConfirmed(false);setMessage('');}
- function close(){if(working.current)return;if(body.trim()&&!record&&!intent.current&&!window.confirm('저장하지 않은 문자본문을 닫을까요?'))return;onClose();}
+ async function close(){if(working.current)return;if(body.trim()&&!record&&!intent.current&&!await askDiscard('저장하지 않은 문자 본문을 닫을까요?'))return;onClose();}
  const locked=Boolean(record)||Boolean(intent.current)||busy,text=record?.body??body;
  const parts=!record&&generated&&text===generated.body?generated.parts:missingParts(text),empty=missingKeys(text),size=messageSize(text);
  const tone=(s:string)=>s==='accepted'?'is-ok':s==='uncertain'||s==='sending'?'is-warn':'is-wait';

@@ -1,0 +1,37 @@
+/* App confirm modal (askConfirm / ask / askDiscard). Loaded with the component so teacher and student screens look the same. */
+.confirm-modal{width:min(400px,calc(100vw - 32px));max-height:calc(100vh - 32px);margin:auto;padding:0;border:0;border-radius:22px;background:#fff;color:#1f2937;box-shadow:0 24px 60px rgba(43,35,38,.22);overflow:auto;font-family:inherit}
+.confirm-modal::backdrop{background:rgba(30,23,26,.38);backdrop-filter:blur(2px)}
+.confirm-modal[open]{animation:confirm-in .16s ease-out}
+.confirm-modal-body{display:grid;justify-items:center;gap:8px;padding:26px 24px 18px;text-align:center}
+.confirm-modal-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:16px;background:#fef2f3;color:#8b2f40}
+.confirm-modal h2{margin:4px 0 0;font-size:18px;font-weight:800;color:#1e293b}
+.confirm-modal p{margin:0;font-size:14px;line-height:1.55;color:#64748b}
+.confirm-modal ul{list-style:none;width:100%;margin:6px 0 0;padding:8px 10px;max-height:180px;overflow:auto;border-radius:14px;background:#f8fafc;display:grid;gap:4px;text-align:left}
+.confirm-modal li{font-size:13px;font-weight:600;color:#334155}
+.confirm-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 20px 20px}
+.confirm-modal-actions button{min-height:44px;border:0;border-radius:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit}
+.confirm-modal-cancel{background:#f1f5f9;color:#475569}
+.confirm-modal-cancel:hover{background:#e2e8f0}
+.confirm-modal-ok{background:#f5a3a8;color:#5e1e2a;box-shadow:0 6px 16px rgba(245,163,168,.35)}
+.confirm-modal-ok:hover{background:#f08c93}
+.confirm-modal-actions button:focus-visible{outline:2px solid #8b2f40;outline-offset:2px}
+@keyframes confirm-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.confirm-modal[open]{animation:none}}
+.confirm-modal-actions.has-alt .confirm-modal-ok{grid-column:1/-1;grid-row:1}
+.confirm-modal p{white-space:pre-line}
+.confirm-modal.is-danger .confirm-modal-icon{background:#fee2e2;color:#b91c1c}
+.confirm-modal.is-danger .confirm-modal-ok{background:#dc2626;color:#fff;box-shadow:none}
+.confirm-modal.is-danger .confirm-modal-ok:hover{background:#b91c1c}
+.confirm-modal.is-danger .confirm-modal-cancel:focus-visible{outline:2px solid #94a3b8;outline-offset:2px}
+.confirm-modal.is-leave .confirm-modal-icon{background:#fef3c7;color:#b45309}
+.confirm-modal.is-leave .confirm-modal-cancel{background:#f5a3a8;color:#5e1e2a}
+.confirm-modal.is-leave .confirm-modal-cancel:hover{background:#f08c93}
+.confirm-modal.is-leave .confirm-modal-ok{background:#f1f5f9;color:#475569;box-shadow:none}
+.confirm-modal.is-leave .confirm-modal-ok:hover{background:#e2e8f0}
+/* 담당에서 빼는 이유 (teacher dialog) */
+.confirm-modal-reasons{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:6px}
+.confirm-modal-reasons button{min-height:34px;padding:0 12px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;color:#475569;font-size:13px;font-weight:600}
+.confirm-modal-reasons button[aria-pressed=true]{border-color:#f3a5b4;background:#fef2f3;color:#8b2f40}
+.confirm-modal-note{width:100%;height:38px;margin-top:4px;padding:0 12px;border:1px solid #e2e8f0;border-radius:12px;font-size:13px}
+.confirm-modal-hint{font-size:12px!important;color:#94a3b8!important}
+.confirm-modal-ok:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}

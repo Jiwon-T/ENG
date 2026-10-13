@@ -2,6 +2,8 @@ import {useEffect,useMemo,useState} from 'react';
 import {Calculator,ChevronLeft,ChevronRight,Download,Search} from 'lucide-react';
 import {matchesKoreanSearch} from '../../lib/koreanSearch';
 import {tuitionCharge,tuitionCsv,TUITION_SESSIONS} from '../../lib/tuition';
+import {askConfirm,askDiscard} from './ConfirmDialog';
+import {useLeaveProtection} from '../../lib/leaveProtection';
 type Edit={sessions?:number|null;free?:number|null;tuition?:number|null};
 const won=(n:number|null|undefined)=>n==null?'—':`${n.toLocaleString('ko-KR')}원`;
 const shift=(m:string,d:number)=>{const [y,mo]=m.split('-').map(Number),t=new Date(Date.UTC(y,mo-1+d,1));return `${t.getUTCFullYear()}-${String(t.getUTCMonth()+1).padStart(2,'0')}`;};
@@ -13,14 +15,15 @@ export default function TuitionCalculator({busy,request,act,autoLoad=false,onDir
  // Opened from the 관리자 설정 menu: load this month right away; unsaved edits are reported so the menu can ask first.
  useEffect(()=>{if(autoLoad)void act(()=>load());},[]);
  const unsaved=Object.keys(edits).length>0;
+ useLeaveProtection(unsaved);
  useEffect(()=>{onDirty?.(unsaved);},[unsaved]);
  useEffect(()=>()=>onDirty?.(false),[]);
- const go=(m:string)=>{if(Object.keys(edits).length&&!window.confirm('저장하지 않은 수정이 있습니다. 다른 달로 옮길까요?'))return;void act(()=>load(m));};
+ const go=async(m:string)=>{if(Object.keys(edits).length&&!await askDiscard('저장하지 않은 수정이 있어요',{message:'다른 달로 옮기면 수정한 내용이 사라져요.',discardText:'버리고 이동'}))return;void act(()=>load(m));};
  const rows=useMemo(()=>(sheet?.rows||[]).map((r:any)=>{const e=edits[r.key]||{};const sessions=e.sessions!==undefined?(e.sessions??r.expected):r.sessions,free=e.free!==undefined?(e.free??0):r.free,tuition=e.tuition!==undefined?e.tuition:r.tuition;return {...r,sessions,free,tuition,dirty:Boolean(edits[r.key]),...tuitionCharge(tuition,sessions,free)};}),[sheet,edits]);
  const shown=rows.filter((r:any)=>(filter==='all'||filter==='missing'&&r.tuition==null||filter==='edited'&&(r.edited||r.dirty)||filter==='left'&&r.left||filter==='changed'&&r.changedSinceConfirm)&&matchesKoreanSearch(r.name,query));
  const total=rows.reduce((n:number,r:any)=>n+(r.amount||0),0),missing=rows.filter((r:any)=>r.tuition==null).length,students=new Set(rows.map((r:any)=>r.studentKey)).size;
  const edit=(key:string,field:keyof Edit,text:string)=>{const digits=text.replace(/\D/g,'').slice(0,field==='tuition'?9:2);setEdits(old=>({...old,[key]:{...old[key],[field]:digits===''?null:Number(digits)}}));};
- const save=(confirm=false)=>{if(confirm&&!window.confirm(`${month} 수강료 ${won(total)}을 확정할까요? 확정 후에도 수정할 수 있습니다.`))return;
+ const save=async(confirm=false)=>{if(confirm&&!await askConfirm({title:`${month} 수강료를 확정할까요?`,message:`합계 ${won(total)} · 확정 후에도 수정할 수 있습니다.`,confirmText:'확정',icon:'check'}))return;
   void act(async()=>{const r=await request('save-tuition-month',{month,revision:sheet.revision,rows:Object.fromEntries(Object.entries(edits)),confirm});await load(month);setNotice(confirm?`${month} 수강료를 확정했습니다.`:'수정 내용을 저장했습니다.');return r;});};
  const download=()=>{const csv=tuitionCsv([['학생','과목','일지 작성','남은 시간표','수업 횟수','무료 보강','청구 회차','수강료(8회)','청구액','메모'],...rows.map((r:any)=>[r.name,r.subject,r.written,r.planned,r.sessions,r.free,r.charged,r.tuition,r.amount,r.note])]);
   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=`수강료_${month}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};

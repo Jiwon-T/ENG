@@ -34,6 +34,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Wordbook, Word } from './wordbookTypes';
 import { shuffleArray } from './wordbookUtils';
 import { SortableWordbookCard, SortableWordCard } from './WordbookSortableCards';
+import {askConfirm} from './ConfirmDialog';
 
 export default function WordbookManager({ category = 'word' }: { category?: 'word' | 'grammar' | 'exam' }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
@@ -482,7 +483,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const handleDeletePassage = async (passageDay: number) => {
     if (!selectedWordbook) return;
     const targetDay = Number(passageDay);
-    if (!window.confirm(`지문 ${targetDay}에 포함된 모든 문장을 삭제하시겠습니까?`)) return;
+    if (!await askConfirm({ title: `지문 ${targetDay}의 문장을 모두 삭제할까요?`, confirmText: '삭제', tone: 'danger', icon: 'trash' })) return;
     const passageWords = words.filter(w => (Number(w.day) || 1) === targetDay);
     const batch = writeBatch(db);
     passageWords.forEach(w => {

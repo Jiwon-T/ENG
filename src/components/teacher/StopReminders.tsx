@@ -3,6 +3,7 @@ import {CalendarX2} from 'lucide-react';
 import {auth} from '../../lib/firebase';
 import {teacherAuthenticatedRequest} from '../../lib/teacherAuthenticatedRequest';
 import {plannedStops} from '../../lib/studentOverview';
+import {askConfirm} from './ConfirmDialog';
 
 const md=(d:string)=>`${Number(d.slice(5,7))}/${Number(d.slice(8,10))}`;
 const failure=(r:any)=>`${r.data?.message||r.userMessage||'처리하지 못했습니다. 수강·담당·반 관리에서 확인해 주세요.'}${r.data?.diagnosticId?` (오류 ID: ${r.data.diagnosticId})`:''}`;
@@ -21,7 +22,7 @@ export default function StopReminders({students,today,onChanged}:{students:any[]
    if(!row||row.status!=='등록'||row.plannedEndDate!==item.plannedEndDate){setMessage('그 사이 수강 정보가 바뀌었어요. 목록을 새로 불러왔어요.');await onChanged();return;}
    const sole=(row.classes||[]).filter((c:any)=>c.withdrawalReview).map((c:any)=>c.name);
    const question=stop?`${item.name} 학생의 ${item.subject} 수강을 ${md(item.plannedEndDate)}부로 중단할까요?${sole.length?`\n\n${sole.join(', ')}의 유일한 학생입니다. 반은 진행 중으로 남고, 필요하면 반 관리에서 상태를 바꿔 주세요.`:''}`:`${item.name} 학생의 ${item.subject} 중단 예약을 지우고 계속 다니는 것으로 둘까요?`;
-   if(!window.confirm(question))return;
+   if(!await askConfirm(stop?{title:'수강을 중단할까요?',message:question,confirmText:'중단',tone:'danger',icon:'alert'}:{title:'계속 다니는 것으로 둘까요?',message:question,confirmText:'계속 다님',icon:'check'}))return;
    const data={subject:item.subject,status:stop?'중단':'등록',startDate:row.startDate,endDate:stop?item.plannedEndDate:null,addTeacherUid:null,removeTeacherIds:[],classIds:(row.classes||[]).map((c:any)=>c.id),plannedEndDate:null};
    const saved=await teacherAuthenticatedRequest<any>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save-student-enrollment',studentKey:item.studentKey,operationId:crypto.randomUUID(),studentEditedAt:record.studentEditedAt,enrollmentEditedAt:record.enrollmentEditedAt,data})});
    if(!saved.ok||!saved.data?.ok)throw Error(failure(saved));

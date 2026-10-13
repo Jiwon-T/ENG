@@ -2,12 +2,18 @@
 // move. The unsaved state is cleared only by the input itself (saved, emptied back, or gone from the screen), never
 // by the question: a move that turns out to change nothing leaves the input and its protection in place.
 // Used by the 학습 리포트 screen for the 학습 성취도 평가 box.
-export function createUnsavedGuard(ask: (message: string) => boolean, message: string, onChange?: (dirty: boolean) => void) {
+// `ask` may answer later (the app's modal): the move then runs when it says yes.
+export function createUnsavedGuard(ask: (message: string) => boolean | Promise<boolean>, message: string, onChange?: (dirty: boolean) => void) {
  let dirty = false;
  const guard = {
   get dirty() { return dirty; },
   mark(next: boolean) { if (next === dirty) return; dirty = next; onChange?.(next); },
-  proceed(action: () => void) { if (dirty && !ask(message)) return false; action(); return true; },
+  proceed(action: () => void): boolean | Promise<boolean> {
+   if (!dirty) { action(); return true; }
+   const answer = ask(message);
+   if (typeof answer === 'boolean') { if (answer) action(); return answer; }
+   return answer.then(ok => { if (ok) action(); return ok; });
+  },
  };
  return guard;
 }

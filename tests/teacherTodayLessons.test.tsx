@@ -45,7 +45,7 @@ test('previous selection uses lesson date before edit time and excludes archived
 test('the same today list renders student buttons for single writing and group choices for multiple writing',()=>{
  const props={data:{...data,schedules:[schedule('makeup')]},date:day,onDate:()=>{},request:async()=>({})};
  const single=renderToStaticMarkup(<TeacherTodayLessons {...props} onStudent={()=>{}}/>);
- assert.ok(single.includes('정규반'));assert.ok(single.includes('보강'));assert.ok(single.includes('15:00'));assert.equal((single.match(/학생A/g)||[]).length,2);assert.ok(single.includes('학생B'));
+ assert.ok(single.includes('정규반'));assert.ok(single.includes('보강'));assert.ok(single.includes('15:00'));assert.equal((single.match(/>학생A</g)||[]).length,2,'one visible row per lesson');assert.ok(single.includes('학생B'));
  const group=renderToStaticMarkup(<TeacherTodayLessons {...props} onGroup={()=>{}}/>);assert.equal((group.match(/학생 2명 불러오기/g)||[]).length,2);
 });
 test('previous-lesson endpoint reuses owner snapshots, preserves rounds and rejects unauthorized students',async()=>{

@@ -1,4 +1,4 @@
-import {createStudentDialogNavigation} from '../../lib/studentDialogNavigation';
+import {createStudentDialogNavigation,type PanelClose} from '../../lib/studentDialogNavigation';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import WorkspaceDialog from './WorkspaceDialog';
 import { WorkspaceDialogEmbedding } from './WorkspaceDialogEmbedding';
@@ -19,10 +19,10 @@ export default function StudentManagementDialog({ name, canManage, onClose, onSe
  const navigationRef = useRef<ReturnType<typeof createStudentDialogNavigation> | null>(null);
  if(!navigationRef.current) navigationRef.current = createStudentDialogNavigation(() => { if (!backRef.current()) onCloseRef.current(); });
  const navigation = navigationRef.current;
- const registerClose = useCallback((close: () => void) => navigation.registerClose(close), [navigation]);
- useEffect(()=>registerAttempt?.(action=>navigation.attempt(action,busy)),[registerAttempt,navigation,busy]);
+ const registerClose = useCallback((close: PanelClose) => navigation.registerClose(close), [navigation]);
+ useEffect(()=>registerAttempt?.(action=>void navigation.attempt(action,busy)),[registerAttempt,navigation,busy]);
  function leave() { navigation.leave(); }
- function attempt(action: () => void) { navigation.attempt(action, busy); }
+ function attempt(action: () => void) { void navigation.attempt(action, busy); }
  function select(tab: string) { if (tab === active) return; attempt(() => { onSelect(tab); setSelected(tab); }); }
  // Inline, 수업 작성 is the summary card's main action, so the tab row holds only the views.
  const row = inline ? tabs.filter(t => t.id !== 'lesson') : tabs;

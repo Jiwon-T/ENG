@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { registrationSubjects } from '../../src/lib/studentRegistration.js';
-import type { EnrollmentInput, EnrollmentRecord } from '../../src/lib/studentEnrollment.js';
+import { registrationCampuses, registrationSubjects } from '../../src/lib/studentRegistration.js';
+import { teacherTransferReasons, type EnrollmentInput, type EnrollmentRecord } from '../../src/lib/studentEnrollment.js';
 import { assertRegistrationAccess, type RegistrationActor } from './teacherStudentRegistration.js';
 import { normalizeNotionPageId as uuid } from './notionPageId.js';
 import { hashStudentKey } from './security.js';
@@ -8,7 +8,7 @@ import { invalidateTeacherMutation } from './teacherReadCache.js';
 import {coreActive,readCoreEnrollment,saveCoreEnrollment} from './academyCore.js';
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => Number.isFinite(Date.parse(v + 'T00:00:00Z')) && new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) === v);
 const ids = z.array(z.string().uuid().transform(uuid)).max(100).refine(v => new Set(v).size === v.length);
-export const enrollmentEditSchema = z.object({ subject: z.enum(registrationSubjects), status: z.enum(['등록', '대기', '중단']), startDate: date, endDate: date.nullable(), addTeacherUid: z.string().min(1).max(128).nullable(), removeTeacherIds: ids, classIds: ids, plannedEndDate: date.nullable().default(null) }).strict().superRefine((v, c) => {
+export const enrollmentEditSchema = z.object({ subject: z.enum(registrationSubjects), status: z.enum(['등록', '대기', '중단']), startDate: date, endDate: date.nullable(), addTeacherUid: z.string().min(1).max(128).nullable(), removeTeacherIds: ids, classIds: ids, plannedEndDate: date.nullable().default(null), transferReason: z.enum(teacherTransferReasons).nullable().default(null), transferNote: z.string().trim().max(200).default(''), campus: z.enum(registrationCampuses).nullable().optional() }).strict().superRefine((v, c) => {
     if (v.status === '중단' ? !v.endDate : Boolean(v.endDate))
         c.addIssue({ code: 'custom', message: '중단 상태에는 중단일이 필요합니다.' });
     if (v.endDate && v.endDate < v.startDate)

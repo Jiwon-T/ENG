@@ -8,6 +8,7 @@ import AppUserManager from './AppUserManager';
 import AppTemplateManager from './AppTemplateManager';
 import SpeedCheckPanel from './SpeedCheckPanel';
 import {createUnsavedGuard} from '../../lib/unsavedGuard';
+import {askDiscard} from './ConfirmDialog';
 
 type Props={data:any;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;busy:boolean;refresh:()=>Promise<any>};
 type Section={id:string;label:string;hint:string;icon:LucideIcon;alert?:boolean;adminOnly?:boolean};
@@ -39,7 +40,7 @@ export default function AdminDashboard({data,request,act,busy,refresh}:Props){
  const [active,setActive]=useState(()=>{const id=remembered();return sections.some(s=>s.id===id)?id:'teachers';});
  const current=sections.find(s=>s.id===active)||sections[0];
  const guardRef=useRef<ReturnType<typeof createUnsavedGuard>|null>(null);
- if(!guardRef.current)guardRef.current=createUnsavedGuard(message=>window.confirm(message),UNSAVED);
+ if(!guardRef.current)guardRef.current=createUnsavedGuard(message=>askDiscard(message,{discardText:'버리고 이동'}),UNSAVED);
  const guard=guardRef.current;
  const markDirty=(dirty:boolean)=>guard.mark(dirty);
  function choose(id:string){if(id===current.id)return;guard.proceed(()=>{setActive(id);remember(id);});}

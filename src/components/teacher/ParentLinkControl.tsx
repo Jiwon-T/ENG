@@ -2,6 +2,7 @@ import {useState} from 'react';
 import {Copy,Globe} from 'lucide-react';
 import {auth} from '../../lib/firebase';
 import {teacherAuthenticatedRequest} from '../../lib/teacherAuthenticatedRequest';
+import {askConfirm} from './ConfirmDialog';
 const SITE='https://jiwont.kr';
 const failures:Record<string,string>={
  SLUG_ALREADY_IN_USE:'이미 다른 학생이 쓰는 주소입니다. 다른 주소를 입력해 주세요.',
@@ -23,7 +24,7 @@ export default function ParentLinkControl({studentKey,studentName}:{studentKey:s
  const toggle=()=>{const next=!open;setOpen(next);setInput('');setMessage('');if(next&&current===undefined)void load();};
  const clean=(v:string)=>v.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,30);
  const save=async()=>{const slug=clean(input);if(slug.length<3){setMessage(failures.VALIDATION_ERROR);return;}
-  if(current&&!window.confirm(`주소를 ${SITE}/${slug} 로 바꿀까요? 예전 주소(${SITE}/${current})는 더 이상 열리지 않고, 학부모님은 새 주소에서 다시 인증해야 합니다.`))return;
+  if(current&&!await askConfirm({title:'학부모 주소를 바꿀까요?',message:`${SITE}/${slug} 로 바꿉니다. 예전 주소(${SITE}/${current})는 더 이상 열리지 않고, 학부모님은 새 주소에서 다시 인증해야 합니다.`,confirmText:'주소 바꾸기',tone:'danger',icon:'link'}))return;
   setBusy(true);setMessage('');
   try{const r=current?await call('PATCH',{reportSlug:current,newReportSlug:slug}):await call('POST',{studentKey,reportSlug:slug});
    if(!r.ok||!r.data?.ok){setMessage(failureText(r));return;}

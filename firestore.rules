@@ -432,5 +432,6 @@ service cloud.firestore {
     match /studentLinkCodes/{id} { allow read, write: if false; }
     match /studentLinkCodeIndex/{id} { allow read, write: if false; }
     match /studentLinkAttempts/{id} { allow read, write: if false; }
+    match /teacherTransfers/{id} { allow read, write: if false; }
   }
 }

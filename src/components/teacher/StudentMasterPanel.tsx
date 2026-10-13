@@ -1,11 +1,12 @@
 import React,{useId,useState} from 'react';
-import {ChevronLeft,ChevronRight,Plus,Search} from 'lucide-react';
+import {ChevronLeft,ChevronRight,Plus,Search,CalendarClock,Link2Off} from 'lucide-react';
 import {studentSearchResults} from '../../lib/koreanSearch';
 import {isCurrentStudent} from '../../lib/teacherLessonGrid';
 import StudentCombobox from './StudentCombobox';
 import StatusBadge from './StatusBadge';
 import {PetCharacter} from '../pet/PetCharacters';
 import {plannedStopOf} from '../../lib/studentOverview';
+import {campusCounts,rememberCampus,rememberedCampus,studentCampusLabel,studentCampuses} from '../../lib/campus';
 const todayKst=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date());
 const md=(d:string)=>`${Number(d.slice(5,7))}/${Number(d.slice(8,10))}`;
 // Same stages as PetService.getStage, kept here so the list does not load the pet service.
@@ -19,7 +20,11 @@ export default function StudentMasterPanel({students,value,onSelect,registration
  const searching=Boolean(query.trim()),intake=group==='intake'&&!searching;
  // While searching, every student is a candidate regardless of the chip, so nobody is hidden by the wrong tab.
  const pool=searching?students:group==='current'?current:group==='other'?others:[];
- const filtered=studentSearchResults(pool.filter(s=>!subject||s.subjects?.some((r:any)=>r.subject===subject)),query);
+ // Campus chips: only when students are at two or more campuses; the choice is remembered on this device.
+ const [campusChoice,setCampusChoice]=useState(()=>rememberedCampus('students'));
+ const campusChips=campusCounts(current.flatMap(s=>studentCampuses(s)));
+ const campus=campusChips.length>1&&campusChips.some(([c])=>c===campusChoice)?campusChoice:'';
+ const filtered=studentSearchResults(pool.filter(s=>(!subject||s.subjects?.some((r:any)=>r.subject===subject))&&(!campus||studentCampuses(s).includes(campus))),query);
  const move=(direction:number)=>{const index=current.findIndex(s=>s.studentKey===value);if(current.length)onSelect(current[(index+direction+current.length)%current.length].studentKey);};
  const groups:[typeof group,string,number][]=[['current','재원생',current.length],...(registrations?[['intake','신입생·상담',registrations.count] as [typeof group,string,number]]:[]),['other','이외',others.length]];
  const chips=<div className="student-master-segment" role="group" aria-label="학생 구분">{groups.map(([key,label,n])=><button type="button" key={key} aria-pressed={group===key&&!searching} onClick={()=>{setGroup(key);setQuery('');setFocus('');}}>{label} <b>{n}</b></button>)}</div>;
@@ -30,10 +35,11 @@ export default function StudentMasterPanel({students,value,onSelect,registration
   <div className="student-master-desktop">
    <div className="student-master-head"><h2>학생 관리</h2>{registrations&&<button type="button" className="small-button" onClick={registrations.onAdd}><Plus size={16} aria-hidden="true"/>상담·신입생</button>}</div>
    {search}{chips}
+   {!intake&&campusChips.length>1&&<div className="campus-chips" role="group" aria-label="캠퍼스"><button type="button" aria-pressed={!campus} onClick={()=>{setCampusChoice('');rememberCampus('students','');}}>전체</button>{campusChips.map(([c,n])=><button type="button" key={c} aria-pressed={campus===c} onClick={()=>{setCampusChoice(c);rememberCampus('students',c);}}>{c} <b>{n}</b></button>)}</div>}
    {!intake&&<select aria-label="학생 과목 필터" value={subject} onChange={e=>setSubject(e.target.value)}><option value="">전체 과목</option>{[...new Set<string>(students.flatMap(s=>(s.subjects||[]).map((r:any)=>r.subject)))].map(s=><option key={s}>{s}</option>)}</select>}
    {!intake&&<div role="listbox" aria-label="학생 목록" tabIndex={0} aria-activedescendant={filtered.some(s=>s.studentKey===(focus||value))?`${id}-${focus||value}`:undefined} onKeyDown={e=>{const index=filtered.findIndex(s=>s.studentKey===(focus||value));if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const next=filtered[(index+(e.key==='ArrowDown'?1:-1)+filtered.length)%filtered.length];if(next){setFocus(next.studentKey);document.getElementById(`${id}-${next.studentKey}`)?.scrollIntoView({block:'nearest'});}}else if(e.key==='Enter'){e.preventDefault();if(filtered.some(s=>s.studentKey===(focus||value)))onSelect(focus||value);}}}>
     {searching&&filtered.length>0&&<p className="student-intake-heading">학생</p>}
-    {filtered.map(s=>{const parts=s.studentDisplayName.match(/^(.*?)\s*\((.*)\)$/);return <div id={`${id}-${s.studentKey}`} key={s.studentKey} role="option" aria-selected={value===s.studentKey} className={`student-master-row has-look${value===s.studentKey?' is-selected':''}${focus===s.studentKey?' is-focused':''}`} onClick={()=>onSelect(s.studentKey)}><span className="smr-icon" aria-hidden="true">{s.look?.icon||(parts?.[1]||s.studentDisplayName).slice(0,1)}</span><span className="smr-main"><span className="smr-line"><strong>{parts?.[1]||s.studentDisplayName}</strong>{s.look?.pet&&<span className="smr-pet" title={`키우는 펫 ${s.look.pet.name}${s.look.pet.level!=null?` · Lv.${s.look.pet.level}`:''}`}><span className="smr-pet-art" aria-hidden="true">{s.look.pet.character?<PetCharacter character={s.look.pet.character} stage={petStage(s.look.pet.level) as any}/>:'🐾'}</span>{s.look.pet.name}{s.look.pet.level!=null&&<b>Lv.{s.look.pet.level}</b>}</span>}</span>{parts&&<small>{parts[2]}</small>}<div className="smr-tags">{today?.unwritten.has(s.studentKey)?<StatusBadge kind="saved" text="오늘 일지 미작성"/>:today?.lesson.has(s.studentKey)&&<span className="smr-today">오늘 수업</span>}{(()=>{const stop=plannedStopOf(s);return stop?<span className={'smr-stop'+(stop<=todayKst()?' is-due':'')}>{stop<=todayKst()?'중단 예정일 지남':`${md(stop)} 중단 예정`}</span>:null;})()}{searching&&!isCurrentStudent(s)&&<StatusBadge kind="unwritten" text="이외"/>}{!(s.accountLinked??s.linkedFirebaseUid)&&<span className="smr-quiet">앱 계정 미연결</span>}{!s.hasGuardianContact&&<span className="smr-quiet">연락처 없음</span>}</div></span></div>;})}
+    {filtered.map(s=>{const parts=s.studentDisplayName.match(/^(.*?)\s*\((.*)\)$/);return <div id={`${id}-${s.studentKey}`} key={s.studentKey} role="option" aria-selected={value===s.studentKey} className={`student-master-row has-look${value===s.studentKey?' is-selected':''}${focus===s.studentKey?' is-focused':''}`} onClick={()=>onSelect(s.studentKey)}><span className="smr-icon" aria-hidden="true">{s.look?.icon||(parts?.[1]||s.studentDisplayName).slice(0,1)}</span><span className="smr-main"><span className="smr-line"><strong>{parts?.[1]||s.studentDisplayName}</strong>{s.look?.pet&&<span className="smr-pet" title={`키우는 펫 ${s.look.pet.name}${s.look.pet.level!=null?` · Lv.${s.look.pet.level}`:''}`}><span className="smr-pet-art" aria-hidden="true">{s.look.pet.character?<PetCharacter character={s.look.pet.character} stage={petStage(s.look.pet.level) as any}/>:'🐾'}</span>{s.look.pet.name}{s.look.pet.level!=null&&<b>Lv.{s.look.pet.level}</b>}</span>}</span>{parts&&<small>{parts[2]}</small>}<div className="smr-tags">{studentCampusLabel(s)&&<span className="smr-campus">{studentCampusLabel(s)}</span>}{today?.unwritten.has(s.studentKey)?<StatusBadge kind="unwritten" text="오늘 일지 미작성"/>:today?.lesson.has(s.studentKey)&&<span className="smr-today">오늘 수업</span>}{(()=>{const stop=plannedStopOf(s);return stop?<span className={'smr-stop'+(stop<=todayKst()?' is-due':'')}><CalendarClock size={11} aria-hidden="true"/>{stop<=todayKst()?'중단 예정일 지남':`${md(stop)} 중단 예정`}</span>:null;})()}{searching&&!isCurrentStudent(s)&&<StatusBadge kind="unwritten" text="이외"/>}{!(s.accountLinked??s.linkedFirebaseUid)&&<span className="smr-quiet"><Link2Off size={11} aria-hidden="true"/>앱 계정 미연결</span>}{!s.hasGuardianContact&&<span className="smr-quiet">연락처 없음</span>}</div></span></div>;})}
    </div>}
    {!intake&&!filtered.length&&!searching&&<p className="report-caption">해당하는 학생이 없습니다.</p>}
   </div>

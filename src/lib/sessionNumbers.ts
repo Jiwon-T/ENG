@@ -89,3 +89,9 @@ export function editedSessionNumbers<T extends Record<string,any>>(data:T,baseli
  }
  return next;
 }
+/** Short form of a round hint for the narrow 회차 field: "직전 6.7 +1" (or "월 첫 수업 +0.9"); the full text stays as its tooltip. */
+export function shortRoundHint(hint:string){
+ const prev=hint.match(/^자동 입력 · 직전 ([\d.]+)회차\([^)]*\) \+([\d.]+)$/);if(prev)return `직전 ${prev[1]} +${prev[2]}`;
+ const first=hint.match(/^자동 입력 · \d{4}-\d{2} 월별 시작 0 \+([\d.]+)$/);if(first)return `월 첫 수업 +${first[1]}`;
+ return hint;
+}

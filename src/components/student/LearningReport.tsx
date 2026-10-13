@@ -9,6 +9,7 @@ import { PetService } from '../../lib/petService';
 import { collection, query, where, onSnapshot, doc, getDoc, orderBy, limit, updateDoc, getDocs } from 'firebase/firestore';
 import { visibleStudentSchedules } from '../../lib/studentReportLists';
 import { safeFetchJson } from '../../lib/safeFetchJson';
+import { askConfirm } from '../teacher/ConfirmDialog';
 import type { StudentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 
 function activityDate(value: any) {
@@ -524,7 +525,7 @@ export default function LearningReport() {
 
   const completeAssignment = async (item: any) => {
     if (!auth.currentUser || completingAssignment) return;
-    if (!window.confirm('해당 과제가 완료 되었나요?')) return;
+    if (!await askConfirm({ title: '과제를 다 했나요?', message: typeof item.content === 'string' && item.content.trim() ? (item.content.trim().length > 120 ? `${item.content.trim().slice(0, 120)}…` : item.content.trim()) : undefined, confirmText: '완료했어요', cancelText: '아직이에요', icon: 'check' })) return;
     setCompletingAssignment(item.id);
     try {
       if (item.isLessonAssignment) {

@@ -2,6 +2,7 @@ import {useEffect,useState} from 'react';
 import {Search,UserMinus,UserPlus,Users} from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import {matchesKoreanSearch} from '../../lib/koreanSearch';
+import {askConfirm} from './ConfirmDialog';
 /** Admin: app accounts. Everyone signs up as a student; teacher access is given here, then students are assigned in 선생님 관리. */
 export default function AppUserManager({busy,request,act,refresh,autoLoad=false}:{busy:boolean;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;refresh:()=>Promise<any>;autoLoad?:boolean}){
  const [list,setList]=useState<any[]|null>(null),[query,setQuery]=useState(''),[group,setGroup]=useState<'all'|'teacher'|'student'>('all'),[notice,setNotice]=useState('');
@@ -9,7 +10,7 @@ export default function AppUserManager({busy,request,act,refresh,autoLoad=false}
  useEffect(()=>{if(autoLoad)void act(load);},[]);
  const isTeacher=(u:any)=>u.role==='teacher'||u.role==='principal';
  const shown=(list||[]).filter(u=>(group==='all'||group==='teacher'&&isTeacher(u)||group==='student'&&!isTeacher(u))&&(matchesKoreanSearch(u.name||'',query)||u.email.toLowerCase().includes(query.toLowerCase())));
- const change=(u:any,role:'teacher'|'student')=>{const msg=role==='teacher'?`${u.name||u.email} 계정에 선생님 권한을 줄까요? 이후 선생님 관리에서 담당 학생을 지정할 수 있습니다.`:`${u.name||u.email} 계정을 학생 계정으로 되돌릴까요? 선생님방 연결이 해제되며, 담당 기록은 보관됩니다.`;if(!window.confirm(msg))return;
+ const change=async(u:any,role:'teacher'|'student')=>{const who=u.name||u.email;if(!await askConfirm(role==='teacher'?{title:`${who} 계정에 선생님 권한을 줄까요?`,message:'이후 선생님 관리에서 담당 학생을 지정할 수 있습니다.',confirmText:'권한 주기',icon:'user'}:{title:`${who} 계정을 학생 계정으로 되돌릴까요?`,message:'선생님방 연결이 해제되며, 담당 기록은 보관됩니다.',confirmText:'되돌리기',tone:'danger',icon:'user'}))return;
   void act(async()=>{await request('set-user-role',{uid:u.uid,role});await load();await refresh();setNotice(role==='teacher'?`${u.name||u.email} 님에게 선생님 권한을 줬습니다. 선생님 관리에서 담당 학생을 지정해 주세요.`:`${u.name||u.email} 님을 학생 계정으로 되돌렸습니다.`);});};
  const [renaming,setRenaming]=useState<{uid:string;value:string}|null>(null);
  // App name: the person's own choice; the admin only corrects it.
@@ -17,9 +18,9 @@ export default function AppUserManager({busy,request,act,refresh,autoLoad=false}
   void act(async()=>{const r=await request('set-user-name',{uid:u.uid,name});setRenaming(null);await load();setNotice(r.unchanged?'이름이 그대로입니다.':`앱 이름을 ‘${name}’(으)로 바꿨습니다.`);});};
  const [removed,setRemoved]=useState<any[]|null>(null);
  const loadRemoved=async()=>{const r=await request('read:removed-users');setRemoved(r.removed||[]);};
- const remove=(u:any)=>{if(!window.confirm(`${u.name||u.email} 계정을 탈퇴시킬까요?\n\n앱에 저장된 이 계정의 정보가 지워집니다. 같은 계정으로 다시 로그인하면 새 학생 계정으로 시작합니다.${u.linkedStudent?'\n학생과 연결된 계정이라 연결도 함께 해제됩니다. 학생 기록·리포트·학부모 주소는 그대로 남습니다.':''} 다시 가입하지 못하게 하려면 아래 ‘탈퇴한 계정’에서 로그인을 막을 수 있습니다.`))return;
+ const remove=async(u:any)=>{if(!await askConfirm({title:`${u.name||u.email} 계정을 탈퇴시킬까요?`,message:`앱에 저장된 이 계정의 정보가 지워집니다. 같은 계정으로 다시 로그인하면 새 학생 계정으로 시작합니다.${u.linkedStudent?'\n학생과 연결된 계정이라 연결도 함께 해제됩니다. 학생 기록·리포트·학부모 주소는 그대로 남습니다.':''}\n다시 가입하지 못하게 하려면 아래 ‘탈퇴한 계정’에서 로그인을 막을 수 있습니다.`,confirmText:'탈퇴시키기',tone:'danger',icon:'trash'}))return;
   void act(async()=>{await request('remove-app-user',{uid:u.uid,blockSignIn:false});await load();if(removed)await loadRemoved();setNotice(`${u.name||u.email} 계정을 탈퇴시켰습니다. 다시 로그인하면 새 학생 계정으로 시작합니다.`);});};
- const signIn=(r:any,block:boolean)=>{if(!window.confirm(block?`${r.name||r.email} 계정의 로그인을 막을까요?`:`${r.name||r.email} 계정의 로그인을 다시 허용할까요? 다시 로그인하면 새 학생 계정으로 시작합니다.`))return;
+ const signIn=async(r:any,block:boolean)=>{if(!await askConfirm(block?{title:`${r.name||r.email} 계정의 로그인을 막을까요?`,confirmText:'로그인 막기',tone:'danger',icon:'alert'}:{title:`${r.name||r.email} 계정의 로그인을 다시 허용할까요?`,message:'다시 로그인하면 새 학생 계정으로 시작합니다.',confirmText:'다시 허용',icon:'check'}))return;
   void act(async()=>{await request('removed-user-signin',{id:r.id,block});await loadRemoved();setNotice(block?'로그인을 막았습니다.':'로그인을 다시 허용했습니다.');});};
  return <section className="panel rv">
   <div className="rv-head"><h2>앱 사용자{list&&<small>{list.length}명</small>}</h2>{!list&&<button type="button" className="small-button" disabled={busy} onClick={()=>act(load)}><Users size={16} aria-hidden="true"/>사용자 목록 열기</button>}</div>

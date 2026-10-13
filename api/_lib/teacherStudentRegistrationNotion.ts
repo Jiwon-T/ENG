@@ -11,7 +11,7 @@ export function registrationStudentProperties(id:string, value:StudentRegistrati
     const overall=value.enrollments.some(row=>row.status==='등록')?'등록':value.enrollments.some(row=>row.status==='대기')?'대기':'중단';
     return {
         ...admissionNotionProperties(value.admission||emptyAdmission(),value.guardianSalutation),
-        '학생':title(studentRegistrationTitle(value)), '학교':rich(value.school), '학년':{select:value.grade?{name:value.grade}:null},
+        '학생':title(studentRegistrationTitle(value)), '학교':rich(value.school), '학년':{select:value.grade?{name:value.grade}:null}, '캠퍼스':{multi_select:[...new Set([...(value.campuses||[]),...value.enrollments.map(row=>row.campus).filter(Boolean) as string[]])].map(name=>({name}))},
         '앱 등록 ID':rich(id), '학생 호칭':rich(value.studentSalutation), '학생연락처':{phone_number:value.studentPhone || null},
         '보호자연락처':{phone_number:value.guardianPhone || null}, '보호자이름':rich(value.guardianName),
         '수강료':{number:registrationTuitionTotal(value)}, '납부기한':rich(value.paymentDeadline), '등록상태':{status:{name:overall}},
@@ -27,6 +27,7 @@ export function registrationEnrollmentProperties(id:string, value:StudentRegistr
         properties[row.subject]={status:{name:row.status}};
         properties[`${row.subject} 시작일`]={date:{start:row.startDate}};
         properties[`${row.subject} 중단일`]={date:row.endDate?{start:row.endDate}:null};
+        properties[`${row.subject} 캠퍼스`]={select:row.campus?{name:row.campus}:null};
     }
     return properties;
 }

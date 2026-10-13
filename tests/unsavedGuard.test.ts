@@ -37,3 +37,11 @@ test('the student dialog guard (tabs, student switch, close) goes through the sa
  navigation.attempt(() => { moved = 'lesson-tab'; });
  assert.equal(moved, 'lesson-tab', 'nothing unsaved any more: moves right away'); assert.equal(closed, 0);
 });
+test('the guard waits for an answer that comes later (the app modal)', async () => {
+ let moved = 0, answer = false;
+ const guard = createUnsavedGuard(async () => answer, '저장하지 않은 평가');
+ assert.equal(guard.proceed(() => moved++), true, 'nothing unsaved: moves at once');
+ guard.mark(true);
+ assert.equal(await guard.proceed(() => moved++), false); assert.equal(moved, 1, '계속 작성: no move');
+ answer = true; assert.equal(await guard.proceed(() => moved++), true); assert.equal(moved, 2, '버리고 이동: moves');
+});

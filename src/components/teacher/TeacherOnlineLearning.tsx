@@ -9,12 +9,15 @@ import StatCard from '../reports/StatCard';
 import SessionRow from '../reports/SessionRow';
 import StatusBadge from './StatusBadge';
 import {testPercentage,sessionMatches,filteredActivities,wrongRowExpanded} from '../../lib/teacherReportPresentation';
+import {askDiscard} from './ConfirmDialog';
+import {useLeaveProtection} from '../../lib/leaveProtection';
 const filters=[['all','전체'],['test','단어 테스트'],['quiz','퀴즈'],['flashcard','플래시카드'],['grammar','문법'],['exam','시험 대비']];
 const modes:Record<string,string>={quiz:'객관식 퀴즈',flashcard:'플래시카드',match:'매치 게임',conjugation:'3단 변화',test:'단어 테스트'};
 const date=(v:string|null,options:any={month:'long',day:'numeric',weekday:'short'})=>v?new Date(v).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',...options}):'날짜 미상';
 /** 학습 성취도 평가: a short note on how the student is doing in the online app; the student sees it in their own 학습 리포트. */
 function OnlineEvaluation({studentKey,initial,onDirty}:{key?:string;studentKey:string;initial:{text:string;updatedAt:string|null};onDirty?:(dirty:boolean)=>void}){
  const [text,setText]=useState(initial.text),[saved,setSaved]=useState(initial),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[open,setOpen]=useState(false);
+ useLeaveProtection(text.trim()!==(saved.text||'').trim());
  const dirty=busy||text.trim()!==saved.text;
  // Report the unsaved state to the screen's guards, and warn before the browser tab closes.
  useEffect(()=>{onDirty?.(dirty);},[dirty]);
@@ -35,7 +38,7 @@ function OnlineEvaluation({studentKey,initial,onDirty}:{key?:string;studentKey:s
  return <section className="report-online-evaluation" aria-label="학습 성취도 평가"><h4>학습 성취도 평가</h4>
   <AutoTextarea autoFocus aria-label="학습 성취도 평가" value={text} maxLength={1000} maxRows={6} disabled={busy} placeholder="온라인 학습을 잘하고 있는지 간단히 남겨 주세요. 예: 단어 복습을 꾸준히 하고 있어요." onChange={e=>{setText(e.target.value);setMessage('');}}/>
   <div className="report-online-evaluation-foot"><span className="report-caption">{saved.updatedAt?`마지막 저장 ${date(saved.updatedAt,{month:'long',day:'numeric',hour:'numeric',minute:'2-digit'})}`:'아직 남긴 평가가 없습니다.'} · 학생 학습 리포트에 보입니다.</span>
-   <span className="report-online-evaluation-actions"><button type="button" className="gs-quiet" disabled={busy} onClick={()=>{if(text.trim()!==saved.text&&!window.confirm('저장하지 않은 평가를 버릴까요?'))return;setText(saved.text);setOpen(false);setMessage('');}}>취소</button>
+   <span className="report-online-evaluation-actions"><button type="button" className="gs-quiet" disabled={busy} onClick={async()=>{if(text.trim()!==saved.text&&!await askDiscard('저장하지 않은 평가를 버릴까요?',{discardText:'버리기'}))return;setText(saved.text);setOpen(false);setMessage('');}}>취소</button>
    <button type="button" className="primary-button" disabled={busy||text.trim()===saved.text} onClick={()=>void save()}>{busy?'저장 중…':'평가 저장'}</button></span></div>
   {message&&<p role="status" className="report-caption">{message}</p>}
  </section>;

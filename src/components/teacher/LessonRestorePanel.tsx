@@ -1,14 +1,15 @@
 import {useState} from 'react';
 import StatusBadge from './StatusBadge';
+import {askConfirm} from './ConfirmDialog';
 type Props={request:(action:string,body?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>any;busy?:boolean;students?:{studentKey:string;studentDisplayName?:string}[];staff?:{uid:string;name:string}[];onRestored?:()=>any};
 /** Deleted lessons (app-only mode). Loads nothing until opened; restore keeps the original public report ID. */
 export default function LessonRestorePanel({request,act,busy=false,students=[],staff=[],onRestored}:Props){
  const [state,setState]=useState<any>(null),[message,setMessage]=useState(''),[error,setError]=useState('');
  const names=new Map(students.map(s=>[s.studentKey,s.studentDisplayName||'학생'])),teachers=new Map(staff.map(s=>[s.uid,s.name]));
  async function load(){try{setError('');setState(await request('read:archived-lessons'));}catch(e){setError(e instanceof Error?e.message:'불러오지 못했습니다');}}
- function restore(r:any){
+ async function restore(r:any){
   const who=`${r.data.date} ${names.get(r.data.studentKey)||'학생'} ${r.data.subject}`;
-  if(!window.confirm(r.publicRestore?`${who} 일지와 학생·학부모 리포트를 삭제 전 상태로 되돌릴까요?`:`${who} 일지를 비공개 초안으로 되돌릴까요? 리포트에 보이려면 다시 반영해야 합니다.`))return;
+  if(!await askConfirm(r.publicRestore?{title:'일지와 리포트를 되돌릴까요?',message:`${who} 일지와 학생·학부모 리포트를 삭제 전 상태로 되돌립니다.`,confirmText:'되돌리기',icon:'restore'}:{title:'비공개 초안으로 되돌릴까요?',message:`${who} 일지를 비공개 초안으로 되돌립니다. 리포트에 보이려면 다시 반영해야 합니다.`,confirmText:'되돌리기',icon:'restore'}))return;
   void act(async()=>{const result=await request('restore-lesson',{id:r.id,revision:r.revision,confirmed:true});setMessage(result.publicRestored?`${who} 일지와 리포트를 복원했습니다.`:`${who} 일지를 비공개 초안으로 복원했습니다. 확인 후 반영해 주세요.`);await load();await onRestored?.();});
  }
  return <details className="panel lesson-cutover" onToggle={e=>{if((e.currentTarget as HTMLDetailsElement).open&&!state)void load();}}>

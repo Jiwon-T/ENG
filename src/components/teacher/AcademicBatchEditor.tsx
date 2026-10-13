@@ -6,6 +6,8 @@ import StatusBadge from './StatusBadge';
 import ExamFields from './AcademicExamFields';
 import { detailMetadata, suggestedExamTitle, withSuggestedTitle, schoolTagFrom } from '../../lib/academicExamPeriod';
 import { academicBatchPayload, academicBatchError, applyAcademicBatchChunks } from '../../lib/academicBatch';
+import {askDiscard} from './ConfirmDialog';
+import {useLeaveProtection} from '../../lib/leaveProtection';
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
 const SUBJECTS = ['영어', '수학', '국어', '과학', '한국사'];
 const STATUSES = ['제출 완료', '미제출', '제출 대상 아님'];
@@ -21,6 +23,7 @@ export default function AcademicBatchEditor({ data, kind, onClose, request, act,
 }) {
     const [common, setCommon] = useState(() => { const value = { subject: data.scopes?.[0]?.subject || '영어', examType: kind, examDetail: kind === '학교 내신' ? '1학기 중간고사' : '', examYear: new Date().getFullYear(), title: '', examDate: today(), maxScore: 100 as number | null, deadline: null as string | null, ...detailMetadata(kind === '학교 내신' ? '1학기 중간고사' : '') }; return { ...value, title: suggestedExamTitle(value) }; });
     const [rows, setRows] = useState<any[]>([]), [working, setWorking] = useState(false), [message, setMessage] = useState('');
+    useLeaveProtection(rows.some(row => ['new', 'failed-save'].includes(row.phase)));
     const [schoolTag, setSchoolTag] = useState(''), [editingExam, setEditingExam] = useState(true), [notes, setNotes] = useState<Record<string, boolean>>({});
     const lock = useRef(false), scoreInputs = useRef(new Map<string, HTMLInputElement>());
     const scopes = data.principal ? data.teachingScopes || [] : data.scopes || [];
@@ -78,8 +81,8 @@ export default function AcademicBatchEditor({ data, kind, onClose, request, act,
     }
     const nameOf = (key: string) => data.students.find((s: any) => s.studentKey === key)?.studentDisplayName || '학생';
     const tags = [common.subject, common.examType === '학교 내신' ? '내신' : common.examType, common.title.trim() || suggestedExamTitle(common, schoolTag) || '시험명 없음', common.examDate ? `${Number(common.examDate.slice(5, 7))}월 ${Number(common.examDate.slice(8, 10))}일` : '시험일 없음', `만점 ${common.maxScore ?? '—'}`, ...(common.deadline ? [`기한 ${common.deadline.slice(5).replace('-', '/')}`] : [])];
-    return <WorkspaceDialog open title="여러 학생 성적 입력" onClose={() => { if (working)
-        return; if (rows.some(row => ['new', 'failed-save'].includes(row.phase)) && !window.confirm('저장하지 않은 성적 입력을 닫을까요?'))
+    return <WorkspaceDialog open title="여러 학생 성적 입력" onClose={async () => { if (working)
+        return; if (rows.some(row => ['new', 'failed-save'].includes(row.phase)) && !await askDiscard('저장하지 않은 성적 입력을 닫을까요?'))
         return; onClose(); }}><section className="academic-batch-editor gs"><p className="gs-lead">시험 정보는 한 번만, 점수는 학생별로 입력합니다.</p>
  <section className="gs-sec"><h3><span className="gs-num">1</span>시험</h3>
   {editingExam && !frozen ? <fieldset disabled={working || frozen}>

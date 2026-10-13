@@ -66,7 +66,8 @@ test('Notion blocked: enrollment status and teacher removal commit with public p
 });
 test('Notion blocked: explicit assignment grant is CAS/idempotent and reflects enrollment relations without account recreation',async()=>{
  const f=fixture();await f.setup();const p=f.rows.get('teacherWorkspaceAccess/teacher');
- const value={uid:'teacher',academyId:'main',workspaceRole:'teacher',workspaceLabel:'담당',notionTeacherPageId:tid,academyStudents:[],scopes:[]};
+ const value={uid:'teacher',academyId:'main',workspaceRole:'teacher',workspaceLabel:'담당',notionTeacherPageId:tid,academyStudents:[],scopes:[],transferReason:'학원 사정'};
+ await assert.rejects(saveCoreGrant(f.db,f.actor,{...value,transferReason:undefined},p.assignmentRevision,assertTeacherSettingsAccess),/TRANSFER_REASON_REQUIRED/,'taking the teacher off a continuing subject needs a reason');
  await saveCoreGrant(f.db,f.actor,value,p.assignmentRevision,assertTeacherSettingsAccess);await saveCoreGrant(f.db,f.actor,value,p.assignmentRevision,assertTeacherSettingsAccess);
  assert.deepEqual(f.source('enrollments',eid).fields.properties['영어 담당'].relation,[]);assert.equal(f.rows.get('users/teacher').role,'teacher');
  await assert.rejects(saveCoreGrant(f.db,f.actor,{...value,scopes:[{studentKey:sid,subject:'영어'}]},p.assignmentRevision,assertTeacherSettingsAccess),/DRAFT_CONFLICT/);
@@ -92,7 +93,7 @@ test('selective restore keeps account/report identity, advances app version, and
 });
 test('an account snapshot captured before assignment removal cannot restore stale permissions',async()=>{
  const f=fixture();await f.setup();const stale={...structuredClone(f.rows.get('teacherWorkspaceAccess/teacher')),uid:'teacher'};
- await saveCoreGrant(f.db,f.actor,{uid:'teacher',academyId:'main',workspaceRole:'teacher',notionTeacherPageId:tid,academyStudents:[],scopes:[]},stale.assignmentRevision,assertTeacherSettingsAccess);
+ await saveCoreGrant(f.db,f.actor,{uid:'teacher',academyId:'main',workspaceRole:'teacher',notionTeacherPageId:tid,academyStudents:[],scopes:[],transferReason:'학원 사정'},stale.assignmentRevision,assertTeacherSettingsAccess);
  assert.deepEqual(await readCoreScopes(f.db,stale),[]);
  f.rows.set('teacherWorkspaceAccess/teacher',{...f.rows.get('teacherWorkspaceAccess/teacher'),disabled:true});await assert.rejects(readCoreScopes(f.db,stale),/TEACHER_NOT_CONFIGURED/);
 });
@@ -180,4 +181,80 @@ test('중단 예약: saved only while 등록 and not before the start, read back
  assert.equal((await save({status:'중단',endDate:'2026-12-31',plannedEndDate:'2026-12-31'})).status,400,'no reservation on a stopped subject');
  assert.equal((await save({plannedEndDate:'2026-09-01'})).status,400,'not before the start date');
  assert.equal((await save({})).status,200);assert.equal((await readStudentEnrollment(f.db,f.actor,sid)).subjects.find((s:any)=>s.subject==='영어')!.plannedEndDate,null,'left out = cleared');
+});
+test('담당 변경: taking a teacher off a continuing subject needs a reason and is recorded for the principal and admin only',async()=>{
+ const f=fixture();await f.setup();
+ const {readTeacherTransfers}=await import('../api/_lib/teacherTransfers.js');
+ const save=async(extra:any)=>{const e=await readStudentEnrollment(f.db,f.actor,sid);return workspaceCall(f,'POST',{action:'save-student-enrollment',studentKey:sid,operationId:randomUUID(),studentEditedAt:e.studentEditedAt,enrollmentEditedAt:e.enrollmentEditedAt,data:{subject:'영어',status:'등록',startDate:'2026-10-02',endDate:null,addTeacherUid:null,removeTeacherIds:[tid],classIds:[],...extra}});};
+ const transfers=()=>[...f.rows.entries()].filter(([k])=>k.startsWith('teacherTransfers/')).map(([,v])=>v);
+ const refused=await save({});assert.equal(refused.status,400);assert.match(JSON.stringify(refused.body),/TRANSFER_REASON_REQUIRED|바꾸는 이유/);
+ assert.equal((await readStudentEnrollment(f.db,f.actor,sid)).subjects[0].teachers.length,1,'nothing changed without a reason');assert.equal(transfers().length,0);
+ assert.equal((await save({transferReason:'학생·학부모 요청',transferNote:'메모는 기타일 때만'})).status,200);
+ const [t]=transfers();assert.equal(t.reason,'학생·학부모 요청');assert.equal(t.note,'','the note is kept only with 기타');assert.equal(t.subject,'영어');assert.deepEqual(t.toUids,[]);assert.deepEqual(t.fromUids,['teacher'],'who handed the student over');assert.equal(t.academyId,'main');
+ assert.equal((await readStudentEnrollment(f.db,f.actor,sid)).subjects[0].teachers.length,0);
+ const list=await readTeacherTransfers(f.db,{...f.actor,admin:true,academyId:'main'});assert.equal(list.transfers.length,1);
+ await assert.rejects(readTeacherTransfers(f.db,{uid:'teacher',academyId:'main',admin:false,principal:false}),/FORBIDDEN/,'teachers never read transfer records');
+});
+test('담당 변경: a stop is not a transfer (no reason, no record); 기타 keeps its optional note',async()=>{
+ const f=fixture();await f.setup();const transfers=()=>[...f.rows.entries()].filter(([k])=>k.startsWith('teacherTransfers/')).map(([,v])=>v);
+ let r=await readStudentEnrollment(f.db,f.actor,sid);
+ await saveStudentEnrollment(f.db,f.actor,sid,{operationId:randomUUID(),studentEditedAt:r.studentEditedAt,enrollmentEditedAt:r.enrollmentEditedAt,data:{subject:'영어',status:'중단',startDate:'2026-10-01',endDate:'2026-10-08',addTeacherUid:null,removeTeacherIds:[tid],classIds:[]}});
+ assert.equal(transfers().length,0,'중단 with the teacher removed is a stop');
+ const g=fixture();await g.setup();r=await readStudentEnrollment(g.db,g.actor,sid);
+ await saveStudentEnrollment(g.db,g.actor,sid,{operationId:randomUUID(),studentEditedAt:r.studentEditedAt,enrollmentEditedAt:r.enrollmentEditedAt,data:{subject:'영어',status:'등록',startDate:'2026-10-01',endDate:null,addTeacherUid:null,removeTeacherIds:[tid],classIds:[],transferReason:'기타',transferNote:' 학원 내부 조정 '}});
+ const [t]=[...g.rows.entries()].filter(([k])=>k.startsWith('teacherTransfers/')).map(([,v])=>v);assert.equal(t.reason,'기타');assert.equal(t.note,'학원 내부 조정');
+});
+test('담당 변경: removing one of two co-teachers records who stays (afterUids), not "담당 없음"',async()=>{
+ const f=fixture();await f.setup();
+ const tid2='44444444-4444-4444-8444-444444444444',tRow=f.rows.get(DIRECTORY_ROWS+'/'+directoryRowKey('teachers',tid));
+ f.rows.set(DIRECTORY_ROWS+'/'+directoryRowKey('teachers',tid2),{...structuredClone(tRow),notionPageId:tid2,pointer:{teacherUid:'teacher2'}});
+ f.rows.set('users/teacher2',{role:'teacher'});f.rows.set('teacherWorkspaceAccess/teacher2',{academyId:'main',workspaceRole:'teacher',notionTeacherPageId:tid2,scopes:[{studentKey:sid,subject:'영어'}],assignmentRevision:1,assignmentSource:'firestore'});
+ const eKey=DIRECTORY_ROWS+'/'+directoryRowKey('enrollments',eid),eRow=f.rows.get(eKey);eRow.fields.properties['영어 담당']={relation:[{id:tid},{id:tid2}]};f.rows.set(eKey,eRow);
+ const r=await readStudentEnrollment(f.db,f.actor,sid);assert.equal(r.subjects[0].teachers.length,2,'two co-teachers before');
+ await saveStudentEnrollment(f.db,f.actor,sid,{operationId:randomUUID(),studentEditedAt:r.studentEditedAt,enrollmentEditedAt:r.enrollmentEditedAt,data:{subject:'영어',status:'등록',startDate:'2026-10-01',endDate:null,addTeacherUid:null,removeTeacherIds:[tid],classIds:[],transferReason:'시간 변경'}});
+ const [t]=[...f.rows.entries()].filter(([k])=>k.startsWith('teacherTransfers/')).map(([,v])=>v);
+ assert.deepEqual(t.fromUids,['teacher']);assert.deepEqual(t.toUids,[],'nobody new');assert.deepEqual(t.afterUids,['teacher2'],'the co-teacher stays');
+ const {readTeacherTransfers}=await import('../api/_lib/teacherTransfers.js');assert.deepEqual((await readTeacherTransfers(f.db,f.actor)).transfers[0].afterUids,['teacher2']);
+});
+test('담당 변경 from the teacher dialog: one record per student and subject, retry writes nothing new, a stopped subject needs no reason',async()=>{
+ const f=fixture();await f.setup();const p=f.rows.get('teacherWorkspaceAccess/teacher');
+ const transfers=()=>[...f.rows.entries()].filter(([k])=>k.startsWith('teacherTransfers/')).map(([,v])=>v);
+ const value={uid:'teacher',academyId:'main',workspaceRole:'teacher',workspaceLabel:'담당',notionTeacherPageId:tid,academyStudents:[],scopes:[],transferReason:'기타',transferNote:' 시간표 정리 '};
+ await saveCoreGrant(f.db,f.actor,value,p.assignmentRevision,assertTeacherSettingsAccess);await saveCoreGrant(f.db,f.actor,value,p.assignmentRevision,assertTeacherSettingsAccess);
+ const list=transfers();assert.equal(list.length,1,'one record, the retry adds none');
+ assert.deepEqual({from:list[0].fromUids,to:list[0].toUids,after:list[0].afterUids,subject:list[0].subject,reason:list[0].reason},{from:['teacher'],to:[],after:[],subject:'영어',reason:'기타'});
+ assert.equal(list[0].note,'시간표 정리');
+ const g=fixture();await g.setup();const eKey=DIRECTORY_ROWS+'/'+directoryRowKey('enrollments',eid),eRow=g.rows.get(eKey);eRow.fields.properties['영어']={status:{name:'중단'}};g.rows.set(eKey,eRow);
+ const q=g.rows.get('teacherWorkspaceAccess/teacher');
+ await saveCoreGrant(g.db,g.actor,{uid:'teacher',academyId:'main',workspaceRole:'teacher',notionTeacherPageId:tid,academyStudents:[],scopes:[]},q.assignmentRevision,assertTeacherSettingsAccess);
+ assert.equal([...g.rows.keys()].filter(k=>k.startsWith('teacherTransfers/')).length,0,'a stopped subject is not a transfer');
+});
+test('담당 변경 from the teacher dialog: a subject with no status still needs a reason and is recorded (only 중단 is exempt)',async()=>{
+ const f=fixture();await f.setup();const eKey=DIRECTORY_ROWS+'/'+directoryRowKey('enrollments',eid),eRow=f.rows.get(eKey);delete eRow.fields.properties['영어'];f.rows.set(eKey,eRow);
+ const p=f.rows.get('teacherWorkspaceAccess/teacher'),value={uid:'teacher',academyId:'main',workspaceRole:'teacher',notionTeacherPageId:tid,academyStudents:[],scopes:[]};
+ await assert.rejects(saveCoreGrant(f.db,f.actor,value,p.assignmentRevision,assertTeacherSettingsAccess),/TRANSFER_REASON_REQUIRED/,'missing status is not a stop');
+ await saveCoreGrant(f.db,f.actor,{...value,transferReason:'시간 변경'},p.assignmentRevision,assertTeacherSettingsAccess);
+ assert.equal([...f.rows.keys()].filter(k=>k.startsWith('teacherTransfers/')).length,1);
+});
+test('campus per subject in 수강 관리: saved, read back, kept when left out, cleared with null; in the summary and the student 캠퍼스',async()=>{
+ const f=fixture();await f.setup();
+ const save=async(extra:any)=>{const e=await readStudentEnrollment(f.db,f.actor,sid);return saveStudentEnrollment(f.db,f.actor,sid,{operationId:randomUUID(),studentEditedAt:e.studentEditedAt,enrollmentEditedAt:e.enrollmentEditedAt,data:{subject:'영어',status:'등록',startDate:'2026-10-01',endDate:null,addTeacherUid:null,removeTeacherIds:[],classIds:[],...extra}});};
+ await save({campus:'이충'});
+ const read=async()=>(await readStudentEnrollment(f.db,f.actor,sid)).subjects.find((s:any)=>s.subject==='영어')!.campus;
+ assert.equal(await read(),'이충');
+ assert.equal(f.rows.get('studentEnrollments/'+eid).subjects.find((s:any)=>s.subject==='영어').campus,'이충','the lesson-tab summary sees it');
+ assert.deepEqual(f.source('students',sid).fields.properties['캠퍼스'],{multi_select:[{name:'이충'}]});
+ await save({});assert.equal(await read(),'이충','left out = kept');
+ await save({campus:null});assert.equal(await read(),null,'null = cleared');
+ const {readCoreEnrollmentSummaries}=await import('../api/_lib/academyCore.js');await save({campus:'고덕'});
+ assert.equal((await readCoreEnrollmentSummaries(f.db,f.actor)).get(sid)!.find((s:any)=>s.subject==='영어').campus,'고덕');
+});
+test('student 캠퍼스 follows the subjects when a campus changes, down to an empty list; untouched saves keep it',async()=>{
+ const f=fixture();await f.setup();
+ const save=async(extra:any)=>{const e=await readStudentEnrollment(f.db,f.actor,sid);return saveStudentEnrollment(f.db,f.actor,sid,{operationId:randomUUID(),studentEditedAt:e.studentEditedAt,enrollmentEditedAt:e.enrollmentEditedAt,data:{subject:'영어',status:'등록',startDate:'2026-10-01',endDate:null,addTeacherUid:null,removeTeacherIds:[],classIds:[],...extra}});};
+ const campus=()=>f.source('students',sid).fields.properties['캠퍼스'];
+ await save({campus:'이충'});assert.deepEqual(campus(),{multi_select:[{name:'이충'}]});
+ await save({campus:null});assert.deepEqual(campus(),{multi_select:[]},'the last subject campus cleared → empty');
+ const sKey=DIRECTORY_ROWS+'/'+directoryRowKey('students',sid),sRow=f.rows.get(sKey);sRow.fields.properties['캠퍼스']={multi_select:[{name:'고덕'}]};f.rows.set(sKey,sRow);
+ await save({});assert.deepEqual(campus(),{multi_select:[{name:'고덕'}]},'a save that does not touch the campus keeps the student value');
 });

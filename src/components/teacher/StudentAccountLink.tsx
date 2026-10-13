@@ -3,6 +3,7 @@ import {Link2,Search,Unlink} from 'lucide-react';
 import {auth} from '../../lib/firebase';
 import {teacherAuthenticatedRequest} from '../../lib/teacherAuthenticatedRequest';
 import {matchesKoreanSearch} from '../../lib/koreanSearch';
+import {askConfirm} from './ConfirmDialog';
 const failures:Record<string,string>={
  STUDENT_ALREADY_LINKED:'이 학생은 이미 다른 앱 계정과 연결되어 있습니다. 먼저 그 연결을 해제해 주세요.',
  INVALID_ROLE:'학생 계정만 연결할 수 있습니다. 선생님 계정은 연결할 수 없습니다.',
@@ -38,12 +39,12 @@ export default function StudentAccountLink({studentKey,studentName,linkedUid,onC
     <p className="sal-title">연결된 앱 계정</p>
     {!users?<p className="gs-note">불러오는 중…</p>:<p className="sal-current"><strong>{linked?.name||'이름 없음'}</strong><span>{linked?.email||linkedUid}</span></p>}
     <p className="gs-note">연결을 해제하면 학생 앱에서 리포트·과제가 보이지 않습니다. 수업 기록은 그대로 남습니다.</p>
-    <div className="gs-foot"><span className="gs-grow"/><button type="button" className="small-button" onClick={()=>setOpen(false)}>닫기</button><button type="button" className="gs-quiet sal-danger" disabled={busy} onClick={()=>{if(window.confirm(`${studentName} 학생과 앱 계정의 연결을 해제할까요?`))void send('DELETE',{firebaseUid:linkedUid},'앱 계정 연결을 해제했습니다.');}}><Unlink size={14} aria-hidden="true"/>연결 해제</button></div>
+    <div className="gs-foot"><span className="gs-grow"/><button type="button" className="small-button" onClick={()=>setOpen(false)}>닫기</button><button type="button" className="gs-quiet sal-danger" disabled={busy} onClick={async()=>{if(await askConfirm({title:`${studentName} 학생과 앱 계정의 연결을 해제할까요?`,confirmText:'연결 해제',tone:'danger',icon:'unlink'}))void send('DELETE',{firebaseUid:linkedUid},'앱 계정 연결을 해제했습니다.');}}><Unlink size={14} aria-hidden="true"/>연결 해제</button></div>
    </>:<>
     <p className="sal-title">{studentName} 학생이 가입한 앱 계정을 고르세요</p>
     <label className="student-master-search"><Search size={16} aria-hidden="true"/><input aria-label="앱 계정 검색" placeholder="이름·초성·이메일 검색" value={query} onChange={e=>setQuery(e.target.value)} autoFocus/></label>
     {!users?<p className="gs-note">앱 사용자 목록을 불러오는 중…</p>:<ul className="sal-list">{candidates.slice(0,30).map(u=><li key={u.uid}><span><strong>{u.name||'이름 없음'}</strong><small>{u.email}</small></span>
-     <button type="button" className="small-button" disabled={busy} onClick={()=>{if(window.confirm(`${u.name||u.email} 계정을 ${studentName} 학생과 연결할까요?`))void send('POST',{firebaseUid:u.uid,studentKey},`${u.name||'앱 계정'} 계정을 연결했습니다.`);}}>연결</button></li>)}
+     <button type="button" className="small-button" disabled={busy} onClick={async()=>{if(await askConfirm({title:`${u.name||u.email} 계정을 ${studentName} 학생과 연결할까요?`,confirmText:'연결',icon:'link'}))void send('POST',{firebaseUid:u.uid,studentKey},`${u.name||'앱 계정'} 계정을 연결했습니다.`);}}>연결</button></li>)}
      {!candidates.length&&<li className="gs-note">연결할 수 있는 학생 계정이 없습니다. 학생이 먼저 앱에 가입해야 합니다.</li>}</ul>}
     <div className="sal-code">
      <p className="sal-title">또는 학생에게 연결 코드 주기</p>

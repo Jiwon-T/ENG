@@ -9,6 +9,8 @@ import { emptyRegistration, registrationStatusLabels, type RegistrationInput, ty
 import { registrationSaveIntent, registrationFailureIsDefinitive, type RegistrationSaveIntent } from '../../lib/studentRegistrationSave';
 import WorkspaceDialog from './WorkspaceDialog';
 import StudentRegistrationForm from './StudentRegistrationForm';
+import {askConfirm,askDiscard} from './ConfirmDialog';
+import {useLeaveProtection} from '../../lib/leaveProtection';
 interface PageResult extends ServerResult {ok:boolean;records:RegistrationSummary[];page:number;pages:number;total:number;counts?:Record<string,number>}
 interface ServerResult {ok:boolean;error?:string;message?:string;diagnosticId?:string;id?:string;revision?:number;syncStatus?:string;sourceMode?:string;record?:RegistrationRecord}
 async function request<T>(action:string, values:Record<string,unknown>={}) {
@@ -28,6 +30,7 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
     const [open,setOpen]=useState(false),[value,setValue]=useState<RegistrationInput>(emptyRegistration);
     const [key,setKey]=useState(''),[revision,setRevision]=useState<number | undefined>();
     const [busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[feedback,setFeedback]=useState('');
+    useLeaveProtection(dirty);
     const [options,setOptions]=useState<RegistrationOptions | undefined>(),[optionsError,setOptionsError]=useState(''),[optionsReload,setOptionsReload]=useState(0);
     const [locked,setLocked]=useState(false),[retrying,setRetrying]=useState(false);
     const intent=useRef<RegistrationSaveIntent | null>(null),writeBusy=useRef(false),generation=useRef(0);
@@ -82,9 +85,9 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
         } catch(error) { if(current===generation.current)setFeedback(error instanceof Error?error.message:'등록 내용을 불러오지 못했습니다.'); }
         finally { if(current===generation.current)setBusy(false); }
     }
-    function close() {
+    async function close() {
         if(writeBusy.current)return;
-        if((dirty || intent.current) && !window.confirm(intent.current?'저장 결과를 확인하지 못했습니다. 창을 닫은 뒤 목록을 새로고침해 저장 여부를 확인해 주세요. 닫을까요?':'저장하지 않은 입력을 닫을까요?'))return;
+        if((dirty || intent.current) && !await (intent.current?askConfirm({title:'저장 결과를 확인하지 못했어요',message:'창을 닫은 뒤 목록을 새로고침해 저장 여부를 확인해 주세요.',confirmText:'닫기',icon:'alert'}):askDiscard('저장하지 않은 입력을 닫을까요?')))return;
         generation.current++;intent.current=null;setCurrent(null);setOptions(undefined);setOpen(false);setValue(emptyRegistration());setKey('');setRevision(undefined);setRetrying(false);setFeedback('');setBusy(false);
     }
     async function save() {
@@ -130,7 +133,7 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
     }
     async function convert(record:RegistrationSummary){
         if(writeBusy.current)return;
-        if(!window.confirm(record.purpose==='additional'?'선택한 상담 과목의 실제 등록을 확인한 뒤 상담 목록에서 정리할까요?':'재원생으로 전환할까요? 이 목록에서 빠지고 아래 학생 관리 카드에서 계속 관리합니다. 기존 기록과 리포트 주소는 유지됩니다.'))return;
+        if(!await askConfirm(record.purpose==='additional'?{title:'상담 목록에서 정리할까요?',message:'선택한 상담 과목의 실제 등록을 확인한 뒤 정리해 주세요.',confirmText:'정리',icon:'check'}:{title:'재원생으로 전환할까요?',message:'이 목록에서 빠지고 아래 학생 관리 카드에서 계속 관리합니다. 기존 기록과 리포트 주소는 유지됩니다.',confirmText:'전환',icon:'check'}))return;
         writeBusy.current=true;setBusy(true);setFeedback('');const current=generation.current,uid=auth.currentUser?.uid;
         try{const result=await teacherAuthenticatedRequest<ServerResult>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'convert-registration-resident',id:record.id,revision:record.revision})});if(current!==generation.current||auth.currentUser?.uid!==uid)return;if(!result.ok||!result.data?.ok)throw Error(responseMessage(result));setReload(n=>n+1);setFeedback('목록에서 정리했습니다. 아래 학생 관리 카드에서 계속 관리할 수 있습니다.');await onSynced();}catch(error){if(current===generation.current)setFeedback(error instanceof Error?error.message:'전환 결과를 확인하지 못했습니다.');}finally{writeBusy.current=false;if(current===generation.current)setBusy(false);}
     }

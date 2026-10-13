@@ -1,6 +1,8 @@
 import {Fragment,useEffect,useState} from 'react';
 import {ChevronLeft,ChevronRight,Download,Eye,EyeOff,Wallet} from 'lucide-react';
 import {tuitionCsv} from '../../lib/tuition';
+import {askDiscard} from './ConfirmDialog';
+import {useLeaveProtection} from '../../lib/leaveProtection';
 const won=(n:number|null|undefined)=>n==null?'—':`${n.toLocaleString('ko-KR')}원`;
 const shift=(m:string,d:number)=>{const [y,mo]=m.split('-').map(Number),t=new Date(Date.UTC(y,mo-1+d,1));return `${t.getUTCFullYear()}-${String(t.getUTCMonth()+1).padStart(2,'0')}`;};
 const thisMonth=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date()).slice(0,7);
@@ -12,9 +14,10 @@ export default function TeacherPayroll({busy,request,act,autoLoad=false,onDirty}
  const load=async(m=month)=>{const r=await request('read:teacher-payroll',{month:m});setData(r);setMonth(m);setAdjust({});setNotice('');};
  useEffect(()=>{if(autoLoad)void act(()=>load());},[]);
  const unsaved=Object.keys(adjust).length>0||Boolean(editShares);
+ useLeaveProtection(unsaved);
  useEffect(()=>{onDirty?.(unsaved);},[unsaved]);
  useEffect(()=>()=>onDirty?.(false),[]);
- const go=(m:string)=>{if(Object.keys(adjust).length&&!window.confirm('저장하지 않은 조정이 있습니다. 다른 달로 옮길까요?'))return;void act(()=>load(m));};
+ const go=async(m:string)=>{if(Object.keys(adjust).length&&!await askDiscard('저장하지 않은 조정이 있어요',{message:'다른 달로 옮기면 조정한 내용이 사라져요.',discardText:'버리고 이동'}))return;void act(()=>load(m));};
  const pct=(n:number)=>reveal?`${n}%`:'••%';
  const saveAdjust=()=>void act(async()=>{await request('save-payroll-adjust',{month,revision:data.revision,adjust:Object.fromEntries(Object.entries(adjust).map(([uid,a]:[string,{amount:number|null;note:string}])=>[uid,a.amount==null&&!a.note?null:{amount:a.amount??0,note:a.note}]))});await load(month);setNotice('조정 금액을 저장했습니다.');});
  const saveShares=()=>{if(!editShares)return;void act(async()=>{await request('save-teacher-shares',editShares);setEditShares(null);await load(month);setNotice('정산 비율을 저장했습니다.');});};

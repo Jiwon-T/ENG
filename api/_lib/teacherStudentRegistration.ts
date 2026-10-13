@@ -2,7 +2,7 @@ import {admissionSchema} from './studentAdmission.js';
 import { z } from 'zod';
 import { createHash, randomUUID } from 'node:crypto';
 import { subjects } from './teacherWorkspacePolicy.js';
-import { registrationGrades, type RegistrationSummary } from '../../src/lib/studentRegistration.js';
+import { registrationCampuses, registrationGrades, type RegistrationSummary } from '../../src/lib/studentRegistration.js';
 
 const calendarDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
     const date = new Date(`${value}T00:00:00Z`);
@@ -15,6 +15,7 @@ export const studentRegistrationSchema = z.object({
     existingStudentKey:z.string().uuid().nullable().default(null),
     admission:admissionSchema,
     name: z.string().trim().min(1).max(60),
+    campuses: z.array(z.enum(registrationCampuses)).max(registrationCampuses.length).default([]).refine(list => new Set(list).size === list.length, '캠퍼스를 중복 선택할 수 없습니다.'),
     school: z.string().trim().max(80).default(''),
     grade: z.enum(['', ...registrationGrades]).default(''),
     studentPhone: phone.default(''), guardianPhone: phone.default(''),
@@ -30,6 +31,7 @@ export const studentRegistrationSchema = z.object({
         classIds: z.array(z.string().uuid().transform(value=>value.toLowerCase())).max(20).default([]),
         // 8-session price for this subject; the student's 수강료 is the sum.
         tuition: z.number().int().nonnegative().max(100_000_000).nullable().default(null),
+        campus: z.enum(registrationCampuses).nullable().default(null),
     }).strict().superRefine((value, ctx) => {
         if (new Set(value.classIds).size !== value.classIds.length) ctx.addIssue({code:'custom',message:'반을 중복 선택할 수 없습니다.'});
         if (value.classIds.length && (value.status !== '등록' || !value.teacherUid)) ctx.addIssue({code:'custom',message:'반 배정에는 등록 상태와 담당 선생님이 필요합니다.'});

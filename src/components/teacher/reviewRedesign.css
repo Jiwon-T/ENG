@@ -398,7 +398,7 @@
 .teacher-workspace .student-master-row.has-look small{margin:2px 0 4px}
 
 .teacher-workspace .smr-pet{padding-left:3px}
-.teacher-workspace .smr-pet-art{flex:none;display:grid;place-items:center;width:22px;height:20px;overflow:hidden;border-radius:999px;background:#ffe4ec;box-shadow:inset 0 0 0 1px #fbcfe8}
+.teacher-workspace .smr-pet-art{flex:none;display:grid;place-items:center;width:22px;height:20px;overflow:hidden;border-radius:999px;background:#ffe4ec;box-shadow:inset 0 0 0 1px #fadde1}
 .teacher-workspace .smr-pet-art svg{width:22px!important;height:20px!important}
 .teacher-workspace .smr-pet-art div{display:flex!important;align-items:center;justify-content:center;width:22px;height:20px;padding:0!important;margin:0!important}
 .teacher-workspace .smr-pet-art div>:not(svg):not(div){display:none}
@@ -442,21 +442,21 @@
 .teacher-workspace .tt-head h3{margin:0;font-size:15px}
 .teacher-workspace .tt-legend{display:inline-flex;gap:6px;flex-wrap:wrap}
 .teacher-workspace .tt-tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
-.teacher-workspace .tt-tag.lesson{background:#fff1f3;color:#be185d}
+.teacher-workspace .tt-tag.lesson{background:#fef2f3;color:#8b2f40}
 .teacher-workspace .tt-tag.study{background:#ecfdf5;color:#047857}
 .teacher-workspace .tt-tag.test{background:#eef2ff;color:#4338ca}
-.teacher-workspace .tt-line{margin-top:10px;padding:12px 14px;border:1px solid #f1e4e7;border-left:4px solid #f9a8c0;border-radius:16px;background:#fff}
+.teacher-workspace .tt-line{margin-top:10px;padding:12px 14px;border:1px solid #f1e4e7;border-left:4px solid #f5a3a8;border-radius:16px;background:#fff}
 .teacher-workspace .tt-line.is-test{border-left-color:#a5b4fc;background:#fbfbff}
 .teacher-workspace .tt-line.is-stopped{opacity:.6}
 .teacher-workspace .tt-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .teacher-workspace .tt-row+.tt-row{margin-top:8px}
 .teacher-workspace .tt-kind{display:inline-flex;padding:3px;border-radius:999px;background:#f8fafc;gap:2px}
 .teacher-workspace .tt-kind button{display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700;color:var(--workspace-muted);background:transparent}
-.teacher-workspace .tt-kind button[aria-pressed=true]{background:#fff;color:#be185d;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.teacher-workspace .tt-kind button[aria-pressed=true]{background:#fff;color:#8b2f40;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .teacher-workspace .tt-line.is-test .tt-kind button[aria-pressed=true]{color:#4338ca}
 .teacher-workspace .tt-days{display:inline-flex;gap:4px;flex-wrap:wrap}
 .teacher-workspace .tt-days button{width:34px;height:34px;min-height:34px;padding:0;border-radius:999px;border:1px solid #eef2f6;background:#fff;font-size:13px;font-weight:700;color:var(--workspace-muted)}
-.teacher-workspace .tt-days button[aria-pressed=true]{background:#fff1f3;border-color:#f9a8c0;color:#be185d}
+.teacher-workspace .tt-days button[aria-pressed=true]{background:#fef2f3;border-color:#f5a3a8;color:#8b2f40}
 .teacher-workspace .tt-line.is-test .tt-days button[aria-pressed=true]{background:#eef2ff;border-color:#a5b4fc;color:#4338ca}
 .teacher-workspace .tt-time{display:inline-flex;align-items:center;gap:6px}
 .teacher-workspace .tt-time input{width:128px!important;min-height:36px!important;height:36px!important;padding:4px 10px!important;margin:0!important;border-radius:10px!important}
@@ -467,7 +467,7 @@
 .teacher-workspace .tt-who{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed #f1e4e7}
 .teacher-workspace .tt-label{font-size:12px;font-weight:700;color:var(--workspace-muted);margin-right:4px}
 .teacher-workspace .tt-chip{min-height:28px;padding:2px 10px;border-radius:999px;border:1px solid #eef2f6;background:#fff;font-size:12px;color:var(--workspace-muted)}
-.teacher-workspace .tt-chip[aria-pressed=true]{background:#fff1f3;border-color:#f9a8c0;color:#be185d;font-weight:700}
+.teacher-workspace .tt-chip[aria-pressed=true]{background:#fef2f3;border-color:#f5a3a8;color:#8b2f40;font-weight:700}
 .teacher-workspace .tt-study{margin-top:8px;padding:8px 10px;border-radius:12px;background:#f6fdf9}
 .teacher-workspace .tt-study-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 0}
 .teacher-workspace .tt-study-row+.tt-study-row{border-top:1px solid #e3f6ec}
@@ -477,19 +477,19 @@
 .teacher-workspace .tt-study-add{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 .teacher-workspace .tt-study-add button{display:inline-flex;align-items:center;gap:3px;min-height:28px;padding:2px 10px;border-radius:999px;border:1px dashed #6ee7b7;background:#fff;color:#047857;font-size:12px;font-weight:700}
 .teacher-workspace .tt-add{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
-.teacher-workspace .tt-add button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;border-radius:14px;border:1px dashed #f9a8c0;background:#fffafb;color:#be185d;font-weight:700}
+.teacher-workspace .tt-add button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;border-radius:14px;border:1px dashed #f5a3a8;background:#fffafb;color:#8b2f40;font-weight:700}
 .teacher-workspace .tt-add button+button{border-color:#a5b4fc;background:#fbfbff;color:#4338ca}
 @media(max-width:640px){.teacher-workspace .tt-time input{width:110px!important}.teacher-workspace .tt-add{grid-template-columns:1fr}}
 .teacher-workspace .tt-time input{width:142px!important}
 .teacher-workspace .tt-presets button{min-height:30px;padding:2px 10px;border-radius:999px;border:1px solid #eef2f6;background:#fff;font-size:12px;font-weight:700;color:var(--workspace-muted)}
-.teacher-workspace .tt-presets button:hover{border-color:#f9a8c0;color:#be185d}
+.teacher-workspace .tt-presets button:hover{border-color:#f5a3a8;color:#8b2f40}
 @media(max-width:640px){.teacher-workspace .tt-time input{width:132px!important}}
 
 /* 대상·자습 학생 고르기: 포함된 학생은 색 + ✓, 빠진 학생은 회색 점선 */
 .teacher-workspace .tt-people{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
 .teacher-workspace .tt-count{margin-right:2px;padding:2px 8px;border-radius:999px;background:#f8fafc;font-size:11px;font-weight:800;color:var(--workspace-text,#1f2937);white-space:nowrap}
 .teacher-workspace .tt-person{display:inline-flex;align-items:center;gap:3px;min-height:28px;padding:2px 10px 2px 7px;border-radius:999px;font-size:12px;border:1px dashed #d4d8de;background:#fff;color:#94a3b8;text-decoration:line-through;text-decoration-color:#cbd5e1}
-.teacher-workspace .tt-person[aria-pressed=true]{border:1px solid #f472b6;background:#fce7f3;color:#9d174d;font-weight:700;text-decoration:none}
+.teacher-workspace .tt-person[aria-pressed=true]{border:1px solid #f5a3a8;background:#fde3e6;color:#9d174d;font-weight:700;text-decoration:none}
 .teacher-workspace .tt-people.green .tt-person[aria-pressed=true]{border-color:#34d399;background:#d1fae5;color:#065f46}
 .teacher-workspace .tt-reset{min-height:26px;padding:2px 8px;border-radius:999px;background:transparent;color:var(--workspace-muted);font-size:11px;text-decoration:underline}
 .teacher-workspace .tt-solo{font-size:12px;color:var(--workspace-muted)}
@@ -507,7 +507,7 @@
 .teacher-workspace .ah-row{display:grid;grid-template-columns:48px 86px minmax(0,1fr) auto;align-items:center;gap:8px;padding:6px 4px;border-top:1px solid #f3f4f6;font-size:13px}
 .teacher-workspace .ah-time{font-variant-numeric:tabular-nums;color:var(--workspace-muted);font-size:12px}
 .teacher-workspace .ah-area{justify-self:start;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#f1f5f9;color:#475569;white-space:nowrap}
-.teacher-workspace .ah-area.a-회원{background:#eef2ff;color:#4338ca}.teacher-workspace .ah-area.a-수강료{background:#fff1f3;color:#be185d}.teacher-workspace .ah-area.a-정산{background:#fef3c7;color:#92400e}.teacher-workspace .ah-area.a-반·커리큘럼{background:#ecfdf5;color:#047857}
+.teacher-workspace .ah-area.a-회원{background:#eef2ff;color:#4338ca}.teacher-workspace .ah-area.a-수강료{background:#fef2f3;color:#8b2f40}.teacher-workspace .ah-area.a-정산{background:#fef3c7;color:#92400e}.teacher-workspace .ah-area.a-반·커리큘럼{background:#ecfdf5;color:#047857}
 .teacher-workspace .ah-text{min-width:0;overflow-wrap:anywhere}
 .teacher-workspace .ah-by{font-size:12px;color:var(--workspace-muted);white-space:nowrap}
 @media(max-width:640px){.teacher-workspace .ah-row{grid-template-columns:44px minmax(0,1fr)}.teacher-workspace .ah-area,.teacher-workspace .ah-by{grid-column:2}}
@@ -530,9 +530,9 @@
 .teacher-workspace .ce-card .class-basics label{font-size:12px;font-weight:700;color:var(--workspace-muted)}
 .teacher-workspace .ce-card :is(input:not([type=checkbox]),select){min-height:40px!important;height:40px;margin-top:4px;border-radius:10px}
 .teacher-workspace .ce-picked{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
-.teacher-workspace .ce-chip{display:inline-flex;align-items:center;gap:2px;min-height:30px;padding:2px 4px 2px 10px;border:1px solid #f472b6;border-radius:999px;background:#fce7f3;color:#9d174d;font-size:12px;font-weight:700}
+.teacher-workspace .ce-chip{display:inline-flex;align-items:center;gap:2px;min-height:30px;padding:2px 4px 2px 10px;border:1px solid #f5a3a8;border-radius:999px;background:#fde3e6;color:#9d174d;font-size:12px;font-weight:700}
 .teacher-workspace .ce-chip button{display:grid;place-items:center;width:22px;height:22px;min-height:22px;padding:0;border-radius:999px;background:transparent;color:#9d174d}
-.teacher-workspace .ce-chip button:hover{background:#fbcfe8}
+.teacher-workspace .ce-chip button:hover{background:#fadde1}
 .teacher-workspace .ce-hint{font-size:12px;color:var(--workspace-muted)}
 .teacher-workspace .ce-search{display:flex;gap:6px;align-items:center}
 .teacher-workspace .ce-search-box{position:relative;flex:1;min-width:0}
@@ -540,12 +540,12 @@
 .teacher-workspace .ce-search-box input{width:100%;margin:0!important;padding-left:32px!important}
 .teacher-workspace .ce-seg{display:inline-flex;flex:none;padding:3px;border-radius:999px;background:#f8fafc;gap:2px}
 .teacher-workspace .ce-seg button{min-height:30px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;color:var(--workspace-muted);background:transparent}
-.teacher-workspace .ce-seg button[aria-pressed=true]{background:#fff;color:#be185d;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.teacher-workspace .ce-seg button[aria-pressed=true]{background:#fff;color:#8b2f40;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .teacher-workspace .ce-results{display:grid;gap:2px;margin:6px 0 0;padding:4px;list-style:none;border:1px solid #f1e4e7;border-radius:12px;background:#fffafb;max-height:300px;overflow:auto}
 .teacher-workspace .ce-results button{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:38px;padding:4px 10px;border-radius:9px;background:transparent;font-size:13px;color:var(--workspace-text,#1f2937);text-align:left}
-.teacher-workspace .ce-results button:hover{background:#fff1f3}
-.teacher-workspace .ce-results button[aria-pressed=true]{background:#fce7f3;color:#9d174d;font-weight:700}
-.teacher-workspace .ce-state{display:inline-flex;align-items:center;gap:3px;flex:none;font-size:11px;font-weight:700;color:#be185d}
+.teacher-workspace .ce-results button:hover{background:#fef2f3}
+.teacher-workspace .ce-results button[aria-pressed=true]{background:#fde3e6;color:#9d174d;font-weight:700}
+.teacher-workspace .ce-state{display:inline-flex;align-items:center;gap:3px;flex:none;font-size:11px;font-weight:700;color:#8b2f40}
 .teacher-workspace .ce-empty{padding:6px 10px;font-size:12px;color:var(--workspace-muted)}
 .teacher-workspace .ce-books>summary{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:32px;cursor:pointer;list-style:none}
 .teacher-workspace .ce-books>summary::-webkit-details-marker{display:none}
@@ -558,7 +558,7 @@
 .teacher-workspace .ce-book-row{display:grid;grid-template-columns:minmax(0,1fr) 106px 34px;gap:6px;align-items:center;margin-top:6px}
 .teacher-workspace .ce-book-row :is(input,select){margin:0!important;font-size:13px}
 .teacher-workspace .ce-book-row select{padding:4px 22px 4px 8px!important;background-position:right 6px center}
-.teacher-workspace .ce-add{display:inline-flex;align-items:center;justify-content:center;gap:4px;width:100%;min-height:36px;margin-top:8px;border-radius:12px;border:1px dashed #f9a8c0;background:#fffafb;color:#be185d;font-size:13px;font-weight:700}
+.teacher-workspace .ce-add{display:inline-flex;align-items:center;justify-content:center;gap:4px;width:100%;min-height:36px;margin-top:8px;border-radius:12px;border:1px dashed #f5a3a8;background:#fffafb;color:#8b2f40;font-size:13px;font-weight:700}
 /* Regular board: lessons above, 정규 자습·테스트 below. */
 .schedule-board-title{display:flex;align-items:center;gap:6px;margin:4px 0 0;font-size:14px;font-weight:800}
 .schedule-board-title small{font-size:12px;font-weight:700;color:var(--workspace-muted)}
@@ -650,15 +650,15 @@
 .teacher-workspace .class-card{position:relative;display:flex;flex-direction:column;gap:8px;min-height:auto;padding:12px 14px;border:1px solid #f1e4e7;border-radius:16px;background:#fff;text-align:left;font:inherit;color:inherit;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .15s}
 .teacher-workspace .class-card:hover{border-color:#f3a5b4;box-shadow:0 6px 18px rgba(190,24,93,.08);transform:translateY(-1px)}
 .teacher-workspace .class-card:focus-visible{outline:2px solid var(--workspace-focus);outline-offset:2px}
-.teacher-workspace .class-card.is-today{box-shadow:inset 3px 0 0 #f9a8c0}
-.teacher-workspace .class-card.is-picked{border-color:#f472b6;background:#fff7fa}
+.teacher-workspace .class-card.is-today{box-shadow:inset 3px 0 0 #f5a3a8}
+.teacher-workspace .class-card.is-picked{border-color:#f5a3a8;background:#fff7fa}
 .teacher-workspace .class-card.is-added{border-color:#a7f3d0;background:#f6fdf9;box-shadow:none}
 .teacher-workspace .class-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
 .teacher-workspace .class-card-top strong{font-size:15px;font-weight:800;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.teacher-workspace .class-card-subject{flex:none;padding:2px 8px;border-radius:999px;background:#fff1f3;color:#be185d;font-size:11px;font-weight:700}
+.teacher-workspace .class-card-subject{flex:none;padding:2px 8px;border-radius:999px;background:#fef2f3;color:#8b2f40;font-size:11px;font-weight:700}
 .teacher-workspace .class-card-added{flex:none;display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:999px;background:#d1fae5;color:#047857;font-size:11px;font-weight:700}
 .teacher-workspace .class-card-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--workspace-muted)}
-.teacher-workspace .class-card-time{font-weight:700;color:#be185d;font-variant-numeric:tabular-nums}
+.teacher-workspace .class-card-time{font-weight:700;color:#8b2f40;font-variant-numeric:tabular-nums}
 .teacher-workspace .class-card-off{color:#94a3b8}
 .teacher-workspace .class-card-count{display:inline-flex;align-items:center;gap:3px;font-weight:700;color:#475569}
 .teacher-workspace .class-card-names{display:flex;flex-wrap:wrap;gap:4px}
@@ -669,11 +669,11 @@
 @media(max-width:520px){.teacher-workspace .class-picker-grid{grid-template-columns:1fr}.teacher-workspace .class-picker-search{width:100%}}
 /* 학생 관리 메인: 학원 한눈에 보기 */
 .teacher-workspace .so{display:grid;gap:14px;min-width:0}
-.teacher-workspace .so-head h2{margin:0;font-size:20px;font-weight:800;color:#1e293b}
+.teacher-workspace .so-head h2{margin:0;font-size:18px;font-weight:800;color:#1e293b}
 .teacher-workspace .so-head p{margin:4px 0 0;font-size:13px;color:var(--workspace-muted)}
 .teacher-workspace .so-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .teacher-workspace .so-card{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:10px;align-items:center;padding:14px 16px;border-radius:18px;background:#fff;border:1px solid #f1e4e7}
-.teacher-workspace .so-card-icon{grid-row:1/3;display:grid;place-items:center;width:40px;height:40px;border-radius:14px;background:#fff1f3;color:#be185d}
+.teacher-workspace .so-card-icon{grid-row:1/3;display:grid;place-items:center;width:40px;height:40px;border-radius:14px;background:#fef2f3;color:#8b2f40}
 .teacher-workspace .so-card-label{font-size:12px;font-weight:700;color:var(--workspace-muted)}
 .teacher-workspace .so-card strong{font-size:26px;font-weight:800;line-height:1.1;color:#1e293b;font-variant-numeric:tabular-nums}
 .teacher-workspace .so-card strong small{margin-left:2px;font-size:13px;font-weight:700;color:#94a3b8}
@@ -687,17 +687,17 @@
 .teacher-workspace .so-sub{font-size:12px;color:var(--workspace-muted)}
 .teacher-workspace .so-legend{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--workspace-muted)}
 .teacher-workspace .so-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-left:6px}
-.teacher-workspace .so-legend i.is-joined{background:#f472b6}.teacher-workspace .so-legend i.is-left{background:#cbd5e1}
+.teacher-workspace .so-legend i.is-joined{background:#f5a3a8}.teacher-workspace .so-legend i.is-left{background:#cbd5e1}
 .teacher-workspace .so-chart svg{display:block;width:100%;height:auto;overflow:visible}
 .teacher-workspace .so-grid{stroke:#f1f5f9;stroke-dasharray:3 4}
 .teacher-workspace .so-axis{stroke:#e2e8f0}
 .teacher-workspace .so-now{fill:#fff5f8}
-.teacher-workspace .so-bar.is-joined{fill:#f472b6}.teacher-workspace .so-bar.is-left{fill:#cbd5e1}
+.teacher-workspace .so-bar.is-joined{fill:#f5a3a8}.teacher-workspace .so-bar.is-left{fill:#cbd5e1}
 .teacher-workspace .so-bar{transition:opacity .15s}.teacher-workspace .so-bar:hover{opacity:.75}
 .teacher-workspace .so-value{font-size:11px;font-weight:800;text-anchor:middle}
-.teacher-workspace .so-value.is-joined{fill:#be185d}.teacher-workspace .so-value.is-left{fill:#64748b}
+.teacher-workspace .so-value.is-joined{fill:#8b2f40}.teacher-workspace .so-value.is-left{fill:#64748b}
 .teacher-workspace .so-month{font-size:11px;font-weight:600;fill:#64748b;text-anchor:middle}
-.teacher-workspace .is-now .so-month{font-weight:800;fill:#be185d}
+.teacher-workspace .is-now .so-month{font-weight:800;fill:#8b2f40}
 .teacher-workspace .so-year{font-size:9px;fill:#94a3b8;text-anchor:middle}
 .teacher-workspace .so-note{margin:8px 0 0;font-size:12px;color:var(--workspace-muted)}
 .teacher-workspace .so-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px}
@@ -707,7 +707,7 @@
 .teacher-workspace .so-bars li{display:grid;grid-template-columns:48px minmax(0,1fr) 28px;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#334155}
 .teacher-workspace .so-bars b{text-align:right;font-variant-numeric:tabular-nums}
 .teacher-workspace .so-track{height:10px;border-radius:999px;background:#f8fafc;overflow:hidden}
-.teacher-workspace .so-track>span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#f9a8c0,#f472b6)}
+.teacher-workspace .so-track>span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#f5a3a8,#f5a3a8)}
 .teacher-workspace .so-bars.is-grade .so-track>span{background:linear-gradient(90deg,#c7d2fe,#818cf8)}
 .teacher-workspace .so-tenure-values{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .teacher-workspace .so-tenure-values>div{display:grid;gap:2px;padding:10px 12px;border-radius:14px;background:#f8fafc}
@@ -728,7 +728,7 @@
 @media(max-width:900px){.teacher-workspace .so-row{grid-template-columns:1fr}}
 /* 등록일 줄 (정보 수정 · 입학·상담) */
 .teacher-workspace .enrollment-dates{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:0 0 12px;padding:10px 12px;border-radius:14px;background:#fff7fa;border:1px solid #fbe3ea}
-.teacher-workspace .enrollment-dates-title{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;color:#be185d}
+.teacher-workspace .enrollment-dates-title{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;color:#8b2f40}
 .teacher-workspace .enrollment-date{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#fff;border:1px solid #f1e4e7;font-size:13px;font-weight:600;color:#334155;font-variant-numeric:tabular-nums}
 .teacher-workspace .enrollment-date b{font-weight:800;color:#1e293b}
 .teacher-workspace .enrollment-date.is-stopped{color:#94a3b8}
@@ -739,7 +739,7 @@
 .teacher-workspace .enr-overview{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
 .teacher-workspace .enr-card{display:flex;flex-direction:column;gap:6px;min-height:auto;padding:12px 14px;border:1px solid #eef2f6;border-radius:16px;background:#fff;text-align:left;font:inherit;color:inherit;cursor:pointer;transition:border-color .15s,box-shadow .15s}
 .teacher-workspace .enr-card:hover:not(:disabled){border-color:#f3a5b4}
-.teacher-workspace .enr-card.is-open{border-color:#f472b6;box-shadow:0 0 0 3px #fce7f3}
+.teacher-workspace .enr-card.is-open{border-color:#f5a3a8;box-shadow:0 0 0 3px #fde3e6}
 .teacher-workspace .enr-card.is-none{border-style:dashed;background:#fcfcfd}
 .teacher-workspace .enr-card-top{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .teacher-workspace .enr-card-top strong{font-size:15px;font-weight:800;color:#1e293b}
@@ -770,11 +770,11 @@
 .teacher-workspace .enr-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .teacher-workspace .enr-chip{min-height:36px;padding:0 14px;border-radius:999px;border:1px solid #e2e8f0;background:#fff;font-size:13px;font-weight:700;color:#475569}
 .teacher-workspace .enr-chip:hover:not(:disabled){border-color:#f3a5b4}
-.teacher-workspace .enr-chip.is-picked{background:#fce7f3;border-color:#f472b6;color:#9d174d}
+.teacher-workspace .enr-chip.is-picked{background:#fde3e6;border-color:#f5a3a8;color:#9d174d}
 .teacher-workspace .enr-chip.is-teacher{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}
 .teacher-workspace .enr-chip.is-teacher.is-removed{background:#fff;border-style:dashed;color:#94a3b8;text-decoration:line-through}
 .teacher-workspace .enr-chip:disabled{opacity:.45}
-.teacher-workspace .enr-add{width:auto!important;min-height:36px!important;height:36px!important;margin:0!important;padding:0 32px 0 12px!important;border-radius:999px!important;border-style:dashed!important;font-size:13px;font-weight:700;color:#be185d}
+.teacher-workspace .enr-add{width:auto!important;min-height:36px!important;height:36px!important;margin:0!important;padding:0 32px 0 12px!important;border-radius:999px!important;border-style:dashed!important;font-size:13px;font-weight:700;color:#8b2f40}
 .teacher-workspace .enr-empty{font-size:12px;color:#94a3b8}
 .teacher-workspace .enr-hint{margin:-4px 0 0 106px;font-size:11px;line-height:1.5;color:#94a3b8}
 .teacher-workspace .enr-foot{position:sticky;bottom:0;display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #f1f5f9;background:#fff}
@@ -792,7 +792,7 @@
 .teacher-workspace .msg-field select{margin:0}
 .teacher-workspace .msg-seg{display:flex;flex-wrap:wrap;gap:6px}
 .teacher-workspace .msg-seg button{min-height:36px;padding:0 16px;border-radius:999px;border:1px solid #e2e8f0;background:#fff;font-size:13px;font-weight:700;color:#475569}
-.teacher-workspace .msg-seg button[aria-pressed=true]{background:#fce7f3;border-color:#f472b6;color:#9d174d}
+.teacher-workspace .msg-seg button[aria-pressed=true]{background:#fde3e6;border-color:#f5a3a8;color:#9d174d}
 .teacher-workspace .msg-generate{width:100%;min-height:42px}
 .teacher-workspace .msg-history{border-top:1px dashed #f1e4e7;padding-top:10px}
 .teacher-workspace .msg-history summary{cursor:pointer;font-size:13px;font-weight:700;color:#475569}
@@ -810,7 +810,7 @@
 .teacher-workspace .msg-bubble{position:relative;padding:12px;border-radius:20px 20px 6px 20px;background:linear-gradient(180deg,#fff7fa,#fff0f5);border:1px solid #fbcfe0}
 .teacher-workspace .msg-bubble textarea{display:block;width:100%;min-height:240px;margin:0;padding:4px 4px 20px;border:0;background:transparent;box-shadow:none;outline:none;font-size:14px;line-height:1.65;color:#1e293b;resize:vertical}
 .teacher-workspace .msg-bubble textarea:disabled{color:#334155;opacity:1}
-.teacher-workspace .msg-count{position:absolute;right:14px;bottom:8px;font-size:11px;color:#be185d;opacity:.7}
+.teacher-workspace .msg-count{position:absolute;right:14px;bottom:8px;font-size:11px;color:#8b2f40;opacity:.7}
 .teacher-workspace .msg-main{width:100%;min-height:44px}
 .teacher-workspace .msg-record{display:grid;gap:10px}
 .teacher-workspace .msg-confirm{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#334155}
@@ -821,18 +821,18 @@
 /* 보호자 문자: 실제 문자 미리보기, 채운 값 강조, 빈 값 채우기, 단문/장문 */
 .teacher-workspace .msg-hint{margin:0;font-size:12px;line-height:1.5;color:var(--workspace-muted)}
 .teacher-workspace .msg-stale{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0;padding:8px 12px;border-radius:12px;background:#fff7ed;color:#9a3412;font-size:12px}
-.teacher-workspace .msg-bubble.is-editing{background:#fff;border-color:#f472b6;box-shadow:0 0 0 3px #fce7f3}
+.teacher-workspace .msg-bubble.is-editing{background:#fff;border-color:#f5a3a8;box-shadow:0 0 0 3px #fde3e6}
 .teacher-workspace .msg-render{min-height:220px;padding:4px;font-size:14px;line-height:1.7;color:#1e293b;white-space:pre-wrap;overflow-wrap:anywhere;cursor:text;border-radius:12px;outline:none}
 .teacher-workspace .msg-render[role=button]:hover{background:rgba(255,255,255,.55)}
-.teacher-workspace .msg-render:focus-visible{box-shadow:0 0 0 2px #f472b6}
+.teacher-workspace .msg-render:focus-visible{box-shadow:0 0 0 2px #f5a3a8}
 .teacher-workspace .msg-render.is-empty{color:#94a3b8}
 .teacher-workspace .msg-var{padding:0 2px;border-radius:4px;color:inherit}
 .teacher-workspace .msg-var.is-filled{background:#e0e7ff;box-shadow:inset 0 -2px 0 #a5b4fc}
 .teacher-workspace .msg-var.is-missing{background:#ffe4e6;color:#be123c;font-weight:700;box-shadow:inset 0 -2px 0 #fda4af}
 .teacher-workspace .msg-bubble-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;padding-top:6px;border-top:1px dashed #fbcfe0}
-.teacher-workspace .msg-size{font-size:11px;font-weight:700;color:#be185d;font-variant-numeric:tabular-nums}
+.teacher-workspace .msg-size{font-size:11px;font-weight:700;color:#8b2f40;font-variant-numeric:tabular-nums}
 .teacher-workspace .msg-size.is-over{color:#be123c}
-.teacher-workspace .msg-bubble-foot .gs-quiet{min-height:32px;font-size:12px;font-weight:700;color:#be185d}
+.teacher-workspace .msg-bubble-foot .gs-quiet{min-height:32px;font-size:12px;font-weight:700;color:#8b2f40}
 .teacher-workspace .msg-bubble textarea{min-height:220px;padding:4px}
 .teacher-workspace .msg-count{display:none}
 .teacher-workspace .msg-missing{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 12px;border-radius:14px;background:#fff1f2}
@@ -903,34 +903,15 @@
 .teacher-workspace .wb-word-card .text-lg{font-size:16px;line-height:1.35}
 .teacher-workspace .wb-word-card .text-sm{font-size:13px}
 @media(max-width:640px){.teacher-workspace .wb-detail-head{align-items:flex-start}.teacher-workspace .wb-days-row{flex-wrap:wrap}.teacher-workspace .wb-days{flex-basis:100%}}
-/* Centered confirmation (askConfirm): mounted on body, so not scoped to .teacher-workspace */
-.confirm-modal{width:min(400px,calc(100vw - 32px));max-height:calc(100vh - 32px);margin:auto;padding:0;border:0;border-radius:22px;background:#fff;color:#1f2937;box-shadow:0 24px 60px rgba(43,35,38,.22);overflow:auto;font-family:inherit}
-.confirm-modal::backdrop{background:rgba(30,23,26,.38);backdrop-filter:blur(2px)}
-.confirm-modal[open]{animation:confirm-in .16s ease-out}
-.confirm-modal-body{display:grid;justify-items:center;gap:8px;padding:26px 24px 18px;text-align:center}
-.confirm-modal-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:16px;background:#fff1f3;color:#be185d}
-.confirm-modal h2{margin:4px 0 0;font-size:18px;font-weight:800;color:#1e293b}
-.confirm-modal p{margin:0;font-size:14px;line-height:1.55;color:#64748b}
-.confirm-modal ul{list-style:none;width:100%;margin:6px 0 0;padding:8px 10px;max-height:180px;overflow:auto;border-radius:14px;background:#f8fafc;display:grid;gap:4px;text-align:left}
-.confirm-modal li{font-size:13px;font-weight:600;color:#334155}
-.confirm-modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 20px 20px}
-.confirm-modal-actions button{min-height:44px;border:0;border-radius:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit}
-.confirm-modal-cancel{background:#f1f5f9;color:#475569}
-.confirm-modal-cancel:hover{background:#e2e8f0}
-.confirm-modal-ok{background:#f472b6;color:#fff;box-shadow:0 6px 16px rgba(244,114,182,.35)}
-.confirm-modal-ok:hover{background:#ec4899}
-.confirm-modal-actions button:focus-visible{outline:2px solid #be185d;outline-offset:2px}
-@keyframes confirm-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
-@media(prefers-reduced-motion:reduce){.confirm-modal[open]{animation:none}}
 /* 오늘만 바뀐 수업 시간 */
 .teacher-workspace .today-lesson-time s{color:#94a3b8;font-weight:500}
 .teacher-workspace .today-moved{display:inline-block;margin-left:2px;padding:0 6px;border-radius:999px;background:#fef3c7;color:#b45309;font-size:11px;font-weight:800;white-space:nowrap}
 /* 1단계: one header row (home + teacher room menu + profile), compact lesson top row and 출결·평가 chips */
-.teacher-workspace .workspace-home{flex:none;display:grid;place-items:center;width:34px;height:34px;min-height:34px;padding:0;border:0;border-radius:11px;background:#fff1f3;font-size:16px;cursor:pointer}
-.teacher-workspace .workspace-home:hover{background:#fce7f3}
+.teacher-workspace .workspace-home{flex:none;display:grid;place-items:center;width:34px;height:34px;min-height:34px;padding:0;border:0;border-radius:11px;background:#fef2f3;font-size:16px;cursor:pointer}
+.teacher-workspace .workspace-home:hover{background:#fde3e6}
 .teacher-workspace .workspace-profile{position:relative;flex:none;display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:3px 10px 3px 4px;border:1px solid #f1f5f9;border-radius:999px;background:#fff;color:#94a3b8;cursor:pointer}
 .teacher-workspace .workspace-profile:hover{background:#f8fafc}
-.teacher-workspace .workspace-profile-face{display:grid;place-items:center;width:26px;height:26px;overflow:hidden;border-radius:9px;background:#fff1f3;font-size:14px}
+.teacher-workspace .workspace-profile-face{display:grid;place-items:center;width:26px;height:26px;overflow:hidden;border-radius:9px;background:#fef2f3;font-size:14px}
 .teacher-workspace .workspace-profile-face img{width:100%;height:100%;object-fit:cover}
 .teacher-workspace .workspace-profile-name{font-size:12px;font-weight:700;color:#475569;white-space:nowrap}
 .teacher-workspace .workspace-profile-dot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border:2px solid #fff;border-radius:999px;background:#ef4444}
@@ -944,3 +925,143 @@
 .teacher-workspace .lesson-area-basics .lesson-top-fields label{font-size:12px}
 .teacher-workspace .lesson-evaluation-fields{gap:6px}
 @media(min-width:641px){.teacher-workspace .lesson-evaluation-fields .lesson-option-chip{min-height:32px;min-width:32px;padding:4px 9px}}
+/* 2단계: today list grouped by time, per-student and per-lesson hide, 진행 중 / 끝남 · 미작성, moved time under the time */
+.teacher-workspace .today-time-card{padding-right:0}
+.teacher-workspace .today-time-head{position:relative;display:flex;align-items:center;gap:6px;min-height:26px;padding-right:26px}
+.teacher-workspace .today-time-head .today-lesson-time{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}.teacher-workspace .today-time-head{flex-wrap:wrap;row-gap:2px}
+.teacher-workspace .today-time-head .today-lesson-kind{margin-left:auto;font-size:11px;color:var(--workspace-muted);white-space:nowrap}
+.teacher-workspace .today-time-head .today-dismiss{top:1px}
+.teacher-workspace .today-now{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:999px;background:#fde3e6;color:#8b2f40;font-size:var(--workspace-font-xs);font-weight:800;white-space:nowrap}
+.teacher-workspace .today-moved-line{display:block;margin:1px 0 0;font-size:11px;font-weight:800;color:#b45309;font-variant-numeric:tabular-nums}
+.teacher-workspace .today-student-row{position:relative;display:flex;align-items:center;gap:2px}
+.teacher-workspace .today-student-row>.today-lesson-student{flex:1;min-width:0;padding-top:4px;padding-bottom:4px}
+/* Selected: a thin pink line on the left and a bolder name, no pink fill (진행 중 is only the badge). */
+.teacher-workspace .today-lesson-entry.is-current,.teacher-workspace .today-student-row.is-current>.today-lesson-entry{background:transparent;border-left-width:2px;border-left-color:var(--workspace-brand-fg);padding-left:9px;border-radius:0 10px 10px 0}
+.teacher-workspace .today-lesson-entry.is-current .today-lesson-name,.teacher-workspace .today-student-row.is-current>.today-lesson-entry .today-lesson-name{font-weight:800;color:var(--workspace-brand-fg,inherit)}
+.teacher-workspace .today-row-main{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.teacher-workspace .today-row-main .today-lesson-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.teacher-workspace .today-row-main .workspace-status-badge{flex:none}
+.teacher-workspace .today-late{flex:none;display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:999px;background:#fef3c7;color:#b45309;font-size:var(--workspace-font-xs);font-weight:800;white-space:nowrap}
+.teacher-workspace .today-dismiss.is-row{position:static;flex:none;width:22px;height:22px}
+@media(hover:hover) and (pointer:fine){.teacher-workspace .today-dismiss{opacity:0;transition:opacity .12s}.teacher-workspace .today-lesson-card:hover>.today-dismiss,.teacher-workspace .today-time-head:hover .today-dismiss,.teacher-workspace .today-time-card:hover .today-time-head .today-dismiss,.teacher-workspace .today-student-row:hover .today-dismiss,.teacher-workspace .today-dismiss:focus-visible{opacity:1}}
+@media(pointer:coarse){.teacher-workspace .today-time-head{padding-right:44px}.teacher-workspace .today-time-head .today-dismiss{top:-9px}.teacher-workspace .today-dismiss.is-row{width:40px;height:40px}}
+/* 3단계: save state next to the title, 반영 primary when ready, labelled refresh, Ctrl+S hint, three-choice leave modal */
+.teacher-workspace .lesson-title-row{flex-wrap:wrap;row-gap:4px}
+.teacher-workspace .lesson-save-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:var(--workspace-font-xs);font-weight:700;line-height:18px;white-space:nowrap;background:#f1f5f9;color:#64748b}
+.teacher-workspace .lesson-save-pill.is-unsaved{background:#fef3c7;color:#b45309}
+.teacher-workspace .lesson-save-pill.is-published{background:#dcfce7;color:#15803d}
+.teacher-workspace .lesson-save-pill.is-pending{background:#fef9c3;color:#a16207}
+.teacher-workspace .lesson-save-pill.is-failed{background:#fee2e2;color:#b91c1c}
+.teacher-workspace .lesson-action-bar.is-title-status .lesson-action-refresh{order:-1}
+.teacher-workspace .lesson-action-bar.is-title-status .lesson-refresh-button{display:inline-flex;align-items:center;gap:4px;width:auto;padding:0 10px}
+.teacher-workspace .lesson-refresh-label{font-size:12px;font-weight:600}
+.teacher-workspace .lesson-action-hint{flex:none;font-size:11px;color:var(--lesson-muted);white-space:nowrap}
+@media(max-width:640px),(pointer:coarse){.teacher-workspace .lesson-action-hint{display:none}}
+@media(max-width:640px){.teacher-workspace .lesson-refresh-label{display:none}.teacher-workspace .lesson-action-bar.is-title-status .lesson-refresh-button{padding:0;justify-content:center}}
+/* 4단계 ①: one status icon set (StatusBadge kinds + chips) */
+.workspace-status-badge.status-brand{--status-bg:#fde3e6;--status-fg:#8b2f40;--status-border:#fadde1;--status-dot:#f08c93}
+.teacher-workspace :is(.smr-stop,.smr-quiet,.enr-status,.enr-planned,.student-summary-chip){display:inline-flex;align-items:center;gap:3px}
+.teacher-workspace :is(.smr-stop,.smr-quiet,.enr-status,.enr-planned,.student-summary-chip)>svg{flex:none}
+/* 여러 학생 editor: the shown student's save state above the inputs (the highlighted chip says who) */
+.teacher-workspace .grid-active-title{display:flex;align-items:center;gap:8px;margin:2px 0 8px;font-size:14px}
+/* Phones: one button row 저장 / 반영 / ⋯ — 새로고침 and 일지 삭제 move into the ⋯ menu */
+.teacher-workspace .lesson-action-more{display:none;position:relative;flex:none}
+.teacher-workspace .lesson-action-more>summary{display:grid;place-items:center;width:48px;height:48px;border:1px solid var(--lesson-border);border-radius:var(--workspace-radius-button);background:var(--lesson-white);color:var(--lesson-accent);cursor:pointer;list-style:none}
+.teacher-workspace .lesson-action-more>summary::-webkit-details-marker{display:none}
+.teacher-workspace .lesson-action-more-menu{position:absolute;right:0;bottom:calc(100% + 6px);z-index:40;display:grid;min-width:150px;padding:4px;border:1px solid #f1f5f9;border-radius:14px;background:#fff;box-shadow:0 10px 28px rgba(15,23,42,.14)}
+.teacher-workspace .lesson-action-bar .lesson-action-more-menu>button{display:flex;align-items:center;gap:8px;width:100%;height:44px;min-height:44px;padding:0 12px;border:0;border-radius:10px;background:transparent;color:#334155;font-size:14px;font-weight:600;justify-content:flex-start;text-align:left;box-shadow:none}
+.teacher-workspace .lesson-action-bar .lesson-action-more-menu>button:hover:not(:disabled){filter:none;background:#f8fafc}
+.teacher-workspace .lesson-action-bar .lesson-action-more-menu>.lesson-delete-button{color:#b91c1c}
+.teacher-workspace .lesson-action-bar .lesson-action-more-menu>button:disabled{opacity:.45}
+@media(max-width:640px){
+ .teacher-workspace .lesson-action-bar.is-title-status .lesson-action-refresh{display:none}
+ .teacher-workspace .lesson-action-bar.is-title-status .lesson-action-state{grid-column:1/-1}
+ .teacher-workspace .lesson-action-bar.is-title-status .lesson-action-state:empty{display:none}
+ .teacher-workspace .lesson-action-bar.is-title-status .lesson-action-buttons{display:flex;gap:8px;align-items:stretch}
+ .teacher-workspace .lesson-action-bar.is-title-status .lesson-action-buttons>button,.teacher-workspace .lesson-action-bar.is-title-status .lesson-action-buttons>.lesson-action-controls{flex:1;min-width:0}
+ .teacher-workspace .lesson-action-bar.is-title-status .lesson-action-buttons>.lesson-delete-button{display:none}
+ .teacher-workspace .lesson-action-bar.is-title-status .lesson-action-more{display:block}
+}
+/* 입학·상담 원서: campus toggle left of the name, centered subject chips, footer on the right */
+.teacher-workspace .admission-application .adm-name-row{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 12px;min-width:0}
+.teacher-workspace .admission-application .adm-name-row>label{min-width:0}
+.teacher-workspace .admission-application .adm-name-row>.adm-f-name{flex:1 1 150px}
+.teacher-workspace .admission-application .adm-name-row>.adm-f-school{flex:1 1 150px}
+.teacher-workspace .admission-application .adm-name-row>.adm-f-grade{flex:0 0 96px}
+.teacher-workspace .admission-application .adm-campus{display:grid;gap:4px;flex:none}
+.teacher-workspace .admission-application .adm-campus-label{font-size:12px;font-weight:600;color:#64748b}
+.teacher-workspace .admission-application .adm-campus-toggle{display:inline-flex;height:40px;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#fff}
+.teacher-workspace .admission-application .adm-campus-toggle>button{min-width:0;height:100%;min-height:0;padding:0 11px;border:0;border-right:1px solid #f1f5f9;border-radius:0;background:transparent;color:#64748b;font-size:13px;font-weight:600;box-shadow:none}
+.teacher-workspace .admission-application .adm-campus-toggle>button:last-child{border-right:0}
+.teacher-workspace .admission-application .adm-campus-toggle>button[aria-pressed=true]{background:#fef2f3;color:var(--workspace-brand-fg)}
+.teacher-workspace .admission-application .adm-campus-toggle>button:focus-visible{outline:2px solid #f3a5b4;outline-offset:-2px}
+.teacher-workspace .admission-application .adm-foot .gs-grow{flex:1}
+.teacher-workspace .admission-application .adm-subject-pick .rv-chip{display:inline-flex;align-items:center;justify-content:center;gap:3px;min-height:34px;padding:0 13px;line-height:1}
+.teacher-workspace .admission-application .adm-foot .adm-step-button{display:inline-flex;align-items:center;gap:2px;height:40px;min-height:40px;padding:0 12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;color:#475569;font-size:14px;font-weight:600;box-shadow:none}
+.teacher-workspace .admission-application .adm-foot .adm-step-button:hover{background:#f8fafc}
+.teacher-workspace .admission-application .adm-foot .primary-button{height:40px;min-height:40px;padding:0 18px}
+/* 원서 1단계: compact widths — short values (phone, date, short address) don't need full columns */
+.teacher-workspace .student-registration-form .adm-step[data-step="0"]{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 12px}
+.teacher-workspace .student-registration-form .adm-step[data-step="0"]>legend{width:100%}
+.teacher-workspace .student-registration-form .adm-step[data-step="0"]>.adm-name-row{flex:1 1 100%}
+.teacher-workspace .student-registration-form .adm-step[data-step="0"] label[for$="-salutation"]{flex:0 1 140px}
+.teacher-workspace .student-registration-form .adm-step[data-step="0"] label:is([for$="-student-phone"],[for$="-guardian-phone"]){flex:0 1 160px}
+.teacher-workspace .student-registration-form .adm-step[data-step="0"] label:has(>input[id$="-birthDate"]){flex:0 1 160px}
+.teacher-workspace .student-registration-form .adm-step[data-step="0"] label:has(>input[id$="-referral"]){flex:0 1 200px}
+.teacher-workspace .student-registration-form .adm-step[data-step="0"] div:has(>label>input[id$="-address"]){flex:1 1 220px;max-width:360px}
+@media(max-width:480px){.teacher-workspace .student-registration-form .adm-step[data-step="0"]>*:not(legend){flex:1 1 100%;max-width:none}}
+/* 수강 관리: reason for taking a teacher off a continuing subject (담당 변경) */
+.teacher-workspace .enr-transfer-body{display:grid;gap:6px;min-width:0}
+.teacher-workspace .enr-transfer-who{margin:0;font-size:12px;font-weight:600;color:#475569}
+.teacher-workspace .enr-transfer-who b{color:#dc2626}
+.teacher-workspace .enr-transfer-note{max-width:320px;height:36px;min-height:36px;font-size:13px}
+.teacher-workspace .enr-foot .enr-warn{margin-right:8px;font-size:12px;font-weight:600;color:#b45309}
+/* 관리자 설정 → 선생님: 담당 변경 counts on the cards, the record list inside a teacher's dialog */
+.teacher-workspace .tt-moves{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.teacher-workspace .tt-move{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:600}
+.teacher-workspace .tt-move.is-asked,.teacher-workspace .tt-why.is-asked{background:#fef3c7;color:#92400e}
+.teacher-workspace .tt-list{list-style:none;margin:0;padding:0;display:grid}
+.teacher-workspace .tt-list li{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 0;border-top:1px solid #f1f5f9;font-size:13px}
+.teacher-workspace .tt-list li:first-child{border-top:0}
+.teacher-workspace .tt-day{color:#94a3b8;font-variant-numeric:tabular-nums}
+.teacher-workspace .tt-what{min-width:0;overflow-wrap:anywhere}
+.teacher-workspace .tt-why{padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:600;white-space:nowrap}
+@media(max-width:520px){.teacher-workspace .tt-list li{grid-template-columns:40px minmax(0,1fr)}.teacher-workspace .tt-why{grid-column:2;justify-self:start}}
+@media(min-width:900px){.teacher-workspace .rv-stats.has-five{grid-template-columns:repeat(5,minmax(0,1fr))}}
+/* Teacher dialog: 담당 학생 two per row (one on phones) */
+.teacher-workspace .gs-rows.is-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.teacher-workspace .gs-rows.is-two>.gs-row{margin:0;min-width:0}
+.teacher-workspace .gs-rows.is-two .gs-row-who strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.teacher-workspace .gs-rows.is-two .rv-sub{font-size:11px;white-space:nowrap}
+.teacher-workspace .gs-rows.is-two>.rv-empty{grid-column:1/-1}
+@media(max-width:560px){.teacher-workspace .gs-rows.is-two{grid-template-columns:1fr}}
+.teacher-workspace .tt-list .tt-dropped{color:#94a3b8;text-decoration-thickness:1.5px}
+/* Two columns: the lesson editor reaches the bottom of the 오늘 수업 column (the sticky list is capped at the
+   screen height), with the 저장·반영 bar at its bottom edge. Only when the list is the taller one. */
+@container workspace-shell (min-width:880px){
+ .teacher-workspace .lesson-writing-layout>.lesson-editor-panel{align-self:stretch;display:flex;flex-direction:column}
+ .teacher-workspace .lesson-writing-layout>.lesson-editor-panel>.lesson-action-bar{margin-top:auto}
+ .teacher-workspace .lesson-writing-layout>.lesson-editor-panel>:has(+.lesson-action-bar){margin-bottom:12px}
+}
+.teacher-workspace .lesson-evaluation-heading .lesson-bulk-buttons{display:inline-flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+/* 일지: hint while a lesson was opened by itself; next unwritten lesson after 반영 */
+.teacher-workspace .lesson-pick-hint{display:inline-flex;align-items:center;gap:4px;color:#94a3b8;font-size:12px;font-weight:500;white-space:nowrap}
+.teacher-workspace .lesson-action-bar .lesson-next-lesson{display:inline-flex;align-items:center;gap:4px;margin-top:4px;min-height:32px;height:32px;padding:0 12px;border:1px solid var(--workspace-brand-border);border-radius:999px;background:var(--workspace-brand-bg);color:var(--workspace-brand-fg);font-size:13px;font-weight:700;box-shadow:none}
+.teacher-workspace .lesson-action-bar .lesson-next-lesson:hover{background:var(--workspace-brand-soft-hover)}
+/* Campus: one per subject (원서 card, 수강 관리) and per class (반 editor) */
+.teacher-workspace .campus-toggle{display:inline-flex;height:32px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;background:#fff;flex:none}
+.teacher-workspace .campus-toggle>button{min-width:0;height:100%;min-height:0;padding:0 10px;border:0;border-right:1px solid #f1f5f9;border-radius:0;background:transparent;color:#64748b;font-size:12px;font-weight:600;box-shadow:none}
+.teacher-workspace .campus-toggle>button:last-child{border-right:0}
+.teacher-workspace .campus-toggle>button[aria-pressed=true]{background:#fef2f3;color:var(--workspace-brand-fg)}
+.teacher-workspace .campus-toggle>button:focus-visible{outline:2px solid #f3a5b4;outline-offset:-2px}
+.teacher-workspace .ce-campus{display:grid;gap:4px}
+.teacher-workspace .ce-campus-label{font-size:12px;font-weight:600;color:#64748b}
+.teacher-workspace .enr-campus{display:inline-flex;align-items:center;padding:0 7px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:600}
+.teacher-workspace .admission-application .adm-subject-head .campus-toggle{margin-left:8px}
+/* Campus chips (오늘 수업, 학생 관리) and the campus tag on a student */
+.teacher-workspace .campus-chips{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.teacher-workspace .campus-chips>button{display:inline-flex;align-items:center;gap:4px;min-height:28px;height:28px;padding:0 10px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;color:#64748b;font-size:12px;font-weight:600;box-shadow:none}
+.teacher-workspace .campus-chips>button b{font-weight:700;color:#94a3b8}
+.teacher-workspace .campus-chips>button[aria-pressed=true]{border-color:var(--workspace-brand-dot);background:var(--workspace-brand-bg);color:var(--workspace-brand-fg)}
+.teacher-workspace .campus-chips>button[aria-pressed=true] b{color:var(--workspace-brand-fg)}
+.teacher-workspace .smr-campus{display:inline-flex;align-items:center;padding:0 6px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:600}

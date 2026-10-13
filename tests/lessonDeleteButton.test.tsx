@@ -16,8 +16,8 @@ test('editor delete is restricted to saved owned records or administrators',()=>
 });
 test('shared single editor places delete after publish and uses confirmed revision-aware archive',()=>{
  const source=fs.readFileSync(new URL('../src/components/teacher/TeacherWorkspace.tsx',import.meta.url),'utf8');
- assert.match(source,/이 학생 반영<\/button><LessonDeleteButton/);
- assert.match(source,/window\.confirm\(`/);
+ assert.match(source,/반영<\/button><LessonDeleteButton/);
+ assert.match(source,/askConfirm\(\{title:`\$\{target\.data\.date\} \$\{target\.data\.subject\} 일지를 삭제할까요\?`[^]*?confirmText:'삭제',tone:'danger'/);
  assert.match(source,/request\('archive-lesson',\{id:target.id,revision:target.revision\}\)/);
  assert.match(source,/autoVersion.current===version/);
 });

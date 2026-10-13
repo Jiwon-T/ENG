@@ -31,7 +31,7 @@ test('the card shows the time changed just for today and opens that lesson',()=>
  const reg={id:'r1',title:'중1 문법반',kind:'정규',date:'2026-10-07',subject:'영어',start:'16:10',end:'17:30',students:['a'],session:'lesson'} as any;
  let opened:any=null;
  const html=renderToStaticMarkup(<TeacherTodayLessons data={{uid:'t',admin:true,classes:[],students:[{studentKey:'a',studentDisplayName:'가'}],drafts:[{id:'x',stage:'draft',data:{studentKey:'a',date:reg.date,subject:'영어',start:'16:40',end:'18:00',classSession:'있음'}}],schedules:[{id:'s',data:{...reg,status:'예정',kind:'정규'}}]}} date={reg.date} onDate={()=>{}} request={async()=>({})} onStudent={(k:any,e:any)=>{opened=e;}}/>);
- assert.ok(html.includes('오늘만 16:40–18:00'),'moved time shown');assert.ok(html.includes('저장됨'));
+ assert.ok(html.includes('→ 16:40–18:00'),'moved time shown under the time');assert.ok(html.includes('저장됨'));
 });
 test('next unwritten lesson after a lesson moved for today goes forward, not back to an earlier one',()=>{
  const mk=(id:string,start:string,end:string)=>({...event,id,start,end,students:['a']});
@@ -78,4 +78,13 @@ test('the card lesson id wins over another loaded lesson at the same time',async
  assert.equal((await openTodayLesson([older,{...matched,archived:true}],input,'t',false,'matched',read)).kind,'new','the card lesson was deleted: not swapped for the same-time one');
  const source=readFileSync(new URL('../src/components/teacher/TeacherWorkspace.tsx',import.meta.url),'utf8');
  assert.match(source,/let saved:any=savedId\?null:matchingSavedLesson/,'selectStudent skips the time match when a card id is given');
+});
+test('progress and next unwritten match saved lessons against the whole day, not only the events still shown',()=>{
+ const e14={...event,id:'h14',start:'14:00',end:'15:20',students:['a']},e16={...event,id:'h16',start:'16:00',end:'17:20',students:['a']};
+ const saved14={id:'s14',stage:'published',data:{studentKey:'a',date:event.date,subject:event.subject,start:'14:00'}};
+ // 14:00 hidden: without the whole day the 14:00 lesson would look moved and land on 16:00.
+ assert.equal(todayLessonState(e16,'a',[saved14],[e16]),'반영 완료','the trap: shown events only');
+ assert.deepEqual(todayLessonProgress([e16],[saved14],[e14,e16]),{total:1,published:0,saved:0,empty:1});
+ assert.equal(nextUnwrittenLesson([e16],[saved14],undefined,[e14,e16])?.event.id,'h16');
+ assert.deepEqual(todayLessonProgress([e16],[saved14]),{total:1,published:1,saved:0,empty:0},'default stays the shown events');
 });

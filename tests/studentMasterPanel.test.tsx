@@ -27,7 +27,7 @@ test('student rows show the student\'s picked icon on the left and their pet bes
 test('teachers see linked/unlinked without the account UID',()=>{
  const render=(accountLinked:boolean)=>renderToStaticMarkup(<StudentMasterPanel students={[{...students[0],linkedFirebaseUid:null,accountLinked}]} value="" onSelect={()=>{}}/>);
  assert.doesNotMatch(render(true),/앱 계정 미연결/);
- assert.match(render(false),/smr-quiet">앱 계정 미연결/,'shown as a quiet note, not a badge');
+ assert.match(render(false),/smr-quiet"><svg[^]*?<\/svg>앱 계정 미연결/,'shown as a quiet note with the link-off icon, not a badge');
 });
 
 test('today marks put an unwritten lesson log first in the row',()=>{

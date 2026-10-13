@@ -113,7 +113,7 @@ export async function readCoreEnrollment(db:any,actor:any,keyInput:any){
  for(const id of members(s.fields.properties['소속반']))classes.push({id,...await classRecord(db,id,true)});
  const entries=[];for(const subject of subjects){const p=e.fields.properties,teachers=[];
   for(const id of members(p[subject+' 담당'])){const t=valid((await refFor(db,'teachers',id).get()).data(),'teachers');teachers.push({id,name:name(t)});}
-  entries.push({subject,status:choice(p[subject]),startDate:p[subject+' 시작일']?.date?.start||null,endDate:p[subject+' 중단일']?.date?.start||null,plannedEndDate:p[subject+' 중단 예정일']?.date?.start||null,teachers,
+  entries.push({subject,status:choice(p[subject]),startDate:p[subject+' 시작일']?.date?.start||null,endDate:p[subject+' 중단일']?.date?.start||null,plannedEndDate:p[subject+' 중단 예정일']?.date?.start||null,campus:choice(p[subject+' 캠퍼스'])||null,teachers,
    classes:classes.filter(c=>c.row.subject===subject).map(c=>({id:c.id,name:c.row.name,withdrawalReview:!c.row.archived&&c.row.status==='진행 중'&&c.row.students?.length===1&&uuid(c.row.students[0])===key}))});
  }return {studentKey:key,enrollmentId:e.entityId||e.notionPageId,studentEditedAt:stamp(s),enrollmentEditedAt:stamp(e),subjects:entries,pending:null};
 }
@@ -121,7 +121,7 @@ export async function readCoreEnrollmentSummaries(db:any,actor:any){
  const q=await db.collection(DIRECTORY_ROWS).where('sourceKey','==',directorySourceKey('enrollments')).limit(501).get();if(q.docs.length>500)throw Error('DIRECTORY_PAGE_LIMIT');
  const result=new Map<string,any[]>();for(const d of q.docs){const r=d.data();if(r.fields?.archived)continue;valid(r,'enrollments');if(result.has(r.studentKey))throw Error('NOTION_DUPLICATE_ENROLLMENT');
   if(!actor.admin&&!actor.scopes.some((s:any)=>uuid(s.studentKey)===r.studentKey))continue;
-  result.set(r.studentKey,subjects.filter(subject=>choice(r.fields.properties[subject])).map(subject=>({subject,status:choice(r.fields.properties[subject]),startDate:r.fields.properties[subject+' 시작일']?.date?.start||null,endDate:r.fields.properties[subject+' 중단일']?.date?.start||null,plannedEndDate:r.fields.properties[subject+' 중단 예정일']?.date?.start||null})));
+  result.set(r.studentKey,subjects.filter(subject=>choice(r.fields.properties[subject])).map(subject=>({subject,status:choice(r.fields.properties[subject]),startDate:r.fields.properties[subject+' 시작일']?.date?.start||null,endDate:r.fields.properties[subject+' 중단일']?.date?.start||null,plannedEndDate:r.fields.properties[subject+' 중단 예정일']?.date?.start||null,campus:choice(r.fields.properties[subject+' 캠퍼스'])||null})));
  }return result;
 }
 export async function coreRegistrationOptions(db:any,actor:any){
@@ -145,22 +145,27 @@ export async function saveCoreEnrollment(db:any,actor:any,keyInput:any,request:a
   for(const id of [...new Set([...classIds,...input.classIds])]){const found=await classRecord(db,id);const r=(await tx.get(found.ref)).data();if(r.academyId!=='main'||r.archived)throw Error('CORE_CLASS_MIGRATION_REQUIRED');classes.push({id,ref:found.ref,row:r});}
   if(input.classIds.some((id:string)=>!classes.some(c=>c.id===id&&c.row.subject===input.subject)))throw Error('FORBIDDEN');
   if(input.status==='중단'&&input.classIds.some((id:string)=>!classIds.includes(id)))throw Error('NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');
-  const teachers=members(e.fields.properties[input.subject+' 담당']).filter(id=>!input.removeTeacherIds.includes(id));
+  const before=members(e.fields.properties[input.subject+' 담당']),removedIds=before.filter(id=>input.removeTeacherIds.includes(id));
+  // 담당 변경: taking an existing teacher off a subject that continues needs a reason (kept for the principal and admin).
+  const transfer=removedIds.length>0&&input.status!=='중단';if(transfer&&!input.transferReason)throw Error('TRANSFER_REASON_REQUIRED');
+  const teachers=before.filter(id=>!input.removeTeacherIds.includes(id));
   const profiles=(await tx.get(db.collection('teacherWorkspaceAccess').where('academyId','==','main').limit(101))).docs;if(profiles.length>100)throw Error('CORE_CUTOVER_LIMIT');
   if(input.addTeacherUid){const target=profiles.find((d:any)=>d.id===input.addTeacherUid)?.data();if(!target||target.disabled||!target.notionTeacherPageId)throw Error('INVALID_TEACHER');if(!teachers.includes(uuid(target.notionTeacherPageId)))teachers.push(uuid(target.notionTeacherPageId));}
-  const teacherUids=[];for(const id of teachers){const teacher=valid((await tx.get(refFor(db,'teachers',id))).data(),'teachers');if(['중단','휴직'].includes(choice(teacher.fields.properties['상태'])))throw Error('INVALID_TEACHER');
+  const fromUids:string[]=[];if(transfer)for(const id of removedIds){const old=(await tx.get(refFor(db,'teachers',id))).data();if(old?.pointer?.teacherUid)fromUids.push(old.pointer.teacherUid);}
+  const teacherUids=[],toUids:string[]=[];for(const id of teachers){const teacher=valid((await tx.get(refFor(db,'teachers',id))).data(),'teachers');if(!before.includes(id))toUids.push(teacher.pointer.teacherUid);if(['중단','휴직'].includes(choice(teacher.fields.properties['상태'])))throw Error('INVALID_TEACHER');
    if(input.addTeacherUid===teacher.pointer.teacherUid&&(choice(teacher.fields.properties['상태'])!=='재직'||!(teacher.fields.properties['담당 과목']?.multi_select||[]).some((v:any)=>v.name===input.subject)))throw Error('NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');teacherUids.push(teacher.pointer.teacherUid);}
   if(input.status!=='중단'&&input.classIds.some((id:string)=>{const r=classes.find(c=>c.id===id)!.row;return r.status!=='진행 중'||!(r.teacherUids||[r.ownerUid]).some((uid:string)=>teacherUids.includes(uid));}))throw Error('NOTION_REGISTRATION_ASSIGNMENT_REQUIRED');
   const projectedRef=db.collection('studentEnrollments').doc(e.entityId||e.notionPageId),projected=(await tx.get(projectedRef)).data();
   if(projected?.internalStudentId&&projected.internalStudentId!==s.pointer.internalStudentId)throw Error('STUDENT_MAPPING_CONFLICT');
-  const retained=classes.filter(c=>classIds.includes(c.id)&&c.row.subject!==input.subject).map(c=>c.id),at=Date.now(),p={...e.fields.properties,[input.subject]:{status:{name:input.status}},[input.subject+' 시작일']:{date:{start:input.startDate}},[input.subject+' 중단일']:{date:input.endDate?{start:input.endDate}:null},[input.subject+' 중단 예정일']:{date:input.plannedEndDate?{start:input.plannedEndDate}:null},[input.subject+' 담당']:{relation:teachers.map(id=>({id}))}};
+  const retained=classes.filter(c=>classIds.includes(c.id)&&c.row.subject!==input.subject).map(c=>c.id),at=Date.now(),p={...e.fields.properties,[input.subject]:{status:{name:input.status}},[input.subject+' 시작일']:{date:{start:input.startDate}},[input.subject+' 중단일']:{date:input.endDate?{start:input.endDate}:null},[input.subject+' 중단 예정일']:{date:input.plannedEndDate?{start:input.plannedEndDate}:null},...(input.campus!==undefined?{[input.subject+' 캠퍼스']:{select:input.campus?{name:input.campus}:null}}:{}),[input.subject+' 담당']:{relation:teachers.map(id=>({id}))}};
   const next=changed(tx,db,enrollment.ref,e,p,actor.uid,at);
   const starts=subjects.map(subject=>p[subject+' 시작일']?.date?.start).filter(Boolean).sort();
-  changed(tx,db,sr,s,{...s.fields.properties,'소속반':{relation:[...retained,...input.classIds].map(id=>({id}))},'등록상태':{status:{name:subjects.some(subject=>choice(p[subject])==='등록')?'등록':subjects.some(subject=>choice(p[subject])==='대기')?'대기':'중단'}},'강의명':{multi_select:subjects.filter(subject=>choice(p[subject])==='등록').map(name=>({name}))},'수강시작일':{date:starts.length?{start:starts[0]}:null}},actor.uid,at);
+  changed(tx,db,sr,s,{...s.fields.properties,'소속반':{relation:[...retained,...input.classIds].map(id=>({id}))},'등록상태':{status:{name:subjects.some(subject=>choice(p[subject])==='등록')?'등록':subjects.some(subject=>choice(p[subject])==='대기')?'대기':'중단'}},'강의명':{multi_select:subjects.filter(subject=>choice(p[subject])==='등록').map(name=>({name}))},...(input.campus!==undefined?{'캠퍼스':{multi_select:[...new Set(subjects.map(subject=>choice(p[subject+' 캠퍼스'])).filter(Boolean))].map(name=>({name}))}}:{}),'수강시작일':{date:starts.length?{start:starts[0]}:null}},actor.uid,at);
   for(const c of classes)if(c.row.subject===input.subject){const wanted=input.classIds.includes(c.id),keys=(c.row.students||[]).filter((id:string)=>uuid(id)!==key);if(wanted)keys.push(key);if(JSON.stringify([...keys].sort())!==JSON.stringify([...(c.row.students||[])].sort()))tx.set(c.ref,{...c.row,students:keys,revision:(c.row.revision||0)+1,updatedAt:at});}
   for(const d of profiles){const profile=d.data();if(!profile.notionTeacherPageId)continue;const id=uuid(profile.notionTeacherPageId),scopes=(profile.scopes||[]).filter((v:any)=>uuid(v.studentKey)!==key||v.subject!==input.subject);if(teachers.includes(id))scopes.push({studentKey:key,subject:input.subject});
    const keys=(items:any[])=>items.map(v=>uuid(v.studentKey)+':'+v.subject).sort();if(JSON.stringify(keys(scopes))!==JSON.stringify(keys(profile.scopes||[])))tx.set(d.ref,{...profile,scopes,assignmentRevision:(profile.assignmentRevision||0)+1,assignmentSource:'firestore'});}
-  tx.set(projectedRef,{...projected,internalStudentId:s.pointer.internalStudentId,studentKey:key,sourceUpdatedAt:stamp(next),removed:false,subjects:subjects.filter(subject=>choice(p[subject])).map(subject=>({subject,status:choice(p[subject]),startAt:p[subject+' 시작일']?.date?.start||null,endAt:p[subject+' 중단일']?.date?.start||null,plannedEndDate:p[subject+' 중단 예정일']?.date?.start||null})),appSource:'firestore'});
+  tx.set(projectedRef,{...projected,internalStudentId:s.pointer.internalStudentId,studentKey:key,sourceUpdatedAt:stamp(next),removed:false,subjects:subjects.filter(subject=>choice(p[subject])).map(subject=>({subject,status:choice(p[subject]),startAt:p[subject+' 시작일']?.date?.start||null,endAt:p[subject+' 중단일']?.date?.start||null,plannedEndDate:p[subject+' 중단 예정일']?.date?.start||null,campus:choice(p[subject+' 캠퍼스'])||null})),appSource:'firestore'});
+  if(transfer)tx.set(db.collection('teacherTransfers').doc(digest(['transfer',actor.uid,op])),{academyId:'main',studentKey:key,subject:input.subject,fromUids,toUids,afterUids:teacherUids,reason:input.transferReason,note:input.transferReason==='기타'?input.transferNote||'':'',by:actor.uid,at});
   const result={status:'synced',alreadySaved:false,sourceMode:'firestore'};tx.set(cr,{fingerprint,result,at});return result;
  });
 }
@@ -192,8 +197,15 @@ export async function saveCoreGrant(db:any,actor:any,value:any,expected:number,p
   // Without a Notion teacher page the app record alone holds the assignment (the app is the only store now).
   if(!actor.admin&&JSON.stringify(value.notionSources||[])!==JSON.stringify(old.notionSources||[]))throw Error('FORBIDDEN');
   const teacherId=old.notionTeacherPageId?uuid(old.notionTeacherPageId):null,at=Date.now();
+  // 담당 변경 from the teacher dialog: this teacher taken off a subject that continues needs a reason, like 수강 관리.
+  const keep=(key:string,subject:string)=>value.scopes.some((s:any)=>uuid(s.studentKey)===key&&s.subject===subject);
+  const dropped=(old.scopes||[]).map((s:any)=>({key:uuid(s.studentKey),subject:s.subject})).filter((s:any)=>!keep(s.key,s.subject)&&(()=>{const status=choice(enrollments.find(e=>e.key===s.key)?.row.fields.properties[s.subject]);return status!=='중단';})()); // only an explicit 중단 is not a transfer (a missing status still asks, like the screen)
+  if(dropped.length&&!value.transferReason)throw Error('TRANSFER_REASON_REQUIRED');
+  const staff=dropped.length?(await tx.get(db.collection('teacherWorkspaceAccess').where('academyId','==','main').limit(101))).docs:[];
   for(const e of enrollments){const p={...e.row.fields.properties};for(const subject of subjects){const ids=members(p[subject+' 담당']).filter(id=>id!==teacherId);if(teacherId&&value.scopes.some((s:any)=>uuid(s.studentKey)===e.key&&s.subject===subject))ids.push(teacherId);p[subject+' 담당']={relation:ids.map(id=>({id}))};}changed(tx,db,e.ref,e.row,p,actor.uid,at);}
   tx.set(ref,{...old,scopes:value.scopes,workspaceLabel:value.workspaceLabel||old.workspaceLabel||'',workspaceRole:value.workspaceRole,disabled:false,assignmentRevision:(old.assignmentRevision||0)+1,assignmentSource:'firestore',notionAssignmentStage:'synced',notionSyncRequired:false,lastCoreGrantIntent:intent,...(actor.admin&&value.notionSources?{notionSources:value.notionSources}:{})});
+  for(const d of dropped){const afterUids=staff.filter((p:any)=>p.id!==value.uid&&!p.data().disabled&&(p.data().scopes||[]).some((s:any)=>uuid(s.studentKey)===d.key&&s.subject===d.subject)).map((p:any)=>p.id);
+   tx.set(db.collection('teacherTransfers').doc(digest(['grant-transfer',intent,d.key,d.subject])),{academyId:'main',studentKey:d.key,subject:d.subject,fromUids:[value.uid],toUids:[],afterUids,reason:value.transferReason,note:value.transferReason==='기타'?String(value.transferNote||'').trim().slice(0,200):'',by:actor.uid,at});}
   if(actor.admin&&value.uid!==process.env.ADMIN_UID)tx.set(ur,{...user,role:value.workspaceRole==='principal'?'principal':'teacher'});
   for(let i=0;i<keys.length;i++)if(value.academyStudents.includes(keys[i])||value.scopes.some((s:any)=>uuid(s.studentKey)===keys[i]))tx.set(db.collection('academyStudentMemberships').doc(keys[i]),{...memberships[i],disabled:false});
   return {sourceMode:'firestore',alreadySaved:false};

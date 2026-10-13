@@ -6,12 +6,15 @@ import type {StudentProfileInput,StudentProfileRecord} from '../../lib/studentPr
 import WorkspaceDialog from './WorkspaceDialog';
 import StudentProfileForm from './StudentProfileForm';
 import EnrollmentDates from './EnrollmentDates';
+import {askConfirm,askDiscard} from './ConfirmDialog';
+import {useLeaveProtection} from '../../lib/leaveProtection';
 interface Intent {operationId:string;expectedEditedAt:string;data:StudentProfileInput}
 interface Result {ok:boolean;record?:StudentProfileRecord;profile?:StudentProfileInput;status?:string;message?:string;diagnosticId?:string}
 function errorMessage(result:any){return `${result.data?.message || result.userMessage || '처리 결과를 확인하지 못했습니다.'}${result.data?.diagnosticId?` (오류 ID: ${result.data.diagnosticId})`:''}`;}
 export default function StudentProfileEditor({studentKey,onClose,onSaved}:{studentKey:string;onClose:()=>void;onSaved:(value:StudentProfileInput)=>void}) {
     const [record,setRecord]=useState<StudentProfileRecord|null>(null),[value,setValue]=useState<StudentProfileInput|null>(null);
     const [intent,setIntent]=useState<Intent|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[message,setMessage]=useState(''),[dirty,setDirty]=useState(false);
+    useLeaveProtection(dirty&&!intent);
     const version=useRef(0),writing=useRef(false);
     // Per-subject prices live beside the profile (studentTuition); null = not loaded, so the single 수강료 field stays.
     const [prices,setPrices]=useState<{subjects:string[];values:Record<string,number|null>}|null>(null),[pricesDirty,setPricesDirty]=useState(false);
@@ -58,7 +61,7 @@ export default function StudentProfileEditor({studentKey,onClose,onSaved}:{stude
     }
     async function discard(){
         if(writing.current || !record?.pending?.canDiscard || !intent)return;
-        if(!window.confirm('저장되지 않은 수정 요청을 취소하고 현재 학생 정보를 다시 불러올까요?'))return;
+        if(!await askConfirm({title:'저장되지 않은 수정 요청을 취소할까요?',message:'현재 학생 정보를 다시 불러옵니다.',confirmText:'요청 취소',cancelText:'그대로 두기',tone:'danger',icon:'alert'}))return;
         writing.current=true;setBusy(true);const current=version.current,uid=auth.currentUser?.uid;
         try {
             const r=await teacherAuthenticatedRequest<Result>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'discard-student-profile',studentKey,operationId:intent.operationId})});
@@ -69,8 +72,8 @@ export default function StudentProfileEditor({studentKey,onClose,onSaved}:{stude
         }catch(error){if(current===version.current)setMessage(error instanceof Error?error.message:'취소 결과를 확인하지 못했습니다.');}
         finally{writing.current=false;if(current===version.current)setBusy(false);}
     }
-    function close(){
-        if(dirty && !intent && !window.confirm('저장하지 않은 학생 정보 변경을 닫을까요?'))return;
+    async function close(){
+        if(dirty && !intent && !await askDiscard('저장하지 않은 학생 정보 변경을 닫을까요?'))return;
         onClose();
     }
     return <WorkspaceDialog open title="학생 정보 수정" onClose={close}>

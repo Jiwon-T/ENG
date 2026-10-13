@@ -1,6 +1,9 @@
 import {emptyAdmission,type AdmissionInput} from './studentAdmission.js';
 // Shared types only: browser code must never import the server module or node:crypto.
 export const registrationSubjects = ['영어', '수학', '국어', '과학', '한국사'] as const;
+// Campuses a student attends; a few take classes at two (e.g. 이충 and 용죽).
+export const registrationCampuses = ['용죽', '이충', '고덕'] as const;
+export type RegistrationCampus = typeof registrationCampuses[number];
 // Highest grade first: most students are high-school.
 export const registrationGrades = ['고3', '고2', '고1', '중3', '중2', '중1', '초6', '초5', '초4', '초3', '초2', '초1'] as const;
 export type RegistrationSubject = typeof registrationSubjects[number];
@@ -10,6 +13,7 @@ export interface RegistrationInput {
     existingStudentKey?: string | null;
     admission?:AdmissionInput;
     name: string;
+    campuses?: RegistrationCampus[];
     school: string;
     grade: string;
     studentPhone: string;
@@ -27,6 +31,8 @@ export interface RegistrationInput {
         teacherUid?: string | null;
         classIds?: string[];
         tuition?: number | null;
+        /** The campus this subject is taken at (one per subject; a student may attend two campuses). */
+        campus?: RegistrationCampus | null;
     }[];
 }
 export type RegistrationSyncStatus = 'pending' | 'syncing' | 'synced' | 'failed' | 'uncertain';
@@ -52,7 +58,7 @@ export interface RegistrationRecord extends RegistrationSummary {
 }
 export function emptyRegistration(): RegistrationInput {
     const today = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Seoul'}).format(new Date());
-    return {purpose:'new',intakeStage:'new',existingStudentKey:null,admission:emptyAdmission(),name:'', school:'', grade:'', studentPhone:'', guardianPhone:'', guardianName:'', studentSalutation:'', guardianSalutation:'', tuition:null, paymentDeadline:'', enrollments:[{subject:'영어', status:'등록', startDate:today, endDate:null}]};
+    return {purpose:'new',intakeStage:'new',existingStudentKey:null,admission:emptyAdmission(),name:'', campuses:[], school:'', grade:'', studentPhone:'', guardianPhone:'', guardianName:'', studentSalutation:'', guardianSalutation:'', tuition:null, paymentDeadline:'', enrollments:[{subject:'영어', status:'등록', startDate:today, endDate:null}]};
 }
 export const registrationStatusLabels: Record<RegistrationSyncStatus, string> = {
     pending:'등록 대기', syncing:'등록 중', synced:'등록 완료', failed:'등록 실패', uncertain:'등록 결과 확인 필요',
