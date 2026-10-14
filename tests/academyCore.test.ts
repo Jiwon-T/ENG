@@ -351,3 +351,60 @@ test('명부 줄 at 선생님 권한: the new account is in 수강 관리 / 원�
  const rel=f.source('enrollments',eid).fields.properties['수학 담당'].relation.map((x:any)=>x.id);assert.ok(rel.includes(offRow)&&!rel.includes(p.notionTeacherPageId),'the enrollment moves to the kept row');
  assert.deepEqual((await readCoreScopes(f.db,{uid:'fresh',academyId:'main',workspaceRole:'teacher'})).map((s:any)=>s.subject),['수학']);
 });
+test('연결 제안: a new account named like a student without an account or a 앱 미연결 선생님 is offered; 연결 and 아니요 work',async()=>{
+ const f=fixture();await f.setup();
+ // linkStudentAccount uses tx.update, which this test double does not have: merge into the stored row (test only).
+ const run=f.db.runTransaction;(f.db as any).runTransaction=(fn:any)=>run((tx:any)=>fn({...tx,update:(ref:any,patch:any)=>tx.set(ref,{...f.rows.get(ref.path),...patch})}));
+ const {readLinkSuggestions,acceptLinkSuggestion,dismissLinkSuggestion}=await import('../api/_lib/linkSuggestions.js');const {createOfflineTeacher}=await import('../api/_lib/offlineTeacher.js');
+ // The fixture student loses its account link; a new account with the same name signs up.
+ const mk=f.rows.get('notionStudentMappings/'+hashStudentKey(sid));f.rows.set('notionStudentMappings/'+hashStudentKey(sid),{...mk,firebaseUid:null});f.rows.set('users/student-account',{role:'student'});
+ f.rows.set('users/kid',{role:'student',name:'모의 학생',email:'k@x.kr'});
+ const made=await createOfflineTeacher(f.db,f.actor,{name:'박민지',subjects:['영어'],phone:'010-0000-1234'});
+ f.rows.set('users/pm',{role:'student',name:'박민지',email:'p@x.kr'});
+ await createOfflineTeacher(f.db,f.actor,{name:'이수진',subjects:['수학'],phone:'010-0000-5678'});
+ f.rows.set('users/sj',{role:'student',name:'수진',email:'s@x.kr'});
+ await assert.rejects(readLinkSuggestions(f.db,{...f.actor,admin:false,principal:true}),/FORBIDDEN/,'admin only');
+ let r:any=await readLinkSuggestions(f.db,f.actor);
+ const kid=r.suggestions.find((s:any)=>s.uid==='kid');assert.equal(kid.kind,'student');assert.equal(kid.targetId,sid);assert.equal(kid.sameName,true);
+ const pm=r.suggestions.find((s:any)=>s.uid==='pm');assert.equal(pm.kind,'teacher');assert.equal(pm.targetId,made.uid);assert.equal(pm.needsRole,true);assert.match(pm.detail,/영어 · 담당 0명/);
+ const sj=r.suggestions.find((s:any)=>s.uid==='sj');assert.equal(sj.sameName,false,'given name only: flagged');
+ await dismissLinkSuggestion(f.db,f.actor,{kind:sj.kind,uid:'sj',targetId:sj.targetId});
+ await acceptLinkSuggestion(f.db,f.actor,{kind:'student',uid:'kid',targetId:sid});
+ assert.equal(f.rows.get('users/kid').notionStudentKey,sid,'linked like 학생 관리 › 앱 계정 연결');
+ await acceptLinkSuggestion(f.db,f.actor,{kind:'teacher',uid:'pm',targetId:made.uid});
+ assert.equal(f.rows.get('users/pm').role,'teacher','선생님 권한 given');
+ const pmProfile=f.rows.get('teacherWorkspaceAccess/pm');assert.equal(pmProfile.notionTeacherPageId,f.rows.get('teacherWorkspaceAccess/'+made.uid).notionTeacherPageId,'and linked to the offline record');
+ r=await readLinkSuggestions(f.db,f.actor);assert.deepEqual(r.suggestions,[],'linked and turned-down pairs are no longer offered');
+});
+test('담당 시작일 is stored when a teacher starts on a subject (선생님 관리, 수강 관리, restart) and shown in 수강 관리',async()=>{
+ const f=fixture();await f.setup();
+ const {startId,seoulDay}=await import('../api/_lib/assignmentStarts.js');
+ const start=(uid:string,subject:string)=>f.rows.get('teacherAssignmentStarts/'+startId(uid,sid,subject))?.since;
+ // The fixture teacher already teaches 영어: taken off, then given the student again.
+ const grant=(scopes:any[],extra:any={})=>saveCoreGrant(f.db,f.actor,{uid:'teacher',academyId:'main',workspaceRole:'teacher',workspaceLabel:'',notionTeacherPageId:tid,academyStudents:[sid],scopes,...extra},f.rows.get('teacherWorkspaceAccess/teacher').assignmentRevision||0,assertTeacherSettingsAccess);
+ await grant([],{transferReason:'일정'});await grant([{studentKey:sid,subject:'영어'}]);
+ assert.equal(start('teacher','영어'),seoulDay(),'선생님 관리: from today');
+ f.rows.set('teacherAssignmentStarts/'+startId('teacher',sid,'영어'),{uid:'teacher',studentKey:sid,subject:'영어',since:'2026-05-11'});
+ let e=await readStudentEnrollment(f.db,f.actor,sid);
+ assert.equal(e.subjects.find((s:any)=>s.subject==='영어')!.teachers.find((t:any)=>t.uid==='teacher')!.since,'2026-05-11','수강 관리 shows it');
+ const save=async(data:any)=>{const r=await readStudentEnrollment(f.db,f.actor,sid);await saveStudentEnrollment(f.db,f.actor,sid,{operationId:randomUUID(),studentEditedAt:r.studentEditedAt,enrollmentEditedAt:r.enrollmentEditedAt,data:{subject:'영어',status:'등록',startDate:'2026-10-01',endDate:null,addTeacherUid:null,removeTeacherIds:[],classIds:[],...data}});};
+ await save({status:'중단',endDate:'2026-10-05'});await save({status:'등록',startDate:'2026-10-12'});
+ assert.equal(start('teacher','영어'),'2026-10-12','a restart starts the teacher again on the new 시작일');
+ const h=(await readStudentEnrollment(f.db,f.actor,sid)).subjects.find((s:any)=>s.subject==='영어')!.history!;
+ const status=h.filter((x:any)=>x.kind!=='담당 변경');assert.deepEqual(status.map((x:any)=>x.kind),['등록','중단','재시작'],'이력: 등록 → 중단 → 재시작 (same teacher)');assert.deepEqual(status.slice(1).map((x:any)=>x.date),['2026-10-05','2026-10-12']);assert.match(status[2].text,/담당 모의 선생님/);
+ assert.equal(h.filter((x:any)=>x.kind==='담당 변경').length,2,'taken off and given back in 선생님 관리 show as 담당 변경');
+});
+test('연결 제안 with two same-name students: both offered side by side with 학교 and dates, the recent one hinted',async()=>{
+ const f=fixture();await f.setup();
+ const {readLinkSuggestions}=await import('../api/_lib/linkSuggestions.js');
+ const mk=f.rows.get('notionStudentMappings/'+hashStudentKey(sid));f.rows.set('notionStudentMappings/'+hashStudentKey(sid),{...mk,firebaseUid:null});
+ const other='66666666-6666-4666-8666-666666666666',srcKey=DIRECTORY_ROWS+'/'+directoryRowKey('students',sid),src=structuredClone(f.rows.get(srcKey));
+ src.notionPageId=other;src.entityId=other;src.studentKey=other;src.fields.properties['학원 등록일']={date:{start:'2026-10-10'}};src.fields.properties['학교']={rich_text:[{plain_text:'고덕중'}]};
+ const mine=f.rows.get(srcKey);mine.fields.properties['학원 등록일']={date:{start:'2025-03-04'}};f.rows.set(srcKey,mine); f.rows.set(DIRECTORY_ROWS+'/'+directoryRowKey('students',other),src);f.rows.set('academyStudentMemberships/'+other,{academyId:'main',disabled:false,internalStudentId:'other-internal'});
+ f.rows.set('users/kid',{role:'student',name:'모의 학생',email:'k@x.kr',createdAt:'2026-10-12T03:00:00Z'});
+ const r:any=await readLinkSuggestions(f.db,f.actor);
+ const pick=r.unclear.find((u:any)=>u.uid==='kid');assert.equal(pick.reason,'same-name');assert.equal(pick.joined,'2026-10-12');
+ assert.deepEqual(pick.choices.map((c:any)=>c.targetId).sort(),[sid,other].sort());
+ assert.ok(pick.choices.every((c:any)=>c.sameName===true),'full name match');const recent=pick.choices.find((c:any)=>c.targetId===other);assert.equal(recent.justBefore,true);assert.equal(recent.registered,'2026-10-10');assert.match(recent.detail,/고덕중/);
+ const older=pick.choices.find((c:any)=>c.targetId===sid);assert.equal(older.justBefore,false);assert.match(older.subjects,/영어 2026\.10\.1/,'과목 시작일 from the enrollment row');
+});

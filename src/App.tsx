@@ -9,6 +9,8 @@ import { Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, A
 import { motion, AnimatePresence } from 'motion/react';
 import type { RecentLearning } from './lib/recentLearning';
 import { AppChrome } from './lib/appChrome';
+import { lastSignedOut, loadLogin, rememberSignedIn } from './lib/authHint';
+import { NibTile } from './components/RosyLogo';
 import type { AnalysisResult, QuestionType } from './lib/gemini';
 
 function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
@@ -92,7 +94,7 @@ class ErrorBoundary extends (Component as any) {
 }
 
 // Lazy load heavy components
-const Login = lazy(() => import('./components/auth/Login'));
+const Login = lazy(loadLogin);
 const Home = lazy(() => import('./components/Home'));
 const AnalysisView = lazy(() => import('./components/AnalysisView'));
 const TeacherRoom = lazy(() => import('./components/teacher/TeacherRoom'));
@@ -141,6 +143,8 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  // Signed out last time: show the login screen without waiting for Firebase to finish restoring.
+  const [assumeSignedOut, setAssumeSignedOut] = useState(lastSignedOut);
   const [currentView, setCurrentView] = useState<View>('home');
   const [isMobile, setIsMobile] = useState(false);
   const [text, setText] = useState('');
@@ -208,6 +212,7 @@ export default function App() {
       studentReportCache.invalidate();
       setAuthLoading(true);
       setUser(firebaseUser);
+      rememberSignedIn(Boolean(firebaseUser));setAssumeSignedOut(false);
       
       if (firebaseUser) {
         void import('./components/Home');
@@ -379,18 +384,16 @@ export default function App() {
     );
   }
 
-  if (authLoading) {
+  if (authLoading && !(assumeSignedOut && !user)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#fafafa]">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="flex flex-col items-center gap-4"
         >
-          <div className="text-4xl">🏫</div>
-          <div className="text-slate-400 font-black tracking-widest animate-pulse uppercase text-xs">
-            loading...
-          </div>
+          <NibTile size={72} className="animate-pulse" />
+          <span className="sr-only">불러오는 중</span>
         </motion.div>
       </div>
     );
@@ -399,9 +402,9 @@ export default function App() {
   if (!user) {
     return (
       <Suspense fallback={
-        <div className="min-h-screen flex items-center justify-center bg-[#fafafa]">
+        <div className="min-h-screen flex items-center justify-center bg-white">
           <div className="flex flex-col items-center gap-4">
-            <div className="text-4xl animate-bounce">🏫</div>
+            <NibTile size={72} className="animate-pulse" />
           </div>
         </div>
       }>
@@ -414,7 +417,7 @@ export default function App() {
     <ErrorBoundary>
       <div className="min-h-screen pb-20 bg-[#fafafa]">
       {/* Global Navigation Bar (the teacher room shows these controls in its own header row) */}
-      {currentView !== 'teacher-room' && (
+      {currentView !== 'teacher-room' && currentView !== 'home' && (
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex justify-between items-center no-print">
         <div className="flex items-center gap-2 cursor-pointer group" onClick={goHome}>
           <div className="w-8 h-8 bg-pastel-pink-100 rounded-lg flex items-center justify-center text-sm group-hover:bg-pastel-pink-200 transition-colors">
@@ -630,6 +633,9 @@ export default function App() {
                 userUid={user.uid}
                 pendingAssignmentCount={pendingAssignmentCount}
                 onResume={target => { setResumeTarget(target); setCurrentView(target.category === 'word' ? 'vocab' : target.category); }}
+                displayName={profile?.alias || profile?.name}
+                avatar={profile?.photoURL}
+                onOpenMenu={() => setIsMenuOpen(true)}
               />
             </motion.div>
           ) : currentView === 'pet' ? (

@@ -30,6 +30,10 @@
       "destination": "/api/teacher/workspace?__cron=lesson-migration"
     },
     {
+      "source": "/api/hooks/new-signups",
+      "destination": "/api/teacher/workspace?__hook=new-signups"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

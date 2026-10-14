@@ -985,3 +985,46 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 .teacher-workspace .lesson-kbd{margin-left:6px;font:inherit;font-size:11px;font-weight:500;line-height:16px;padding:0 4px;border:1px solid currentColor;border-radius:4px;opacity:.55}
 .teacher-workspace.workspace-mobile .lesson-kbd{display:none}
 @media (pointer:coarse){.teacher-workspace .lesson-kbd{display:none}}
+
+/* 리포트 확인 (teacher preview in the app): the app's rose palette and one type scale. The public parent page keeps its own
+   indigo look; only this in-app preview changes. The tab row and its counts sit outside .report-preview (in .report-teacher-tools), so they are scoped to .report-review. Titles 15px, card titles 13-14px, notes 11-12px, values 12-13px bold. */
+.teacher-workspace .report-preview{--report-accent:#e0587a;--report-accent-bg:#fef2f3;--report-border:#f3e6e8;}
+.teacher-workspace .report-preview .report-preview-label{color:#9a8a8f;font-size:11px;}
+.teacher-workspace .report-review .report-section-tabs{display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:#f8f1f2;}
+.teacher-workspace .report-review .report-section-tabs>button{min-height:34px;height:34px;padding:4px 14px;font-size:12px;font-weight:700;background:transparent;color:#9a8a8f;border-radius:999px;}
+.teacher-workspace .report-review .report-section-tabs>button[aria-selected=true]{background:#fff;color:#8b2f40;box-shadow:0 1px 2px rgba(94,30,42,.08);}
+.teacher-workspace .report-review .report-count{background:transparent;padding:0 0 0 2px;font-size:12px;font-weight:700;color:#e0587a;}
+.teacher-workspace .report-review .report-count:empty{display:none;}
+.teacher-workspace .report-preview .review-section h3{font-size:15px;font-weight:700;color:#1f1a24;margin:4px 0 8px;}
+.teacher-workspace .report-preview .review-section h3 span{font-size:11px;font-weight:500;color:#9a8a8f;}
+.teacher-workspace .report-preview .report-lesson-list h4{font-size:11px;font-weight:600;color:#9a8a8f;margin:10px 0 4px;}
+.teacher-workspace .report-preview .report-lesson-card{border:1px solid #f3e6e8;border-radius:12px;min-height:56px;padding:8px 10px;}
+.teacher-workspace .report-preview .report-lesson-card.is-selected{background:#fff7f8;border-color:#e0587a;border-left:1px solid #e0587a;}
+.teacher-workspace .report-preview .report-lesson-card small{font-size:11px;color:#7a6a70;}
+.teacher-workspace .report-preview .report-lesson-detail{border:1px solid #f3e6e8;border-radius:14px;padding:14px;}
+.teacher-workspace .report-preview .report-lesson-detail header h3{font-size:15px;font-weight:700;color:#1f1a24;margin:4px 0;}
+.teacher-workspace .report-preview .report-time-box{background:#fdf6f7;color:#5e1e2a;padding:10px 12px;border-radius:10px;margin-top:10px;font-size:12px;}
+.teacher-workspace .report-preview .report-time-box strong{display:inline;font-size:13px;font-weight:700;margin:0 0 0 6px;}
+.teacher-workspace .report-preview .report-evaluations{grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px;margin-top:8px;}
+.teacher-workspace .report-preview .report-evaluations>div{flex-direction:row;justify-content:space-between;align-items:center;padding:8px 10px;background:#fdf6f7;border-radius:10px;font-size:12px;}
+.teacher-workspace .report-preview .report-feedback{background:#fdf6f7;color:#5e1e2a;padding:10px 12px;border-radius:10px;margin-top:8px;}
+.teacher-workspace .report-preview .report-feedback h4,.teacher-workspace .report-preview .report-feedback strong{font-size:12px;font-weight:700;}
+.teacher-workspace .report-preview .report-feedback p{font-size:12px;line-height:1.6;}
+.teacher-workspace .report-preview .report-range{background:#fef2f3;color:#8b2f40;}
+.teacher-workspace .report-preview .report-schedule{background:#fff;border:1px solid #f3e6e8;border-radius:12px;padding:10px 12px;margin:6px 0;}
+.teacher-workspace .report-preview .report-preview-schedule{background:transparent;padding:0;}
+.teacher-workspace .report-preview .report-past summary{min-height:40px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #f3e6e8;margin-top:8px;padding:8px 2px;font-size:12px;font-weight:700;color:#8b2f40;list-style:none;}
+.teacher-workspace .report-preview .report-past summary::-webkit-details-marker{display:none;}
+.teacher-workspace .report-preview .report-past summary::after{content:'펼치기 ⌄';font-weight:500;color:#9a8a8f;}
+.teacher-workspace .report-preview .report-past[open] summary::after{content:'접기 ⌃';}
+.teacher-workspace .report-preview .report-stats{gap:6px;margin:8px 0 2px;}
+.teacher-workspace .report-preview .report-stat{min-height:52px;background:#fdf6f7;border:0;border-radius:10px;padding:6px 10px;justify-content:space-between;}
+.teacher-workspace .report-preview .report-stat>span{font-size:11px;color:#9a8a8f;}
+.teacher-workspace .report-preview .report-stat strong{font-size:16px;font-weight:700;color:#1f1a24;}
+.teacher-workspace .report-preview .report-stats-note{font-size:11px;color:#b9a9ae;margin:0 0 4px;}
+.teacher-workspace .report-preview .report-filter-chips>button[aria-pressed=true]{background:#e0587a;color:#fff;}
+.teacher-workspace .report-preview .review-pagination{font-size:12px;color:#8b2f40;}
+.teacher-workspace .report-preview .teacher-academic [role=tab]{min-height:34px;}
+.teacher-workspace .report-preview .teacher-academic [role=tab][aria-selected=true]{background:#e0587a;color:#fff;}
+.teacher-workspace .report-preview .teacher-academic [role=tab][aria-selected=false]{background:#f8f1f2;color:#8b2f40;}
+.teacher-workspace .report-preview .teacher-academic h3{margin:0;}

@@ -30,9 +30,14 @@ export interface EnrollmentRecord {
         endDate: string | null;
         plannedEndDate?: string | null;
         campus?: string | null;
+        /** 수강 이력 (등록 · 중단 · 재시작 · 담당 변경), oldest first. */
+        history?: { date: string; kind: string; text: string }[];
         teachers: {
             id: string;
             name: string;
+            /** The teacher's account (null for an old row without one) and their 담당 시작일. */
+            uid?: string | null;
+            since?: string | null;
         }[];
         classes: {
             withdrawalReview?: boolean;

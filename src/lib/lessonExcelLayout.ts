@@ -5,7 +5,7 @@ const lineHeight=(font:number)=>font*1.5;
 function glyphWidth(ch:string,font:number){const code=ch.codePointAt(0)!;const width=ch==='\t'?4:code>=0x300&&code<=0x36f?0:code>255?2:/[MW@%]/.test(ch)?1.4:/[il.,'!|]/.test(ch)?0.5:1;return width*font/11*1.08;}
 /** Split only at row/cell limits; concatenating parts preserves every original character. */
 export function excelTextParts(value:string,width:number,font=14):string[]{
- const capacity=Math.max(1,width-2),maxLines=Math.floor((409-6)/lineHeight(font));
+ const capacity=Math.max(1,width-2),maxLines=Math.floor((409-6)/lineHeight(font))-1; // one line kept spare (see lessonExcelRowHeight)
  const parts:string[]=[];let part='',lineWidth=0,lines=1;
  for(const ch of value.replace(/\r\n/g,'\n').replace(/\r/g,'\n')){
   const size=ch==='\n'?0:glyphWidth(ch,font),wrap=ch!=='\n'&&lineWidth>0&&lineWidth+size>capacity;
@@ -18,7 +18,7 @@ export function excelTextParts(value:string,width:number,font=14):string[]{
 /** Lines Excel shows for wrapped text. Excel breaks at spaces, so a word that does not fit moves whole to the next line;
  *  only a word longer than the cell breaks by character. Counting by character alone left rows too short. */
 export function excelTextLines(value:string,width:number,font=14){
- const capacity=Math.max(1,width-2.5);let lines=0;
+ const capacity=Math.max(1,(width-2.5)*0.92);let lines=0; // a little narrower than measured: Excel wraps earlier than the estimate
  for(const paragraph of value.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n')){
   lines++;let used=0;
   for(const word of paragraph.split(/(?<= )/)){
@@ -29,4 +29,5 @@ export function excelTextLines(value:string,width:number,font=14){
  }
  return Math.max(1,lines);
 }
-export function lessonExcelRowHeight(values:string[],widths=lessonExcelWidths){return Math.min(409,Math.max(21,...values.map((v,i)=>excelTextLines(v,widths[i],lessonExcelFontSizes[i])*lineHeight(lessonExcelFontSizes[i])+10)));}
+/** Row height: the wrapped lines plus one spare line when a cell wraps, so the last line is never cut off. */
+export function lessonExcelRowHeight(values:string[],widths=lessonExcelWidths){return Math.min(409,Math.max(21,...values.map((v,i)=>{const lines=excelTextLines(v,widths[i],lessonExcelFontSizes[i]);return (lines>1?lines+1:lines)*lineHeight(lessonExcelFontSizes[i])+10;})));}

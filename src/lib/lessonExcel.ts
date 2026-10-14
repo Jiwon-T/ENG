@@ -13,7 +13,7 @@ export function lessonExcelFilename(day:string,teacher:string) {
 }
 export function lessonExcelCells(record:any):string[] {
  const d=record.data,round=d.round!=null?` (${d.round})`:'';
- const time=d.classSession==='없음'?'수업 없음':`${d.start||'미입력'}-${d.end||'미입력'}${round}${String(d.attendance||'').startsWith('보강')?'-보강':''}`;
+ const time=d.classSession==='없음'?'.':`${d.start||'미입력'}-${d.end||'미입력'}${round}${String(d.attendance||'').startsWith('보강')?'-보강':''}`;
  const study=d.selfStudy==='있음'?`${d.selfStudyStart||'미입력'}-${d.selfStudyEnd||'미입력'}${d.selfStudyRound!=null?` (${d.selfStudyRound})`:''}`:d.selfStudy==='없음'?'.':'미확인';
  // Scores sit right under the lesson content, above 과제 (the 일지 조회 card keeps them last).
  const learning=[d.content,d.total>0&&`테스트: ${d.correct??'미입력'}/${d.total}`,d.examTotal>0&&`내신 대비 테스트: ${d.examCorrect??'미입력'}/${d.examTotal}`,d.assignment&&`과제: ${d.assignment}`,d.examScope&&`시험범위: ${d.examScope}`,d.note&&`피드백: ${d.note}`,d.nextPlan&&`다음 계획: ${d.nextPlan}`].filter(Boolean).join('\n');

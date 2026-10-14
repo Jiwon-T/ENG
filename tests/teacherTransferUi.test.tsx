@@ -101,3 +101,21 @@ test('앱 계정 연결: only on an offline teacher, only accounts with 선생�
  assert.match(ws,/if\(a\.offline&&!a\.linkedUid&&!staff\.some/,'a linked offline record is no longer listed as a teacher');
  assert.match(ws,/body\.action==='link-offline-teacher'\)\{failureStage='offline-teacher-link';[\s\S]*?invalidateTeacherMutation\('grant'\);teacherReadCache\.clear\(\);/);
 });
+test('연결 제안 box: loaded with 앱 사용자, confirm before linking, 아니요 stored on the server, partial names flagged',async()=>{
+ const fsm=await import('node:fs'),src=fsm.readFileSync(new URL('../src/components/teacher/AppUserManager.tsx',import.meta.url),'utf8');
+ assert.match(src,/useEffect\(\(\)=>\{if\(autoLoad\)\{void act\(load\);void loadHints\(\);\}\},\[\]\);/);
+ assert.match(src,/if\(!await askConfirm\(\{title:student\?/);assert.match(src,/request\('accept-link-suggestion',\{kind:s\.kind,uid:s\.uid,targetId:s\.targetId\}\)/);
+ assert.match(src,/request\('dismiss-link-suggestion'/);assert.match(src,/!s\.sameName&&<em className="lsg-partial">이름만 같아요<\/em>/);
+ assert.doesNotMatch(src,/localStorage/,'nothing about people kept in the browser');
+});
+test('앱 사용자 rows: one chip, one main button, and ⋯ for 이름 바꾸기 / 탈퇴 (no greyed-out 권한 주기 on linked students)',async()=>{
+ const fsm=await import('node:fs'),src=fsm.readFileSync(new URL('../src/components/teacher/AppUserManager.tsx',import.meta.url),'utf8');
+ assert.match(src,/<span className=\{'aur-chip is-'\+k\.tone\}>/);assert.match(src,/\{u\.isAdmin\|\|u\.linkedStudent\?null:/,'linked students and the admin get no main button');
+ assert.match(src,/<details className="aur-more">/);assert.match(src,/className="is-danger"[^>]*onClick=\{\(\)=>remove\(u\)\}/,'탈퇴 lives in ⋯, in red');
+ assert.doesNotMatch(src,/disabled=\{busy\|\|u\.linkedStudent\}/);
+});
+test('연결 제안 same-name pick: candidates side by side with 학원 등록 and 과목 dates, 가입 직전 등록 hint, link code advice, 아니요 for all',async()=>{
+ const fsm=await import('node:fs'),src=fsm.readFileSync(new URL('../src/components/teacher/AppUserManager.tsx',import.meta.url),'utf8');
+ assert.match(src,/u\.choices\?\.length\?<div key=\{'c'\+u\.kind\+u\.uid\} className="lsg-pick">/);assert.match(src,/c\.justBefore&&<em className="lsg-near">가입 직전 등록<\/em>/);
+ assert.match(src,/헷갈리면 학생 관리에서 연결 코드를 주는 게 가장 확실해요\./);assert.match(src,/sameName:c\.sameName===true/,'the warning follows each candidate');assert.doesNotMatch(src,/detail:c\.detail,sameName:true/);assert.match(src,/!c\.sameName&&<em className="lsg-partial">이름만 같아요<\/em>/);assert.match(src,/for\(const c of u\.choices\)await request\('dismiss-link-suggestion'/);
+});

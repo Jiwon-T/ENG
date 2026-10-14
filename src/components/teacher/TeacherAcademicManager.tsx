@@ -18,6 +18,9 @@ const SUBJECTS=['영어','수학','국어','과학','한국사'];
 const stageText=(stage:string)=>({draft:'저장됨',published:'반영 완료',failed:'반영 실패',notion_saved:'저장됨',publishing:'반영 중'} as any)[stage]||'반영 중';
 const stageKind=(stage:string)=>stage==='published'?'done':stage==='failed'?'failed':'saved';
 const pct=(d:any)=>d&&d.score!=null&&d.maxScore?d.score/d.maxScore*100:null;
+/** 성적 변화: 소수점 한 자리까지 비교해요 (76.7→76.5도 ▼0.2로 보이게). */
+export const round1=(n:number)=>Math.round(n*10)/10;
+export const trendText=(diff:number)=>`${diff>0?'▲':diff<0?'▼':'–'}${diff!==0?Math.abs(diff).toFixed(Number.isInteger(diff)?0:1):''}`;
 export default function TeacherAcademicManager({data,busy,request,act}:{data:any;busy:boolean;request:(action?:string,body?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>}) {
  const editId=useRef<string>('');
  const [value,setValue]=useState<any>(()=>({...blank(),subject:data.scopes?.[0]?.subject||'영어'})),[selected,setSelected]=useState<any>(null),[saved,setSaved]=useState<any>(null);
@@ -58,8 +61,8 @@ export default function TeacherAcademicManager({data,busy,request,act}:{data:any
  const studentGroups=new Map<string,any[]>();for(const r of records){const k=r.data.studentKey;if(!studentGroups.has(k))studentGroups.set(k,[]);studentGroups.get(k)!.push(r);}
  const splitName=(full:string)=>{const m=full.match(/^(.*?)\s*\((.*)\)$/);return {name:m?.[1]||full,meta:m?.[2]||''};};
  const gradeText=(g:string)=>/^\d+$/.test(g)?`${g}등급`:g;
- const trendOf=(r:any)=>{const p=pct(r.data),prev=pct(r.previous);return p!==null&&prev!==null?Math.round(p-prev):null;};
- const Trend=({diff,title}:{diff:number|null;title?:string})=>diff===null?null:<span className={'rv-trend '+(diff>0?'up':diff<0?'down':'same')} title={title}>{diff>0?'▲':diff<0?'▼':'–'}{diff!==0?Math.abs(diff):''}</span>;
+  const trendOf=(r:any)=>{const p=pct(r.data),prev=pct(r.previous);return p!==null&&prev!==null?round1(p-prev):null;};
+ const Trend=({diff,title}:{diff:number|null;title?:string})=>diff===null?null:<span className={'rv-trend '+(diff>0?'up':diff<0?'down':'same')} title={title}>{trendText(diff)}</span>;
  const pending=selected?.revision?stageText(selected.stage):'';
  const status=value.submissionStatus,percent=pct(value);
  return <div>{batchOpen&&<AcademicBatchEditor data={data} kind={kind} onClose={()=>setBatchOpen(false)} request={request} act={act} onSaved={()=>load(true)}/>}
@@ -105,7 +108,7 @@ export default function TeacherAcademicManager({data,busy,request,act}:{data:any
     <span role="cell" className="gr-bar-cell">{scored?<><b>{d.score}{d.maxScore!==100?<small>/{d.maxScore}</small>:null}</b><span className="rv-bar" aria-hidden="true"><span style={{width:Math.min(100,Math.max(0,p||0))+'%'}}/></span></>:<span className={d.submissionStatus==='미제출'?'gr-missing':'gr-muted'}>{d.submissionStatus}</span>}</span>
     <span role="cell">{d.grade?gradeText(d.grade):'—'}</span><span role="cell"><Trend diff={diff}/></span><span role="cell"><StatusBadge kind={stageKind(r.stage) as any} text={stageText(r.stage)} compact/></span>
    </button>;})}</div>}
-  {view==='student'&&records.length>0&&<div className="gr-students">{[...studentGroups.entries()].map(([key,rows])=>{const sorted=[...rows].sort((x,y)=>String(x.data.examDate).localeCompare(String(y.data.examDate))),points=sorted.map(r=>pct(r.data)).filter((x:any)=>x!==null) as number[],last=sorted[sorted.length-1],{name,meta}=splitName(nameOf(key)),diff=points.length>1?Math.round(points[points.length-1]-points[points.length-2]):trendOf(last);
+  {view==='student'&&records.length>0&&<div className="gr-students">{[...studentGroups.entries()].map(([key,rows])=>{const sorted=[...rows].sort((x,y)=>String(x.data.examDate).localeCompare(String(y.data.examDate))),points=sorted.map(r=>pct(r.data)).filter((x:any)=>x!==null) as number[],last=sorted[sorted.length-1],{name,meta}=splitName(nameOf(key)),diff=points.length>1?round1(points[points.length-1]-points[points.length-2]):trendOf(last);
    // Scaled to this student's own range (at least 10 points tall) so small changes are visible.
    const w=120,h=32,lo=Math.min(...points,100),hi=Math.max(...points,0),mid=(lo+hi)/2,span=Math.max(10,hi-lo),top=mid+span/2,xs=points.map((_,i)=>points.length>1?6+i*(w-12)/(points.length-1):w/2),ys=points.map(v=>4+(top-v)/span*(h-8));
    return <div key={key} className="gr-student"><span className="gr-name"><strong>{name}</strong><small>{meta}{meta?' · ':''}시험 {rows.length}번</small></span>

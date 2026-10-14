@@ -81,7 +81,7 @@ export default function StudentProfileEditor({studentKey,onClose,onSaved}:{stude
         {loading?<p role="status" className="text-sm">학생 정보를 불러오는 중…</p>:null}
         {message?<p role="status" className="text-sm text-rose-600 mb-3">{message}</p>:null}
         {intent?<p className="text-xs text-slate-500 mb-3">수정 요청의 입력을 보존하고 있습니다. 창을 닫아도 서버에 접수한 요청은 유지됩니다.</p>:null}
-        {value?<StudentProfileForm value={value} busy={busy} disabled={Boolean(intent)} retrying={Boolean(intent)} onChange={next=>{setValue(next);setDirty(true);}} onSubmit={()=>void save()} prices={prices} onPrices={values=>{if(!prices)return;const list=prices.subjects.map(subject=>values[subject]).filter((n):n is number=>typeof n==='number');setPrices({...prices,values});setPricesDirty(true);setDirty(true);setValue(old=>old&&{...old,tuition:list.length?list.reduce((a,b)=>a+b,0):null});}}/>:null}
+        {value?<StudentProfileForm value={value} firstSubjectStart={record?.firstSubjectStart} busy={busy} disabled={Boolean(intent)} retrying={Boolean(intent)} onChange={next=>{setValue(next);setDirty(true);}} onSubmit={()=>void save()} prices={prices} onPrices={values=>{if(!prices)return;const list=prices.subjects.map(subject=>values[subject]).filter((n):n is number=>typeof n==='number');setPrices({...prices,values});setPricesDirty(true);setDirty(true);setValue(old=>old&&{...old,tuition:list.length?list.reduce((a,b)=>a+b,0):null});}}/>:null}
         {record?.pending?.canDiscard?<button type="button" disabled={busy} className="small-button mt-3" onClick={()=>void discard()}>미반영 수정 요청 취소</button>:null}
     </WorkspaceDialog>;
 }

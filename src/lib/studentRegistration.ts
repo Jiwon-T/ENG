@@ -23,6 +23,8 @@ export interface RegistrationInput {
     guardianSalutation: string;
     tuition: number | null;
     paymentDeadline: string;
+    /** 학원 등록일 (new students): today unless changed. */
+    academyStartDate?: string;
     enrollments: {
         subject: RegistrationSubject;
         status: '등록' | '대기' | '중단';
@@ -56,9 +58,20 @@ export interface RegistrationRecord extends RegistrationSummary {
     requestId: string;
     data: RegistrationInput;
 }
+/** Student display name, same style as the student list: "이용준 (세교중2)" — school without "학교", then the grade number
+ *  ("효명고" + "고2" → "효명고2"). Used by the 원서 and, when 학교 or 학년 changes, by 학생 정보. */
+export function studentTitle(name: string, school: string, grade: string) {
+    const raw = String(school || '').replace(/\s+/g, ''), short = raw.replace(/초등학교$/, '초').replace(/중학교$/, '중').replace(/고등학교$/, '고')
+        .replace(/학교$/, ''), place = short || raw;
+    const g = String(grade || '').trim(), year = g.match(/\d/)?.[0] || '';
+    const suffix = place ? place + (year || g) : g;
+    return name.trim() + (suffix ? ` (${suffix})` : '');
+}
+/** The name without the trailing "(학교학년)": "이용준 (세교중2)" → "이용준". */
+export const studentBaseName = (display: string) => String(display || '').replace(/\s*\([^()]*\)\s*$/, '').trim();
 export function emptyRegistration(): RegistrationInput {
     const today = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Seoul'}).format(new Date());
-    return {purpose:'new',intakeStage:'new',existingStudentKey:null,admission:emptyAdmission(),name:'', campuses:[], school:'', grade:'', studentPhone:'', guardianPhone:'', guardianName:'', studentSalutation:'', guardianSalutation:'', tuition:null, paymentDeadline:'', enrollments:[{subject:'영어', status:'등록', startDate:today, endDate:null}]};
+    return {purpose:'new',intakeStage:'new',existingStudentKey:null,admission:emptyAdmission(),name:'', campuses:[], school:'', grade:'', studentPhone:'', guardianPhone:'', guardianName:'', studentSalutation:'', guardianSalutation:'', tuition:null, paymentDeadline:'', academyStartDate:today, enrollments:[{subject:'영어', status:'등록', startDate:today, endDate:null}]};
 }
 export const registrationStatusLabels: Record<RegistrationSyncStatus, string> = {
     pending:'등록 대기', syncing:'등록 중', synced:'등록 완료', failed:'등록 실패', uncertain:'등록 결과 확인 필요',

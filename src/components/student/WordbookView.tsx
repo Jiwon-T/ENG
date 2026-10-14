@@ -200,13 +200,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     
     setEarnedPoints(points);
     setEarnedXP(xp);
-    if (points > 0) {
-      const newState = PetService.addPoints(points, auth.currentUser.uid);
-      setTotalPoints(newState.points);
-    } else {
-      setTotalPoints(PetService.getState(auth.currentUser.uid).points);
-    }
-    if (xp > 0) PetService.addXP(xp, auth.currentUser.uid);
+    // The server applies the rate and the daily cap; show what was actually given.
+    const source = type === 'match' ? 'wordbook-match' : type === 'flashcard' ? 'wordbook-flashcard' : 'wordbook-quiz', count = type === 'quiz' || type === 'conjugation' ? (score || 0) : sessionWords.length;
+    void PetService.award(source, count).then(r => { if (!r) return; setEarnedPoints(r.result?.points ?? 0); setEarnedXP(r.result?.xp ?? 0); setTotalPoints(r.state.points); });
 
     const targetCategory = (selectedWordbook.category || 
       (selectedWordbook.type === 'irregular' || 

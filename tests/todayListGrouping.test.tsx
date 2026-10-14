@@ -71,3 +71,9 @@ test('skipping a lesson or a student asks in the same centered confirm as other 
  assert.doesNotMatch(src,/WorkspaceDialog/);assert.match(src,/askConfirm\(studentKey\?\{title:`\$\{who\} 학생이 오늘 이 수업에 빠지나요\?`/);
  assert.match(src,/onClick=\{\(\)=>void askExclude\(\{events:\[event\],studentKey:key\}\)\}/);assert.match(src,/onClick=\{\(\)=>void askExclude\(\{events:group\}\)\}/);
 });
+test('진행 중 is a small ▷ beside the time, on the same line as the lesson kind; the words stay for tooltips and screen readers',async()=>{
+ const fs=await import('node:fs'),src=fs.readFileSync(new URL('../src/components/teacher/TeacherTodayLessons.tsx',import.meta.url),'utf8');
+ assert.match(src,/\{now&&<span className="today-now" title="진행 중"><Play size=\{9\} aria-hidden="true"\/><span className="sr-only">진행 중<\/span><\/span>\}/);
+ const css=fs.readFileSync(new URL('../src/components/teacher/reviewRedesign.css',import.meta.url),'utf8');
+ assert.match(css,/\.today-time-head \.today-now\{flex:none;justify-content:center;width:18px;height:18px;/);
+});

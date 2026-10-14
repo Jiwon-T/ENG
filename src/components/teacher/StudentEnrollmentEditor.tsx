@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 import { teacherAuthenticatedRequest } from '../../lib/teacherAuthenticatedRequest';
+import AssignmentSince from './AssignmentSince';
 import { registrationSubjects, type RegistrationOptions } from '../../lib/studentRegistration';
 import { teacherTransferReasons, type EnrollmentInput, type EnrollmentRecord } from '../../lib/studentEnrollment';
 import WorkspaceDialog from './WorkspaceDialog';
@@ -24,6 +25,8 @@ export default function StudentEnrollmentEditor({ studentKey, onClose, onSaved }
 }) {
     const [record, setRecord] = useState<EnrollmentRecord | null>(null), [options, setOptions] = useState<RegistrationOptions>({ teachers: [], classes: [] }), [value, setValue] = useState<EnrollmentInput | null>(null), [intent, setIntent] = useState<Intent | null>(null), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true), [message, setMessage] = useState(''), [dirty, setDirty] = useState(false);
     useLeaveProtection(dirty && !intent);
+    // 담당 시작일 is corrected on its own (saved at once), separate from the 수강 save.
+    async function saveSince(uid: string, since: string) { if (!value) return; setMessage(''); const r = await teacherAuthenticatedRequest<any>(auth, '/api/teacher/workspace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-assignment-start', uid, studentKey, subject: value.subject, since }) }); if (!r.ok || !r.data?.ok) { setMessage(messageFor(r)); return; } setRecord(await getRecord()); }
     const version = useRef(0), writing = useRef(false);
     async function getRecord() { const r = await teacherAuthenticatedRequest<any>(auth, '/api/teacher/workspace?' + new URLSearchParams({ action: 'student-enrollment', studentKey })); if (!r.ok || !r.data?.ok)
         throw Error(messageFor(r)); return r.data.record as EnrollmentRecord; }
@@ -165,6 +168,8 @@ export default function StudentEnrollmentEditor({ studentKey, onClose, onSaved }
   <select aria-label="담당 추가" className="enr-add" value={value.addTeacherUid || ''} onChange={e => change({ addTeacherUid: e.target.value || null })}><option value="">+ 담당 추가</option>{options.teachers.filter(t => t.subjects.includes(value.subject)).map(t => <option value={t.uid} key={t.uid}>{t.name}</option>)}</select>
   {!row?.teachers.length && !value.addTeacherUid ? <span className="enr-empty">담당 없음</span> : null}</div></div>
  <p className="enr-hint">이름을 누르면 이 과목 담당에서 빠지고, 다시 누르면 유지돼요. 누르지 않은 공동 담당은 그대로예요.</p>
+ {(row?.history?.length || 0) > 1 ? <details className="enr-history"><summary>이력 보기 <small>{row!.history!.length}</small></summary><ol>{row!.history!.map((h, i) => <li key={i}><time>{h.date}</time><b className={`is-${h.kind === '중단' ? 'stop' : h.kind === '담당 변경' ? 'move' : 'start'}`}>{h.kind}</b>{h.text ? <span>{h.text}</span> : null}</li>)}</ol></details> : null}
+ {row?.teachers.some(t => t.uid) ? <div className="enr-row"><span className="enr-label">담당 시작일</span><div className="enr-since">{row.teachers.filter(t => t.uid).map(t => <span key={t.id}><AssignmentSince label={t.name} since={t.since || null} canEdit={!busy} busy={busy} onSave={since => saveSince(t.uid!, since)}/></span>)}</div></div> : null}
  {needsReason ? <div className="enr-row is-top enr-transfer"><span className="enr-label">바꾸는 이유</span><div className="enr-transfer-body"><p className="enr-transfer-who">{removedTeachers.map(t => t.name).join(', ')} 선생님에서 바꾸는 이유 <b aria-hidden="true">*</b></p><div className="enr-chips" role="group" aria-label="담당을 바꾸는 이유">{teacherTransferReasons.map(reason => <button type="button" key={reason} aria-pressed={value.transferReason === reason} className={`enr-chip${value.transferReason === reason ? ' is-picked' : ''}`} onClick={() => change({ transferReason: reason })}>{reason}</button>)}</div>{value.transferReason === '기타' ? <input className="enr-transfer-note" aria-label="기타 사유 메모 (선택)" placeholder="메모 (선택)" maxLength={200} value={value.transferNote || ''} onChange={e => change({ transferNote: e.target.value })}/> : null}<p className="enr-hint">원장·관리자만 볼 수 있어요. 선생님에게는 보이지 않아요.</p></div></div> : null}
  <div className="enr-row is-top"><span className="enr-label">소속반</span><div className="enr-chips">{classChoices.map(c => { const picked = value.classIds.includes(c.id), locked = value.status === '중단' && !row?.classes.some(existing => existing.id === c.id); return <button type="button" key={c.id} aria-pressed={picked} disabled={locked} className={`enr-chip${picked ? ' is-picked' : ''}`} onClick={() => change({ classIds: picked ? value.classIds.filter(id => id !== c.id) : [...value.classIds, c.id] })}>{picked ? '✓ ' : ''}{c.name}</button>; })}{!classChoices.length ? <span className="enr-empty">선택 가능한 반이 없습니다.</span> : null}</div></div>
  <p className="enr-hint">중단 시 기존 반 연결은 퇴원 이력으로 유지할 수 있습니다. 반은 자동으로 중단되지 않습니다. 대기 상태는 이 과목의 반 선택을 해제해 주세요. 다른 과목의 반은 유지됩니다.</p>

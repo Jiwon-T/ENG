@@ -1,5 +1,5 @@
 import {useMemo,useRef,useState,type ReactNode} from 'react';
-import {Calculator,Gauge,History,MessageSquareText,UserCog,Users,Wallet,type LucideIcon} from 'lucide-react';
+import {Calculator,Gauge,History,MessageSquareText,Swords,UserCog,Users,Wallet,type LucideIcon} from 'lucide-react';
 import TeacherManager from './TeacherManager';
 import TuitionCalculator from './TuitionCalculator';
 import TeacherPayroll from './TeacherPayroll';
@@ -7,6 +7,7 @@ import AdminHistoryPanel from './AdminHistoryPanel';
 import AppUserManager from './AppUserManager';
 import AppTemplateManager from './AppTemplateManager';
 import SpeedCheckPanel from './SpeedCheckPanel';
+import GuildNicknamePanel from './GuildNicknamePanel';
 import {createUnsavedGuard} from '../../lib/unsavedGuard';
 import {askDiscard} from './ConfirmDialog';
 
@@ -33,6 +34,7 @@ export default function AdminDashboard({data,request,act,busy,refresh}:Props){
    {id:'payroll',label:'선생님 정산',icon:Wallet,hint:'이번 달 정산·비율'},
    {id:'users',label:'앱 사용자',icon:UserCog,hint:'선생님 권한·이름·탈퇴',adminOnly:true},
    {id:'templates',label:'문자 템플릿',icon:MessageSquareText,hint:'보호자 문자 문구',adminOnly:true},
+   {id:'guild',label:'원정대 별칭',icon:Swords,hint:'학생 별칭 확인·경고',adminOnly:true},
    {id:'history',label:'관리 기록',icon:History,hint:'누가 언제 무엇을 바꿨는지'},
   ]:[]),
   {id:'check',label:'점검',icon:Gauge,hint:'요청 속도 확인'},
@@ -51,6 +53,7 @@ export default function AdminDashboard({data,request,act,busy,refresh}:Props){
   users:<AppUserManager busy={busy} request={request} act={act} refresh={refresh} autoLoad/>,
   templates:<AppTemplateManager busy={busy} request={request} act={act} autoLoad onDirty={markDirty}/>,
   history:<AdminHistoryPanel busy={busy} request={request} act={act} autoLoad/>,
+  guild:<GuildNicknamePanel busy={busy} request={request} act={act} autoLoad/>,
   check:<section className="panel rv"><SpeedCheckPanel/></section>,
  };
  return <div className="admin-dash">

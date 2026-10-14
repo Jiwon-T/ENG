@@ -7,6 +7,7 @@ import {subjects} from './teacherWorkspacePolicy.js';
 import {workspaceInflightRead} from './workspaceInflightRead.js';
 import {admissionEditSchema,admissionEditProperties,admissionFromProperties} from './studentAdmission.js';
 import {writeAppTeacherRow} from './offlineTeacher.js';
+import {ASSIGNMENT_STARTS,resolveStarts,startDayFor,writeAssignmentStart} from './assignmentStarts.js';
 export const CORE_AUTHORITY=DIRECTORY_CORE_AUTHORITY,CORE_COMMANDS='academyCoreCommands';
 const digest=(v:any)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const stateRef=(db:any)=>db.collection(CORE_AUTHORITY).doc('main');
@@ -57,7 +58,10 @@ export async function setCoreTeacherAccess(db:any,actor:any,input:any){
 }
 export async function readCoreProfile(db:any,actor:any,keyInput:any,decode:(page:any)=>any){
  manage(actor);const key=uuid(z.string().uuid().parse(keyInput));await member({get:(r:any)=>r.get()},db,actor,key);
- const r=valid((await refFor(db,'students',key).get()).data(),'students');return {studentKey:key,data:decode({properties:r.fields.properties}),editedAt:stamp(r),pending:null};
+ const r=valid((await refFor(db,'students',key).get()).data(),'students');
+ // The earliest 과목 시작일, offered in 학생 정보 to fill an empty 학원 등록일 (no enrollment row: nothing offered).
+ const e=await enrollmentRow(db,key).catch(()=>null),firstSubjectStart=e?subjects.map(s=>e.row.fields.properties[s+' 시작일']?.date?.start).filter(Boolean).sort()[0]||null:null;
+ return {studentKey:key,data:decode({properties:r.fields.properties}),editedAt:stamp(r),pending:null,firstSubjectStart};
 }
 // Trusted server bridge used by existing report/contact consumers. It creates no
 // account and changes no authorization; callers retain their existing checks.
@@ -108,14 +112,34 @@ async function classRecord(db:any,id:string,allowArchived=false){
  let d=await db.collection('teacherClasses').doc(id).get();if(!d.exists){const q=await db.collection('teacherClasses').where('notionPageId','==',id).limit(2).get();if(q.docs.length!==1)throw Error('CORE_CLASS_MIGRATION_REQUIRED');d=q.docs[0];}
  const r=d.data();if(r.academyId!=='main'||r.archived&&!allowArchived)throw Error('CORE_CLASS_MIGRATION_REQUIRED');return {ref:d.ref,row:r};
 }
+/** One subject's 수강 이력 from the enrollment row's history: 등록, 중단, 재시작 (also with the same teacher), other
+ *  status changes, and 담당 변경. Dates are the 시작일 / 중단일 entered, else the day of the change (Seoul). */
+export function subjectHistory(subject:string,docs:any[],nameOf:(id:string)=>string){
+ const day=(at:number)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date(at)),events:{date:string;kind:string;text:string}[]=[];
+ for(const d of docs){const b=d.before?.properties||{},a=d.after?.properties||{},sb=choice(b[subject]),sa=choice(a[subject]),when=day(d.at||0);
+  const start=a[subject+' 시작일']?.date?.start,end=a[subject+' 중단일']?.date?.start,tb=members(b[subject+' 담당']),ta=members(a[subject+' 담당']);
+  const who=(ids:string[])=>ids.map(nameOf).join(', ');
+  if(sa&&sa!==sb){if(!sb)events.push({date:start||when,kind:'등록',text:ta.length?`담당 ${who(ta)}`:''});else if(sa==='중단')events.push({date:end||when,kind:'중단',text:''});else if(sb==='중단'&&sa==='등록')events.push({date:start||when,kind:'재시작',text:ta.length?`담당 ${who(ta)}`:''});else events.push({date:when,kind:sa,text:''});}
+  const added=ta.filter(id=>!tb.includes(id)),removed=tb.filter(id=>!ta.includes(id));
+  if(d.before&&sb&&sa&&(added.length||removed.length))events.push({date:when,kind:'담당 변경',text:[removed.length?who(removed):'',added.length?who(added):''].filter(Boolean).join(' → ')||''});}
+ return events.sort((x,y)=>x.date.localeCompare(y.date));
+}
 export async function readCoreEnrollment(db:any,actor:any,keyInput:any){
  manage(actor);const key=uuid(z.string().uuid().parse(keyInput));await member({get:(r:any)=>r.get()},db,actor,key);
  const s=valid((await refFor(db,'students',key).get()).data(),'students'),e=(await enrollmentRow(db,key)).row,classes=[];
  // A link to a class that was deleted or can no longer be found is skipped here (and kept as is on save).
  for(const id of members(s.fields.properties['소속반'])){try{classes.push({id,...await classRecord(db,id,true)});}catch(e){if((e as Error).message!=='CORE_CLASS_MIGRATION_REQUIRED')throw e;}}
+ const [storedStarts,studentTransfers]=await Promise.all([db.collection(ASSIGNMENT_STARTS).where('studentKey','==',key).limit(200).get(),db.collection('teacherTransfers').where('studentKey','==',key).limit(200).get()]);
+ // 수강 이력: the enrollment row's history (app edits carry entityId; the first import may carry only notionPageId).
+ const rowId=e.entityId||e.notionPageId,histories=new Map<number,any>();
+ for(const q of await Promise.all([db.collection(DIRECTORY_HISTORY).where('entityId','==',rowId).limit(300).get(),db.collection(DIRECTORY_HISTORY).where('notionPageId','==',rowId).limit(300).get()]))for(const d of q.docs){const h=d.data();if(h.sourceKey===e.sourceKey)histories.set(h.revision||0,h);}
+ const histDocs=[...histories.entries()].sort((a,b)=>a[0]-b[0]).map(([,h])=>h),names=new Map<string,string>();
+ for(const h of histDocs)for(const subject of subjects)for(const id of [...members(h.before?.properties?.[subject+' 담당']),...members(h.after?.properties?.[subject+' 담당'])])if(!names.has(id)){const t=(await refFor(db,'teachers',id).get()).data();names.set(id,t?.fields?name(t):'선생님');}
  const entries=[];for(const subject of subjects){const p=e.fields.properties,teachers=[];
-  for(const id of members(p[subject+' 담당'])){const t=valid((await refFor(db,'teachers',id).get()).data(),'teachers');teachers.push({id,name:name(t)});}
-  entries.push({subject,status:choice(p[subject]),startDate:p[subject+' 시작일']?.date?.start||null,endDate:p[subject+' 중단일']?.date?.start||null,plannedEndDate:p[subject+' 중단 예정일']?.date?.start||null,campus:choice(p[subject+' 캠퍼스'])||null,teachers,
+  for(const id of members(p[subject+' 담당'])){const t=valid((await refFor(db,'teachers',id).get()).data(),'teachers'),uid=t.pointer?.teacherUid||null;
+   const since=uid?resolveStarts([{uid,studentKey:key,subject,subjectStart:p[subject+' 시작일']?.date?.start||null}],storedStarts.docs.map((d:any)=>d.data()),studentTransfers.docs.map((d:any)=>d.data()))[0].since:null;
+   teachers.push({id,name:name(t),uid,since});}
+  entries.push({subject,history:subjectHistory(subject,histDocs,id=>names.get(id)||'선생님'),status:choice(p[subject]),startDate:p[subject+' 시작일']?.date?.start||null,endDate:p[subject+' 중단일']?.date?.start||null,plannedEndDate:p[subject+' 중단 예정일']?.date?.start||null,campus:choice(p[subject+' 캠퍼스'])||null,teachers,
    classes:classes.filter(c=>c.row.subject===subject).map(c=>({id:c.id,name:c.row.name,withdrawalReview:!c.row.archived&&c.row.status==='진행 중'&&c.row.students?.length===1&&uuid(c.row.students[0])===key}))});
  }return {studentKey:key,enrollmentId:e.entityId||e.notionPageId,studentEditedAt:stamp(s),enrollmentEditedAt:stamp(e),subjects:entries,pending:null};
 }
@@ -165,6 +189,8 @@ export async function saveCoreEnrollment(db:any,actor:any,keyInput:any,request:a
   if(projected?.internalStudentId&&projected.internalStudentId!==s.pointer.internalStudentId)throw Error('STUDENT_MAPPING_CONFLICT');
   const retained=classes.filter(c=>classIds.includes(c.id)&&c.row.subject!==input.subject).map(c=>c.id),at=Date.now(),p={...e.fields.properties,[input.subject]:{status:{name:input.status}},[input.subject+' 시작일']:{date:{start:input.startDate}},[input.subject+' 중단일']:{date:input.endDate?{start:input.endDate}:null},[input.subject+' 중단 예정일']:{date:input.plannedEndDate?{start:input.plannedEndDate}:null},...(input.campus!==undefined?{[input.subject+' 캠퍼스']:{select:input.campus?{name:input.campus}:null}}:{}),[input.subject+' 담당']:{relation:teachers.map(id=>({id}))}};
   const next=changed(tx,db,enrollment.ref,e,p,actor.uid,at);
+  const restarted=choice(e.fields.properties[input.subject])==='중단'&&input.status==='등록';
+  if(input.status!=='중단')for(const uid of restarted?teacherUids:toUids)writeAssignmentStart(tx,db,{uid,studentKey:key,subject:input.subject,since:restarted?input.startDate:startDayFor(input.startDate,at),by:actor.uid,at,source:restarted?'restart':'enrollment'});
   const starts=subjects.map(subject=>p[subject+' 시작일']?.date?.start).filter(Boolean).sort();
   changed(tx,db,sr,s,{...s.fields.properties,'소속반':{relation:[...retained,...dead,...input.classIds].map(id=>({id}))},'등록상태':{status:{name:subjects.some(subject=>choice(p[subject])==='등록')?'등록':subjects.some(subject=>choice(p[subject])==='대기')?'대기':'중단'}},'강의명':{multi_select:subjects.filter(subject=>choice(p[subject])==='등록').map(name=>({name}))},...(input.campus!==undefined?{'캠퍼스':{multi_select:[...new Set(subjects.map(subject=>choice(p[subject+' 캠퍼스'])).filter(Boolean))].map(name=>({name}))}}:{}),'수강시작일':{date:starts.length?{start:starts[0]}:null}},actor.uid,at);
   for(const c of classes)if(c.row.subject===input.subject){const wanted=input.classIds.includes(c.id),keys=(c.row.students||[]).filter((id:string)=>uuid(id)!==key);if(wanted)keys.push(key);if(JSON.stringify([...keys].sort())!==JSON.stringify([...(c.row.students||[])].sort()))tx.set(c.ref,{...c.row,students:keys,revision:(c.row.revision||0)+1,updatedAt:at});}
@@ -219,6 +245,7 @@ export async function saveCoreGrant(db:any,actor:any,value:any,expected:number,p
   // A row the app made for an account (선생님 권한 or a link) follows the same way: name and 담당 과목 (Notion-era rows are left alone).
   const appRow=!old.offline&&(old.appTeacherRow||made)?{subjects:value.teacherSubjects??old.subjects??[]}:null;
   if((offlineInfo||appRow)&&teacherRow){const label=offlineInfo?value.workspaceLabel||old.workspaceLabel||'':accountName,list=(offlineInfo||appRow)!.subjects,props=teacherRow.fields.properties;const nextProps={...props,'선생님':{title:[{plain_text:label,text:{content:label}}]},'담당 과목':{multi_select:list.map((name:string)=>({name}))}};if(JSON.stringify(nextProps)!==JSON.stringify(props))changed(tx,db,refFor(db,'teachers',old.notionTeacherPageId),teacherRow,nextProps,actor.uid,at);}
+  for(const s of value.scopes)if(!(old.scopes||[]).some((o:any)=>uuid(o.studentKey)===uuid(s.studentKey)&&o.subject===s.subject)){const e=enrollments.find(x=>x.key===uuid(s.studentKey));writeAssignmentStart(tx,db,{uid:value.uid,studentKey:s.studentKey,subject:s.subject,since:startDayFor(e?.row.fields.properties[s.subject+' 시작일']?.date?.start,at),by:actor.uid,at,source:'grant'});}
   tx.set(ref,{...old,...(offlineInfo||{}),...(appRow||{}),...(made?{notionTeacherPageId:made.rowId,appTeacherRow:true}:{}),scopes:value.scopes,workspaceLabel:value.workspaceLabel||old.workspaceLabel||'',workspaceRole:value.workspaceRole,disabled:false,assignmentRevision:(old.assignmentRevision||0)+1,assignmentSource:'firestore',notionAssignmentStage:'synced',notionSyncRequired:false,lastCoreGrantIntent:intent,...(actor.admin&&value.notionSources?{notionSources:value.notionSources}:{})});
   for(const d of dropped){const afterUids=staff.filter((p:any)=>p.id!==value.uid&&!p.data().disabled&&(p.data().scopes||[]).some((s:any)=>uuid(s.studentKey)===d.key&&s.subject===d.subject)).map((p:any)=>p.id);
    tx.set(db.collection('teacherTransfers').doc(digest(['grant-transfer',intent,d.key,d.subject])),{academyId:'main',studentKey:d.key,subject:d.subject,fromUids:[value.uid],toUids:[],afterUids,reason:value.transferReason,note:value.transferReason==='기타'?String(value.transferNote||'').trim().slice(0,200):'',by:actor.uid,at});}
@@ -254,6 +281,7 @@ export async function linkOfflineTeacher(db:any,actor:any,input:unknown){
   const transfers=new Map<string,any>();for(const field of ['fromUids','toUids','afterUids'])for(const d of (await tx.get(db.collection('teacherTransfers').where(field,'array-contains',v.offlineUid))).docs)transfers.set(d.id,d);
   const rates=db.collection('payrollRates'),offRate=(await tx.get(rates.doc(v.offlineUid))).data(),rate=(await tx.get(rates.doc(v.uid))).data();
   const months=(await tx.get(db.collection('payrollMonths').where('academyId','==','main'))).docs.filter((d:any)=>d.data().adjust?.[v.offlineUid]);
+  const offStarts=(await tx.get(db.collection(ASSIGNMENT_STARTS).where('uid','==',v.offlineUid))).docs;
   const at=Date.now(),label=off.workspaceLabel||target.workspaceLabel||'';
   // The kept row also gets every 담당 과목 (수강 관리 / 원서 read the row, not the profile).
   const rowSubjects=(row.fields.properties['담당 과목']?.multi_select||[]).map((s:any)=>s.name),teaches=[...new Set<string>([...rowSubjects,...(off.subjects||[]),...(target.subjects||[])])];
@@ -273,6 +301,7 @@ export async function linkOfflineTeacher(db:any,actor:any,input:unknown){
    adjust[v.uid]=b?{amount:(b.amount||0)+(a.amount||0),note:[b.note,a.note].filter(Boolean).join(' / ').slice(0,200)}:a;
    const next={...m,adjust,revision:(m.revision||0)+1,updatedAt:at,updatedBy:actor.uid};tx.set(d.ref,next);
    tx.set(db.collection('payrollMonthHistory').doc(`${m.month}:${next.revision}`),{before:m.adjust,after:adjust,by:actor.uid,at,reason:'offline-teacher-link'});}
+  for(const d of offStarts){const r=d.data();tx.delete(d.ref);writeAssignmentStart(tx,db,{uid:v.uid,studentKey:r.studentKey,subject:r.subject,since:r.since,by:actor.uid,at,source:'offline-teacher-link'});}
   return {uid:v.uid,label,alreadyLinked:false};
  });
 }

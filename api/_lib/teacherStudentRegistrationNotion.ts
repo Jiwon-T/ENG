@@ -14,7 +14,7 @@ export function registrationStudentProperties(id:string, value:StudentRegistrati
         '학생':title(studentRegistrationTitle(value)), '학교':rich(value.school), '학년':{select:value.grade?{name:value.grade}:null}, '캠퍼스':{multi_select:[...new Set([...(value.campuses||[]),...value.enrollments.map(row=>row.campus).filter(Boolean) as string[]])].map(name=>({name}))},
         '앱 등록 ID':rich(id), '학생 호칭':rich(value.studentSalutation), '학생연락처':{phone_number:value.studentPhone || null},
         '보호자연락처':{phone_number:value.guardianPhone || null}, '보호자이름':rich(value.guardianName),
-        '수강료':{number:registrationTuitionTotal(value)}, '납부기한':rich(value.paymentDeadline), '등록상태':{status:{name:overall}},
+        '수강료':{number:registrationTuitionTotal(value)}, '납부기한':rich(value.paymentDeadline), '학원 등록일':{date:{start:value.academyStartDate||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date())}}, '등록상태':{status:{name:overall}},
         '강의명':{multi_select:value.enrollments.filter(row=>row.status==='등록').map(row=>({name:row.subject}))},
         ...(classIds.length?{'소속반':{relation:classIds.map(id=>({id}))}}:{}),
         '수강시작일':{date:{start:value.enrollments.map(row=>row.startDate).sort()[0]}},

@@ -86,7 +86,7 @@ export async function signUpWithEmail(email: string, password: string) {
   } catch (error: any) {
     // Only log unexpected errors
     if (error?.code !== 'auth/email-already-in-use') {
-      console.error('Error signing up helper:', error);
+      console.error('Error signing up helper:', error?.code || 'unknown'); // the code only: auth errors can carry the email
     }
     throw error;
   }
@@ -103,7 +103,7 @@ export async function signInWithEmail(email: string, password: string) {
       error?.code !== 'auth/wrong-password' &&
       error?.code !== 'auth/invalid-credential'
     ) {
-      console.error('Error signing in helper:', error);
+      console.error('Error signing in helper:', error?.code || 'unknown');
     }
     throw error;
   }
@@ -113,7 +113,7 @@ export async function resetPassword(email: string) {
   try {
     await sendPasswordResetEmail(auth, email);
   } catch (error: any) {
-    console.error('Error resetting password helper:', error);
+    console.error('Error resetting password helper:', error?.code || 'unknown');
     throw error;
   }
 }
@@ -124,12 +124,7 @@ export async function signIn() {
     // Profile sync will be handled by onAuthStateChanged in App.tsx
     return result.user;
   } catch (error: any) {
-    console.error('Firebase Google Login Error:', {
-      code: error.code,
-      message: error.message,
-      userAgent: navigator.userAgent,
-      isIframe: window.self !== window.top
-    });
+    console.error('Firebase Google Login Error:', { code: error?.code, isIframe: window.self !== window.top });
     throw error;
   }
 }

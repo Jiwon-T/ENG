@@ -64,7 +64,7 @@ async function reportReview(db:any,actor:any,studentKey:string,audience:'parent'
     return {...snapshot,reports:paged.records,reportTotal:paged.total,reportPage:paged.page,reportPages:paged.pages};
 }
 /** Only the picked emoji icon and pet name/level leave the user document; photo URLs and anything else stay private. */
-function studentLook(u:any){if(!u)return null;const icon=typeof u.photoURL==='string'&&u.photoURL.length<=8&&!/^https?:/i.test(u.photoURL)?u.photoURL:null;const p=u.petStats,pet=p&&typeof p.petName==='string'&&p.petName&&p.petName!=='친구가 필요해요'?{name:String(p.petName).slice(0,20),level:Number.isFinite(p.highestLevel)?Number(p.highestLevel):null,character:typeof p.character==='string'?p.character.slice(0,30):null}:null;return icon||pet?{icon,pet}:null;}
+function studentLook(u:any){if(!u)return null;const icon=typeof u.photoURL==='string'&&u.photoURL.length<=8&&!/^https?:/i.test(u.photoURL)?u.photoURL:null;const p=u.petStats,pet=p&&typeof p.petName==='string'&&p.petName&&p.petName!=='친구가 필요해요'?{name:String(p.petName).slice(0,20),level:Number.isFinite(p.highestLevel)?Number(p.highestLevel):null,character:typeof p.character==='string'?p.character.slice(0,30):null,count:Number.isFinite(p.petCount)?Math.max(1,Math.min(6,Math.floor(p.petCount))):1}:null;return icon||pet?{icon,pet}:null;}
 
 /** One page of this teacher's saved lessons (newest first). Shared by drafts-page and the lesson bootstrap. */
 async function readDraftsPage(db:any,actor:any,pageNo:number,sizeInput:number,force:boolean){
@@ -80,6 +80,7 @@ async function readDraftsPage(db:any,actor:any,pageNo:number,sizeInput:number,fo
 export default async function handler(req: IncomingMessage,res:ServerResponse){
     const params=new URL(req.url||'','http://localhost').searchParams;
     if(params.get('__cron')==='lesson-migration')return handleLessonMigrationCron(req,res);
+    if(params.get('__hook')==='new-signups')return handleSignupHook(req,res);
     return handleWorkspace(req,res);
 }
 /** Daily scheduler entry (Vercel Cron sends Authorization: Bearer CRON_SECRET). The path keeps its old name so the cron setting needs no change. */
@@ -93,6 +94,14 @@ export async function handleLessonMigrationCron(req: IncomingMessage,res:ServerR
         try{trash=await purgeExpiredLessonTrash(db);}catch(e:any){console.warn('LESSON_TRASH_PURGE_FAILED',{error:String(e?.message||'').slice(0,80)});return sendJson(res,500,{ok:false,error:'LESSON_TRASH_PURGE_FAILED',retry:'next-daily-run'});}
         return sendJson(res,200,{ok:true,trashPurged:trash.purged,more:Boolean(trash.more)});}
     catch(error:any){const result=workspaceError(error,'lesson-migration-cron');console.warn('LESSON_MIGRATION_CRON_FAILED',{error:result.body.error,diagnosticId:result.body.diagnosticId});return sendJson(res,result.status,result.body);}
+}
+/** 새 가입자 알림 for Make (Authorization: Bearer MAKE_HOOK_SECRET, at least 16 characters; unset = off). */
+export async function handleSignupHook(req: IncomingMessage,res:ServerResponse,initialize=getFirebaseAdmin){
+    const secret=process.env.MAKE_HOOK_SECRET||'',header=req.headers.authorization||'';
+    if(req.method!=='GET')return sendJson(res,405,{ok:false,error:'METHOD_NOT_ALLOWED'});
+    if(secret.length<16||!timingSafeCompare(header,'Bearer '+secret))return sendJson(res,401,{ok:false,error:'UNAUTHORIZED'});
+    try{const {db}=initialize();const {newSignups}=await import('../_lib/signupHook.js');return sendJson(res,200,{ok:true,...await newSignups(db)});}
+    catch(error:any){console.warn('SIGNUP_HOOK_FAILED',{code:typeof error?.code==='string'||typeof error?.code==='number'?String(error.code).slice(0,40):'unknown'});return sendJson(res,500,{ok:false,error:'SIGNUP_HOOK_FAILED'});} // the code only: messages may carry personal data
 }
 export async function handleWorkspace(req: IncomingMessage, res: ServerResponse, actorProvider=teacherActor) {
     let failureStage = 'authentication';
@@ -120,6 +129,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(action==='lesson-conflict')throw Error('LESSON_APP_ACTIVE');
             if(action==='messages'){failureStage='message-read';return sendJson(res,200,{ok:true,...await (await import('../_lib/teacherMessages.js')).readTeacherMessages(db,actor,params.get('studentKey'),params.get('subject'))});}
             if(action==='student-enrollment'){failureStage='student-enrollment-read';return sendJson(res,200,{ok:true,record:await readStudentEnrollment(db,actor,params.get('studentKey'))});}
+            if(action==='student-party'){failureStage='pet-party';const {readStudentParty}=await import('../_lib/teacherPetParty.js');return sendJson(res,200,{ok:true,...await readStudentParty(db,actor,params.get('studentKey'))});}
+            if(action==='guild-nicknames'){failureStage='pet-party';const {listGuildNicknames}=await import('../_lib/teacherPetParty.js');return sendJson(res,200,{ok:true,...await listGuildNicknames(db,actor)});}
             if(action==='student-school'){failureStage='student-school';const {readStudentSchool}=await import('../_lib/studentSchool.js');return sendJson(res,200,{ok:true,...await readStudentSchool(db,actor,params.get('studentKey'))});}
             if(action==='student-admission'){failureStage='student-admission-read';if(!await coreActive(db,actor))throw Error('CORE_NOT_READY');return sendJson(res,200,{ok:true,record:await readCoreAdmission(db,actor,params.get('studentKey'))});}
             if(action==='student-profile'){failureStage='student-profile-read';return sendJson(res,200,{ok:true,record:await readStudentProfile(db,actor,params.get('studentKey'))});}
@@ -145,6 +156,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(action==='admin-history'){failureStage='admin-history';const {readAdminHistory}=await import('../_lib/adminHistory.js');return sendJson(res,200,{ok:true,...await readAdminHistory(db,actor,params.get('group'))});}
             if(action==='teacher-transfers'){failureStage='teacher-transfers';const {readTeacherTransfers}=await import('../_lib/teacherTransfers.js');return sendJson(res,200,{ok:true,...await readTeacherTransfers(db,actor)});}
             if(action==='removed-users'){failureStage='app-users';const {listRemovedUsers}=await import('../_lib/appUsers.js');return sendJson(res,200,{ok:true,...await listRemovedUsers(db,actor)});}
+            if(action==='link-suggestions'){failureStage='link-suggestions';const {readLinkSuggestions}=await import('../_lib/linkSuggestions.js');return sendJson(res,200,{ok:true,...await readLinkSuggestions(db,actor)});}
             if(action==='app-users'){failureStage='app-users';const {listAppUsers}=await import('../_lib/appUsers.js');return sendJson(res,200,{ok:true,...await listAppUsers(db,actor)});}
             if(action==='archived-lessons'){failureStage='lesson-restore';return sendJson(res,200,{ok:true,appMode:await lessonAppActive(db,actor),...(await lessonAppActive(db,actor)?await (await import('../_lib/appLessonRestore.js')).listArchivedAppLessons(db,actor):{records:[]})});}
             if (action === 'academic-records'||action==='academic-records-fast') {
@@ -284,6 +296,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                     for(const s of students as any[])if(s.linkedFirebaseUid&&looks.get(s.linkedFirebaseUid))s.look=looks.get(s.linkedFirebaseUid);}
                 // A student's account UID is for the admin and principal only; teachers just see whether one is linked.
                 for(const s of students as any[]){s.accountLinked=Boolean(s.linkedFirebaseUid);if(!actor.admin&&!actor.principal)s.linkedFirebaseUid=null;}
+                // 담당 시작일 of the signed-in teacher's own students (학생 관리 summary).
+                if(needs('students')&&(actor.scopes||[]).length){const {myAssignmentStarts}=await import('../_lib/assignmentStarts.js');const own=(students as any[]).map(s=>({...s,subjects:(s.subjects||[]).filter((x:any)=>actor.scopes.some((sc:any)=>sc.studentKey===s.studentKey&&sc.subject===x.subject))}));const mine=await myAssignmentStarts(db,actor.uid,own).catch(()=>new Map());for(const s of students as any[])if(mine.get(s.studentKey))s.mySince=mine.get(s.studentKey);}
                 const records = drafts.docs.map(d => ({ id: d.id, ...d.data() }));
                 // App-only records are published in the same transaction; nothing waits on a Notion reflection.
                 const scheduleRecords = schedules.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -389,9 +403,12 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         if(body.action==='create-link-code'){failureStage='student-link-code';const {createLinkCode}=await import('../_lib/studentLinkCodes.js');const {action,...input}=body;return sendJson(res,200,{ok:true,...await createLinkCode(db,actor,input)});}
         if(body.action==='removed-user-signin'){failureStage='app-user-remove';const {setRemovedSignIn}=await import('../_lib/appUsers.js');const {action,...input}=body;return sendJson(res,200,{ok:true,...await setRemovedSignIn(db,actor,input,getFirebaseAdmin().auth)});}
         if(body.action==='save-online-evaluation'){failureStage='online-evaluation';const {saveOnlineEvaluation}=await import('../_lib/teacherOnlineLearning.js');const {action,...input}=body;return sendJson(res,200,{ok:true,...await saveOnlineEvaluation(db,actor,input)});}
+        if(body.action==='guild-warn'){failureStage='pet-party';const {warnGuildNickname}=await import('../_lib/teacherPetParty.js');const {action,...input}=body;return sendJson(res,200,{ok:true,...await warnGuildNickname(db,actor,input)});}
         if(body.action==='set-user-name'){failureStage='app-user-name';const {setAppUserName}=await import('../_lib/appUsers.js');const {action,...input}=body;const result=await setAppUserName(db,actor,input);teacherReadCache.clear();return sendJson(res,200,{ok:true,...result});}
         if(body.action==='set-user-role'){failureStage='app-user-role';const {setAppUserRole}=await import('../_lib/appUsers.js');const {action,...input}=body;const result=await setAppUserRole(db,actor,input);invalidateTeacherMutation('grant');teacherReadCache.clear();return sendJson(res,200,{ok:true,...result});}
         if(body.action==='teacher-access'){failureStage='teacher-access';const {setCoreTeacherAccess}=await import('../_lib/academyCore.js');const {action,...input}=body;const result=await setCoreTeacherAccess(db,actor,input);invalidateTeacherMutation('grant');teacherReadCache.clear();return sendJson(res,200,{ok:true,...result});}
+        if(body.action==='set-assignment-start'){failureStage='assignment-start';const {setAssignmentStart}=await import('../_lib/assignmentStarts.js');const {action,...input}=body;const result=await setAssignmentStart(db,actor,input);invalidateTeacherMutation('grant');teacherReadCache.clear();return sendJson(res,200,{ok:true,...result});}
+        if(body.action==='accept-link-suggestion'||body.action==='dismiss-link-suggestion'){failureStage='link-suggestions';const {acceptLinkSuggestion,dismissLinkSuggestion}=await import('../_lib/linkSuggestions.js');const {action,...input}=body;const result=action==='accept-link-suggestion'?await acceptLinkSuggestion(db,actor,input):await dismissLinkSuggestion(db,actor,input);invalidateTeacherMutation('grant');teacherReadCache.clear();return sendJson(res,200,{ok:true,...result});}
         if(body.action==='link-offline-teacher'){failureStage='offline-teacher-link';const {linkOfflineTeacher}=await import('../_lib/academyCore.js');const {action,...input}=body;const result=await linkOfflineTeacher(db,actor,input);invalidateTeacherMutation('grant');teacherReadCache.clear();return sendJson(res,200,{ok:true,...result});}
         if(body.action==='create-offline-teacher'){failureStage='offline-teacher';const {createOfflineTeacher}=await import('../_lib/offlineTeacher.js');const {action,...input}=body;const result=await createOfflineTeacher(db,actor,input);invalidateTeacherMutation('grant');teacherReadCache.clear();return sendJson(res,200,{ok:true,...result});}
         if (body.action === 'grant') {

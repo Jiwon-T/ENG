@@ -12,15 +12,16 @@ export const studentProfileSchema=z.object({
     displayName:z.string().trim().min(1).max(200),school:z.string().trim().max(80),grade:z.enum(['',...registrationGrades]),
     studentPhone:phone,guardianPhone:phone,guardianName:z.string().trim().max(80),studentSalutation:z.string().trim().max(80),
     tuition:z.number().int().nonnegative().max(100_000_000).nullable(),paymentDeadline:z.string().trim().max(200),
+    academyStartDate:z.union([z.literal(''),z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).default(''),
 }).strict();
-const names:Record<keyof StudentProfileInput,string>={displayName:'학생',school:'학교',grade:'학년',studentPhone:'학생연락처',guardianPhone:'보호자연락처',guardianName:'보호자이름',studentSalutation:'학생 호칭',tuition:'수강료',paymentDeadline:'납부기한'};
+const names:Record<keyof StudentProfileInput,string>={displayName:'학생',school:'학교',grade:'학년',studentPhone:'학생연락처',guardianPhone:'보호자연락처',guardianName:'보호자이름',studentSalutation:'학생 호칭',tuition:'수강료',paymentDeadline:'납부기한',academyStartDate:'학원 등록일'};
 const rich=(v:string)=>({rich_text:v?[{text:{content:v}}]:[]});
 export function profileFromPage(page:any):StudentProfileInput {
     const p=page.properties || {};
-    return studentProfileSchema.parse({displayName:(p['학생']?.title || []).map((t:any)=>t.plain_text ?? t.text?.content ?? '').join(''),school:registrationText(p['학교']),grade:p['학년']?.select?.name || '',studentPhone:p['학생연락처']?.phone_number || '',guardianPhone:p['보호자연락처']?.phone_number || '',guardianName:registrationText(p['보호자이름']),studentSalutation:registrationText(p['학생 호칭']),tuition:p['수강료']?.number ?? null,paymentDeadline:registrationText(p['납부기한'])}) as StudentProfileInput;
+    return studentProfileSchema.parse({displayName:(p['학생']?.title || []).map((t:any)=>t.plain_text ?? t.text?.content ?? '').join(''),school:registrationText(p['학교']),grade:p['학년']?.select?.name || '',studentPhone:p['학생연락처']?.phone_number || '',guardianPhone:p['보호자연락처']?.phone_number || '',guardianName:registrationText(p['보호자이름']),studentSalutation:registrationText(p['학생 호칭']),tuition:p['수강료']?.number ?? null,paymentDeadline:registrationText(p['납부기한']),academyStartDate:p['학원 등록일']?.date?.start||''}) as StudentProfileInput;
 }
 export function profileProperties(data:StudentProfileInput,base:StudentProfileInput) {
-    const all:any={'학생':{title:[{text:{content:data.displayName}}]},'학교':rich(data.school),'학년':{select:data.grade?{name:data.grade}:null},'학생연락처':{phone_number:data.studentPhone || null},'보호자연락처':{phone_number:data.guardianPhone || null},'보호자이름':rich(data.guardianName),'학생 호칭':rich(data.studentSalutation),'수강료':{number:data.tuition},'납부기한':rich(data.paymentDeadline)};
+    const all:any={'학생':{title:[{text:{content:data.displayName}}]},'학교':rich(data.school),'학년':{select:data.grade?{name:data.grade}:null},'학생연락처':{phone_number:data.studentPhone || null},'보호자연락처':{phone_number:data.guardianPhone || null},'보호자이름':rich(data.guardianName),'학생 호칭':rich(data.studentSalutation),'수강료':{number:data.tuition},'납부기한':rich(data.paymentDeadline),'학원 등록일':{date:data.academyStartDate?{start:data.academyStartDate}:null}};
     return Object.fromEntries((Object.keys(names) as (keyof StudentProfileInput)[]).filter(key=>data[key]!==base[key]).map(key=>[names[key],all[names[key]]]));
 }
 function assertPage(page:any,key:string) {

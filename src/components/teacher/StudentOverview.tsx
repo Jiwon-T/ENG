@@ -55,7 +55,7 @@ export default function StudentOverview({students,intakeCount,today=todayKst(),o
     </div>
     <div className="so-panel so-pets">
      <div className="so-panel-head"><h3><Trophy size={15} aria-hidden="true"/>앱 활동 · 펫 랭킹</h3></div>
-     {o.pets.length?<ol>{o.pets.map((p,i)=><li key={p.studentKey}><span className={`so-rank r${i+1}`}>{i+1}</span><span className="so-pet-art" aria-hidden="true">{p.pet.character?<PetCharacter character={p.pet.character} stage={petStage(p.pet.level) as any}/>:'🐾'}</span><span className="so-pet-who"><strong>{p.name}</strong><small>{p.pet.name}</small></span><b>Lv.{p.pet.level}</b></li>)}</ol>:<p className="so-note">앱에서 펫을 키우는 학생이 아직 없어요.</p>}
+     {o.pets.length?<ol>{o.pets.map((p,i)=><li key={p.studentKey}><span className={`so-rank r${i+1}`}>{i+1}</span><span className="so-pet-art" aria-hidden="true">{p.pet.character?<PetCharacter character={p.pet.character} stage={petStage(p.pet.level) as any} portrait/>:'🐾'}</span><span className="so-pet-who"><strong>{p.name}</strong><small>{p.pet.name}</small></span><b>Lv.{p.pet.level}{p.pet.count>1&&` · ${p.pet.count}마리`}</b></li>)}</ol>:<p className="so-note">앱에서 펫을 키우는 학생이 아직 없어요.</p>}
     </div>
    </div>
   </div>

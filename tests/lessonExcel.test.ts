@@ -18,7 +18,7 @@ test('export naming and real calendar validation match the reference',()=>{
 test('cells preserve homework, optional exam scope, special notes and no-class meaning',()=>{
  const r=record('a','18:50'),cells=lessonExcelCells(r);
  assert.equal(cells[0],'1용죽 이현준');assert.match(cells[3],/과제: 숙제\n시험범위: 1과/);assert.equal(cells[5],'상담');
- r.data.classSession='없음';assert.equal(lessonExcelCells(r)[1],'수업 없음');
+ r.data.classSession='없음';assert.equal(lessonExcelCells(r)[1],'.','no lesson: a dot');
 });
 test('real workbook preserves reference styles, literal strings, all rows and chronological order',async()=>{
  const template=await fs.readFile(new URL('../public/templates/lesson-log.xlsx',import.meta.url));
@@ -73,4 +73,8 @@ test('excel: row height follows Excel\'s word wrap, so rows are tall enough for 
  assert.equal(excelTextLines('가나다라마바 가나다라마바 가나다라마바 가나다라마바',24,14),4);
  assert.equal(excelTextLines('한 줄\n두 줄\n\n네 줄',40,14),4);
  assert.ok(lessonExcelRowHeight(['','','','23년도, 24년도, 25년도 실전 문제 풀이 연습\n과제: 오답 고쳐 오기, 교과서 변형 문제 1회씩 풀어오기\n내신 대비 테스트: 42/55','',''])>=4*21);
+});
+test('excel: a wrapped cell gets one spare line so the last line is never cut off',()=>{
+ const two=['','','','첫째 줄\n둘째 줄','',''],one=['','','','한 줄','',''];
+ assert.equal(lessonExcelRowHeight(one),31);assert.equal(lessonExcelRowHeight(two),3*21+10);
 });

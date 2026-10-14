@@ -163,7 +163,7 @@ describe('Student Account Linking and Ownership Protection Tests', () => {
       // 학생 본인은 오직 화이트리스트 필드만 업데이트 가능
       assert.ok(
         rules.includes(
-          "request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'alias', 'photoURL', 'isNameSet', 'petStats', 'updatedAt'])"
+          "request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'alias', 'photoURL', 'isNameSet', 'updatedAt'])"
         ),
         'Student update must use affectedKeys().hasOnly whitelist'
       );
@@ -180,8 +180,9 @@ describe('Student Account Linking and Ownership Protection Tests', () => {
       );
     });
 
-    it('9. Existing student profile fields (petStats, alias, photoURL, isNameSet) remain allowed', () => {
-      const allowedProfileFields = ['name', 'alias', 'photoURL', 'isNameSet', 'petStats', 'updatedAt'];
+    it('9. Student profile fields (alias, photoURL, isNameSet) remain allowed; petStats is written only by the server', () => {
+      assert.ok(!/hasOnly\(\['name', 'alias', 'photoURL', 'isNameSet', 'petStats'/.test(rules), 'students must not write petStats themselves');
+      const allowedProfileFields = ['name', 'alias', 'photoURL', 'isNameSet', 'updatedAt'];
       for (const field of allowedProfileFields) {
         assert.ok(
           rules.includes(`'${field}'`),

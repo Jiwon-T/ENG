@@ -4,6 +4,7 @@ import {assertRegistrationAccess,studentRegistrationSchema,studentRegistrationTi
 import {registrationStudentProperties,registrationEnrollmentProperties} from './teacherStudentRegistrationNotion.js';
 import {DIRECTORY_ROWS,DIRECTORY_HISTORY,directoryRowKey,directorySourceKey} from './academyDirectorySource.js';
 import {hashStudentKey,generateInternalStudentId} from './security.js';
+import {writeAssignmentStart} from './assignmentStarts.js';
 const digest=(value:any)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 /** Finalize one saved new-student intake. No Notion dependency or account creation. */
 export async function commitAppStudentRegistration(db:any,actor:any,idInput:unknown,revisionInput:unknown){
@@ -17,7 +18,7 @@ export async function commitAppStudentRegistration(db:any,actor:any,idInput:unkn
   if(current.sourceMode==='firestore'&&current.studentKey&&current.syncStatus==='synced')return {id,revision,syncStatus:'synced',studentKey:current.studentKey,sourceMode:'firestore',alreadySynced:true};
   if(current.notionStudentPageId||current.studentCreateAttempted||current.enrollmentCreateAttempted||current.syncLeaseUntil>Date.now()||['syncing','uncertain','synced'].includes(current.syncStatus))throw Error('REGISTRATION_SOURCE_CONFLICT');
   const value=studentRegistrationSchema.parse(current.data);if(value.purpose!=='new'||value.intakeStage==='consultation')throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
-  const teacherIds:Record<string,string>={},teacherUpdates=new Map<string,any>(),classUpdates=new Map<string,any>();
+  const teacherIds:Record<string,string>={},teacherUpdates=new Map<string,any>(),classUpdates=new Map<string,any>(),starts:{uid:string;subject:string;since:string}[]=[];
   for(const enrollment of value.enrollments){
    let teacherUid=enrollment.teacherUid;
    if(teacherUid){
@@ -29,7 +30,7 @@ export async function commitAppStudentRegistration(db:any,actor:any,idInput:unkn
     const teacher=(await tx.get(db.collection(DIRECTORY_ROWS).doc(directoryRowKey('teachers',profile.notionTeacherPageId)))).data(),p=teacher?.fields?.properties;
     if(!teacher||teacher.academyId!=='main'||teacher.fields.archived||teacher.issue||teacher.pointer?.teacherUid!==teacherUid||(p['상태']?.select?.name||p['상태']?.status?.name)!=='재직'||!(p['담당 과목']?.multi_select||[]).some((s:any)=>s.name===enrollment.subject))throw Error('INVALID_TEACHER');
     teacherIds[enrollment.subject]=profile.notionTeacherPageId;
-    const previous=teacherUpdates.get(teacherUid)?.profile||profile,scopes=[...(previous.scopes||[]),{studentKey,subject:enrollment.subject}];teacherUpdates.set(teacherUid,{ref:pr,profile:{...previous,scopes}});
+    const previous=teacherUpdates.get(teacherUid)?.profile||profile,scopes=[...(previous.scopes||[]),{studentKey,subject:enrollment.subject}];teacherUpdates.set(teacherUid,{ref:pr,profile:{...previous,scopes}});starts.push({uid:teacherUid,subject:enrollment.subject,since:enrollment.startDate});
    }
    for(const classId of enrollment.classIds){
     let found=await tx.get(db.collection('teacherClasses').doc(classId));if(!found.exists){const result=await tx.get(db.collection('teacherClasses').where('notionPageId','==',classId).limit(2));if(result.docs.length!==1)throw Error('CORE_CLASS_MIGRATION_REQUIRED');found=result.docs[0];}
@@ -51,6 +52,7 @@ export async function commitAppStudentRegistration(db:any,actor:any,idInput:unkn
   tx.set(member,{academyId:'main',studentKey,internalStudentId,disabled:false,origin:'app',sourceMode:'firestore',createdAt:at,updatedAt:at});
   tx.set(projected,{internalStudentId,studentKey,sourceUpdatedAt:stamp,removed:false,subjects:value.enrollments.map(e=>({subject:e.subject,status:e.status,startAt:e.startDate,endAt:e.endDate,campus:e.campus||null})),appSource:'firestore',notionPageId:null});
   for(const update of teacherUpdates.values())tx.set(update.ref,{...update.profile,assignmentRevision:(update.profile.assignmentRevision||0)+1,assignmentSource:'firestore'});
+  for(const s of starts)writeAssignmentStart(tx,db,{...s,studentKey,by:actor.uid,at,source:'registration'}); // 담당 시작일 = 과목 시작일
   for(const update of classUpdates.values()){const next={...update.row,students:[...new Set([...(update.row.students||[]),studentKey])],revision:(update.row.revision||0)+1,updatedAt:at};tx.set(update.ref,next);tx.set(db.collection('academyManagedHistory').doc(`teacherClasses:${update.ref.id}:${next.revision}`),{before:update.row,after:next,by:actor.uid,at,reason:'app-registration'});}
   tx.set(ref,{...current,studentKey,appEnrollmentId:enrollmentId,internalStudentId,sourceMode:'firestore',notionStudentPageId:null,studentSaved:true,enrollmentSaved:true,syncStatus:'synced',syncError:null,updatedAt:at});
   return {id,revision,syncStatus:'synced',studentKey,sourceMode:'firestore',alreadySynced:false};

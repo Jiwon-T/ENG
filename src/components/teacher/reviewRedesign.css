@@ -1085,3 +1085,75 @@
 .teacher-workspace .otl{display:grid;gap:4px;padding-top:10px;border-top:1px solid #e2e8f0}
 .teacher-workspace .otl-row{display:flex;gap:6px}
 .teacher-workspace .otl-row>select{flex:1;min-width:0}
+/* 연결 제안 (앱 사용자) */
+.teacher-workspace .lsg{display:grid;gap:6px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--workspace-brand-dot);border-radius:12px;background:var(--workspace-brand-bg)}
+.teacher-workspace .lsg-title{display:flex;align-items:center;gap:6px;margin:0;font-size:13px;font-weight:700;color:var(--workspace-brand-fg)}
+.teacher-workspace .lsg-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 10px;border-radius:8px;background:#fff;font-size:13px}
+.teacher-workspace .lsg-who{flex:1;min-width:200px}
+.teacher-workspace .lsg-who small{color:#64748b;font-size:12px}
+.teacher-workspace .lsg-kind{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#4338ca}
+.teacher-workspace .lsg-kind.is-teacher{background:#fef3c7;color:#92400e}
+.teacher-workspace .lsg-partial{margin-left:6px;font-style:normal;font-size:11px;font-weight:600;color:#b45309}
+.teacher-workspace .lsg-unclear{display:flex;align-items:center;gap:6px;margin:0;padding:6px 10px;border-radius:8px;background:#fff;font-size:12px;color:#64748b}
+/* 진행 중: a small ▷ dot on the same line as 정규 / 보강 / 테스트 (the words are its tooltip and screen-reader text). */
+.teacher-workspace .today-time-head .today-now{flex:none;justify-content:center;width:18px;height:18px;padding:0 0 0 1px;box-sizing:border-box}
+.teacher-workspace .today-time-head .today-now>svg{fill:currentColor}
+/* 앱 사용자 rows: one chip, one main button, ⋯ (이름 바꾸기 · 탈퇴). */
+.teacher-workspace .gs-row.app-user-row{grid-template-columns:minmax(0,1fr) auto 132px 32px;gap:8px}
+.teacher-workspace .aur-chip{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.teacher-workspace .aur-chip.is-student{background:#f1f5f9;color:#475569}
+.teacher-workspace .aur-chip.is-linked{background:#e0f2fe;color:#075985}
+.teacher-workspace .aur-chip.is-teacher{background:#dcfce7;color:#166534}
+.teacher-workspace .aur-chip.is-off{background:#f1f5f9;color:#94a3b8}
+.teacher-workspace .aur-chip.is-admin{background:#ede9fe;color:#5b21b6}
+.teacher-workspace .aur-main{display:flex;justify-content:flex-end}
+.teacher-workspace .aur-button{display:inline-flex;align-items:center;justify-content:center;gap:4px;width:100%;height:30px;min-height:30px;padding:0 10px;border:1px solid #d7dee8;border-radius:9px;background:#fff;color:#334155;font-size:12px;font-weight:600;white-space:nowrap;box-shadow:none}
+.teacher-workspace .aur-button:hover:not(:disabled){border-color:var(--workspace-brand-dot);background:var(--workspace-brand-bg);color:var(--workspace-brand-fg)}
+.teacher-workspace .aur-more{position:relative}
+.teacher-workspace .aur-more>summary{list-style:none;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;color:#64748b;cursor:pointer}
+.teacher-workspace .aur-more>summary::-webkit-details-marker{display:none}
+.teacher-workspace .aur-more>summary:hover,.teacher-workspace .aur-more[open]>summary{background:#f1f5f9}
+.teacher-workspace .aur-menu{position:absolute;right:0;top:34px;z-index:5;display:grid;gap:2px;min-width:180px;padding:4px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.12)}
+.teacher-workspace .aur-menu>button{display:flex;align-items:center;gap:6px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:none;color:#334155;font-size:13px;font-weight:500;text-align:left;box-shadow:none}
+.teacher-workspace .aur-menu>button:hover:not(:disabled){background:#f8fafc}
+.teacher-workspace .aur-menu>button.is-danger{color:#be123c}
+.teacher-workspace .aur-menu>p{margin:2px 0 0;padding:6px 10px;border-top:1px solid #f1f5f9;font-size:12px;color:#64748b}
+@media (max-width:560px){.teacher-workspace .gs-row.app-user-row{grid-template-columns:minmax(0,1fr) auto 32px}.teacher-workspace .app-user-row .aur-main{grid-column:1/-1;grid-row:2;justify-content:flex-start}.teacher-workspace .app-user-row .aur-main>.aur-button{width:auto}}
+/* 학원 등록일: 원서 (today by default) and 학생 정보 (a small fill button while empty). */
+.teacher-workspace .adm-academy-date{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:13px;font-weight:600;color:#475569}
+.teacher-workspace .adm-academy-date input{width:auto;min-height:34px;margin:0}
+.teacher-workspace .profile-academy-date{display:grid;gap:4px;align-content:start}
+.teacher-workspace .profile-fill-date{justify-self:start;display:inline-flex;align-items:center;gap:4px;min-height:26px;height:26px;padding:0 10px;border:1px dashed var(--workspace-brand-dot);border-radius:999px;background:var(--workspace-brand-bg);color:var(--workspace-brand-fg);font-size:12px;font-weight:600;box-shadow:none}
+.teacher-workspace .profile-fill-date small{font-weight:500;opacity:.8}
+/* 담당 시작일 chip (학생 관리 summary, 수강 관리) with a small date box when it can be corrected. */
+.teacher-workspace .asn-since{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 9px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:12px;font-weight:500;white-space:nowrap;list-style:none}
+.teacher-workspace .asn-since b{font-weight:700;margin-right:2px}
+.teacher-workspace .asn-edit{position:relative;display:inline-block}
+.teacher-workspace .asn-edit>summary{cursor:pointer}
+.teacher-workspace .asn-edit>summary::-webkit-details-marker{display:none}
+.teacher-workspace .asn-edit>summary:hover,.teacher-workspace .asn-edit[open]>summary{background:var(--workspace-brand-bg);color:var(--workspace-brand-fg)}
+.teacher-workspace .asn-pop{position:absolute;left:0;top:30px;z-index:6;display:flex;align-items:flex-end;gap:6px;padding:8px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.12)}
+.teacher-workspace .asn-pop label{display:grid;gap:2px;font-size:12px;font-weight:600;color:#475569}
+.teacher-workspace .asn-pop input{min-height:32px;margin:0}
+.teacher-workspace .asn-pop .small-button{flex:none;white-space:nowrap;min-height:32px}
+.teacher-workspace .enr-since{display:flex;flex-wrap:wrap;gap:6px}
+/* 수강 이력 (수강 관리): folded, only when there is more than the first 등록. */
+.teacher-workspace .enr-history{margin:4px 0 8px;font-size:12px}
+.teacher-workspace .enr-history>summary{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;background:#f1f5f9;color:#475569;font-weight:600;cursor:pointer;list-style:none}
+.teacher-workspace .enr-history>summary::-webkit-details-marker{display:none}
+.teacher-workspace .enr-history>summary small{color:#94a3b8;font-weight:700}
+.teacher-workspace .enr-history[open]>summary{background:var(--workspace-brand-bg);color:var(--workspace-brand-fg)}
+.teacher-workspace .enr-history ol{margin:8px 0 0;padding:0 0 0 12px;list-style:none;border-left:2px solid #e2e8f0;display:grid;gap:6px}
+.teacher-workspace .enr-history li{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.teacher-workspace .enr-history time{font-variant-numeric:tabular-nums;color:#94a3b8;min-width:78px}
+.teacher-workspace .enr-history b{font-weight:700}
+.teacher-workspace .enr-history b.is-start{color:#0f766e}.teacher-workspace .enr-history b.is-stop{color:#b91c1c}.teacher-workspace .enr-history b.is-move{color:#7c3aed}
+.teacher-workspace .enr-history span{color:#475569}
+/* 연결 제안: same-name students side by side */
+.teacher-workspace .lsg-pick{display:grid;gap:4px;padding:8px 10px;border-radius:8px;background:#fff}
+.teacher-workspace .lsg-pick-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0;font-size:13px}
+.teacher-workspace .lsg-pick-head small{color:#64748b;font-size:12px}
+.teacher-workspace .lsg-choice{padding:6px 8px;border:1px solid #eef2f6}
+.teacher-workspace .lsg-dates{display:block;font-size:11px;color:#94a3b8}
+.teacher-workspace .lsg-near{font-style:normal;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:#fef3c7;color:#92400e;white-space:nowrap}
+.teacher-workspace .lsg-pick-foot{display:flex;align-items:center;gap:8px;margin:2px 0 0;font-size:12px;color:#64748b}

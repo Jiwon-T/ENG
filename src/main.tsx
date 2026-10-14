@@ -1,9 +1,13 @@
 import {StrictMode, Suspense, lazy} from 'react';
 import {createRoot} from 'react-dom/client';
 import { parentStartupSlug } from './lib/startupRoute';
+// Signed-out devices need the login screen first: fetch it alongside the app instead of after it.
+import { lastSignedOut, loadLogin } from './lib/authHint';
+import { NibTile } from './components/RosyLogo';
 const App = lazy(() => import('./App'));
 const ParentReport = lazy(() => import('./components/parent/ParentReportView').then(m => ({ default: m.ParentReportView })));
 const parentSlug = parentStartupSlug(window.location.pathname);
+if (!parentSlug && lastSignedOut()) void loadLogin();
 if (parentSlug && window.location.pathname.startsWith('/report/')) window.history.replaceState({}, '', `/${parentSlug}`);
 import './index.css';
 // The app confirm modal (askConfirm / askDiscard) is used on teacher and student screens alike.
@@ -19,7 +23,7 @@ if (typeof window !== 'undefined' &&
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Suspense fallback={<div role="status" className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">지원T를 불러오는 중입니다…</div>}>
+    <Suspense fallback={<div role="status" aria-label="지원T를 불러오는 중입니다" className="min-h-screen flex items-center justify-center bg-white"><NibTile size={72} className="animate-pulse" /></div>}>
       {parentSlug ? <ParentReport reportSlug={parentSlug} onGoHome={() => { window.location.href = '/'; }} /> : <App />}
     </Suspense>
   </StrictMode>,

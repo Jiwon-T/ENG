@@ -210,7 +210,7 @@ service cloud.firestore {
         // 3) 학생 본인: 프로필 관련 지정된 화이트리스트 필드만 수정 가능
         // role, uid, email, teacherNote, notionStudentKey, firebaseUid, admin 수정 전면 차단
         (isOwner(uid) && resource.data.role in ['student', 'principal'] && 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'alias', 'photoURL', 'isNameSet', 'petStats', 'updatedAt']))
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'alias', 'photoURL', 'isNameSet', 'updatedAt']))
       );
       allow delete: if isAdmin();
     }

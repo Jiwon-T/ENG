@@ -1,3 +1,4 @@
+import { aiFetch } from './aiFetch';
 
 export interface Chunk {
   text: string;
@@ -137,10 +138,7 @@ export async function analyzeEnglishText(
     Text: ${text}`;
 
   try {
-    const apiResponse = await fetch("/api/gemini", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const apiResponse = await aiFetch({
         model: "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
@@ -243,8 +241,7 @@ export async function analyzeEnglishText(
             required: ["title", "englishTitle", "examInfo", "topic", "mainIdea", "summaryLong", "plotPoints", "logicType", "purpose", "keySentence", "keywords", "sentences", "summary"]
           }
         }
-      })
-    });
+      });
 
     if (!apiResponse.ok) {
       const errorData = await apiResponse.json();

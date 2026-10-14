@@ -412,8 +412,7 @@ export default function LearningReport() {
     try {
       await markIncorrectAnswerReviewed(ans.sessionId, ans.word);
       if (auth.currentUser) {
-        PetService.addPoints(8, auth.currentUser.uid);
-        PetService.addXP(15, auth.currentUser.uid);
+        void PetService.award('review-confirm', 1);
       }
       setRewardFeedback({ points: 8, xp: 15 });
       setTimeout(() => setRewardFeedback(null), 3000);
@@ -516,8 +515,7 @@ export default function LearningReport() {
         // Award points and XP for finishing review
         const score = reviewScore + (isCorrect ? 1 : 0);
         if (auth.currentUser) {
-          PetService.addPoints(score * 8, auth.currentUser.uid);
-          PetService.addXP(score * 15, auth.currentUser.uid);
+          void PetService.award('review-round', score);
         }
       }
     }, 1500);
@@ -576,16 +574,17 @@ export default function LearningReport() {
 
 
       {/* Assignments Section */}
-      <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-5">
-        <h3 className="text-lg md:text-xl font-black text-slate-900 mb-3 flex items-center gap-2">
-          <ClipboardList className="text-blue-500" size={20} />
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 mb-4">
+        <h3 className="text-[15px] font-bold text-slate-900 mb-3 flex items-center gap-1.5">
+          <ClipboardList className="text-blue-500" size={15} aria-hidden="true" />
           과제
+          {combinedAssignments.length > 0 && <span className="ml-auto text-xs font-normal text-slate-400">{combinedAssignments.length}개</span>}
         </h3>
         
-        <div className="space-y-4">
+        <div className="space-y-2">
           {paginatedAssignments.map((item) => (
-            <div key={item.id} className={`p-3 md:p-4 rounded-xl border transition-all ${item.isNew ? 'bg-blue-50 border-blue-100 shadow-md shadow-blue-50' : item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
-              <div className="flex justify-between items-start mb-3">
+            <div key={item.id} className={`p-3 rounded-xl border transition-all ${item.isNew ? 'bg-blue-50 border-blue-100 shadow-md shadow-blue-50' : item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+              <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${item.isNew ? 'bg-blue-500 animate-pulse' : item.isDone ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -603,7 +602,7 @@ export default function LearningReport() {
                   </button>
                 </div>
               </div>
-              <p className={`text-slate-700 text-sm md:text-base font-medium leading-relaxed whitespace-pre-wrap ${item.isDone ? 'opacity-50 line-through' : ''}`}>
+              <p className={`text-slate-700 text-[13px] font-medium leading-relaxed whitespace-pre-wrap ${item.isDone ? 'opacity-50 line-through' : ''}`}>
                 {item.content}
               </p>
             </div>
@@ -626,39 +625,39 @@ export default function LearningReport() {
       </div>
 
       {/* 일정은 학생이 가장 자주 확인하는 과제 바로 아래에 배치 */}
-      <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-100 shadow-sm mb-5">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
-            <CalendarDays className="text-violet-600" size={20} />
+          <h3 className="text-[15px] font-bold text-slate-900 flex items-center gap-1.5">
+            <CalendarDays className="text-violet-600" size={15} aria-hidden="true" />
             학습 일정
           </h3>
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-violet-50 text-violet-700">
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700">
             {scheduleLoad === 'ready' ? `예정 ${pendingScheduleCount}개` : '불러오는 중'}
           </span>
         </div>
         {visibleSchedules.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {paginatedSchedules.map(schedule => (
-              <div key={schedule.scheduleId} className="p-4 md:p-5 rounded-2xl bg-slate-50 border border-slate-100">
-                <div className="flex flex-wrap items-start justify-between gap-2">
+              <div key={schedule.scheduleId} className="p-3 rounded-xl bg-white border border-slate-200">
+                <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-black text-slate-900 break-words">{schedule.title}</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-600">
+                    <p className="text-[13px] font-bold text-slate-900 break-words">{schedule.title}</p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
                       {formatKoreanDateTime(schedule.startAt)}
-                      {schedule.endAt ? ` ~ ${formatKoreanDateTime(schedule.endAt, new Date(schedule.startAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }) === new Date(schedule.endAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }))}` : ''}
+                      {schedule.endAt ? ` – ${formatKoreanDateTime(schedule.endAt, new Date(schedule.startAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }) === new Date(schedule.endAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }))}` : ''}
+                      {` · ${schedule.subject || '영어'} · ${schedule.scheduleType}`}
                     </p>
                   </div>
-                  <div className="flex gap-2">
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-white border border-slate-200 text-slate-600">{schedule.subject || '영어'} · {schedule.scheduleType}</span>
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${schedule.status === '취소' ? 'bg-rose-100 text-rose-700' : schedule.status === '완료' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}>{schedule.status}</span>
+                  <div className="flex flex-none gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold ${schedule.status === '취소' ? 'bg-rose-100 text-rose-700' : schedule.status === '완료' ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}>{schedule.status}</span>
                   </div>
                 </div>
-                {schedule.notice && <p className="mt-3 text-sm text-slate-600 whitespace-pre-wrap break-words">{schedule.notice}</p>}
+                {schedule.notice && <p className="mt-2 text-xs text-slate-600 whitespace-pre-wrap break-words">{schedule.notice}</p>}
               </div>
             ))}
           </div>
         ) : (
-          <div className="py-4 text-center text-sm font-medium text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <div className="py-4 text-center text-xs font-medium text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
             {scheduleLoad === 'ready' ? '등록된 일정이 없습니다.' : scheduleLoad === 'failed' ? '일정을 불러오지 못했습니다.' : '일정을 불러오는 중…'}
           </div>
         )}
@@ -675,31 +674,28 @@ export default function LearningReport() {
 
 
 
-      <nav aria-label="리포트 보기" className="flex gap-2 mb-5">
-        <button type="button" aria-pressed={!showAcademic} onClick={() => setShowAcademic(false)} className={`min-h-[44px] flex-1 rounded-xl text-sm font-bold ${!showAcademic ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}><span aria-hidden="true">✒️</span> 학습</button>
-        <button type="button" aria-pressed={showAcademic} onClick={() => setShowAcademic(true)} className={`min-h-[44px] flex-1 rounded-xl text-sm font-bold ${showAcademic ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600'}`}><span aria-hidden="true">📈</span> 성적</button>
+      <nav aria-label="리포트 보기" className="flex gap-0.5 mb-4 rounded-full bg-indigo-50 p-1">
+        <button type="button" aria-pressed={!showAcademic} onClick={() => setShowAcademic(false)} className={`min-h-[40px] flex-1 rounded-full text-sm font-bold ${!showAcademic ? 'bg-indigo-600 text-white' : 'text-indigo-600'}`}>학습</button>
+        <button type="button" aria-pressed={showAcademic} onClick={() => setShowAcademic(true)} className={`min-h-[40px] flex-1 rounded-full text-sm font-bold ${showAcademic ? 'bg-indigo-600 text-white' : 'text-indigo-600'}`}>성적</button>
       </nav>
-      {showAcademic && <div id="student-academic-panel" className="mb-5"><AcademicPanel load={loadAcademic} subject={subjectFilter} /></div>}
+      {showAcademic && <div id="student-academic-panel" className="mb-4"><AcademicPanel load={loadAcademic} subject={subjectFilter} /></div>}
       <div hidden={showAcademic}>
       {/* Offline lesson records: the server DTO excludes attitude, test evaluation and feedback. */}
       {studentLessonReports.length > 0 && (
-        <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm mb-8 md:mb-16">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-2">
-              <Trophy className="text-indigo-600" size={20} />
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[15px] font-bold text-slate-900 flex items-center gap-1.5">
+              <Trophy className="text-indigo-600" size={15} aria-hidden="true" />
               수업 기록
             </h3>
-
+            <span className="text-xs text-slate-400">{studentLessonReports.length}건</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             {paginatedLessonReports.map((report) => (
-              <div
-                key={report.reportId}
-                className="p-4 md:p-5 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-500">
+              <div key={report.reportId} className="p-3 rounded-xl bg-white border border-slate-200">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] font-bold text-slate-900">
                     {new Date(report.lessonDate).toLocaleDateString('ko-KR', {
                       timeZone: 'Asia/Seoul',
                       month: 'long',
@@ -707,36 +703,18 @@ export default function LearningReport() {
                       weekday: 'short',
                     })}
                   </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                  <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
                     {report.subject || '영어'} · {report.category}
                   </span>
                 </div>
-
-                <div className="flex items-center justify-around py-2 border-t border-b border-slate-200/60">
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">출결</p>
-                    <p className="text-sm font-black text-slate-700">{report.attendance || '미확인'}</p>
-                  </div>
-                  <div className="w-px h-8 bg-slate-200"></div>
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">숙제</p>
-                    <p className="text-sm font-black text-slate-700">{report.homework || '미확인'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-around py-2">
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">단어 시험</p>
-                    <p className="text-xl font-bold text-indigo-600 tabular-nums tracking-tight">
-                      {report.vocabularyScore !== null ? `${report.vocabularyScore}점` : '-'}
-                    </p>
-                  </div>
-                  <div className="w-px h-8 bg-slate-200"></div>
-                  <div className="text-center">
-                    <p className="text-[11px] text-slate-400 font-medium">내신 점수</p>
-                    <p className="text-xl font-bold text-emerald-600 tabular-nums tracking-tight">
-                      {report.schoolExamScore !== null ? `${report.schoolExamScore}점` : '-'}
-                    </p>
-                  </div>
+                <div className="mt-2 grid grid-cols-4 gap-1 text-center">
+                  {([['출결', report.attendance || '미확인', 'text-slate-900'], ['숙제', report.homework || '미확인', 'text-slate-900'],
+                    ['단어', report.vocabularyScore !== null ? `${report.vocabularyScore}점` : '—', 'text-indigo-600'], ['내신', report.schoolExamScore !== null ? `${report.schoolExamScore}점` : '—', 'text-emerald-600']] as const).map(([label, value, color]) => (
+                    <div key={label} className="rounded-lg bg-slate-50 px-1 py-1.5">
+                      <p className="text-[10.5px] text-slate-400">{label}</p>
+                      <p className={`text-[13px] font-bold tabular-nums break-keep ${color}`}>{value}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

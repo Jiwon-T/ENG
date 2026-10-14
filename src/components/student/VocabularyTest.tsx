@@ -401,8 +401,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
         const points = finalScoreValue * 10; 
         const xp = finalScoreValue * 20;
         
-        PetService.addPoints(points, auth.currentUser.uid);
-        PetService.addXP(xp, auth.currentUser.uid);
+        void PetService.award('vocab-test', finalScoreValue); // the server applies the rate and the daily cap
 
         const startDay = Number(dayRange?.start) || 1;
         const endDay = Number(dayRange?.end) || startDay;
