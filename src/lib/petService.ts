@@ -11,7 +11,7 @@ export interface PetState {
   currentPetSlot: number; unlockedSlots: number; pets: PetData[]; day: string;
   today: { studyPoints: number; studyCap: number; energyItemsLeft: number }; stage: PetStage;
 }
-export interface PetResponse { state: PetState; result?: any; pendingRewards?: number; saved?: boolean }
+export interface PetResponse { state: PetState; result?: any; pendingRewards?: number; saved?: boolean; run?: any; expedition?: any }
 
 const LEGACY_KEY = (uid: string) => `pet_system_data_${uid}`;
 async function call(method: 'GET' | 'POST', body?: unknown): Promise<PetResponse> {
@@ -34,7 +34,9 @@ export const PetService = {
     try {
       const moved = await call('POST', { action: 'import-local', local });
       try { localStorage.removeItem(LEGACY_KEY(uid)); } catch { /* nothing to clean */ }
-      return { ...moved, pendingRewards: first.pendingRewards };
+      // The moved pet may have a higher level than the first answer assumed: read the expedition again (first time only).
+      const games = await call('POST', { action: 'expedition-state' }).catch(() => first);
+      return { ...moved, pendingRewards: first.pendingRewards, run: games.run, expedition: games.expedition };
     } catch { return first; }
   },
   act(action: string, payload: Record<string, unknown> = {}) { return call('POST', { action, ...payload }); },

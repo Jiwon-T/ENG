@@ -215,8 +215,9 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Old student list (phone numbers): the app reads students only through the server.
     match /students/{studentId} {
-      allow read, write: if isAuthenticated() && (isTeacher() || isAdmin());
+      allow read, write: if false;
     }
 
     function canManageLearningSet(data) {
@@ -254,7 +255,13 @@ service cloud.firestore {
 
     match /wordProgress/{progressId} {
       allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isTeacher() || isAdmin());
-      allow write: if isAuthenticated() && (request.resource.data.uid == request.auth.uid || isAdmin());
+      // Own progress only: the document id starts with the student's uid ({uid}_{wordId}), so nobody can overwrite another's.
+      allow create, update: if isAuthenticated() && (
+        (progressId.matches('^' + request.auth.uid + '_.+') && request.resource.data.uid == request.auth.uid &&
+          (resource == null || resource.data.uid == request.auth.uid)) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
     }
 
     match /attendance/{attendanceId} {
@@ -270,19 +277,25 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Not used by the app any more: closed.
     match /consultations/{consultationId} {
-      allow read: if isAuthenticated() && (resource.data.teacherUid == request.auth.uid || isAdmin());
-      allow write: if isTeacher() || isAdmin();
+      allow read, write: if false;
     }
 
+    // 학습 성취도 평가: the student reads their own; teachers write and read it through the server only.
     match /evaluations/{uid} {
-      allow read: if isAuthenticated() && (isOwner(uid) || isTeacher() || isAdmin());
-      allow write: if isTeacher() || isAdmin();
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
     }
 
+    // Seen by every student: the name is stored masked (김*원) and the record holds only these fields.
     match /matchLeaderboard/{recordId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid &&
+        request.resource.data.keys().hasOnly(['wordbookId', 'uid', 'name', 'time', 'createdAt']) &&
+        request.resource.data.wordbookId is string && request.resource.data.name is string &&
+        (request.resource.data.name == '익명' || request.resource.data.name.matches('^[^*]?[*]{1,3}[^*]?$')) &&
+        request.resource.data.time is number && request.resource.data.time > 0 && request.resource.data.time < 3600;
       allow delete: if isAdmin();
     }
 
@@ -310,7 +323,11 @@ service cloud.firestore {
     match /assignments/{assignmentId} {
       allow read: if isAuthenticated() && (resource.data.studentUid == request.auth.uid || isTeacher() || isAdmin());
       allow create: if isTeacher() || isAdmin();
-      allow update: if isAuthenticated() && (resource.data.studentUid == request.auth.uid || isTeacher() || isAdmin());
+      // A student only marks their own assignment as seen (isNew) or done (isDone); teachers change the rest.
+      allow update: if isAuthenticated() && (
+        (resource.data.studentUid == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isNew', 'isDone'])) ||
+        isTeacher() || isAdmin()
+      );
       allow delete: if isTeacher() || isAdmin();
     }
 
@@ -324,8 +341,9 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // The old pet store: the pet lives on the server now (petStates); closed.
     match /petSystems/{uid} {
-      allow read, write: if isAuthenticated() && (isOwner(uid) || isTeacher() || isAdmin());
+      allow read, write: if false;
     }
 
     // ----------------------------------------------------
@@ -337,27 +355,27 @@ service cloud.firestore {
     match /studentEnrollments/{recordId} { allow read, write: if false; }
 
     match /lessonReports/{reportId} {
-      // 오직 선생님/관리자만 클라이언트에서 조회 가능, 생성/수정은 서버(Firebase Admin SDK) 전용
-      allow read: if isAuthenticated() && (isTeacher() || isAdmin());
+      // 조회·생성·수정 모두 서버(Firebase Admin SDK) 전용
+      allow read: if false; // 선생님 화면도 서버 API로만 조회
       allow write: if false; // 클라이언트 직접 쓰기 전면 차단
     }
 
     match /studentSchedules/{scheduleId} {
       // 학생/학부모는 클라이언트 SDK 직접 읽기/쓰기 불가 (반드시 서버 DTO API를 통해서만 조회)
-      // 오직 선생님/관리자만 클라이언트에서 조회 가능, 생성/수정은 서버(Firebase Admin SDK) 전용
-      allow read: if isAuthenticated() && (isTeacher() || isAdmin());
+      // 조회·생성·수정 모두 서버(Firebase Admin SDK) 전용
+      allow read: if false; // 선생님 화면도 서버 API로만 조회
       allow write: if false;
     }
 
     match /reportSlugs/{slug} {
       // 고정 주소 매핑 정보는 클라이언트에서 직접 쓰지 못하며 서버 API를 통해서만 관리
-      allow read: if isAuthenticated() && (isTeacher() || isAdmin());
+      allow read: if false; // 선생님 화면도 서버 API로만 조회
       allow write: if false;
     }
 
     match /studentReportMappings/{internalStudentId} {
       // 학생당 단일 활성 슬러그 원자적 보장 매핑 문서는 서버 전용
-      allow read: if isAuthenticated() && (isTeacher() || isAdmin());
+      allow read: if false; // 선생님 화면도 서버 API로만 조회
       allow write: if false;
     }
 
@@ -367,7 +385,7 @@ service cloud.firestore {
     }
 
     match /reportAliases/{alias} {
-      allow read: if isAuthenticated() && (isTeacher() || isAdmin());
+      allow read: if false; // 선생님 화면도 서버 API로만 조회
       allow write: if false;
     }
 

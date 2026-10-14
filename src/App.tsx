@@ -231,6 +231,10 @@ export default function App() {
             }
             
             setProfile(data);
+            // Fetch the screen people open next while the home is idle, so the first click doesn't wait for the download.
+            const prefetch = ['teacher', 'principal', 'admin'].includes(data.role) ? () => import('./components/teacher/TeacherRoom') : () => import('./components/pet/PetHome');
+            const idle = (window as any).requestIdleCallback as ((cb: () => void) => number) | undefined;
+            if (idle) idle(() => { void prefetch().catch(() => {}); }); else setTimeout(() => { void prefetch().catch(() => {}); }, 1500);
             
             if (firebaseUser.email === 'lizzieshere1@gmail.com') {
               setTimeout(runTeacherSeeding, 1000); // Defer seeding

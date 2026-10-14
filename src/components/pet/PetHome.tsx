@@ -60,12 +60,11 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   const say = (message: string) => { setToast(message); window.clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToast(''), 2800); };
   const load = useCallback(async () => {
     if (!user) return;
-    try { const r = await PetService.load(user.uid); setState(r.state); setPending(r.pendingRewards || 0); setLoadError(''); }
+    try { const r = await PetService.load(user.uid); setState(r.state); setPending(r.pendingRewards || 0); if ('run' in r) setFeedRun(r.run || null); if (r.expedition) setExpedition(r.expedition); setLoadError(''); }
     catch (e: any) { setLoadError(e?.message || '펫을 불러오지 못했어요.'); }
   }, [user]);
   useEffect(() => { void load(); }, [load]);
-  // A game left unfinished (here or on another device) shows as 이어 하기.
-  useEffect(() => { if (user) void PetService.act('feed-state').then((r: any) => { setFeedRun(r.run || null); setExpedition(r.expedition || null); }).catch(() => undefined); }, [user]);
+  // A game left unfinished (here or on another device) comes with the load above and shows as 이어 하기.
   // A new day (energy refill) or rewards that arrived while away: refresh when the screen comes back.
   useEffect(() => { const back = () => { if (document.visibilityState === 'visible') void load(); }; document.addEventListener('visibilitychange', back); return () => document.removeEventListener('visibilitychange', back); }, [load]);
 

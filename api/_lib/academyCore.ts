@@ -38,11 +38,16 @@ export async function readCoreScopes(db:any,profile:any,known?:{live:any}){
  const live=known?known.live:(await Promise.all([guard({get:(r:any)=>r.get()},db),db.collection('teacherWorkspaceAccess').doc(profile.uid).get()]))[1].data();
  if(live){if(live.disabled||live.academyId!=='main'||live.workspaceRole!==profile.workspaceRole)throw Error('TEACHER_NOT_CONFIGURED');profile={...live,uid:profile.uid};}
  else if(profile.uid!==process.env.ADMIN_UID)throw Error('TEACHER_NOT_CONFIGURED');
- if(profile.notionTeacherPageId){const row=valid((await refFor(db,'teachers',profile.notionTeacherPageId).get()).data(),'teachers');if(row.pointer?.teacherUid!==profile.uid)throw Error('CORE_LINK_REQUIRED');if(['중단','휴직'].includes(choice(row.fields.properties['상태'])))throw Error('TEACHER_NOT_CONFIGURED');}
+ // The teacher row and the memberships are read in one round trip; the teacher row is still checked first.
+ const rowRead=profile.notionTeacherPageId?refFor(db,'teachers',profile.notionTeacherPageId).get():null;rowRead?.catch(()=>{});
+ let scopes:any[]=[],scopeError:any=null;
+ try{scopes=(profile.scopes||[]).map((s:any)=>{if(!subjects.includes(s.subject))throw Error('CORE_LINK_REQUIRED');return {...s,studentKey:uuid(s.studentKey)};});}catch(e){scopeError=e;}
  // One parallel batch instead of one round trip per assigned student (this runs on every request).
- const scopes=(profile.scopes||[]).map((s:any)=>{if(!subjects.includes(s.subject))throw Error('CORE_LINK_REQUIRED');return {...s,studentKey:uuid(s.studentKey)};});
  const keys=[...new Set<string>(scopes.map((s:any)=>s.studentKey))],refs=keys.map(key=>db.collection('academyStudentMemberships').doc(key));
- const docs:any[]=!refs.length?[]:typeof db.getAll==='function'?await db.getAll(...refs):await Promise.all(refs.map((r:any)=>r.get()));
+ const docsRead:Promise<any[]>=!refs.length?Promise.resolve([]):typeof db.getAll==='function'?db.getAll(...refs):Promise.all(refs.map((r:any)=>r.get()));docsRead.catch(()=>{});
+ if(rowRead){const row=valid((await rowRead).data(),'teachers');if(row.pointer?.teacherUid!==profile.uid)throw Error('CORE_LINK_REQUIRED');if(['중단','휴직'].includes(choice(row.fields.properties['상태'])))throw Error('TEACHER_NOT_CONFIGURED');}
+ if(scopeError)throw scopeError;
+ const docs=await docsRead;
  const ok=new Set(keys.filter((_,i)=>{const m=docs[i].data();return m?.academyId==='main'&&!m.disabled;}));
  return scopes.filter((s:any)=>ok.has(s.studentKey));
 }

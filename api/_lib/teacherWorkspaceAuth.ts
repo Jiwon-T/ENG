@@ -29,7 +29,8 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     workspaceStage='workspace-account';
     if (!process.env.ADMIN_UID) throw new Error('CONFIG_ERROR');
     const admin = uid === process.env.ADMIN_UID;
-    // The academy switch (core authority) does not depend on the account: read it in the same round trip.
+    // Nothing is read before the token is verified. The academy switch (core authority) does not depend on the account:
+    // read it in the same round trip as the account documents.
     const mainAuthority=coreActive(db,{academyId:'main'});mainAuthority.catch(()=>{});
     const [userDoc,profileDoc]=await workspaceInflightRead(db,'account:'+uid,()=>Promise.all([db.collection('users').doc(uid).get(),db.collection('teacherWorkspaceAccess').doc(uid).get()]));
     const user = userDoc.data();

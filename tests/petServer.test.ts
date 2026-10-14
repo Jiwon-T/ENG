@@ -1,3 +1,4 @@
+import { STAGE_IDS } from '../api/_lib/petExpedition.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
@@ -98,6 +99,7 @@ test('pet API: login required; the state lives on the server and users.petStats 
   const first = await call('GET', null, deps);
   assert.equal(first.status, 200); assert.equal(first.out.saved, false); assert.equal(first.out.state.points, 40, 'starts from the old summary');
   assert.equal(first.out.pendingRewards, 0, 'not linked: no lesson rewards');
+  assert.equal(first.out.run, null, 'no unfinished game yet'); assert.equal(first.out.expedition.current, STAGE_IDS[0], 'the expedition map comes with the first load');
 
   const imported = await call('POST', {action: 'import-local', local: {points: 120}}, deps);
   assert.equal(imported.out.state.points, 120);

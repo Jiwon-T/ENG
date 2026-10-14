@@ -1,4 +1,5 @@
 import ExamMaterialCatalog from '../exam/ExamMaterialCatalog';
+import { maskName } from '../../lib/maskName';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import VocabularyTest from './VocabularyTest';
@@ -84,7 +85,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
   const [matchStartTime, setMatchStartTime] = useState<number | null>(null);
   const [matchTime, setMatchTime] = useState(0);
   const [isMatchFinished, setIsMatchFinished] = useState(false);
-  const [leaderboard, setLeaderboard] = useState<{ id: string; name: string; time: number; createdAt: any }[]>([]);
+  const [leaderboard, setLeaderboard] = useState<{ id: string; uid?: string; name: string; time: number; createdAt: any }[]>([]);
 
   // Quiz states
   const [isQuizMode, setIsQuizMode] = useState(false);
@@ -1534,9 +1535,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     if (!auth.currentUser || !selectedWordbook) return;
 
     try {
-      // Get user name
+      // Other students see this record: only the masked name is stored (김*원).
       const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      const userName = userDoc.data()?.name || '익명';
+      const userName = maskName(userDoc.data()?.name);
 
       await addDoc(collection(db, 'matchLeaderboard'), {
         wordbookId: selectedWordbook.id,
@@ -2258,7 +2259,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                                 }`}>
                                   {index + 1}
                                 </span>
-                                <span className="text-sm font-bold text-slate-700">{record.name}</span>
+                                <span className="text-sm font-bold text-slate-700">{record.uid === auth.currentUser?.uid ? '나' : maskName(record.name)}</span>
                               </div>
                               <span className="text-sm font-black text-amber-500">{record.time.toFixed(1)}s</span>
                             </div>

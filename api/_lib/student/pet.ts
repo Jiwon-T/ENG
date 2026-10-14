@@ -35,8 +35,8 @@ const MESSAGES: Record<string, string> = {
 };
 
 /** The linked student's lessons for 공부 보상: id, date, attendance, and whether the student checked the assignment done. */
-async function studyReports(db: any, uid: string) {
-  const user = (await db.collection('users').doc(uid).get()).data();
+async function studyReports(db: any, uid: string, preloadedUser?: any) {
+  const user = preloadedUser ?? (await db.collection('users').doc(uid).get()).data();
   if (!user?.notionStudentKey) return [];
   const mapping = await readStudentMapping(db, user.notionStudentKey);
   if (!mapping?.firebaseUid || mapping.firebaseUid !== uid || !mapping.internalStudentId) return [];
@@ -172,10 +172,12 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
   const fail = (code: string, status = 400) => sendJson(res, status, {ok: false, error: code, message: MESSAGES[code] || '잠시 후 다시 해 주세요.'});
   try {
     if (req.method === 'GET') {
-      const snap = await db.collection(PET_STATES).doc(uid).get(), user = (await db.collection('users').doc(uid).get()).data();
-      const s = rollDay(snap.exists ? snap.data() : initialPetState(now, user?.petStats), now);
-      const pending = pendingStudyRewards(s, await studyReports(db, uid).catch(() => []), now);
-      return sendJson(res, 200, {ok: true, state: publicPetState(s), saved: snap.exists, pendingRewards: pending.length});
+      // Opening the screen: every document is read at once, and the unfinished game comes along (no second request).
+      const [snap, userSnap, g, e] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection('users').doc(uid).get(), db.collection(PET_GAMES).doc(uid).get(), db.collection(PET_EXPEDITIONS).doc(uid).get()]);
+      const user = userSnap.data() || {}, s = rollDay(snap.exists ? snap.data() : initialPetState(now, user.petStats), now);
+      const pending = pendingStudyRewards(s, await studyReports(db, uid, user).catch(() => []), now);
+      return sendJson(res, 200, {ok: true, state: publicPetState(s), saved: snap.exists, pendingRewards: pending.length,
+        run: publicRun(g.data()?.run || null), expedition: publicExpedition(e.exists ? e.data() : initialExpedition(now), currentPet(s).level)});
     }
     if (req.method !== 'POST') return fail('PET_BAD_ACTION', 405);
     const body = await parseJsonBody(req).catch(() => ({}));

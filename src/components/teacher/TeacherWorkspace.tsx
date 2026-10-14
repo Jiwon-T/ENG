@@ -1,4 +1,5 @@
 import LessonRestorePanel from './LessonRestorePanel';
+import WorkspaceSkeleton from './WorkspaceSkeleton';
 import AdminDashboard from './AdminDashboard';
 import StudentMasterPanel from './StudentMasterPanel';
 import ScheduleViewHeader,{type ScheduleView} from './ScheduleViewHeader';
@@ -349,7 +350,7 @@ export default function TeacherWorkspace({ onNavigate }: {
   {(data?.admin||data?.principal)&&dueStops>0&&!(tab==='students'&&studentView==='students'&&!managementStudentKey)&&<div className="stop-banner" role="status"><span>중단 예정일이 지난 학생 <b>{dueStops}</b>명 · 중단할지 정해 주세요</span><button type="button" className="small-button" onClick={()=>{const go=()=>{setTab('students');setStudentView('students');setManagementStudentKey('');};if(tab==='students'&&studentAttemptRef.current)studentAttemptRef.current(go);else go();}}>확인하기</button></div>}
 
   {sectionLoading&&data&&<p role="status" className="text-sm text-slate-500 mb-3">자료를 불러오는 중…</p>}{message && <WorkspaceToast message={message} onClose={dismissMessage}/>}{jobs.some(job=>job.status==='running')&&<p role="status" className="workspace-job-status">처리 중: {jobs.filter(job=>job.status==='running').map(job=>job.label).join(' · ')} · 다른 기록을 작업할 수 있습니다.</p>}
-  {!data ? <div className="panel text-sm text-slate-500">{bootstrapError ? <><p>{bootstrapError}</p><button className="small-button mt-3" disabled={busy} onClick={() => act(refresh)}>다시 불러오기</button></> : '선생님방을 불러오는 중…'}</div> : <>
+  {!data ? bootstrapError ? <div className="panel text-sm text-slate-500"><p>{bootstrapError}</p><button className="small-button mt-3" disabled={busy} onClick={() => act(refresh)}>다시 불러오기</button></div> : <WorkspaceSkeleton/> : <>
   <div hidden={tab !== 'lesson'}><div hidden={lessonMode !== 'grid'}><TeacherLessonGrid headingActions={modeSwitch} isRecordBusy={id=>operations.busy('lesson-record:'+id)} active={tab==='lesson'&&lessonMode==='grid'} data={data} busy={busy} request={request} refresh={refresh} act={act}/></div></div>
   
   {((tab === 'lesson' && lessonMode === 'single') || lessonDialogOpen) && <div className="lesson-writing-layout">
