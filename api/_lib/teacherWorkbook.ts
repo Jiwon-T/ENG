@@ -1,5 +1,6 @@
 // 워크북 만들기 (선생님방): AI 해석과 같은 지문의 재생성 기록. For now the admin only, because every AI call is billed.
 // Nothing here changes lesson or student data; history lives in workbookHistory/{uid}:{passageKey} (server only).
+import {aiErrorCode as modelErrorCode} from './aiModel.js';
 import {z} from 'zod';
 import {WORKBOOK_LIMITS} from '../../src/lib/workbook.js';
 
@@ -18,14 +19,7 @@ export const WORKBOOK_AI_MESSAGES: Record<string, string> = {
 
 /** What went wrong with a model call, as a code the screen can explain (never the prompt or the reply). Gemini refuses
  *  calls from regions it does not serve (for example Hong Kong, hkg1) with "User location is not supported". */
-export function aiErrorCode(error: any) {
-  const text = String(error?.message || error || '');
-  if (text === 'AI_NOT_CONFIGURED' || /API key not valid|API_KEY_INVALID/i.test(text)) return 'AI_NOT_CONFIGURED';
-  if (/location is not supported|FAILED_PRECONDITION/i.test(text)) return 'AI_REGION_UNSUPPORTED';
-  if (/503|high demand|overloaded|UNAVAILABLE/i.test(text)) return 'AI_BUSY';
-  if (/429|RESOURCE_EXHAUSTED|quota/i.test(text)) return 'AI_QUOTA';
-  return 'WORKBOOK_TRANSLATE_FAILED';
-}
+export const aiErrorCode = (error: any) => modelErrorCode(error, 'WORKBOOK_TRANSLATE_FAILED');
 
 /** Korean translations for the given English sentences, one each, in the same order (the teacher reviews them). */
 /** `generate` is the server model call (api/gemini, which runs in a region Gemini serves). */

@@ -65,6 +65,8 @@ test('AI errors become codes the screen can explain (region refusal, busy, quota
   assert.equal(aiErrorCode(Error('503 The model is overloaded')), 'AI_BUSY');
   assert.equal(aiErrorCode(Error('429 RESOURCE_EXHAUSTED')), 'AI_QUOTA');
   assert.equal(aiErrorCode(Error('AI_NOT_CONFIGURED')), 'AI_NOT_CONFIGURED');
+  assert.equal(aiErrorCode(Error('[403] PERMISSION_DENIED: Vertex AI API has not been used')), 'AI_NOT_CONFIGURED', 'Vertex: API off or no role');
+  assert.equal(aiErrorCode(Error('[404] NOT_FOUND: Publisher model was not found')), 'AI_MODEL_NOT_FOUND');
   assert.equal(aiErrorCode(Error('something else')), 'WORKBOOK_TRANSLATE_FAILED');
   await assert.rejects(translateWorkbook(admin, {sentences: ['Hi.']}, async () => { throw Error('User location is not supported for the API use.'); }), /AI_REGION_UNSUPPORTED/);
 });

@@ -72,8 +72,7 @@ export async function handleWorkbookAi(req: IncomingMessage, res: ServerResponse
     }
 }
 
-/** This function runs in Seoul (vercel.json), where Gemini is served; the other functions stay next to Firestore in
- *  Hong Kong. So every model call comes here: ?task=workbook (워크북 해석), ?task=pet (펫 말 가르치기·대화·혼잣말,
+/** Every model call comes here (Gemini through Vertex AI, from the same region as the other functions): ?task=workbook (워크북 해석), ?task=pet (펫 말 가르치기·대화·혼잣말,
  *  the same pet handler and checks as /api/student/pet), and the plain proxy (지문 분석기·문제 생성기). */
 export default function handler(req: IncomingMessage, res: ServerResponse) {
     const task = new URL(req.url || '', 'http://localhost').searchParams.get('task');

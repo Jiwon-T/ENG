@@ -1046,3 +1046,9 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 .teacher-workspace .rv-list .rv-student-link:not(:disabled):hover{background:none;box-shadow:none;}
 .teacher-workspace .rv-list .rv-student-link:hover,.teacher-workspace .rv-list .rv-student-link:focus-visible{color:#c2405e;text-decoration-color:#e0587a;}
 .teacher-workspace .rv-list .rv-student-link:focus-visible{outline:2px solid var(--workspace-palette-ff4778);outline-offset:2px;}
+/* 학생 목록: the pet badge opens the student's pet (read only). */
+.student-master-row .smr-pet.is-clickable{cursor:pointer;transition:box-shadow .15s;}
+.student-master-row .smr-pet.is-clickable:hover{box-shadow:0 0 0 1.5px #e0587a;}
+/* 학생 목록: 이달의 장학 쿠폰 badge (gold before it is handed out, grey after). */
+.student-master-row .smr-coupon{display:inline-flex;align-items:center;flex:none;padding:1px 7px;border-radius:999px;border:1px solid #efc77a;background:#fff8e8;color:#8a5a12;font-size:11px;font-weight:800;cursor:pointer;}
+.student-master-row .smr-coupon.is-paid{border-color:#e5e7eb;background:#f8fafc;color:#94a3b8;}

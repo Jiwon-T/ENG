@@ -1,13 +1,24 @@
 // 개인 원정대: chapters of stages on a map; every stage is one 단어 먹이 주기 game. This file keeps what the student has
-// reached (best stars, bonuses already paid, chapter rewards) in petExpeditions/{uid}; the game itself stays in petGames.
+// reached in petExpeditions/{uid}; the game itself stays in petGames. Progress (best stars, bonuses paid) is kept per pet:
+// a new pet starts the map from the first stage and earns the stage bonuses again. Chapter rewards (backgrounds, gear)
+// are items the student already owns, so they are given once per student.
 // Finishing a stage is applied in the same transaction as the last answer, so a bonus can never be paid twice.
 import {awardCapped, currentPet, type ServerPetState} from './pet.js';
 import {PET_EXPEDITION, PET_JOBS, PET_MAX_LEVEL, petItem, stageQuestions, type PetJob} from '../../src/lib/petCatalog.js';
 
 export const PET_EXPEDITIONS = 'petExpeditions';
-/** `jobReady`: pets (by slot) that cleared the 꿈의 정원 crown stage and may choose a job. */
-export interface ExpeditionState { version: 1; stars: Record<string, number>; bonuses: Record<string, string[]>; chapterRewards: string[]; jobReady?: number[]; updatedAt: number }
-export const initialExpedition = (now = Date.now()): ExpeditionState => ({version: 1, stars: {}, bonuses: {}, chapterRewards: [], updatedAt: now});
+/** One pet's map: best stars per stage and the bonuses already paid. */
+export interface PetProgress { stars: Record<string, number>; bonuses: Record<string, string[]> }
+/** `pets`: progress by pet slot. `stars`/`bonuses` at the top are the old shared map (before per-pet progress): it
+ *  belongs to the first pet. `jobReady`: pets (by slot) that cleared the 꿈의 정원 crown stage and may choose a job. */
+export interface ExpeditionState { version: 1; pets?: Record<string, PetProgress>; stars?: Record<string, number>; bonuses?: Record<string, string[]>; chapterRewards: string[]; jobReady?: number[]; updatedAt: number }
+export const initialExpedition = (now = Date.now()): ExpeditionState => ({version: 1, pets: {}, chapterRewards: [], updatedAt: now});
+/** The map of one pet (created empty for a pet that hasn't played yet; the old shared map moves to the first pet). */
+export function petProgress(e: ExpeditionState, slot: number): PetProgress {
+  e.pets ||= {};
+  if (e.stars || e.bonuses) { e.pets['1'] ||= {stars: e.stars || {}, bonuses: e.bonuses || {}}; delete e.stars; delete e.bonuses; }
+  return e.pets[String(slot)] ||= {stars: {}, bonuses: {}};
+}
 
 /** Every stage in play order: forest-1 … forest-5, sea-1 … castle-5. */
 export const STAGE_IDS = PET_EXPEDITION.chapters.flatMap(c => c.stages.map((_, i) => `${c.id}-${i + 1}`));
@@ -16,19 +27,20 @@ export function stageInfo(id: string) {
   const [chapterId, n] = id.split('-'), chapter = PET_EXPEDITION.chapters.find(c => c.id === chapterId)!, index = Number(n) - 1;
   return {id, chapter, index, name: chapter.stages[index], boss: index === chapter.stages.length - 1, order: at};
 }
-export const stageCleared = (e: ExpeditionState, id: string) => { const info = stageInfo(id); return Boolean(info) && (e.stars[id] || 0) >= (info!.boss ? PET_EXPEDITION.bossStars : 1); };
+export const stageCleared = (e: PetProgress, id: string) => { const info = stageInfo(id); return Boolean(info) && (e.stars[id] || 0) >= (info!.boss ? PET_EXPEDITION.bossStars : 1); };
 /** The first stage is always open; every other one opens when the stage before it (in play order) is cleared, and a
  *  chapter also needs the main pet's level. */
 export const levelOk = (id: string, level: number) => (stageInfo(id)?.chapter.minLevel ?? Infinity) <= level;
-export const stageUnlocked = (e: ExpeditionState, id: string, level = PET_MAX_LEVEL) => { const at = STAGE_IDS.indexOf(id); return levelOk(id, level) && (at === 0 || (at > 0 && stageCleared(e, STAGE_IDS[at - 1]))); };
+export const stageUnlocked = (e: PetProgress, id: string, level = PET_MAX_LEVEL) => { const at = STAGE_IDS.indexOf(id); return levelOk(id, level) && (at === 0 || (at > 0 && stageCleared(e, STAGE_IDS[at - 1]))); };
 
 /**
- * A finished stage game: keep the best stars, pay each bonus once (even when today's cap leaves 0P it counts as paid,
- * nothing is carried over), and give the chapter's background the first time its crown stage is cleared.
+ * A finished stage game, for the pet that started it (`slot`, the main pet by default): keep its best stars, pay each
+ * bonus once per pet (even when today's cap leaves 0P it counts as paid, nothing is carried over), and give the chapter's
+ * background the first time any pet of the student clears its crown stage.
  */
-export function finishStage(e: ExpeditionState, s: ServerPetState, id: string, stars: number) {
+export function finishStage(state: ExpeditionState, s: ServerPetState, id: string, stars: number, slot = currentPet(s).slot) {
   const info = stageInfo(id); if (!info) throw Error('EXPEDITION_BAD_STAGE');
-  const wasCleared = stageCleared(e, id), best = Math.max(e.stars[id] || 0, stars);
+  const e = petProgress(state, slot), wasCleared = stageCleared(e, id), best = Math.max(e.stars[id] || 0, stars);
   e.stars[id] = best;
   const cleared = stageCleared(e, id), paid = e.bonuses[id] || [], out = {stage: id, boss: info.boss, stars, best, cleared, bonus: 0, bonuses: [] as string[], paid: {} as Record<string, number>, unlocked: null as string | null, chapterReward: null as string | null, gear: [] as string[], jobChoice: false};
   const pay = (key: keyof typeof PET_EXPEDITION.bonus) => { if (paid.includes(key)) return; paid.push(key); out.bonuses.push(key); const amount = PET_EXPEDITION.bonus[key], got = awardCapped(s, amount, amount * 2).points; out.paid[key] = got; out.bonus += got; };
@@ -37,16 +49,16 @@ export function finishStage(e: ExpeditionState, s: ServerPetState, id: string, s
   if (stars >= 3) pay('star3');
   e.bonuses[id] = paid;
   if (cleared && !wasCleared) out.unlocked = STAGE_IDS[info.order + 1] || null;
-  if (cleared && info.boss && !e.chapterRewards.includes(info.chapter.id)) {
-    e.chapterRewards.push(info.chapter.id);
+  if (cleared && info.boss && !state.chapterRewards.includes(info.chapter.id)) {
+    state.chapterRewards.push(info.chapter.id);
     if (petItem(info.chapter.reward) && !s.inventory.includes(info.chapter.reward)) s.inventory.push(info.chapter.reward);
     out.chapterReward = info.chapter.reward;
     for (const id of info.chapter.gear || []) if (petItem(id) && !s.inventory.includes(id)) { s.inventory.push(id); out.gear.push(id); }
   }
-  // 꿈의 정원: every clear of its crown stage (the stages can be replayed) lets the main pet choose a job if it has none.
-  const pet = currentPet(s);
+  // 꿈의 정원: every clear of its crown stage (the stages can be replayed) lets that pet choose a job if it has none.
+  const pet = s.pets.find(p => p.slot === slot) || currentPet(s);
   if (info.boss && info.chapter.id === PET_EXPEDITION.jobChapter && stars >= PET_EXPEDITION.bossStars && !pet.job) {
-    e.jobReady = [...new Set([...(e.jobReady || []), pet.slot])]; out.jobChoice = true;
+    state.jobReady = [...new Set([...(state.jobReady || []), pet.slot])]; out.jobChoice = pet.slot === currentPet(s).slot;
   }
   return out;
 }
@@ -62,15 +74,16 @@ export function chooseJob(e: ExpeditionState, s: ServerPetState, jobInput: unkno
   return {job, weapon};
 }
 
-/** The map as the browser draws it. */
-export function publicExpedition(e: ExpeditionState, level = PET_MAX_LEVEL) {
+/** One pet's map as the browser draws it (the main pet's unless `slot` is given). */
+export function publicExpedition(state: ExpeditionState, level = PET_MAX_LEVEL, slot = 1) {
+  const e = petProgress(state, slot);
   // The next stage to play by progress alone (the level is not considered here, so a chapter waiting for a level still
   // shows as the next goal, marked `currentNeedsLevel`); after the last crown stage everything is done.
   const next = STAGE_IDS.find(id => stageUnlocked(e, id) && !stageCleared(e, id)), current = next || STAGE_IDS[STAGE_IDS.length - 1];
   const needs = next && !levelOk(next, level) ? stageInfo(next)!.chapter.minLevel : null;
   return {
-    current, allCleared: !next, currentNeedsLevel: needs, jobReady: e.jobReady || [], totalStars: Object.values(e.stars).reduce((a, n) => a + n, 0), maxStars: STAGE_IDS.length * 3,
-    chapters: PET_EXPEDITION.chapters.map(c => ({id: c.id, title: c.title, name: c.name, reward: c.reward, gear: c.gear || [], questions: stageQuestions(`${c.id}-1`), rewarded: e.chapterRewards.includes(c.id), minLevel: c.minLevel, levelOk: c.minLevel <= level,
+    slot, current, allCleared: !next, currentNeedsLevel: needs, jobReady: state.jobReady || [], totalStars: Object.values(e.stars).reduce((a, n) => a + n, 0), maxStars: STAGE_IDS.length * 3,
+    chapters: PET_EXPEDITION.chapters.map(c => ({id: c.id, title: c.title, name: c.name, reward: c.reward, gear: c.gear || [], questions: stageQuestions(`${c.id}-1`), rewarded: state.chapterRewards.includes(c.id), minLevel: c.minLevel, levelOk: c.minLevel <= level,
       unlocked: stageUnlocked(e, `${c.id}-1`, level),
       stages: c.stages.map((name, i) => { const id = `${c.id}-${i + 1}`; return {id, name, boss: i === c.stages.length - 1, stars: e.stars[id] || 0, unlocked: stageUnlocked(e, id, level), cleared: stageCleared(e, id), bonuses: e.bonuses[id] || []}; })})),
   };

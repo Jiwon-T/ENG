@@ -129,3 +129,21 @@ test('party: address-like nicknames are refused, ordinary words with 구/길/동
   }
   for (const ok of ['구름', '꽃길', '별동', '호두대장', '동글이', '시원한 바람', '구름빵']) assert.equal(checkNickname(ok, []), ok, ok);
 });
+
+test('펫 보기 for teachers: the student pet as the student sees it, read only; others refused, no account → no pet', async () => {
+  const {hashStudentKey} = await import('../api/_lib/security.js');
+  const {readStudentPet} = await import('../api/_lib/teacherPetParty.js');
+  const f = registrationFirestore(), k1 = '11111111-1111-4111-8111-111111111111', k2 = '22222222-2222-4222-8222-222222222222';
+  f.rows.set(`notionStudentMappings/${hashStudentKey(k1)}`, {sourceMode: 'firestore', studentKey: k1, firebaseUid: 'ua', studentDisplayName: '김하늘'});
+  const state = initialPetState(MON, {character: 'hodu', petName: '호두'}); state.points = 1234; state.rewarded = {l1: ['attendance'], a1: ['assignment'], l2: ['attendance']};
+  f.rows.set('petStates/ua', state); f.rows.set('petGuild/ua', {...initialGuild(MON), nickname: '별사탕'});
+  const before = JSON.stringify([...f.rows.entries()]);
+  const actor = {academyId: 'main', scopes: [{studentKey: k1}], teachingScopes: []};
+  const {pet}: any = await readStudentPet(f.db, actor, k1, MON);
+  assert.deepEqual([pet.points, pet.pets[0].name, pet.nickname, pet.rewards], [1234, '호두', '별사탕', {attendance: 2, assignment: 1}]);
+  assert.equal(pet.expeditions[1].current, 'forest-1');
+  assert.ok(!JSON.stringify(pet).includes('"uid"') && !JSON.stringify(pet).includes('ua"'), 'no account id');
+  assert.equal(JSON.stringify([...f.rows.entries()]), before, 'nothing written');
+  await assert.rejects(() => readStudentPet(f.db, {academyId: 'main', scopes: [{studentKey: k2}], teachingScopes: []}, k1, MON), /FORBIDDEN/, 'not their student');
+  assert.deepEqual(await readStudentPet(f.db, {academyId: 'main', admin: true}, k2, MON), {pet: null}, 'no app account: no pet');
+});

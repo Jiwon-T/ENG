@@ -9,9 +9,14 @@ export interface PetData { slot: number; character: string; name: string; chosen
 export interface PetState {
   points: number; inventory: string[]; clothing: string | null; accessories?: Partial<Record<AccessorySlot, string>>; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: PetData[]; day: string;
-  today: { studyPoints: number; studyCap: number; energyItemsLeft: number }; stage: PetStage;
+  today: { studyPoints: number; studyCap: number; energyItemsLeft: number; revivesLeft?: number }; stage: PetStage;
+  /** 금메달 by month ('2026-10') and where they sit in each room (% of the room, by background). */
+  medals?: string[]; decor?: Record<string, MedalSpot[]>;
 }
-export interface PetResponse { state: PetState; result?: any; pendingRewards?: number; saved?: boolean; run?: any; expedition?: any }
+export interface MedalSpot { id: string; x: number; y: number }
+/** 이달의 장학 쿠폰 on the pet screen (`eligible`: 영어 이지원T's student). */
+export interface CouponView { eligible: boolean; month: string; label: string; earned: number; goal: number; requested: boolean; paid: boolean }
+export interface PetResponse { state: PetState; result?: any; pendingRewards?: number; saved?: boolean; run?: any; expedition?: any; coupon?: CouponView }
 
 const LEGACY_KEY = (uid: string) => `pet_system_data_${uid}`;
 /** The AI actions go to /api/gemini (it runs where Gemini is served); everything else to /api/student/pet. */

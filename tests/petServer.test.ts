@@ -26,12 +26,34 @@ test('pet: study points stop at the daily cap (XP cut by the same share) and a n
   assert.throws(() => awardStudy(s, 'made-up' as any, 1), /PET_BAD_SOURCE/);
 });
 
-test('pet: level 100 is the top; the XP bar never runs past full', () => {
+test('pet: Lv.100 opens a place for a new friend and keeps growing; Lv.200 is the top and the XP bar never runs past full', async () => {
+  const {PET_FRIEND_LEVEL, petStageLabel} = await import('../src/lib/petCatalog.js');
+  assert.deepEqual([PET_FRIEND_LEVEL, PET_MAX_LEVEL], [100, 200]);
   const s = initialPetState(NOW), pet = currentPet(s);
+  pet.level = PET_FRIEND_LEVEL - 1; pet.xp = 0;
+  addXP(s, xpNeeded(PET_FRIEND_LEVEL - 1));
+  assert.deepEqual([pet.level, s.unlockedSlots], [100, 2], 'Lv.100: one more place');
+  assert.equal(xpNeeded(100), 15000, 'after Lv.100 each level takes longer');
   pet.level = PET_MAX_LEVEL - 1; pet.xp = 0;
   assert.equal(addXP(s, xpNeeded(PET_MAX_LEVEL - 1) + 5000).leveledUp, true);
-  assert.deepEqual([pet.level, pet.xp, s.unlockedSlots], [PET_MAX_LEVEL, 0, 2]);
+  assert.deepEqual([pet.level, pet.xp, s.unlockedSlots], [PET_MAX_LEVEL, 0, 2], 'reaching 200 opens no extra place');
   assert.equal(addXP(s, 999).leveledUp, false); assert.equal(pet.xp, 0);
+  assert.deepEqual([petStageLabel(99), petStageLabel(120), petStageLabel(150)], ['어른', '마스터', '전설']);
+});
+
+test('pet: 탈진 (0 기운) — only 몬스터 wakes the pet, once a day; 커피·에너지드링크 wait until then', () => {
+  const s = initialPetState(NOW), pet = currentPet(s); s.points = 1000;
+  assert.throws(() => buyItem(s, 'monster'), /PET_NOT_EXHAUSTED/, 'not while the pet has 기운');
+  pet.energy = 0;
+  assert.throws(() => buyItem(s, 'coffee'), /PET_EXHAUSTED/);
+  buyItem(s, 'monster');
+  assert.deepEqual([pet.energy, s.points, s.today.revives], [50, 850, 1]);
+  buyItem(s, 'coffee'); buyItem(s, 'energy_drink');
+  assert.equal(pet.energy, 100, 'the two snacks still work after waking (capped at 100)');
+  pet.energy = 0;
+  assert.throws(() => buyItem(s, 'monster'), /PET_REVIVE_USED/, 'once a day');
+  const tomorrow = rollDay(s, NOW + 86_400_000);
+  assert.equal(tomorrow.pets[0].energy, 100, 'a new day fills 기운 again');
 });
 
 test('pet: shop — points checked, one energy snack per day, clothes only once and only wearable when owned', () => {
@@ -62,7 +84,7 @@ test('pet: the one-time device import keeps only sane, owned things', () => {
   assert.deepEqual(s.inventory, ['crown']);
   assert.deepEqual([currentPet(s).accessories, currentPet(s).clothing, s.background], [{head: 'crown'}, null, 'default']);
   const pet = currentPet(s);
-  assert.deepEqual([pet.character, pet.name, pet.chosen, pet.level, pet.xp], ['unicorn', '다롱이', true, PET_MAX_LEVEL, 0]);
+  assert.deepEqual([pet.character, pet.name, pet.chosen, pet.level, pet.xp], ['unicorn', '다롱이', true, 100, 0]);
   assert.deepEqual(pet.learnedPhrases[0].evolvedVersions, {'10': 'hello'});
 });
 
@@ -170,7 +192,7 @@ test('pets: each Lv.100 opens one more place (up to 6), a new kind starts at Lv.
   const {adoptPet, switchPet, normalizePets} = await import('../api/_lib/pet.js');
   const s = initialPetState(NOW); chooseFirst(s);
   assert.throws(() => adoptPet(s, 'hodu'), /PET_NO_SLOT/, 'no place before Lv.100');
-  currentPet(s).level = PET_MAX_LEVEL - 1; addXP(s, xpNeeded(PET_MAX_LEVEL - 1));
+  currentPet(s).level = 99; addXP(s, xpNeeded(99));
   assert.equal(s.unlockedSlots, 2);
   assert.throws(() => adoptPet(s, 'molang'), /PET_ALREADY_OWNED/);
   s.inventory.push('crown'); equipItem(s, 'crown');
@@ -188,7 +210,7 @@ test('pets: each Lv.100 opens one more place (up to 6), a new kind starts at Lv.
   const many = initialPetState(NOW); chooseFirst(many); many.unlockedSlots = 99;
   for (const c of ['unicorn', 'mymelody', 'haemi', 'mang_bear', 'hodu']) adoptPet(many, c);
   assert.equal(many.pets.length, 6); assert.throws(() => adoptPet(many, 'molang'), /PET_NO_SLOT|PET_ALREADY_OWNED/);
-  assert.deepEqual([petSummary(many).petCount, petSummary(s).highestLevel], [6, PET_MAX_LEVEL], 'teacher summary: highest pet and the count');
+  assert.deepEqual([petSummary(many).petCount, petSummary(s).highestLevel], [6, 100], 'teacher summary: highest pet and the count');
 });
 
 function chooseFirst(s: any) { s.pets[0].chosen = true; s.pets[0].character = 'molang'; }
@@ -200,4 +222,38 @@ test('pet speech without Intl.Segmenter: no half emoji is left (all emoji droppe
     delete (Intl as any).Segmenter;
     assert.equal(cleanPetSpeech('잘했어 👨‍👩‍👧 🇰🇷 👍🏽', 1), '잘했어');
   } finally { (Intl as any).Segmenter = saved; }
+});
+
+test('pet AI: room for Gemini 3 thinking, the failure kind is told apart, and each student has daily limits per action', async () => {
+  const {teachRequest, chatRequest, evolveRequest} = await import('../api/_lib/pet.js');
+  const {PET_AI_LIMITS} = await import('../src/lib/petCatalog.js');
+  const pet = currentPet(initialPetState(NOW));
+  for (const r of [teachRequest(pet, '안녕'), chatRequest(pet, '안녕', []), evolveRequest(pet, '안녕')] as any[]) {
+    assert.ok(r.config.maxOutputTokens >= 1024, 'a small cap cut the answer off'); assert.equal(r.config.thinkingConfig.thinkingLevel, 'LOW');
+  }
+  const f = registrationFirestore();
+  const s = initialPetState(NOW); currentPet(s).energy = 100; f.rows.set('petStates/kid', s);
+  const where = await call('POST', {action: 'chat', text: '안녕'}, {verify: async () => ({uid: 'kid'}), db: () => f.db, generate: async () => { throw Error('[400] User location is not supported for the API use.'); }, now: () => NOW});
+  assert.equal(where.out.error, 'AI_REGION_UNSUPPORTED');
+  const ok: any = {verify: async () => ({uid: 'kid'}), db: () => f.db, generate: async () => '{"response":"응!","remembered":"안녕"}', now: () => NOW};
+  for (let i = 0; i < PET_AI_LIMITS.teach; i++) { const st = f.rows.get('petStates/kid'); currentPet(st).energy = 100; f.rows.set('petStates/kid', st); assert.equal((await call('POST', {action: 'teach', text: `말${i}`}, ok)).out.ok, true); }
+  const over = await call('POST', {action: 'teach', text: '하나 더'}, ok);
+  assert.deepEqual([over.status, over.out.error], [429, 'PET_AI_TEACH_LIMIT']);
+  const st = f.rows.get('petStates/kid'); currentPet(st).energy = 100; f.rows.set('petStates/kid', st);
+  assert.equal((await call('POST', {action: 'chat', text: '안녕'}, ok)).out.ok, true, 'the chat limit is separate');
+});
+
+test('pet AI limits: other AI use keeps the pet counts; a failed reply gives the action back but still counts toward the 60', async () => {
+  const {takeAiQuota} = await import('../api/_lib/aiModel.js');
+  const {PET_AI_LIMITS} = await import('../src/lib/petCatalog.js');
+  const f = registrationFirestore();
+  const fill = () => { const st = f.rows.get('petStates/kid') || initialPetState(NOW); currentPet(st).energy = 100; f.rows.set('petStates/kid', st); };
+  const ok: any = {verify: async () => ({uid: 'kid'}), db: () => f.db, generate: async () => '{"response":"응!","remembered":"안녕"}', now: () => NOW};
+  for (let i = 0; i < PET_AI_LIMITS.teach; i++) { fill(); assert.equal((await call('POST', {action: 'teach', text: `말${i}`}, ok)).out.ok, true); }
+  assert.equal(await takeAiQuota(f.db, 'kid', NOW), true, 'another AI feature');
+  fill(); assert.equal((await call('POST', {action: 'teach', text: '또'}, ok)).out.error, 'PET_AI_TEACH_LIMIT', 'the teach count was not reset');
+  const broken: any = {...ok, generate: async () => { throw Error('503 overloaded'); }};
+  fill(); assert.equal((await call('POST', {action: 'chat', text: '안녕'}, broken)).out.error, 'AI_BUSY');
+  const usage = [...f.rows.entries()].find(([k]) => k.startsWith('aiUsage/kid:'))![1];
+  assert.deepEqual([usage.pet.chat, usage.count], [0, PET_AI_LIMITS.teach + 2], 'chat given back; the attempt still counts toward 60');
 });

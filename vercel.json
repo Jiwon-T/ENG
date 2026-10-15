@@ -3,13 +3,6 @@
   "regions": [
     "hkg1"
   ],
-  "functions": {
-    "api/gemini.ts": {
-      "regions": [
-        "icn1"
-      ]
-    }
-  },
   "crons": [
     {
       "path": "/api/cron/lesson-migration",

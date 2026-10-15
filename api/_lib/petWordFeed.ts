@@ -10,7 +10,7 @@ export const PET_GAMES = 'petGames';
 export interface FeedWord { wordbookId: string; wordId: string; word: string; meaning: string }
 export interface FeedQuestion { key: string; wordbookId: string; word: string; choices: string[]; answer: number; retry?: boolean; fromWrong?: boolean }
 /** `stage`: the 원정대 stage this game is for (none for a plain game). */
-export interface FeedRun { id: string; questions: FeedQuestion[]; results: {choice: number; correct: boolean; points: number}[]; startedAt: number; finished: boolean; stage?: string }
+export interface FeedRun { id: string; questions: FeedQuestion[]; results: {choice: number; correct: boolean; points: number}[]; startedAt: number; finished: boolean; stage?: string; slot?: number }
 export interface PetGameState { version: 1; day: string; rewardedToday: string[]; run: FeedRun | null; updatedAt: number }
 export interface FeedSource { books: {id: string; words: FeedWord[]}[]; wrongs: FeedWord[] }
 

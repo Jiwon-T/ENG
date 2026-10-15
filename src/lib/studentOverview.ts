@@ -1,16 +1,10 @@
 import {isCurrentStudent} from './teacherLessonGrid';
+import {GRADE_ORDER,gradeOf} from './schoolGrade';
+export {gradeOf};
 
 const day=(value:unknown)=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}/.test(value)?value.slice(0,10):null;
 const shortName=(name:string)=>name.replace(/\s*\(.*\)\s*$/,'').trim()||name;
 const monthsBetween=(from:string,to:string)=>(Number(to.slice(0,4))-Number(from.slice(0,4)))*12+Number(to.slice(5,7))-Number(from.slice(5,7))-(Number(to.slice(8,10))<Number(from.slice(8,10))?1:0);
-const GRADE_ORDER=['초1','초2','초3','초4','초5','초6','중1','중2','중3','고1','고2','고3'];
-
-/** Grade from the school in the display name: '전수현 (평여중1)' -> '중1'. */
-export function gradeOf(displayName:string):string|null{
- const school=displayName.match(/\(([^)]*)\)\s*$/)?.[1]||'';
- // The level right before the grade number at the end ('고덕중2' -> 중2, '중앙초3' -> 초3), never a letter earlier in the school name.
- const m=school.match(/(초|중|고)(?:등학교|학교)?\s*([1-6])\s*(?:학년)?\s*$/);return m&&GRADE_ORDER.includes(m[1]+m[2])?m[1]+m[2]:null;
-}
 
 /** 학생 관리 overview, from the student list already loaded (no extra reads). A student's start is the earliest subject
  *  start date; a student who no longer studies any subject left on the latest subject end date. */

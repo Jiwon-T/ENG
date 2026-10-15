@@ -75,7 +75,7 @@ export default function ExpeditionMap({ state, send, onClose, onGuild }: { state
       <div className="mx-auto max-w-md px-4 pb-8 pt-3">
         <header className="flex items-center justify-between">
           <button type="button" onClick={onClose} className="flex items-center gap-0.5 text-sm font-bold text-[#8b2f40]"><ChevronLeft size={18} aria-hidden="true" />펫</button>
-          <h1 className="text-base font-black text-[#5e1e2a]">원정대</h1>
+          <h1 className="text-center text-base font-black leading-tight text-[#5e1e2a]">원정대<span className="block text-[11px] font-bold text-slate-500">{pet.name}의 지도</span></h1>
           <span className="text-xs font-bold text-[#8b2f40]">기운 {pet.energy}</span>
         </header>
         <div role="tablist" aria-label="장" className="-mx-4 mt-3 flex gap-1.5 overflow-x-auto px-4 pb-1">

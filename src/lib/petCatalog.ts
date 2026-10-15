@@ -6,22 +6,30 @@ export type PetItemCategory = 'clothing' | 'accessory' | 'background' | 'consuma
 /** Accessories are worn one per place, all places at once (a hat, glasses, a scarf and a sword together). */
 export type AccessorySlot = 'head' | 'eyes' | 'neck' | 'hand';
 export const ACCESSORY_SLOTS: { id: AccessorySlot; label: string }[] = [{ id: 'head', label: '머리' }, { id: 'eyes', label: '눈' }, { id: 'neck', label: '목' }, { id: 'hand', label: '손' }];
-/** `reward`: earned on the 원정대 (never sold in the shop). `slot`: where an accessory is worn. */
-export interface PetItem { id: string; name: string; price: number; icon: string; category: PetItemCategory; xp?: number; energy?: number; reward?: boolean; slot?: AccessorySlot }
+/** `reward`: earned on the 원정대 (never sold in the shop). `slot`: where an accessory is worn. `revive`: only for a pet
+ *  with no 기운 left (탈진), once a day, apart from the two 기운 간식. */
+export interface PetItem { id: string; name: string; price: number; icon: string; category: PetItemCategory; xp?: number; energy?: number; reward?: boolean; slot?: AccessorySlot; revive?: boolean }
 
 export const PET_CHARACTERS: { id: PetCharacterType; name: string }[] = [
   { id: 'unicorn', name: '다롱' }, { id: 'mymelody', name: '아롱' }, { id: 'haemi', name: '해미' }, { id: 'molang', name: '말랑' }, { id: 'mang_bear', name: '고미' }, { id: 'hodu', name: '호두' },
 ];
-export const PET_MAX_LEVEL = 100;
+/** The top level (raised later with new end content). At PET_FRIEND_LEVEL a pet brings one more friend home. */
+export const PET_MAX_LEVEL = 200;
+export const PET_FRIEND_LEVEL = 100;
 export const PET_MAX_ENERGY = 100;
-/** 기운 회복 간식 (커피·에너지드링크): this many a day. */
+/** 기운 회복 간식 (커피·에너지드링크): this many a day, never for a pet at 0 기운 (탈진). */
 export const PET_ENERGY_ITEMS_PER_DAY = 2;
-/** One more pet each time a pet reaches the top level; one of each kind at most. */
+/** 탈진 회복 '몬스터': once a day, only at 0 기운. */
+export const PET_REVIVES_PER_DAY = 1;
+/** One more pet each time a pet reaches PET_FRIEND_LEVEL; one of each kind at most. */
 export const PET_MAX_PETS = 6;
 export const PLACEHOLDER_PET_NAME = '친구가 필요해요';
 export const petStage = (level: number): PetStage => level <= 20 ? 'baby' : level <= 40 ? 'child' : level <= 60 ? 'teen' : level <= 99 ? 'adult' : 'master';
 export const PET_STAGE_LABEL: Record<PetStage, string> = { baby: '아기', child: '어린이', teen: '청소년', adult: '어른', master: '마스터' };
-export const xpNeeded = (level: number) => level * 100;
+/** The stage's name; from Lv.150 a master is a 전설 (same look). */
+export const petStageLabel = (level: number) => level >= 150 ? '전설' : PET_STAGE_LABEL[petStage(level)];
+/** XP to the next level: after Lv.100 each level takes half as long again. */
+export const xpNeeded = (level: number) => level < PET_FRIEND_LEVEL ? level * 100 : level * 150;
 
 export const PET_ITEMS: PetItem[] = [
   { id: 'muji_cape', name: '무지개 망토', price: 120, icon: '🌈', category: 'clothing' },
@@ -80,8 +88,17 @@ export const PET_ITEMS: PetItem[] = [
   { id: 'candy', name: '별사탕', price: 100, xp: 30, icon: '🍬', category: 'consumable' },
   { id: 'coffee', name: '커피', price: 40, energy: 30, icon: '☕', category: 'consumable' },
   { id: 'energy_drink', name: '에너지드링크', price: 70, energy: 60, icon: '⚡', category: 'consumable' },
+  { id: 'monster', name: '몬스터', price: 150, energy: 50, icon: '🥤', category: 'consumable', revive: true },
 ];
 export const petItem = (id: string) => PET_ITEMS.find(item => item.id === id);
+/** The pet AI's daily limits per student (말 가르치기, 대화하기, 혼잣말), so the AI bill stays small. */
+export const PET_AI_LIMITS = { teach: 5, chat: 15, evolve: 10 } as const;
+/** 이달의 장학 쿠폰: when the points earned in a month (Korea time, from the 1st; spending doesn't matter) reach `goal`,
+ *  영어 이지원T's students may ask for that month's coupon (no points are taken; not asked for = that month is gone) and
+ *  get that month's 금메달 to place in their room. In the first season the points held when counting began count too. */
+export const PET_COUPON = { name: '이달의 장학 쿠폰', goal: 10_000, firstSeason: '2026-10', maxDecor: 24 } as const;
+/** '2026-10' → '26.10' (on the medal and the badges). */
+export const medalLabel = (month: string) => `${month.slice(2, 4)}.${month.slice(5, 7)}`;
 export const accessorySlot = (id: string): AccessorySlot => petItem(id)?.slot || 'head';
 /** What a pet wears, in drawing order; older saves (and party snapshots) kept a single `accessory`. */
 export const wornAccessories = (p: { accessories?: Partial<Record<AccessorySlot, string | null>> | null; accessory?: string | null } | null | undefined): string[] =>
@@ -171,3 +188,74 @@ export const PET_PARTY = {
   nickname: { min: 2, max: 10 },
 } as const;
 export const PET_WORD_FEED = { questions: 10, minQuestions: 5, choices: 3, wrongAnswers: 3, retryAfter: 3, books: 3, sessionScan: 200, wordWindow: 120, energy: 10 };
+
+/**
+ * 채움의 탑: a turn-based climb, one floor per battle. Attacking: pick an action, then answer the word (right = hit).
+ * The monster's turn: answer the meaning within `defendSeconds` to block (less damage); either way the damage depends on
+ * the pet's level and gear. Progress is saved on every floor cleared; running away empties 기운 (탈진). Every
+ * `bossEvery` floors a boss guards a treasure chest. Words come from the hard wordbook the admin sets (중등 / 고등).
+ */
+export const PET_TOWER = {
+  name: '채움의 탑', floors: 10, doors: 3, bossEvery: 10, energy: 10, defendSeconds: 8, choices: 4, poolSize: 60,
+  potionHeal: 0.4, startPotions: 2,
+  /** 함정 바닥: answer within this many seconds. 상인: prices in points. A won battle drops a 강화석 this often. */
+  trapSeconds: 6, stonePrice: 120, potionPrice: 40, stoneDrop: 0.3, merchantPotions: 3,
+  /** 잠든 드래곤: sneaking past takes at least this long along the U path (checked by the server); woken, it fights at
+   *  end-game strength (a top-level pet in full enhanced gear has to block every turn). `dragonColors`: how many looks. */
+  sneakMinMs: 3000, dragon: { hp: 3000, atk: 800, def: 380 }, dragonColors: 6,
+  /** First clear of a floor (inside the daily study cap): points and XP; a boss floor pays `boss`. */
+  reward: { base: 10, perFloor: 5, boss: 100 },
+} as const;
+export type TowerGearSlot = 'weapon' | 'helmet' | 'armor' | 'shoulder' | 'gloves' | 'boots';
+export const TOWER_GEAR_SLOTS: { id: TowerGearSlot; label: string }[] = [{ id: 'weapon', label: '무기' }, { id: 'helmet', label: '투구' }, { id: 'armor', label: '갑옷' }, { id: 'shoulder', label: '견갑' }, { id: 'gloves', label: '장갑' }, { id: 'boots', label: '신발' }];
+/** Tower equipment (never in the shop). `job`: only for a pet with that job (none = 견습자도 OK). */
+export interface TowerGear { id: string; name: string; /** in the small slot */ short: string; slot: TowerGearSlot; icon: string; atk?: number; def?: number; hp?: number; job?: PetJob }
+export const TOWER_GEAR: TowerGear[] = [
+  { id: 'apprentice_club', name: '견습 몽둥이', short: '몽둥이', slot: 'weapon', icon: '🏏', atk: 6 },
+  // Each boss keeps a treasure of its own: 10층 수문장 골렘 → 돌 견갑 (later bosses: 투구·장갑·신발·갑옷; past the floors for
+  // Lv.70+, weapons for 검사 or 마법사).
+  { id: 'golem_pauldron', name: '수문장의 돌 견갑', short: '돌 견갑', slot: 'shoulder', icon: '🪨', def: 8, hp: 20 },
+];
+export const towerGear = (id: string) => TOWER_GEAR.find(g => g.id === id);
+/** Treasure chests: floor 1 (at the entrance) and after each boss (that boss's own treasure). */
+export const TOWER_CHESTS: Record<number, { gear: string[]; potions: number }> = {
+  1: { gear: ['apprentice_club'], potions: PET_TOWER.startPotions },
+  10: { gear: ['golem_pauldron'], potions: 2 },
+};
+export type TowerMonsterKind = 'slime' | 'bat' | 'mushroom' | 'golem' | 'fairy' | 'shadow' | 'dragon' | 'gatekeeper' | 'obsidian_golem' | 'gold_golem';
+/** Floors 1–9 cycle through these; floor 10 is the boss. */
+export const TOWER_MONSTERS: { kind: TowerMonsterKind; name: string }[] = [
+  { kind: 'slime', name: '말랑 슬라임' }, { kind: 'bat', name: '밤 박쥐' }, { kind: 'mushroom', name: '버섯돌이' }, { kind: 'golem', name: '골렘' },
+];
+/** 10층: the obsidian 고대 수문장 골렘 (purple runes, a crystal crown). The floors' own 골렘 is a smaller, mossy one; from
+ *  floor 16 it comes as the 흑요석 골렘 and from floor 21 as the 황금 골렘 (same shape, other stone). */
+export const TOWER_BOSSES: Record<number, { kind: TowerMonsterKind; name: string }> = { 10: { kind: 'gatekeeper', name: '고대 수문장 골렘' } };
+const golemFor = (floor: number) => floor >= 21 ? { kind: 'gold_golem' as const, name: '황금 골렘' } : floor >= 16 ? { kind: 'obsidian_golem' as const, name: '흑요석 골렘' } : null;
+/** The pet's battle stats: level first, gear on top (each 강화 level: weapon +2 공격, other gear +2 방어). */
+export function towerStats(level: number, gear: (TowerGear | undefined)[], levels: Record<string, number> = {}) {
+  const plus = (g: TowerGear | undefined, k: 'atk' | 'def') => g && (levels[g.id] || 0) * ((g.slot === 'weapon') === (k === 'atk') ? TOWER_ENHANCE_STEP : 0) || 0;
+  const add = (k: 'atk' | 'def' | 'hp') => gear.reduce((n, g) => n + (g?.[k] || 0) + (k === 'hp' ? 0 : plus(g, k)), 0);
+  return { atk: 10 + level * 2 + add('atk'), def: 4 + level + add('def'), hp: 60 + level * 4 + add('hp'), mp: 20 + Math.floor(level / 2) };
+}
+/** `door`: which of the floor's three doors was opened (a different monster behind each; same strength). */
+export function towerMonster(floor: number, door = 0) {
+  const pick = TOWER_MONSTERS[(floor - 1 + door) % TOWER_MONSTERS.length], boss = TOWER_BOSSES[floor], look = boss || (pick.kind === 'golem' && golemFor(floor)) || pick;
+  return boss ? { ...look, boss: true, hp: 300 + floor * 12, atk: 50 + floor, def: 20 + floor / 5 } : { ...look, boss: false, hp: 40 + floor * 15, atk: 12 + floor * 4, def: 3 + floor * 2 };
+}
+/** Damage: a hit on the monster; the monster's hit on the pet when blocked or not. Always at least 1 (2 unblocked). */
+export const towerHit = (atk: number, def: number) => Math.max(1, Math.round(atk - def / 2));
+export const towerTaken = (atk: number, def: number, blocked: boolean) => blocked ? Math.max(1, Math.round(atk * 0.25 - def * 0.2)) : Math.max(2, Math.round(atk - def / 2));
+
+/** What can wait behind a door (not a boss floor). Each pet's floor has its own fixed set (the same on a retry, different
+ *  for other students); `weight`: how often. */
+export type TowerEvent = 'monster' | 'treasure' | 'merchant' | 'mirror' | 'riddle' | 'sleeping' | 'trap' | 'fairy';
+export const TOWER_EVENTS: Record<TowerEvent, { name: string; icon: string; weight: number }> = {
+  monster: { name: '몬스터', icon: '👾', weight: 44 }, treasure: { name: '보물', icon: '🎁', weight: 10 }, merchant: { name: '떠돌이 상인', icon: '🧙', weight: 12 },
+  mirror: { name: '거울방', icon: '🪞', weight: 8 }, riddle: { name: '수수께끼 석상', icon: '🗿', weight: 8 }, sleeping: { name: '잠든 드래곤', icon: '🐉', weight: 7 },
+  trap: { name: '함정 바닥', icon: '⚠️', weight: 5 }, fairy: { name: '길 잃은 요정', icon: '🧚', weight: 6 },
+};
+/** 장비 강화 at the 상인: +1 … +5. A failure only uses up the 강화석 (the gear never breaks). */
+export const TOWER_ENHANCE_STEP = 2;
+export const TOWER_ENHANCE: { to: number; stones: number; rate: number }[] = [
+  { to: 1, stones: 1, rate: 0.9 }, { to: 2, stones: 1, rate: 0.8 }, { to: 3, stones: 2, rate: 0.7 }, { to: 4, stones: 2, rate: 0.6 }, { to: 5, stones: 3, rate: 0.5 },
+];

@@ -1,5 +1,5 @@
 import {useMemo,useRef,useState,type ReactNode} from 'react';
-import {Calculator,Gauge,History,MessageSquareText,Swords,UserCog,Users,Wallet,type LucideIcon} from 'lucide-react';
+import {Calculator,Gauge,History,MessageSquareText,Castle,Swords,Ticket,UserCog,Users,Wallet,type LucideIcon} from 'lucide-react';
 import TeacherManager from './TeacherManager';
 import TuitionCalculator from './TuitionCalculator';
 import TeacherPayroll from './TeacherPayroll';
@@ -8,6 +8,8 @@ import AppUserManager from './AppUserManager';
 import AppTemplateManager from './AppTemplateManager';
 import SpeedCheckPanel from './SpeedCheckPanel';
 import GuildNicknamePanel from './GuildNicknamePanel';
+import PetCouponPanel from './PetCouponPanel';
+import PetTowerSettingsPanel from './PetTowerSettingsPanel';
 import {createUnsavedGuard} from '../../lib/unsavedGuard';
 import {askDiscard} from './ConfirmDialog';
 
@@ -35,6 +37,8 @@ export default function AdminDashboard({data,request,act,busy,refresh}:Props){
    {id:'users',label:'앱 사용자',icon:UserCog,hint:'선생님 권한·이름·탈퇴',adminOnly:true},
    {id:'templates',label:'문자 템플릿',icon:MessageSquareText,hint:'보호자 문자 문구',adminOnly:true},
    {id:'guild',label:'원정대 별칭',icon:Swords,hint:'학생 별칭 확인·경고',adminOnly:true},
+   {id:'coupon',label:'장학 쿠폰',icon:Ticket,hint:'이달의 장학 쿠폰 신청·지급',adminOnly:true},
+   {id:'tower',label:'탑 단어장',icon:Castle,hint:'채움의 탑 중등용·고등용 단어장',adminOnly:true},
    {id:'history',label:'관리 기록',icon:History,hint:'누가 언제 무엇을 바꿨는지'},
   ]:[]),
   {id:'check',label:'점검',icon:Gauge,hint:'요청 속도 확인'},
@@ -54,6 +58,8 @@ export default function AdminDashboard({data,request,act,busy,refresh}:Props){
   templates:<AppTemplateManager busy={busy} request={request} act={act} autoLoad onDirty={markDirty}/>,
   history:<AdminHistoryPanel busy={busy} request={request} act={act} autoLoad/>,
   guild:<GuildNicknamePanel busy={busy} request={request} act={act} autoLoad/>,
+  coupon:<PetCouponPanel busy={busy} request={request} act={act} autoLoad/>,
+  tower:<PetTowerSettingsPanel busy={busy} request={request} act={act} autoLoad/>,
   check:<section className="panel rv"><SpeedCheckPanel/></section>,
  };
  return <div className="admin-dash">

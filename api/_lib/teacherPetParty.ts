@@ -2,7 +2,9 @@ import {z} from 'zod';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
-import {PET_GUILD, PET_PARTIES, inactiveDays, progressOf, warnNickname, weekOf, type GuildProfile, type Party} from './petParty.js';
+import {PET_GUILD, PET_PARTIES, inactiveDays, progressOf, shownNickname, warnNickname, weekOf, type GuildProfile, type Party} from './petParty.js';
+import {PET_STATES, publicPetState, rollDay, type ServerPetState} from './pet.js';
+import {PET_EXPEDITIONS, initialExpedition, publicExpedition} from './petExpedition.js';
 
 // 원정대 파티 for teachers: a teacher sees the whole team of their own student (students of the same academy by name,
 // others by nickname only); the admin sees every nickname and can warn one (the student must then pick a new one).
@@ -58,4 +60,27 @@ export async function warnGuildNickname(db: any, actor: any, input: unknown, now
     if (party && partyRef) { for (const m of party.members) if (m.uid === uid) m.nickname = '별칭 바꾸는 중'; tx.set(partyRef, party); }
     return {warned: true};
   });
+}
+
+/** 펫 보기 (teacher room): one student's pets as the student sees them, read only. Own students for a teacher, the academy
+ *  for a principal, everyone for the admin. Nothing here changes the student's pet. */
+export async function readStudentPet(db: any, actor: any, id: unknown, now = Date.now()) {
+  const key = uuid(z.string().uuid().parse(id));
+  if (!allowedStudent(actor, key)) throw Error('FORBIDDEN');
+  const uid = (await readStudentMapping(db, key))?.firebaseUid;
+  if (!uid) return {pet: null};
+  const [stateSnap, expSnap, guildSnap] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection(PET_EXPEDITIONS).doc(uid).get(), db.collection(PET_GUILD).doc(uid).get()]);
+  if (!stateSnap.exists) return {pet: null};
+  const s: ServerPetState = rollDay(stateSnap.data(), now), view = publicPetState(s);
+  const expState = expSnap.exists ? expSnap.data() : initialExpedition(now);
+  const guild = guildSnap.data() as GuildProfile | undefined;
+  // 공부 보상 already received: lesson attendance and completed assignments (counts only).
+  const rewards = Object.values(s.rewarded || {}).flat();
+  return {pet: {
+    ...view, pets: view.pets.map(p => ({slot: p.slot, character: p.character, name: p.name, level: p.level, xp: p.xp, energy: p.energy, maxEnergy: p.maxEnergy, clothing: p.clothing, accessories: p.accessories, job: p.job || null})),
+    nickname: guild?.nickname ? shownNickname(guild) : '',
+    // Each pet has its own map (a new pet starts again from the first stage).
+    expeditions: Object.fromEntries(s.pets.map(p => { const x = publicExpedition(expState, p.level, p.slot); return [p.slot, {current: x.current, allCleared: x.allCleared, currentNeedsLevel: x.currentNeedsLevel, totalStars: x.totalStars, maxStars: x.maxStars, chapters: x.chapters.map(c => ({id: c.id, title: c.title}))}]; })),
+    rewards: {attendance: rewards.filter(r => r === 'attendance').length, assignment: rewards.filter(r => r === 'assignment').length},
+  }};
 }
