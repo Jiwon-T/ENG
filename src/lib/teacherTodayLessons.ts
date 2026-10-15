@@ -46,11 +46,11 @@ export function applyPreviousLesson<T extends Record<string,any>>(current:T,seed
   if(previousLessonAssessmentFields.includes(field as any)&&previous[field]===undefined)continue;
   const scoreGroup=['correct','total','wrong'].includes(field)?['correct','total','wrong']:['examCorrect','examTotal','examWrong'].includes(field)?['examCorrect','examTotal','examWrong']:[];
   if(scoreGroup.some(key=>edited.has(key)||!Object.is(current[key],seed[key])))continue;
-  if(field==='round'&&current.classSession==='없음'||field==='selfStudyRound'&&current.selfStudy==='없음')continue;
+  if(field==='round'&&current.classSession==='없음'||field==='selfStudyRound'&&current.selfStudy==='없음'&&(edited.has('selfStudy')||current.selfStudy!==seed.selfStudy))continue;
   if(Object.is(current[field],seed[field]))next[field]=previous[field]??(field==='content'||field==='assignment'||field==='examScope'?'':null);
  }
  // Retain this session's dates and times; never overwrite manually edited fields.
- if(!Array.isArray(previous.sessionRecords)&&previous.selfStudyRound!==null&&previous.selfStudyRound!==undefined&&!edited.has('selfStudy')&&current.selfStudy===seed.selfStudy&&current.selfStudy==='미확인')next.selfStudy='있음';
+ if(!Array.isArray(previous.sessionRecords)&&previous.selfStudyRound!==null&&previous.selfStudyRound!==undefined&&!edited.has('selfStudy')&&current.selfStudy===seed.selfStudy&&current.selfStudy!=='있음')next.selfStudy='있음';
  return next;
 }
 export function previousLessonValues(previous:any) {

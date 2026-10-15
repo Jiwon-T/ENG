@@ -35,7 +35,9 @@ test('late autofill respects manual edits, changed students/subjects/dates and e
  const edited={...seed,round:3.5,content:'작성 중',assignment:'새 과제'};
  const next=applyPreviousLesson(edited,seed,previous);assert.equal(next.content,'작성 중');assert.equal(next.assignment,'새 과제');assert.equal(next.round,3.5);
  for(const patch of [{studentKey:b},{subject:'수학'},{date:'2026-10-06'}]){const changed={...seed,...patch};assert.equal(applyPreviousLesson(changed,seed,previous),changed);}
- const absent={...seed,classSession:'없음',selfStudy:'없음'};assert.equal(applyPreviousLesson(absent,seed,previous).round,null);assert.equal(applyPreviousLesson(absent,seed,previous).selfStudyRound,null);
+ const absent={...seed,classSession:'없음',selfStudy:'없음'};assert.equal(applyPreviousLesson(absent,seed,previous,['selfStudy']).round,null);assert.equal(applyPreviousLesson(absent,seed,previous,['selfStudy']).selfStudyRound,null);
+ // 자습 starts at 없음 now: left untouched, the previous self-study round still carries over (and switches 자습 to 있음).
+ const untouched=applyPreviousLesson(seed,seed,previous);assert.equal(untouched.selfStudyRound,2);assert.equal(untouched.selfStudy,'있음');
  assert.deepEqual(previousLessonValues({}),{round:null,selfStudyRound:null,content:'',assignment:'',examScope:''});
 });
 test('previous selection uses lesson date before edit time and excludes archived, wrong-subject and future lessons',()=>{

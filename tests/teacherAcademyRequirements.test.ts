@@ -18,7 +18,9 @@ test('self-study-only days omit class time and round but require self-study time
  assert.equal(assertLessonComplete(study).round,null);
  for(const change of [{selfStudyRound:null},{selfStudyRound:0},{selfStudyStart:'25:00'},{selfStudyEnd:'18:00'}]) assert.throws(()=>assertLessonComplete({...study,...change}),/SELF_STUDY_REQUIRED/);
  assert.throws(()=>assertLessonComplete({...study,selfStudy:'없음'}),/LESSON_OR_STUDY_REQUIRED/);
- assert.throws(()=>assertLessonComplete({...lesson,selfStudy:'미확인'}),/SELF_STUDY_REQUIRED/);
+ // 자습 has only 있음/없음 now: an old 미확인 without study time counts as 없음; with study time it still needs a choice.
+ assert.doesNotThrow(()=>assertLessonComplete({...lesson,selfStudy:'미확인'}));
+ assert.throws(()=>assertLessonComplete({...lesson,selfStudy:'미확인',selfStudyStart:'17:40',selfStudyEnd:'18:40',selfStudyRound:1}),/SELF_STUDY_REQUIRED/);
  assert.equal(assertLessonComplete({...lesson,selfStudy:'있음',selfStudyStart:'18:00',selfStudyEnd:'19:00',selfStudyRound:0.5}).selfStudyRound,0.5);
 });
 const grade={studentKey,subject:'영어',examType:'학교 내신',title:'2학기 중간',examDate:'2026-10-03',deadline:null,score:0,maxScore:100,grade:'B',submissionStatus:'제출 완료',note:''};

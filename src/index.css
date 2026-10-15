@@ -1,6 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
+/* Tailwind 4 gives buttons the plain arrow cursor; show the hand on anything that can be pressed. */
+@layer base {
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), summary, select:not(:disabled) { cursor: pointer; }
+}
+
 :root {
   color-scheme: light;
 }

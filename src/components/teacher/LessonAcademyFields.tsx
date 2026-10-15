@@ -17,12 +17,13 @@ export default function LessonAcademyFields({ value, onChange,regularTime,roundH
       ['classSession', '수업', 'start', 'end', 'round'],
       ['selfStudy', '자습', 'selfStudyStart', 'selfStudyEnd', 'selfStudyRound'],
     ] as const).map(([kind, title, start, end, round]) => {
-      const choice = value[kind] || (kind === 'classSession' ? '있음' : '미확인');
+      // 자습 has only 있음/없음; an old 미확인 shows (and is saved) as 없음.
+      const choice = kind === 'selfStudy' ? (value[kind] === '있음' ? '있음' : '없음') : value[kind] || '있음';
       const enabled = choice === '있음';
       return <fieldset className="lesson-time-row" data-session-kind={kind} key={kind}>
         <legend className="sr-only">{title} 시간·회차</legend>
         <label>{title}<select aria-label={`${title} 여부`} value={choice} onChange={e => changeSession(kind, e.target.value)}>
-          {kind === 'selfStudy' && <option>미확인</option>}<option>있음</option><option>없음</option>
+          <option>있음</option><option>없음</option>
         </select></label>
         <div className="lesson-session-controls"><label>회차<input aria-label={`${title} 회차`} type="number" step="any" inputMode="decimal" min="0" disabled={!enabled} required={enabled} placeholder={enabled ? '필수' : '—'} value={value[round] ?? ''} onChange={e => onChange(round, e.target.value === '' ? null : Number(e.target.value))}/><span className="lesson-round-hint" title={roundHints[round]||undefined}>{shortRoundHint(roundHints[round]||'',title)}</span></label>
         <LessonTimePresets title={title} start={value[start]||''} end={value[end]||''} enabled={enabled} normal={kind==='classSession'?regularTime:undefined} onChange={(newStart,newEnd)=>{if(newStart!==value[start])onChange(start,newStart);onChange(end,newEnd);}}><label>시작<input aria-label={`${title} 시작`} type="time" disabled={!enabled} required={enabled} value={value[start] || ''} onChange={e => onChange(start, e.target.value)}/></label>
