@@ -47,10 +47,38 @@ test('Word file: title, both parts with translations, answer key on a new page, 
   const JSZip = (await import('jszip')).default;
   const sentences = [{id: 'a', text: 'American astronauts are given the opportunity to vote even when they are in space.', ko: '미국 우주비행사들은 우주에서도 투표할 기회를 받는다.'}, {id: 'b', text: 'NASA\'s eco-friendly plan costs $20, doesn\'t it?', ko: 'NASA의 친환경 계획은 20달러가 들지 않나요?'}];
   const build = buildWorkbook(sentences);
-  const blob = await workbookDocx(build, '10월 모의고사', 2);
+  const blob = await workbookDocx(build, {title: '10월 모의고사', subtitle: '18번', footer: '채움학원 지원T'});
   const xml = await (await JSZip.loadAsync(await blob.arrayBuffer())).file('word/document.xml')!.async('string');
   const text = docxXmlText(xml);
-  for (const part of ['고등학교 영어 워크북', '10월 모의고사 · 버전 2', 'Part 1. 영문 빈칸 완성', 'Part 2. 단어 순서 배열', 'Answer Key', sentences[0].ko, sentences[1].text, '__________']) assert.ok(text.includes(part), part);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer()), footerXml = await zip.file(Object.keys(zip.files).find(f => /^word\/footer\d*\.xml$/.test(f))!)!.async('string');
+  assert.ok(docxXmlText(footerXml).includes('채움학원 지원T'), 'the footer on every page');
+  assert.ok(!/버전|v\d/i.test(text), 'no version in the file');
+  assert.match(xml, /<w:r>(?:(?!<\/w:r>)[\s\S])*<w:b\/>(?:(?!<\/w:r>)[\s\S])*<w:t[^>]*>WORKBOOK<\/w:t>/, 'the title WORKBOOK is bold');
+  for (const part of ['WORKBOOK', '10월 모의고사 · 18번', 'Part 1. 영문 빈칸 완성', 'Part 2. 단어 순서 배열', 'Answer Key', sentences[0].ko, sentences[1].text, '__________']) assert.ok(text.includes(part), part);
   assert.match(xml, /<w:br w:type="page"\/>/, 'the key starts on a new page');
   assert.equal(text.split('NASA\'s eco-friendly plan costs $20, doesn\'t it?').length - 1, 2, 'the full sentence appears in both answer parts only');
+});
+
+test('AI errors become codes the screen can explain (region refusal, busy, quota, key)', async () => {
+  const {aiErrorCode} = await import('../api/_lib/teacherWorkbook.ts');
+  assert.equal(aiErrorCode(Error('[400 Bad Request] User location is not supported for the API use.')), 'AI_REGION_UNSUPPORTED');
+  assert.equal(aiErrorCode(Error('503 The model is overloaded')), 'AI_BUSY');
+  assert.equal(aiErrorCode(Error('429 RESOURCE_EXHAUSTED')), 'AI_QUOTA');
+  assert.equal(aiErrorCode(Error('AI_NOT_CONFIGURED')), 'AI_NOT_CONFIGURED');
+  assert.equal(aiErrorCode(Error('something else')), 'WORKBOOK_TRANSLATE_FAILED');
+  await assert.rejects(translateWorkbook(admin, {sentences: ['Hi.']}, async () => { throw Error('User location is not supported for the API use.'); }), /AI_REGION_UNSUPPORTED/);
+});
+
+test('워크북 AI route (/api/gemini?task=workbook, the Seoul function): admin only, clear error codes', async () => {
+  const {handleWorkbookAi} = await import('../api/gemini.ts');
+  const call = async (body: any, uid: string, generate: any) => { let status = 0, out: any; const req: any = {method: 'POST', headers: {authorization: 'Bearer t'}, body};
+    const res: any = {setHeader() {}, end(v: string) { out = JSON.parse(v); }, set statusCode(v: number) { status = v; }, get statusCode() { return status; }};
+    await handleWorkbookAi(req, res, {verify: async () => ({uid}), db: () => ({}), generate, adminUid: 'admin'}); return {status, out}; };
+  let calls = 0; const ok = async () => { calls++; return JSON.stringify({translations: ['나는 달린다.']}); };
+  assert.deepEqual((await call({sentences: ['I run.']}, 'admin', ok)).out, {ok: true, translations: ['나는 달린다.']});
+  const refused = await call({sentences: ['I run.']}, 'teacher', ok);
+  assert.deepEqual([refused.status, refused.out.error, calls], [403, 'FORBIDDEN', 1], 'a teacher never reaches the model');
+  const region = await call({sentences: ['I run.']}, 'admin', async () => { throw Error('User location is not supported for the API use.'); });
+  assert.deepEqual([region.status, region.out.error], [502, 'AI_REGION_UNSUPPORTED']);
+  assert.equal((await call({sentences: []}, 'admin', ok)).out.error, 'INVALID_INPUT');
 });

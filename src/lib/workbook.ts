@@ -230,4 +230,8 @@ export function applyTranslations(sentences: WorkbookSentence[], lines: string[]
 }
 
 /** A file name without characters Windows or macOS refuse. */
-export const safeFileName = (title: string, version: number) => `${(title || '워크북').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || '워크북'}_v${version}.docx`;
+/** "제목_소제목.docx" (or just the title), without characters Windows or macOS refuse. */
+export function safeFileName(title: string, subtitle = '') {
+  const clean = (s: string) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+  return `${[clean(title) || '워크북', clean(subtitle)].filter(Boolean).join('_')}.docx`;
+}

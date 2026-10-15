@@ -10,6 +10,6 @@ test('regular preset only uses visible permitted classes on today, not past less
 });
 test('class and study reuse preset groups, retain required native inputs and show manual inputs without a disclosure',()=>{
  const html=renderToStaticMarkup(<LessonAcademyFields value={{classSession:'있음',selfStudy:'있음',start:'14:00',end:'15:20',selfStudyStart:'15:20',selfStudyEnd:'16:40',round:1,selfStudyRound:2}} regularTime={{start:'14:00',end:'15:20'}} onChange={()=>{}}/>);
- assert.ok(html.includes('오늘 정규 14:00–15:20'));assert.ok(!html.includes('<details'));assert.ok(!html.includes('<summary'));assert.equal((html.match(/class="lesson-time-direct-inputs"/g)||[]).length,2);assert.equal((html.match(/aria-pressed="true"/g)||[]).length,2);assert.ok(html.includes('aria-label="자습 시작"'));assert.ok(html.includes('value="15:20"'));assert.ok(html.includes('type="time"'));
+ assert.ok(html.includes('오늘 정규 14:00–15:20'));assert.ok(!html.includes('<details'));assert.ok(!html.includes('<summary'));assert.equal((html.match(/class="lesson-time-direct-inputs"/g)||[]).length,2);assert.equal((html.match(/aria-pressed="true"/g)||[]).length,3);/* +80분 (수업), +60분 and '수업 후' (자습 15:20 = 수업 끝) */assert.ok(html.includes('aria-label="자습 시작"'));assert.ok(html.includes('value="15:20"'));assert.ok(html.includes('type="time"'));
 });
 

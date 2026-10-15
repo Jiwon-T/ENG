@@ -10,7 +10,7 @@ function render(patch:any={}) {
  return renderToStaticMarkup(<AcademyLessonReview data={{uid,students:[],...patch}} request={async()=>({})} act={async()=>{}} busy={false} onEdit={()=>{}}/>);
 }
 test('regular teacher has native row open controls without inline editing',()=>{
- const html=render();assert.ok(!html.includes('작성자 선생님'));assert.equal((html.match(/일지 수정/g)||[]).length,0);assert.equal((html.match(/일지 삭제/g)||[]).length,0);assert.equal((html.match(/class="lesson-review-open"/g)||[]).length,2);assert.match(html,/엑셀 내보내기/);
+ const html=render();assert.ok(!html.includes('작성자 선생님'));assert.equal((html.match(/일지 수정/g)||[]).length,0);assert.equal((html.match(/일지 삭제/g)||[]).length,0);assert.equal((html.match(/<button[^>]*class="lesson-review-cover"/g)||[]).length,2);assert.ok(!/<button[^>]*>(?:(?!<\/button>)[\s\S])*<button/.test(html),'no button inside another');assert.match(html,/엑셀 내보내기/);
 });
 test('principal may select teacher but cannot edit or delete another teacher log',()=>{
  const html=render({principal:true});assert.match(html,/작성자 선생님/);assert.equal((html.match(/일지 수정/g)||[]).length,0);assert.equal((html.match(/일지 삭제/g)||[]).length,0);

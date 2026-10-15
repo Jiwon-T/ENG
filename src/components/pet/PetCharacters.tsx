@@ -243,27 +243,7 @@ function Accessory({ id, look }: { id: string; look: Look }) {
 
 const Sparkle = ({ x, y, s }: { x: number; y: number; s: number }) => <path transform={`translate(${x} ${y}) scale(${s})`} d="M0 -6 Q1 -1 6 0 Q1 1 0 6 Q-1 1 -6 0 Q-1 -1 0 -6Z" fill="#f6c94c" />;
 
-export const PinkCushionSVG = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 100 40" className={className} width="160" height="60" aria-hidden="true">
-    <path d="M10 20 Q50 5 90 20 Q95 35 50 38 Q5 35 10 20" fill="#FCE4EC" stroke="#F8BBD0" strokeWidth="2" />
-    <path d="M25 22 Q50 18 75 22" fill="none" stroke="#F8BBD0" strokeWidth="1" strokeDasharray="2,2" opacity="0.6" />
-  </svg>
-);
-export const SmallBedSVG = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 120 60" className={className} width="180" height="90" aria-hidden="true">
-    <rect x="10" y="10" width="100" height="45" rx="8" fill="#BCAAA4" stroke="#8D6E63" strokeWidth="2" />
-    <rect x="15" y="15" width="90" height="35" rx="4" fill="#BBDEFB" /><path d="M70 15 L105 15 L105 50 L70 50 Z" fill="#90CAF9" />
-    <rect x="15" y="20" width="20" height="25" rx="4" fill="#F5F5F5" stroke="#E0E0E0" strokeWidth="1" />
-  </svg>
-);
-export const MiniDeskSVG = ({ className }: { className?: string }) => (
-  <svg viewBox="0 0 100 60" className={className} width="160" height="100" aria-hidden="true">
-    <rect x="10" y="20" width="80" height="8" rx="2" fill="#A1887F" stroke="#795548" strokeWidth="2" />
-    <rect x="15" y="28" width="4" height="30" fill="#795548" /><rect x="81" y="28" width="4" height="30" fill="#795548" />
-    <rect x="30" y="28" width="40" height="15" rx="2" fill="#D7CCC8" stroke="#A1887F" strokeWidth="1" /><circle cx="50" cy="35" r="2" fill="#8D6E63" />
-    <rect x="35" y="15" width="20" height="8" fill="white" stroke="#E0E0E0" />
-  </svg>
-);
+// 핑크 쿠션·작은 침대·미니 책상 are whole room scenes now (PetScenes.tsx), drawn behind the pet like the other rooms.
 
 const SIZE: Record<PetStage, number> = { baby: 84, child: 100, teen: 116, adult: 132, master: 140 };
 
@@ -282,9 +262,6 @@ export const PetCharacter = ({ character, stage, clothing, accessory, background
   if (portrait) return <div className={className}>{art}</div>;
   return (
     <div className={`relative flex flex-col items-center justify-end ${className}`}>
-      {background === 'pink_cushion' && <PinkCushionSVG className="absolute -bottom-5 z-0" />}
-      {background === 'bed' && <SmallBedSVG className="absolute -bottom-8 z-0 opacity-90" />}
-      {background === 'desk' && <MiniDeskSVG className="absolute -bottom-6 -right-16 z-0 opacity-90" />}
       {art}
     </div>
   );

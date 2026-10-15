@@ -1,7 +1,6 @@
 // 워크북 만들기 (선생님방): AI 해석과 같은 지문의 재생성 기록. For now the admin only, because every AI call is billed.
 // Nothing here changes lesson or student data; history lives in workbookHistory/{uid}:{passageKey} (server only).
 import {z} from 'zod';
-import {generateAi} from '../gemini.js';
 import {WORKBOOK_LIMITS} from '../../src/lib/workbook.js';
 
 export const WORKBOOK_HISTORY = 'workbookHistory';
@@ -10,8 +9,27 @@ const onlyAdmin = (actor: any) => { if (!actor?.admin) throw Error('FORBIDDEN');
 const sentencesSchema = z.array(z.string().trim().min(1).max(WORKBOOK_LIMITS.sentenceChars)).min(1).max(WORKBOOK_LIMITS.sentences);
 const keySchema = z.string().regex(/^[a-z0-9]{6,40}$/);
 
+export const WORKBOOK_AI_MESSAGES: Record<string, string> = {
+  FORBIDDEN: '워크북 AI 해석은 관리자만 쓸 수 있어요.', INVALID_INPUT: '해석할 문장을 다시 확인해 주세요 (1~80문장, 문장마다 600자 이하).',
+  WORKBOOK_TRANSLATE_FAILED: 'AI 해석을 받지 못했어요. 잠시 후 다시 해 주세요.', WORKBOOK_TRANSLATE_MISMATCH: 'AI 해석 개수가 문장 수와 맞지 않아 넣지 않았어요. 다시 해 주세요.',
+  AI_NOT_CONFIGURED: 'AI 연결 설정이 없어요. 관리자에게 확인해 주세요.', AI_REGION_UNSUPPORTED: 'AI 서버가 이 서버 지역에서는 쓸 수 없다고 거절했어요. 서버 지역 설정을 확인해 주세요.',
+  AI_BUSY: 'AI 서버가 바빠요. 잠시 후 다시 해 주세요.', AI_QUOTA: 'AI 사용 한도에 걸렸어요. 잠시 후 다시 하거나 요금 설정을 확인해 주세요.',
+};
+
+/** What went wrong with a model call, as a code the screen can explain (never the prompt or the reply). Gemini refuses
+ *  calls from regions it does not serve (for example Hong Kong, hkg1) with "User location is not supported". */
+export function aiErrorCode(error: any) {
+  const text = String(error?.message || error || '');
+  if (text === 'AI_NOT_CONFIGURED' || /API key not valid|API_KEY_INVALID/i.test(text)) return 'AI_NOT_CONFIGURED';
+  if (/location is not supported|FAILED_PRECONDITION/i.test(text)) return 'AI_REGION_UNSUPPORTED';
+  if (/503|high demand|overloaded|UNAVAILABLE/i.test(text)) return 'AI_BUSY';
+  if (/429|RESOURCE_EXHAUSTED|quota/i.test(text)) return 'AI_QUOTA';
+  return 'WORKBOOK_TRANSLATE_FAILED';
+}
+
 /** Korean translations for the given English sentences, one each, in the same order (the teacher reviews them). */
-export async function translateWorkbook(actor: any, input: any, generate: (request: any) => Promise<string> = generateAi) {
+/** `generate` is the server model call (api/gemini, which runs in a region Gemini serves). */
+export async function translateWorkbook(actor: any, input: any, generate: (request: any) => Promise<string>) {
   onlyAdmin(actor);
   const sentences = sentencesSchema.parse(input?.sentences);
   const text = await generate({
@@ -22,7 +40,7 @@ export async function translateWorkbook(actor: any, input: any, generate: (reque
       responseSchema: {type: 'OBJECT', properties: {translations: {type: 'ARRAY', items: {type: 'STRING'}}}, required: ['translations']},
       temperature: 0.2, maxOutputTokens: 8192,
     },
-  });
+  }).catch((error: any) => { throw Error(aiErrorCode(error)); });
   let parsed: any; try { parsed = JSON.parse(text); } catch { throw Error('WORKBOOK_TRANSLATE_FAILED'); }
   const translations = Array.isArray(parsed?.translations) ? parsed.translations.map((t: any) => String(t ?? '').trim()) : [];
   // One translation per sentence or nothing: a shifted list would pair translations with the wrong sentences.

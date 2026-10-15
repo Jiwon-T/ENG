@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, Heart, Pencil, Check, X, Gift, Plus } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -36,6 +37,9 @@ const won = (n: number) => n.toLocaleString('ko-KR');
 const SPOTS = [{ left: '4%' }, { right: '4%' }, { left: '-2%', bottom: 46 }, { right: '-2%', bottom: 46 }, { left: '18%', bottom: 2 }];
 
 export default function PetHome({ onBack }: { onBack: () => void }) {
+  // The slot on the right of the app's top bar (App.tsx); without it the page keeps a small header of its own.
+  const [pointsSlot, setPointsSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => { setPointsSlot(document.getElementById('app-bar-extra')); }, []);
   const [user, setUser] = useState<FirebaseUser | null>(auth.currentUser);
   const [state, setState] = useState<PetState | null>(null);
   const [pending, setPending] = useState(0);
@@ -58,6 +62,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   const [feedRun, setFeedRun] = useState<FeedRunView | null>(null); // 단어 먹이 주기 (서버에 저장된 판)
   const [feedOpen, setFeedOpen] = useState(false);
   const [expedition, setExpedition] = useState<ExpeditionView | null>(null);
+  const expeditionAsked = useRef(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [guildOpen, setGuildOpen] = useState(false);
   const toastTimer = useRef<number>();
@@ -67,7 +72,11 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   const say = (message: string) => { setToast(message); window.clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToast(''), 2800); };
   const load = useCallback(async () => {
     if (!user) return;
-    try { const r = await PetService.load(user.uid); setState(r.state); setPending(r.pendingRewards || 0); if ('run' in r) setFeedRun(r.run || null); if (r.expedition) setExpedition(r.expedition); setLoadError(''); }
+    try { const r = await PetService.load(user.uid); setState(r.state); setPending(r.pendingRewards || 0); if ('run' in r) setFeedRun(r.run || null); if (r.expedition) setExpedition(r.expedition);
+      // The summary didn't come with the pet (an older server, a hiccup): ask for it on its own, once per visit to this
+      // screen (not again on every return to the tab); the map loads its own state anyway.
+      else if (!expeditionAsked.current) { expeditionAsked.current = true; void PetService.act('expedition-state').then((x: any) => { if (x.expedition) setExpedition(x.expedition); if ('run' in x) setFeedRun(x.run || null); }).catch(() => undefined); }
+      setLoadError(''); }
     catch (e: any) { setLoadError(e?.message || '펫을 불러오지 못했어요.'); }
   }, [user]);
   useEffect(() => { void load(); }, [load]);
@@ -157,11 +166,10 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-md px-4 pb-28">
-        <header className="flex items-center justify-between py-3">
-          <button type="button" onClick={onBack} className="flex items-center gap-0.5 text-sm font-bold text-[#8b2f40]"><ChevronLeft size={18} aria-hidden="true" />홈</button>
-          <h1 className="text-base font-black text-[#5e1e2a]">나만의 펫</h1>
-          <span className="flex items-center gap-1 rounded-full border border-[#f3d5da] px-2.5 py-1 text-xs font-bold text-[#8b2f40]"><span className="h-2 w-2 rounded-full bg-[#e07a87]" aria-hidden="true" />{won(state.points)}P</span>
-        </header>
+        {/* The app's top bar already has '‹ 🏠' and the name; the points go into its right side. */}
+        {pointsSlot ? createPortal(<span className="flex items-center gap-1 rounded-full border border-[#f3d5da] bg-white px-2.5 py-1 text-xs font-bold text-[#8b2f40]" aria-label={`포인트 ${won(state.points)}P`}><span className="h-2 w-2 rounded-full bg-[#e07a87]" aria-hidden="true" />{won(state.points)}P</span>, pointsSlot)
+          : <header className="flex items-center justify-between py-3"><button type="button" onClick={onBack} className="flex items-center gap-0.5 text-sm font-bold text-[#8b2f40]"><ChevronLeft size={18} aria-hidden="true" />홈</button><span className="text-xs font-bold text-[#8b2f40]">{won(state.points)}P</span></header>}
+        <div className="h-3" aria-hidden="true" />
 
         {(many || canAdopt) && <div role="tablist" aria-label="내 펫" className="-mx-1 mb-2 flex gap-2 overflow-x-auto px-1 pb-1">
           {state.pets.map(p => <button key={p.slot} type="button" role="tab" aria-selected={p.slot === pet.slot} disabled={busy} onClick={() => void switchTo(p.slot)} className="flex w-14 flex-none flex-col items-center text-[11px] font-bold text-[#8b2f40]">
@@ -214,9 +222,10 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
             {pending > 0 ? <div className="mt-3 flex items-center gap-2 rounded-xl bg-[#fef2f3] px-3 py-2"><Gift size={16} className="flex-none text-[#d26272]" aria-hidden="true" /><span className="flex-1 text-xs text-[#5e1e2a]"><b className="font-bold">공부 보상 {pending}개 도착</b><span className="block text-slate-500">출석 +{PET_ATTENDANCE_REWARD.points}P · 과제 완료 +{PET_ASSIGNMENT_REWARD.points}P</span></span><button type="button" disabled={busy} onClick={() => void claim()} className="rounded-lg bg-[#d26272] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60">받기</button></div>
               : <p className="mt-1.5 text-[11px] text-slate-400">공부로 받는 하루 포인트예요 · 받는 법은 맨 아래에 있어요</p>}
           </section>
-          {expedition && (() => { const c = expedition.chapters.find(x => expedition.current.startsWith(x.id + '-'))!, n = Number(expedition.current.split('-')[1]); return <section aria-label="원정대" className="mt-3 flex items-center gap-3 rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
+          {/* Always there: the map loads its own state, so 지도·길드 work even when the summary hasn't arrived. */}
+          {(() => { const c = expedition?.chapters.find(x => expedition.current.startsWith(x.id + '-')), n = Number(expedition?.current.split('-')[1]); return <section aria-label="원정대" className="mt-3 flex items-center gap-3 rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
             <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#eef6ea] text-lg" aria-hidden="true">🗺️</span>
-            <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">원정대</b><span className="block text-xs text-slate-500">{!pet.job && (expedition.jobReady || []).includes(pet.slot) ? '꿈의 정원 통과! 지도에서 전직할 수 있어요' : expedition.allCleared ? '모든 장 완료!' : expedition.currentNeedsLevel ? `${c.title} · 대표 펫 Lv.${expedition.currentNeedsLevel}부터` : `${c.title} ${n}단계`} · ★ {expedition.totalStars} / {expedition.maxStars}</span></span>
+            <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">원정대</b><span className="block text-xs text-slate-500">{!expedition || !c ? '지도에서 스테이지를 골라 출발해요' : <>{!pet.job && (expedition.jobReady || []).includes(pet.slot) ? '꿈의 정원 통과! 지도에서 전직할 수 있어요' : expedition.allCleared ? '모든 장 완료!' : expedition.currentNeedsLevel ? `${c.title} · 대표 펫 Lv.${expedition.currentNeedsLevel}부터` : `${c.title} ${n}단계`} · ★ {expedition.totalStars} / {expedition.maxStars}</>}</span></span>
             <span className="flex flex-none gap-1.5"><button type="button" onClick={() => setGuildOpen(true)} className="rounded-xl border border-[#f3d5da] px-3 py-2 text-xs font-bold text-[#8b2f40]">길드</button><button type="button" onClick={() => setMapOpen(true)} className="rounded-xl bg-[#e0587a] px-3.5 py-2 text-xs font-bold text-white">지도</button></span>
           </section>; })()}
           <section aria-label="단어 먹이 주기" className="mt-3 flex items-center gap-3 rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">

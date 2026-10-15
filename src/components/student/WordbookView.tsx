@@ -62,6 +62,8 @@ function shuffleArray<T>(array: T[]): T[] {
 export default function WordbookView({ isMobile, category = 'word', onNavigate, resumeTarget, onResumeHandled }: { isMobile?: boolean; category?: 'word' | 'grammar' | 'exam'; onNavigate?: (view: any) => void; resumeTarget?: RecentLearning | null; onResumeHandled?: () => void }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [examBooks,setExamBooks]=useState<Wordbook[]>([]);
+  // True while only the first ranges of a big word set are shown (the rest is still loading).
+  const [wordsPartial, setWordsPartial] = useState(false);
   const [selectedWordbook, setSelectedWordbook] = useState<Wordbook | null>(null);
   const [words, setWords] = useState<Word[]>([]);
   const [progress, setProgress] = useState<Progress>({});
@@ -420,16 +422,36 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     }
     
     setLoading(true);
+    let full = false, live = true;
+    // Big word sets (up to ~2,000 words): the range on screen comes first, the rest follows. Only for plain word sets,
+    // whose ranges are slices by order (every word has one); grammar sets and Day-based sets wait for the full list.
+    const plain = (selectedWordbook.category || 'word') === 'word' && !selectedWordbook.type;
+    const firstCount = Math.min(300, (selectedWordbook.defaultUnitSize || 47) * (currentChunk + 1));
+    const wordsRef = collection(db, `wordbooks/${selectedWordbook.id}/words`);
+    if (plain) Promise.all([
+      getDocs(query(wordsRef, orderBy('order'), limit(firstCount))),
+      // A book split by DAY numbers (each DAY its own size) can't be cut by count: any word with a DAY anywhere in the
+      // book means waiting for the whole list.
+      getDocs(query(wordsRef, where('day', '>', 0), limit(1))),
+    ]).then(([snapshot, dayed]) => {
+      if (!live || full || snapshot.size < firstCount || !dayed.empty) return; // small or DAY-based: wait for all
+      setWords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Word))); setWordsPartial(true); setLoading(false);
+    }).catch(() => {});
     const q = query(collection(db, `wordbooks/${selectedWordbook.id}/words`));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+      // A snapshot from the device cache may be old or incomplete: show it if it helps, but only the server's list
+      // counts as the whole book.
+      const fromServer = !snapshot.metadata.fromCache;
+      if (!fromServer && (full || !snapshot.size)) return;
       const fetchedWords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Word));
       // Sort by order if available
       fetchedWords.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-      setWords(fetchedWords);
+      if (fromServer) full = true;
+      setWords(fetchedWords); setWordsPartial(!fromServer);
       setLoading(false);
     });
-    return () => unsubscribe();
-  }, [selectedWordbook]);
+    return () => { live = false; unsubscribe(); };
+  }, [selectedWordbook]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!selectedWordbook) return;
@@ -2756,6 +2778,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                 </select>
               </div>
               
+              {wordsPartial && <p className="text-[11px] text-slate-400" role="status">나머지 범위를 불러오는 중…</p>}
               <div className="flex items-center gap-1.5 md:gap-2 overflow-x-auto pb-2 max-w-full no-scrollbar">
                 {Array.from({ length: totalChunks }).map((_, i) => (
                   <button

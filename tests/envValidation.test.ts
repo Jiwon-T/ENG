@@ -77,7 +77,7 @@ describe('Environment Variable and Configuration Enforcement Tests', () => {
     const referencedEnvVars = new Set<string>();
     for (const file of apiFiles) {
       // gemini.ts는 기존 Gemini 프록시이므로 이번 리포트 시스템 환경변수 검사에서 분리 확인
-      if (file.endsWith('gemini.ts')) continue;
+      if (file.endsWith('gemini.ts') || file.endsWith('aiModel.ts')) continue; // aiModel.ts: the Gemini call moved out of gemini.ts
 
       const code = fs.readFileSync(file, 'utf8');
       const matches1 = code.matchAll(/process\.env\.([A-Z0-9_]+)/g);

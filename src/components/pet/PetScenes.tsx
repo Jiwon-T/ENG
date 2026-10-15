@@ -1,6 +1,6 @@
 import React from 'react';
 
-// 원정대 보상 배경: a whole room scene drawn behind the pet (the shop backgrounds stay small props next to the pet).
+// Room scenes drawn behind the pet: 원정대 보상 배경 and the shop rooms (핑크 쿠션·작은 침대·미니 책상).
 // 230×190 grid; the pet stands on the ground strip at the bottom.
 const Star = ({ x, y, s = 1 }: { x: number; y: number; s?: number }) => <path transform={`translate(${x} ${y}) scale(${s})`} d="M0 -5 l1.5 3.5 l3.5 .6 l-2.6 2.2 l.7 3.6 l-3.1 -1.8 l-3.1 1.8 l.7 -3.6 l-2.6 -2.2 l3.5 -.6z" fill="#ffd166" />;
 
@@ -31,6 +31,28 @@ const SCENES: Record<string, React.ReactNode> = {
     <rect x="148" y="90" width="6" height="8" rx="3" fill="#fff6c8" /><rect x="192" y="90" width="6" height="8" rx="3" fill="#fff6c8" />
     <Star x={40} y={44} s={1.4} /><Star x={110} y={30} />
     <path d="M20 100 Q60 70 100 100" fill="none" stroke="#f7b8d4" strokeWidth="4" /><path d="M20 106 Q60 76 100 106" fill="none" stroke="#fff0a8" strokeWidth="4" /><path d="M20 112 Q60 82 100 112" fill="none" stroke="#a8dcf2" strokeWidth="4" />
+  </>,
+  pink_cushion: <>
+    <rect width="230" height="190" fill="#fff4f6" /><rect y="138" width="230" height="52" fill="#fde3e8" /><path d="M0 138 H230" stroke="#f6cdd5" strokeWidth="2" />
+    <g fill="#ffd6de"><circle cx="30" cy="30" r="3" /><circle cx="80" cy="20" r="2.4" /><circle cx="150" cy="34" r="3" /><circle cx="205" cy="22" r="2.4" /><circle cx="60" cy="70" r="2" /><circle cx="185" cy="66" r="2" /></g>
+    <rect x="160" y="44" width="46" height="40" rx="6" fill="#fff" stroke="#f6cdd5" strokeWidth="2" /><path d="M183 44 v40 M160 64 h46" stroke="#f6cdd5" strokeWidth="2" /><path d="M156 46 q8 18 0 40 M210 46 q-8 18 0 40" fill="#fbd3dc" />
+    <ellipse cx="115" cy="160" rx="62" ry="16" fill="#f7a8ba" /><ellipse cx="115" cy="155" rx="56" ry="12" fill="#fbc3d0" /><path d="M70 155 q45 10 90 0" fill="none" stroke="#f7a8ba" strokeWidth="1.5" strokeDasharray="3 3" />
+    <g transform="translate(36 148)"><ellipse rx="14" ry="9" fill="#fbc3d0" /><circle cy="-2" r="3" fill="#f49bb8" /></g><path transform="translate(198 150)" d="M0 -10 q6 0 6 6 q0 6 -6 10 q-6 -4 -6 -10 q0 -6 6 -6z" fill="#f49bb8" />
+  </>,
+  bed: <>
+    <rect width="230" height="190" fill="#eef4fb" /><rect y="140" width="230" height="50" fill="#e6d6c6" /><path d="M0 140 H230" stroke="#d8c3ae" strokeWidth="2" />
+    <rect x="18" y="34" width="40" height="44" rx="4" fill="#fff" stroke="#c9d8ea" strokeWidth="2" /><path d="M38 34 v44 M18 56 h40" stroke="#c9d8ea" strokeWidth="2" /><circle cx="48" cy="44" r="5" fill="#fff3c4" />
+    <rect x="132" y="96" width="88" height="40" rx="8" fill="#b9d3ee" /><rect x="132" y="80" width="14" height="60" rx="5" fill="#a07a5a" /><rect x="132" y="104" width="88" height="10" fill="#fff" /><rect x="150" y="90" width="26" height="14" rx="6" fill="#fff" stroke="#c9d8ea" /><path d="M180 104 q20 -6 40 0 v32 h-40z" fill="#9cc2e6" /><rect x="214" y="96" width="8" height="44" rx="3" fill="#a07a5a" />
+    <circle cx="96" cy="60" r="12" fill="#fff6c8" /><path d="M90 76 h12 v26 h-12z" fill="#e8c9a3" /><path d="M86 66 h20 l-4 -14 h-12z" fill="#f7b8d4" />
+    <rect x="12" y="150" width="70" height="22" rx="11" fill="#f2c6d1" opacity=".7" />
+  </>,
+  desk: <>
+    <rect width="230" height="190" fill="#fffaf1" /><rect y="140" width="230" height="50" fill="#efe1c9" /><path d="M0 140 H230" stroke="#e2cfae" strokeWidth="2" />
+    <rect x="20" y="30" width="56" height="40" rx="4" fill="#e9f3e3" stroke="#cfe0c4" strokeWidth="2" /><path d="M28 60 l10 -12 l8 8 l6 -6 l14 10" fill="none" stroke="#9cc58f" strokeWidth="2" /><circle cx="62" cy="40" r="4" fill="#ffd166" />
+    <rect x="138" y="62" width="76" height="6" rx="2" fill="#c49a6c" /><rect x="146" y="40" width="10" height="22" fill="#f49bb8" /><rect x="157" y="44" width="9" height="18" fill="#a8dcf2" /><rect x="167" y="38" width="11" height="24" fill="#fff0a8" /><rect x="179" y="46" width="8" height="16" fill="#c9b8f0" />
+    <rect x="126" y="108" width="96" height="8" rx="3" fill="#c49a6c" /><rect x="132" y="116" width="6" height="26" fill="#a87d52" /><rect x="210" y="116" width="6" height="26" fill="#a87d52" /><rect x="150" y="96" width="30" height="12" rx="2" fill="#fff" stroke="#e2cfae" /><path d="M165 96 v12" stroke="#e2cfae" />
+    <g transform="translate(200 92)"><path d="M0 16 h-8 l2 -8 h4z" fill="#f49bb8" /><path d="M-4 8 l-6 -10" stroke="#8b2f40" strokeWidth="2" /><circle cx="-11" cy="-4" r="4" fill="#fff3c4" /></g>
+    <rect x="196" y="128" width="12" height="4" rx="2" fill="#ffd166" />
   </>,
   oasis: <>
     <rect width="230" height="190" fill="#fdf3e1" /><circle cx="186" cy="38" r="16" fill="#ffd98a" /><circle cx="186" cy="38" r="22" fill="none" stroke="#ffe9b8" strokeWidth="3" />

@@ -6,7 +6,7 @@ import { verifyFirebaseSession } from '../firebaseSession.js';
 import { readStudentMapping } from '../studentIdentity.js';
 import { lessonReportId } from '../reportAudienceDTO.js';
 import type { StoredLessonReport } from '../reportSchemas.js';
-import { generateAi, takeAiQuota } from '../../gemini.js';
+import { generateAi, takeAiQuota } from '../aiModel.js';
 import {
   PET_STATES, addXP, adoptPet, awardStudy, buyItem, chatRequest, chooseCharacter, claimStudyRewards, currentPet, equipItem, evolveRequest, importLocalPet,
   initialPetState, parseAi, pendingStudyRewards, petSummary, petThePet, publicPetState, renamePet, rollDay, seoulDay, switchPet, teachRequest, wearItem, type ServerPetState,

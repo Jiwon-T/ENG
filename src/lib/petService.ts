@@ -14,10 +14,12 @@ export interface PetState {
 export interface PetResponse { state: PetState; result?: any; pendingRewards?: number; saved?: boolean; run?: any; expedition?: any }
 
 const LEGACY_KEY = (uid: string) => `pet_system_data_${uid}`;
-async function call(method: 'GET' | 'POST', body?: unknown): Promise<PetResponse> {
+/** The AI actions go to /api/gemini (it runs where Gemini is served); everything else to /api/student/pet. */
+const AI_ACTIONS = new Set(['teach', 'chat', 'evolve']);
+async function call(method: 'GET' | 'POST', body?: unknown, path = '/api/student/pet'): Promise<PetResponse> {
   const token = await auth.currentUser?.getIdToken();
   if (!token) throw Error('로그인이 필요해요.');
-  const r = await fetch('/api/student/pet', { method, headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  const r = await fetch(path, { method, headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
   const data = await r.json().catch(() => ({}));
   if (!r.ok || !data?.ok) throw Object.assign(Error(data?.message || '잠시 후 다시 해 주세요.'), { code: data?.error });
   return data;
@@ -39,7 +41,7 @@ export const PetService = {
       return { ...moved, pendingRewards: first.pendingRewards, run: games.run, expedition: games.expedition };
     } catch { return first; }
   },
-  act(action: string, payload: Record<string, unknown> = {}) { return call('POST', { action, ...payload }); },
+  act(action: string, payload: Record<string, unknown> = {}) { return call('POST', { action, ...payload }, AI_ACTIONS.has(action) ? '/api/gemini?task=pet' : '/api/student/pet'); },
   /** 공부 포인트 (server applies the rate and the daily cap). Never blocks the study screen: failures are ignored. */
   award(source: PetStudySource, count: number): Promise<PetResponse | null> {
     if (!auth.currentUser || !(count > 0)) return Promise.resolve(null);

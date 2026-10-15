@@ -5,6 +5,7 @@ import {
   type WorkbookBuild, type WorkbookHistory, type WorkbookSentence,
 } from '../../lib/workbook';
 import { readWorkbookFile } from '../../lib/workbookImport';
+import { auth } from '../../lib/firebase';
 
 // 워크북 만들기 (관리자): 1 지문 입력 → 2 문장·해석 확인 → 3 미리보기·Word. The sentence list keeps each sentence's
 // translation by id, so moving, splitting or merging never pairs a translation with the wrong sentence.
@@ -19,7 +20,12 @@ export default function WorkbookMaker({ request }: { request: Request }) {
   const [step, setStep] = useState<Step>(1);
   const [title, setTitle] = useState(''), [source, setSource] = useState(''), [mode, setMode] = useState<'passage' | 'excerpt'>('passage'), [text, setText] = useState('');
   const [sentences, setSentences] = useState<WorkbookSentence[]>([]);
-  const [build, setBuild] = useState<WorkbookBuild | null>(null), [history, setHistory] = useState<WorkbookHistory>({ blanks: [], orders: [] }), [version, setVersion] = useState(1);
+  const [build, setBuild] = useState<WorkbookBuild | null>(null), [history, setHistory] = useState<WorkbookHistory>({ blanks: [], orders: [] });
+  // 바닥글: each teacher's own line (e.g. 채움학원 지원T), remembered on this device.
+  const [footer, setFooterState] = useState(() => { try { return localStorage.getItem(FOOTER_KEY) || ''; } catch { return ''; } });
+  const setFooter = (v: string) => { setFooterState(v); try { localStorage.setItem(FOOTER_KEY, v); } catch { /* optional */ } };
+  // The build already downloaded (and remembered): downloading it again saves nothing new.
+  const savedBuild = useRef<WorkbookBuild | null>(null);
   const [view, setView] = useState<'part1' | 'part2' | 'key'>('part1');
   const [busy, setBusy] = useState(''), [message, setMessage] = useState(''), [pasteOpen, setPasteOpen] = useState(false), [pasteText, setPasteText] = useState(''), [overwrite, setOverwrite] = useState(false);
   const caret = useRef<Record<string, number>>({});
@@ -60,7 +66,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
 
   const translate = () => run('translate', async () => {
     const todo = sentences.filter(s => s.text.trim() && !s.ko.trim()); if (!todo.length) return setMessage('빈 해석이 없어요.');
-    const r = await request('workbook-translate', { sentences: todo.map(s => s.text) });
+    const r = await workbookTranslate(todo.map(s => s.text));
     const asked = todo.map(s => ({ id: s.id, text: s.text }));
     // Only the ones still empty are filled: anything typed meanwhile stays.
     // Applied only to sentences whose English is unchanged since the request (and still empty).
@@ -76,19 +82,21 @@ export default function WorkbookMaker({ request }: { request: Request }) {
     const past: WorkbookHistory = { blanks: h.blanks || [], orders: h.orders || [] };
     // "다시 섞기" also avoids what is on screen now.
     if (again && build) { past.blanks = [...past.blanks, build.blanks.map(b => b.blanks)]; past.orders = [...past.orders, build.arrange.map(a => a.order)]; }
-    setHistory({ blanks: h.blanks || [], orders: h.orders || [] }); if (!again) setVersion(h.nextVersion || 1);
+    setHistory({ blanks: h.blanks || [], orders: h.orders || [] });
     setBuild(buildWorkbook(sentences, past)); setStep(3); setView('part1');
   });
 
   const download = () => run('docx', async () => {
     if (!build) return; const problems = checkWorkbook(sentences, build); if (problems.length) throw Error(problems[0]);
     const { workbookDocx } = await import('../../lib/workbookDocx'), { saveAs } = await import('file-saver');
-    const blob = await workbookDocx(build, [title, source].filter(Boolean).join(' · '), version);
-    saveAs(blob, safeFileName(title || source, version));
-    // Remember this version's blanks and orders so the next one of the same passage differs.
-    const saved = await request('workbook-save', { key: build.key, title: title.slice(0, 120), blanks: build.blanks.map(b => b.blanks), orders: build.arrange.map(a => a.order) });
+    const blob = await workbookDocx(build, { title, subtitle: source, footer });
+    saveAs(blob, safeFileName(title, source));
+    if (savedBuild.current === build) return setMessage('같은 워크북을 다시 내려받았어요. 다른 빈칸·배열이 필요하면 다시 섞기를 눌러 주세요.');
+    // Remember these blanks and orders, so the next workbook from the same passage picks different ones.
+    await request('workbook-save', { key: build.key, title: title.slice(0, 120), blanks: build.blanks.map(b => b.blanks), orders: build.arrange.map(a => a.order) });
+    savedBuild.current = build;
     setHistory(h => ({ blanks: [...h.blanks, build.blanks.map(b => b.blanks)], orders: [...h.orders, build.arrange.map(a => a.order)] }));
-    setVersion((saved.version || version) + 1); setMessage(`버전 ${saved.version || version}을 내려받았어요. 다시 만들면 다른 빈칸과 배열이 나와요.`);
+    setMessage('내려받았어요. 이 지문으로 다음에 만들거나 다시 섞기를 누르면 이번과 다른 빈칸·배열이 나와요.');
   });
 
   const steps: [Step, string][] = [[1, '지문 입력'], [2, '문장·해석 확인'], [3, '미리보기·다운로드']];
@@ -102,8 +110,9 @@ export default function WorkbookMaker({ request }: { request: Request }) {
     {step === 1 && <div className={`${card} space-y-3`}>
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="text-xs font-bold text-slate-500">워크북 제목<input value={title} maxLength={120} onChange={e => setTitle(e.target.value)} placeholder="예: 2026 고2 10월 모의고사" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800" /></label>
-        <label className="text-xs font-bold text-slate-500">교재·지문 제목 <span className="font-normal">(선택)</span><input value={source} maxLength={120} onChange={e => setSource(e.target.value)} placeholder="예: 18번 지문" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800" /></label>
+        <label className="text-xs font-bold text-slate-500">소제목 <span className="font-normal">(선택 · 교재·지문)</span><input value={source} maxLength={120} onChange={e => setSource(e.target.value)} placeholder="예: 18번 지문" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800" /></label>
       </div>
+      <label className="block text-xs font-bold text-slate-500">바닥글 <span className="font-normal">(선택 · 모든 쪽 아래에 들어가요, 이 기기에 기억)</span><input value={footer} maxLength={80} onChange={e => setFooter(e.target.value)} placeholder="예: 채움학원 지원T" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800" /></label>
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="자료 유형">{([['passage', '연속 지문'], ['excerpt', '발췌 문장 (한 줄에 한 문장)']] as const).map(([id, label]) => <button key={id} type="button" aria-pressed={mode === id} onClick={() => setMode(id)} className={`rounded-full px-3 py-1 text-xs font-bold ${mode === id ? 'bg-[#e0587a] text-white' : 'bg-[#f8f1f2] text-[#8b2f40]'}`}>{label}</button>)}</div>
       <textarea value={text} onChange={e => setText(e.target.value)} rows={10} aria-label="영어 지문 또는 문장" placeholder={mode === 'passage' ? '영어 지문을 붙여 넣으세요. 문장은 앱이 나눠요.' : '한 줄에 한 문장씩 넣으세요. 앞의 번호(1. 2) ①)는 빼고 처리해요.'} className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-sm leading-relaxed" />
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
@@ -143,7 +152,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
     {step === 3 && build && <div className="space-y-2">
       <div className={`${card} flex flex-wrap items-center justify-between gap-2`}>
         <span className="flex gap-1.5" role="tablist" aria-label="미리보기">{([['part1', 'Part 1 빈칸'], ['part2', 'Part 2 배열'], ['key', '정답']] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)} className={`rounded-full px-3 py-1 text-xs font-bold ${view === id ? 'bg-[#e0587a] text-white' : 'bg-[#f8f1f2] text-[#8b2f40]'}`}>{label}</button>)}</span>
-        <span className="text-xs text-slate-500">버전 {version}{history.blanks.length > 0 && ` · 이전 ${history.blanks.length}개 버전과 다르게`}</span>
+        <span className="text-xs text-slate-500">{history.blanks.length > 0 ? `이 지문으로 만든 이전 워크북 ${history.blanks.length}개와 다르게 골랐어요` : '이 지문으로 처음 만드는 워크북'}</span>
       </div>
       {issues.length ? <ul className="rounded-xl bg-[#fef2f3] px-3 py-2 text-xs text-[#b04a5a]">{issues.slice(0, 6).map(m => <li key={m}>· {m}</li>)}</ul>
         : <p className="rounded-xl bg-[#eef6ea] px-3 py-2 text-xs font-bold text-[#4f7a43]">✓ 문장 {sentences.length} · Part 1 {build.blanks.length} · Part 2 {build.arrange.length} · 정답 {sentences.length} · 모든 문장 빈칸 3개 이상</p>}
@@ -163,6 +172,15 @@ export default function WorkbookMaker({ request }: { request: Request }) {
       </div>
     </div>}
   </section>;
+}
+const FOOTER_KEY = 'workbook-footer';
+/** AI 해석 from /api/gemini?task=workbook (the Seoul function: Gemini does not serve the Hong Kong region). */
+async function workbookTranslate(sentences: string[]): Promise<{ translations: string[] }> {
+  const token = await auth.currentUser?.getIdToken();
+  const r = await fetch('/api/gemini?task=workbook', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ sentences }) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data?.ok) throw Error(data?.message || 'AI 해석을 받지 못했어요. 잠시 후 다시 해 주세요.');
+  return data;
 }
 /** "1. 해석" / "1) 해석" pasted from a numbered list: the number is not part of the translation. */
 const stripKoNumber = (line: string) => line.replace(/^\s*(?:\(?\d{1,3}[).]|[①-⑳])\s*/, '').trim();

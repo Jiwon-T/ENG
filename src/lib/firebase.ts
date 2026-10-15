@@ -5,6 +5,8 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+// Memory cache only (the default): a device copy (IndexedDB) can't be cleared reliably while other tabs are open, and
+// would outlive the session on a shared device.
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
 

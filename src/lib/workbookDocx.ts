@@ -1,6 +1,6 @@
 // 워크북 Word 파일: A4, Part 1 (빈칸 + 해석), Part 2 (해석 → 단어 배열 → 답 쓰는 줄), Answer Key on a new page.
 // Built in the browser with the docx library the word test already uses; nothing is stored.
-import { AlignmentType, BorderStyle, Document, HeadingLevel, Packer, PageBreak, Paragraph, TextRun } from 'docx';
+import { AlignmentType, BorderStyle, Document, Footer, HeadingLevel, Packer, PageBreak, Paragraph, TextRun } from 'docx';
 import { BLANK, arrangeLine, blankedText, type WorkbookBuild } from './workbook';
 
 const EN = 'Arial', KO = 'Malgun Gothic';
@@ -9,10 +9,12 @@ const run = (text: string, opts: { bold?: boolean; size?: number; color?: string
 const koLine = (ko: string) => new Paragraph({ spacing: { after: 160 }, indent: { left: 360 }, children: [run('해석  ', { bold: true, size: 18, color: 'B04A5A' }), run(ko, { size: 19, color: '5E5A5C' })] });
 const heading = (text: string) => new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240, after: 160 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'F3C4CC', space: 4 } }, children: [run(text, { bold: true, size: 26, color: '8B2F40' })] });
 
-export async function workbookDocx(build: WorkbookBuild, title: string, version: number): Promise<Blob> {
+/** `footer`: the teacher's own line at the bottom of every page (e.g. 채움학원 지원T); empty for none. */
+export async function workbookDocx(build: WorkbookBuild, info: { title: string; subtitle?: string; footer?: string }): Promise<Blob> {
+  const heading2 = [info.title, info.subtitle].filter(Boolean).join(' · ');
   const body: Paragraph[] = [
-    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80 }, children: [run('고등학교 영어 워크북', { bold: true, size: 36, color: '5E1E2A' })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 280 }, children: [run(`${title || '워크북'} · 버전 ${version}`, { size: 22, color: '8B2F40' })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80 }, children: [run('WORKBOOK', { bold: true, size: 44, color: '5E1E2A' })] }),
+    ...(heading2 ? [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 280 }, children: [run(heading2, { size: 22, color: '8B2F40' })] })] : []),
     heading('Part 1. 영문 빈칸 완성'),
   ];
   build.blanks.forEach((item, n) => {
@@ -35,9 +37,11 @@ export async function workbookDocx(build: WorkbookBuild, title: string, version:
     body.push(koLine(item.ko));
   });
   const doc = new Document({
-    creator: '지원T English', title: `고등학교 영어 워크북 - ${title}`,
+    creator: '지원T English', title: heading2 ? `WORKBOOK - ${heading2}` : 'WORKBOOK',
     styles: { default: { document: { run: { font, size: 21 } } } },
-    sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } }, children: body }],
+    sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, bottom: 1134, left: 1134, right: 1134, footer: 567 } } },
+      ...(info.footer?.trim() ? { footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [run(info.footer.trim().slice(0, 80), { size: 16, color: '9A8A8F' })] })] }) } } : {}),
+      children: body }],
   });
   return Packer.toBlob(doc);
 }

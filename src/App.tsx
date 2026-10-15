@@ -5,7 +5,7 @@ import { SpeedInsights } from '@vercel/speed-insights/react';
 import { auth, db, recordAttendance, logout } from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, collection, query, where, setDoc } from 'firebase/firestore';
-import { Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, ArrowRight, AlertTriangle, RefreshCw, Menu, History, BarChart3, Users, Download, Share, Smartphone, X as CloseIcon, Info, Plus, Dog, Pencil } from 'lucide-react';
+import { ChevronLeft, Home as HomeIcon, Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, ArrowRight, AlertTriangle, RefreshCw, Menu, History, BarChart3, Users, Download, Share, Smartphone, X as CloseIcon, Info, Plus, Dog, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { RecentLearning } from './lib/recentLearning';
 import { AppChrome } from './lib/appChrome';
@@ -105,6 +105,8 @@ const PetHome = lazy(() => import('./components/pet/PetHome'));
 const ParentReportView = lazy(() => import('./components/parent/ParentReportView').then(m => ({ default: m.ParentReportView })));
 
 type View = 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'exam' | 'tutor' | 'report' | 'archive' | 'teacher-room' | 'pet';
+/** The screen's name in the top bar (the same words as on the home tiles and in the menu). */
+const VIEW_TITLES: Partial<Record<View, string>> = { analyzer: '지문 분석기', generator: '문제 생성기', vocab: '단어 세트', grammar: '문법 세트', exam: '시험기간', tutor: 'AI 튜터', report: '학습 리포트', archive: '보관소', pet: '나만의 펫' };
 
 interface UserProfile {
   uid: string;
@@ -431,27 +433,26 @@ export default function App() {
       <div className="min-h-screen pb-20 bg-[#fafafa]">
       {/* Global Navigation Bar (the teacher room shows these controls in its own header row) */}
       {currentView !== 'teacher-room' && currentView !== 'home' && (
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex justify-between items-center no-print">
-        <div className="flex items-center gap-2 cursor-pointer group" onClick={goHome}>
-          <div className="w-8 h-8 bg-pastel-pink-100 rounded-lg flex items-center justify-center text-sm group-hover:bg-pastel-pink-200 transition-colors">
-            {currentView === 'home' ? '🏫' : '🏡'}
-          </div>
-          {currentView !== 'home' && (
-            <span className="font-black text-slate-900 tracking-tight group-hover:text-pastel-pink-500 transition-colors">
-              돌아가기
-            </span>
-          )}
+      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-[#f3e6e8] px-4 md:px-6 py-2.5 flex justify-between items-center gap-2 no-print">
+        {/* One row for every student screen: '‹ 🏠' back home and the screen's name; on the right the screen's own item
+            (the pet puts its points in #app-bar-extra) and the menu (avatar + ☰; the name is shown inside the menu). */}
+        <div className="flex min-w-0 items-center gap-2.5">
+          <button type="button" onClick={goHome} aria-label="홈으로 돌아가기" title="홈으로 돌아가기" className="flex flex-none items-center gap-px rounded-full border border-[#f3e6e8] bg-white py-1.5 pl-1.5 pr-2.5 text-[#8b2f40] transition-colors hover:border-[#eaa9b3] hover:bg-[#fef2f3]">
+            <ChevronLeft size={16} aria-hidden="true" /><HomeIcon size={16} aria-hidden="true" />
+          </button>
+          <h1 className="truncate text-base font-black text-[#5e1e2a]">{VIEW_TITLES[currentView] || ''}</h1>
         </div>
-        
-        <div className="flex items-center gap-4">
+        <div className="flex flex-none items-center gap-2">
+          <div id="app-bar-extra" className="flex items-center" />
           <button
             onClick={() => setIsMenuOpen(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-slate-50 rounded-full border border-slate-100 shadow-sm transition-all active:scale-[0.98] relative"
+            aria-label={`메뉴 열기 (${profile?.alias || profile?.name || ''}님)`}
+            className="flex items-center gap-1.5 rounded-full border border-[#f3e6e8] bg-white py-1 pl-1 pr-2.5 transition-colors hover:border-[#eaa9b3] hover:bg-[#fef2f3] active:scale-[0.98] relative"
           >
             {hasNewAssignment && (
               <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-bounce" />
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <div className="w-7 h-7 bg-pastel-pink-100 rounded-lg flex items-center justify-center text-sm shadow-inner overflow-hidden">
                 {profile?.photoURL && profile.photoURL.startsWith('http') ? (
                   <img src={profile.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
@@ -459,10 +460,7 @@ export default function App() {
                   <span>{profile?.photoURL || '👤'}</span>
                 )}
               </div>
-              <span className="text-xs font-bold text-slate-600">
-                {profile?.alias || profile?.name}님
-              </span>
-              <Menu size={16} className="text-slate-400" />
+              <Menu size={16} className="text-[#8b2f40]" aria-hidden="true" />
             </div>
           </button>
         </div>

@@ -1,15 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { GoogleGenAI } from '@google/genai';
 import { parseJsonBody, sendJson } from './_lib/http.js';
 import { getFirebaseAdmin } from './_lib/firebaseAdmin.js';
 import { verifyFirebaseSession } from './_lib/firebaseSession.js';
+import { WORKBOOK_AI_MESSAGES, translateWorkbook } from './_lib/teacherWorkbook.js';
+import { handlePet } from './_lib/student/pet.js';
+import { AI_DAILY_LIMIT, AI_MODEL, generateAi, takeAiQuota } from './_lib/aiModel.js';
+export { AI_DAILY_LIMIT, AI_MODEL, generateAi, takeAiQuota };
 
 // Gemini proxy: signed-in accounts only, a daily limit per account (the admin is not limited), and the model and
 // output length fixed here rather than chosen by the browser. Only plain generation settings are passed through.
-export const AI_MODEL = 'gemini-3-flash-preview';
-export const AI_DAILY_LIMIT = 60;
 const MAX_OUTPUT = 8192, MAX_TEXT = 20000, MAX_TURNS = 20;
-const seoulDay = (at = Date.now()) => new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Seoul'}).format(new Date(at));
 
 /** Keep only text turns and plain generation settings; anything else (tools, other models, huge outputs) is dropped. */
 export function cleanAiRequest(body: any) {
@@ -27,25 +27,6 @@ export function cleanAiRequest(body: any) {
     if (c.responseSchema && typeof c.responseSchema === 'object' && JSON.stringify(c.responseSchema).length <= 8000) config.responseSchema = c.responseSchema;
     if (typeof c.temperature === 'number' && c.temperature >= 0 && c.temperature <= 2) config.temperature = c.temperature;
     return {contents: turns, config};
-}
-
-/** Count one call for today (Seoul); false when the account has used up today's calls. */
-export async function takeAiQuota(db: any, uid: string, now = Date.now(), limit = AI_DAILY_LIMIT) {
-    const ref = db.collection('aiUsage').doc(`${uid}:${seoulDay(now)}`);
-    return db.runTransaction(async (tx: any) => {
-        const used = Number((await tx.get(ref)).data()?.count || 0);
-        if (used >= limit) return false;
-        tx.set(ref, {uid, day: seoulDay(now), count: used + 1, updatedAt: now});
-        return true;
-    });
-}
-
-/** One model call with the server key (the pet talk uses it too). */
-export async function generateAi(request: any) {
-    const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) throw Error('AI_NOT_CONFIGURED');
-    const response = await new GoogleGenAI({apiKey}).models.generateContent({model: AI_MODEL, ...request});
-    return response.text || '';
 }
 
 type Deps = {verify: (token: string) => Promise<{uid: string}>; db: () => any; generate: (request: any) => Promise<string>; adminUid?: string};
@@ -74,4 +55,29 @@ export async function handleGemini(req: IncomingMessage, res: ServerResponse, de
     }
 }
 
-export default function handler(req: IncomingMessage, res: ServerResponse) { return handleGemini(req, res); }
+/** 워크북 AI 해석 (/api/gemini?task=workbook): the admin only, one Korean sentence per English sentence. */
+export async function handleWorkbookAi(req: IncomingMessage, res: ServerResponse, deps: Deps = defaultDeps()) {
+    if (req.method !== 'POST') return sendJson(res, 405, {ok: false, error: 'Method not allowed'});
+    const header = req.headers.authorization || '';
+    if (!header.startsWith('Bearer ')) return sendJson(res, 401, {ok: false, error: 'UNAUTHORIZED'});
+    let uid: string;
+    try { uid = (await deps.verify(header.slice(7).trim())).uid; } catch { return sendJson(res, 401, {ok: false, error: 'INVALID_TOKEN'}); }
+    if (!deps.adminUid || uid !== deps.adminUid) return sendJson(res, 403, {ok: false, error: 'FORBIDDEN', message: WORKBOOK_AI_MESSAGES.FORBIDDEN});
+    try {
+        return sendJson(res, 200, {ok: true, ...await translateWorkbook({uid, admin: true}, await parseJsonBody(req).catch(() => null), deps.generate)});
+    } catch (error: any) {
+        const code = error?.name === 'ZodError' ? 'INVALID_INPUT' : WORKBOOK_AI_MESSAGES[error?.message] ? error.message : 'WORKBOOK_TRANSLATE_FAILED';
+        console.warn('WORKBOOK_AI_FAILED', {code}); // never the sentences or the reply
+        return sendJson(res, code === 'INVALID_INPUT' ? 400 : code === 'AI_BUSY' ? 503 : code === 'AI_QUOTA' ? 429 : 502, {ok: false, error: code, message: WORKBOOK_AI_MESSAGES[code]});
+    }
+}
+
+/** This function runs in Seoul (vercel.json), where Gemini is served; the other functions stay next to Firestore in
+ *  Hong Kong. So every model call comes here: ?task=workbook (워크북 해석), ?task=pet (펫 말 가르치기·대화·혼잣말,
+ *  the same pet handler and checks as /api/student/pet), and the plain proxy (지문 분석기·문제 생성기). */
+export default function handler(req: IncomingMessage, res: ServerResponse) {
+    const task = new URL(req.url || '', 'http://localhost').searchParams.get('task');
+    if (task === 'workbook') return handleWorkbookAi(req, res);
+    if (task === 'pet') return handlePet(req, res);
+    return handleGemini(req, res);
+}

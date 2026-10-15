@@ -77,7 +77,9 @@ test('toggle blanks, pasted translations, passage key and file name', () => {
   assert.deepEqual(applyTranslations(typed, ['덮어쓰면 안 됨', '새 해석']).map(s => s.ko), ['직접 쓴 해석', '새 해석']);
   assert.equal(passageKey(['1. Hello  world.', '2) Bye.']), passageKey(['Hello world.', 'Bye.']));
   assert.notEqual(passageKey(['Hello world.']), passageKey(['Hello World.']));
-  assert.equal(safeFileName('고2: 10월 "모의고사"/A', 3), '고2 10월 모의고사 A_v3.docx');
+  assert.equal(safeFileName('고2: 10월 "모의고사"/A', '18번 지문'), '고2 10월 모의고사 A_18번 지문.docx');
+  assert.equal(safeFileName('10월 모의고사'), '10월 모의고사.docx', 'no subtitle: the title alone, no version');
+  assert.equal(safeFileName('', ''), '워크북.docx');
 });
 
 test('articles: never a blank, and in Part 2 kept with the first word of their noun phrase', async () => {

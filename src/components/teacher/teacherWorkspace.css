@@ -1036,3 +1036,13 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 .teacher-workspace .lesson-study-remove{min-height:24px;width:24px;height:24px;padding:0;border:0;border-radius:999px;background:#f8f1f2;color:#9a8a8f;font-size:14px;line-height:1;}
 .teacher-workspace .lesson-study-add{justify-self:end;min-height:26px;padding:2px 10px;border:1px dashed #eaa9b3;border-radius:999px;background:#fff;color:#8b2f40;font-size:12px;font-weight:700;}
 .teacher-workspace .lesson-study-add:hover{background:#fef2f3;}
+/* 일지 조회: the student's name opens 학생 관리 for that student. */
+/* The card: a container; its full-size open button sits behind the content, the name button above it (no nesting). */
+.lesson-review-card{position:relative;cursor:pointer;}
+.teacher-workspace .rv-list .lesson-review-cover{position:absolute;inset:0;z-index:1;min-height:0;width:100%;height:100%;padding:0;border:0;border-radius:16px;background:transparent;box-shadow:none;cursor:pointer;}
+.teacher-workspace .rv-list .lesson-review-cover:not(:disabled):hover{background:transparent;box-shadow:none;}
+.teacher-workspace .rv-list .lesson-review-cover:focus-visible{outline:2px solid var(--workspace-palette-ff4778);outline-offset:2px;}
+.teacher-workspace .rv-list .rv-student-link{position:relative;z-index:2;min-height:0;padding:0;border:0;background:none;box-shadow:none;font:inherit;color:inherit;cursor:pointer;border-radius:6px;text-decoration:underline;text-decoration-color:#f3c4cc;text-underline-offset:3px;}
+.teacher-workspace .rv-list .rv-student-link:not(:disabled):hover{background:none;box-shadow:none;}
+.teacher-workspace .rv-list .rv-student-link:hover,.teacher-workspace .rv-list .rv-student-link:focus-visible{color:#c2405e;text-decoration-color:#e0587a;}
+.teacher-workspace .rv-list .rv-student-link:focus-visible{outline:2px solid var(--workspace-palette-ff4778);outline-offset:2px;}
