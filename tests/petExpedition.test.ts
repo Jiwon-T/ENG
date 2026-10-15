@@ -8,9 +8,9 @@ import {PET_DAILY_STUDY_POINTS} from '../src/lib/petCatalog.js';
 
 const NOW = Date.parse('2026-10-14T03:00:00Z');
 
-test('expedition: 15 stages in order; each opens when the one before is cleared; a crown stage needs 2 stars', () => {
+test('expedition: 35 stages in order (7 chapters); each opens when the one before is cleared; a crown stage needs 2 stars', () => {
   const e = initialExpedition(NOW), s = initialPetState(NOW);
-  assert.equal(STAGE_IDS.length, 15); assert.deepEqual([STAGE_IDS[0], STAGE_IDS[4], STAGE_IDS[5]], ['forest-1', 'forest-5', 'sea-1']);
+  assert.equal(STAGE_IDS.length, 35); assert.deepEqual([STAGE_IDS[0], STAGE_IDS[4], STAGE_IDS[5]], ['forest-1', 'forest-5', 'sea-1']);
   assert.deepEqual([stageUnlocked(e, 'forest-1'), stageUnlocked(e, 'forest-2')], [true, false]);
   for (const id of ['forest-1', 'forest-2', 'forest-3', 'forest-4']) finishStage(e, s, id, 1);
   assert.equal(stageUnlocked(e, 'forest-5'), true);
@@ -75,7 +75,7 @@ test('expedition: chapters need the main pet level (숲 1, 바다 5, 성 10); pa
   for (const id of STAGE_IDS.slice(0, 5)) finishStage(e, s, id, 3);
   assert.deepEqual([stageUnlocked(e, 'sea-1', 4), stageUnlocked(e, 'sea-1', 5), levelOk('castle-1', 9), levelOk('castle-1', 10)], [false, true, false, true]);
   const view = publicExpedition(e, 4);
-  assert.deepEqual(view.chapters.map(c => [c.minLevel, c.levelOk, c.unlocked]), [[1, true, true], [5, false, false], [10, false, false]]);
+  assert.deepEqual(view.chapters.map(c => [c.minLevel, c.levelOk, c.unlocked]), [[1, true, true], [5, false, false], [10, false, false], [20, false, false], [35, false, false], [50, false, false], [70, false, false]]);
   const t = initialPetState(NOW); t.today.studyPoints = PET_DAILY_STUDY_POINTS - 25;
   const out = finishStage(initialExpedition(NOW), t, 'forest-1', 3);
   assert.deepEqual([out.paid, out.bonus], [{clear: 20, star2: 5, star3: 0}, 25], 'the screen shows what was really paid');
@@ -99,6 +99,6 @@ test('expedition: the next goal is the first unplayed stage by progress, marked 
   assert.deepEqual([low.current, low.currentNeedsLevel, low.allCleared], ['sea-1', 5, false], 'not castle-5: the sea chapter, waiting for Lv.5');
   assert.deepEqual([publicExpedition(e, 5).currentNeedsLevel], [null]);
   for (const id of STAGE_IDS.slice(5)) finishStage(e, s, id, 3);
-  const all = publicExpedition(e, 10);
-  assert.deepEqual([all.current, all.allCleared, all.currentNeedsLevel], ['castle-5', true, null]);
+  const all = publicExpedition(e, 70);
+  assert.deepEqual([all.current, all.allCleared, all.currentNeedsLevel], ['dream-5', true, null]);
 });

@@ -32,6 +32,42 @@ const SCENES: Record<string, React.ReactNode> = {
     <Star x={40} y={44} s={1.4} /><Star x={110} y={30} />
     <path d="M20 100 Q60 70 100 100" fill="none" stroke="#f7b8d4" strokeWidth="4" /><path d="M20 106 Q60 76 100 106" fill="none" stroke="#fff0a8" strokeWidth="4" /><path d="M20 112 Q60 82 100 112" fill="none" stroke="#a8dcf2" strokeWidth="4" />
   </>,
+  oasis: <>
+    <rect width="230" height="190" fill="#fdf3e1" /><circle cx="186" cy="38" r="16" fill="#ffd98a" /><circle cx="186" cy="38" r="22" fill="none" stroke="#ffe9b8" strokeWidth="3" />
+    <path d="M0 118 Q40 100 80 116 T160 112 T230 116 L230 190 L0 190Z" fill="#f6e2bd" /><path d="M0 140 Q60 126 120 140 T230 138 L230 190 L0 190Z" fill="#f1d7a6" />
+    <ellipse cx="72" cy="160" rx="34" ry="8" fill="#9fd8e6" /><ellipse cx="72" cy="158" rx="22" ry="4" fill="#c4ebf3" />
+    <path d="M40 158 Q42 128 38 108" fill="none" stroke="#b58a5c" strokeWidth="4" strokeLinecap="round" /><path d="M38 108 Q22 100 14 108 M38 108 Q30 92 20 92 M38 108 Q50 94 60 98 M38 108 Q56 104 62 114" fill="none" stroke="#7cc08a" strokeWidth="5" strokeLinecap="round" />
+    <path d="M104 160 Q106 138 102 124" fill="none" stroke="#b58a5c" strokeWidth="3.5" strokeLinecap="round" /><path d="M102 124 Q90 118 84 124 M102 124 Q112 114 120 118 M102 124 Q116 122 118 130" fill="none" stroke="#8fcf98" strokeWidth="4" strokeLinecap="round" />
+    <path d="M160 152 l0 -22 M160 136 l-7 0 l0 -6 M160 140 l7 0 l0 -8" fill="none" stroke="#9ccf8a" strokeWidth="5" strokeLinecap="round" />
+    <path d="M196 150 q4 -10 10 -6 q2 -8 8 -4" fill="none" stroke="#e8b97a" strokeWidth="2" /><circle cx="150" cy="70" r="1.6" fill="#fff" /><circle cx="60" cy="50" r="1.4" fill="#fff" />
+  </>,
+  snow_cabin: <>
+    <rect width="230" height="190" fill="#eef4fb" /><path d="M0 120 L50 60 L90 104 L130 50 L180 108 L210 80 L230 100 L230 190 L0 190Z" fill="#dfe8f5" /><path d="M50 60 L40 72 L50 70 L58 78 L66 68Z M130 50 L118 64 L130 62 L140 70 L146 60Z" fill="#fff" />
+    <rect y="150" width="230" height="40" fill="#fff" /><path d="M0 150 Q60 142 120 150 T230 148" fill="none" stroke="#e3ebf6" strokeWidth="3" />
+    <rect x="150" y="106" width="46" height="44" rx="3" fill="#d9b48f" stroke="#c39a72" /><path d="M142 110 L173 84 L204 110Z" fill="#fff" stroke="#dfe8f5" /><path d="M146 110 L173 88 L200 110" fill="none" stroke="#b97a6a" strokeWidth="3" />
+    <rect x="166" y="124" width="12" height="26" rx="5" fill="#a9744f" /><rect x="154" y="114" width="9" height="9" rx="2" fill="#ffe7a6" stroke="#c39a72" /><rect x="183" y="114" width="9" height="9" rx="2" fill="#ffe7a6" stroke="#c39a72" />
+    <path d="M30 150 L40 120 L50 150Z" fill="#9cc2b0" /><path d="M33 134 L40 114 L47 134Z" fill="#fff" /><path d="M206 150 L214 128 L222 150Z" fill="#9cc2b0" />
+    <g fill="#fff"><circle cx="20" cy="30" r="2" /><circle cx="70" cy="20" r="1.6" /><circle cx="104" cy="40" r="2" /><circle cx="160" cy="24" r="1.6" /><circle cx="210" cy="44" r="2" /><circle cx="88" cy="80" r="1.4" /></g>
+    <g transform="translate(96 156)"><circle r="9" fill="#fff" stroke="#e3ebf6" /><circle cy="-13" r="6" fill="#fff" stroke="#e3ebf6" /><path d="M-6 -9 L6 -9" stroke="#f49bb0" strokeWidth="2.5" /><circle cx="-2" cy="-14" r=".9" fill="#2f2228" /><circle cx="2" cy="-14" r=".9" fill="#2f2228" /></g>
+  </>,
+  galaxy: <>
+    <rect width="230" height="190" fill="#3d3a6b" /><path d="M-10 120 Q60 60 120 70 T240 20" fill="none" stroke="#6c67a8" strokeWidth="26" opacity=".55" /><path d="M-10 120 Q60 60 120 70 T240 20" fill="none" stroke="#9d97d6" strokeWidth="8" opacity=".5" />
+    <g fill="#fff"><circle cx="30" cy="30" r="1.4" /><circle cx="80" cy="50" r="1" /><circle cx="140" cy="30" r="1.6" /><circle cx="200" cy="70" r="1.2" /><circle cx="60" cy="90" r="1" /><circle cx="170" cy="100" r="1.4" /><circle cx="110" cy="110" r="1" /></g>
+    <Star x={150} y={45} /><Star x={50} y={64} s={0.8} />
+    <path d="M180 20 L140 52" stroke="#fff6c8" strokeWidth="2" strokeLinecap="round" /><circle cx="180" cy="20" r="3" fill="#fff6c8" />
+    <path d="M0 150 Q70 130 140 148 T230 142 L230 190 L0 190Z" fill="#5b5794" /><path d="M0 166 Q80 156 160 166 T230 164 L230 190 L0 190Z" fill="#4c4882" />
+    <circle cx="38" cy="38" r="12" fill="#fff3c4" /><circle cx="44" cy="34" r="11" fill="#3d3a6b" />
+    <g transform="translate(186 150)"><rect x="-1.5" y="-26" width="3" height="26" fill="#8a84c4" /><path d="M0 -26 l-8 6 h16z" fill="#f7b8d4" /><circle cy="-30" r="3" fill="#ffd166" /></g>
+  </>,
+  dream_garden: <>
+    <rect width="230" height="190" fill="#fdf0f5" /><path d="M30 130 Q115 20 200 130" fill="none" stroke="#f7b8d4" strokeWidth="7" /><path d="M40 130 Q115 34 190 130" fill="none" stroke="#fff0a8" strokeWidth="7" /><path d="M50 130 Q115 48 180 130" fill="none" stroke="#a8dcf2" strokeWidth="7" /><path d="M60 130 Q115 62 170 130" fill="none" stroke="#c9b8f0" strokeWidth="7" />
+    <g fill="#fff"><ellipse cx="34" cy="132" rx="22" ry="10" /><ellipse cx="196" cy="132" rx="22" ry="10" /></g>
+    <rect y="150" width="230" height="40" fill="#e3f2dc" />
+    <g transform="translate(115 104)"><rect x="-22" y="0" width="44" height="46" rx="22" fill="none" stroke="#e6a3c0" strokeWidth="3" /><circle r="4" fill="#f49bb8" /><circle cx="-16" cy="8" r="3" fill="#ffd166" /><circle cx="16" cy="8" r="3" fill="#ffd166" /></g>
+    <circle cx="24" cy="158" r="5" fill="#f49bb8" /><circle cx="24" cy="158" r="2" fill="#ffd166" /><circle cx="46" cy="164" r="4" fill="#c9b8f0" /><circle cx="46" cy="164" r="1.6" fill="#fff" /><circle cx="186" cy="160" r="5" fill="#a8dcf2" /><circle cx="186" cy="160" r="2" fill="#fff" /><circle cx="208" cy="166" r="4" fill="#f49bb8" />
+    <g transform="translate(160 60)"><path d="M0 0 q-8 -8 -12 0 q4 8 12 0 q8 -8 12 0 q-4 8 -12 0" fill="#f7b8d4" /><path d="M0 -4 v8" stroke="#8b2f40" strokeWidth="1.2" /></g>
+    <Star x={70} y={45} />
+  </>,
 };
 
 export const hasSceneArt = (id: string | null | undefined) => Boolean(id && SCENES[id]);

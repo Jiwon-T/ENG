@@ -3,13 +3,14 @@
 // teacher screens. The AI talk uses fixed instructions written here; the student's text is only ever passed as data.
 import {
   PET_ACTIONS, PET_ASSIGNMENT_REWARD, PET_ATTENDANCE_REWARD, PET_CHARACTERS, PET_DAILY_STUDY_POINTS, PET_ENERGY_ITEMS_PER_DAY, PET_MAX_ENERGY, PET_MAX_LEVEL, PET_MAX_PETS,
-  PET_REWARD_WINDOW_DAYS, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, petItem, petStage, xpNeeded, type PetStudySource,
-} from '../../src/lib/petCatalog.js';
+  PET_REWARD_WINDOW_DAYS, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, petItem, petStage, xpNeeded, type PetStudySource, accessorySlot, type AccessorySlot, type PetJob} from '../../src/lib/petCatalog.js';
 
 export const PET_STATES = 'petStates';
 export interface ServerPhrase { original: string; remembered: string; learnedAtLevel: number; evolvedVersions: Record<string, string> }
 /** Each pet wears its own outfit; the shop items (inventory), points and the room are shared. */
-export interface ServerPet { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: ServerPhrase[]; clothing: string | null; accessory: string | null }
+/** `accessories`: one per place (머리·눈·목·손). `accessory`: what older saves kept (one item), moved into its place on load.
+ *  `job`: chosen once on 7장 꿈의 정원. */
+export interface ServerPet { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: ServerPhrase[]; clothing: string | null; accessories: Partial<Record<AccessorySlot, string>>; accessory?: string | null; job?: PetJob | null }
 export interface ServerPetState {
   version: 1; points: number; inventory: string[]; /** before 여러 마리: what pet 1 wore */ clothing?: string | null; accessory?: string | null; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: ServerPet[];
@@ -26,7 +27,7 @@ export function initialPetState(now = Date.now(), legacy?: any): ServerPetState 
   return {
     version: 1, points: clampInt(legacy?.points, 0, 1_000_000, 0), inventory: [], background: 'default',
     currentPetSlot: 1, unlockedSlots: 1,
-    pets: [{slot: 1, character, name: named ? cleanText(legacy.petName, 12) : PLACEHOLDER_PET_NAME, chosen: Boolean(named), level: clampInt(legacy?.highestLevel, 1, PET_MAX_LEVEL, 1), xp: 0, energy: PET_MAX_ENERGY, maxEnergy: PET_MAX_ENERGY, learnedPhrases: [], clothing: null, accessory: null}],
+    pets: [{slot: 1, character, name: named ? cleanText(legacy.petName, 12) : PLACEHOLDER_PET_NAME, chosen: Boolean(named), level: clampInt(legacy?.highestLevel, 1, PET_MAX_LEVEL, 1), xp: 0, energy: PET_MAX_ENERGY, maxEnergy: PET_MAX_ENERGY, learnedPhrases: [], clothing: null, accessories: {}}],
     day: seoulDay(now), today: {studyPoints: 0, energyItems: 0}, rewarded: {}, updatedAt: now,
   };
 }
@@ -36,7 +37,13 @@ export const currentPet = (s: ServerPetState) => s.pets.find(p => p.slot === s.c
 export function normalizePets(s: ServerPetState) {
   for (const p of s.pets) {
     if (p.clothing === undefined) p.clothing = p.slot === s.pets[0].slot ? s.clothing ?? null : null;
-    if (p.accessory === undefined) p.accessory = p.slot === s.pets[0].slot ? s.accessory ?? null : null;
+    if (!p.accessories || typeof p.accessories !== 'object') {
+      // The pet's own item first; for the first pet an empty or unknown one falls back to the old top-level item.
+      const valid = (id: any): id is string => typeof id === 'string' && petItem(id)?.category === 'accessory';
+      const old = valid(p.accessory) ? p.accessory : p.slot === s.pets[0].slot && valid(s.accessory) ? s.accessory : null;
+      p.accessories = old ? {[accessorySlot(old)]: old} : {};
+    }
+    delete p.accessory;
   }
   delete s.clothing; delete s.accessory;
   const earned = 1 + s.pets.filter(p => p.level >= PET_MAX_LEVEL).length;
@@ -104,14 +111,14 @@ export function equipItem(s: ServerPetState, id: string) {
   if (id !== 'default' && !s.inventory.includes(id)) throw Error('PET_ITEM_NOT_OWNED');
   const pet = currentPet(s);
   if (item.category === 'clothing') pet.clothing = pet.clothing === id ? null : id;
-  if (item.category === 'accessory') pet.accessory = pet.accessory === id ? null : id;
+  if (item.category === 'accessory') { const slot = accessorySlot(id); if (pet.accessories[slot] === id) delete pet.accessories[slot]; else pet.accessories[slot] = id; }
   if (item.category === 'background') s.background = id;
 }
 
 /** Put an owned wearable on (no toggling): used right after buying from the try-on. */
 export function wearItem(s: ServerPetState, id: string) {
   const item = petItem(id); if (!item || item.category === 'consumable' || (id !== 'default' && !s.inventory.includes(id))) return;
-  if (item.category === 'clothing') currentPet(s).clothing = id; else if (item.category === 'accessory') currentPet(s).accessory = id; else s.background = id;
+  if (item.category === 'clothing') currentPet(s).clothing = id; else if (item.category === 'accessory') currentPet(s).accessories[accessorySlot(id)] = id; else s.background = id;
 }
 
 export function chooseCharacter(s: ServerPetState, character: string) {
@@ -126,7 +133,7 @@ export function adoptPet(s: ServerPetState, character: string) {
   if (s.pets.length >= Math.min(s.unlockedSlots, PET_MAX_PETS)) throw Error('PET_NO_SLOT');
   if (s.pets.some(p => p.character === pick.id)) throw Error('PET_ALREADY_OWNED');
   const slot = Math.max(...s.pets.map(p => p.slot)) + 1;
-  s.pets.push({slot, character: pick.id, name: pick.name, chosen: true, level: 1, xp: 0, energy: PET_MAX_ENERGY, maxEnergy: PET_MAX_ENERGY, learnedPhrases: [], clothing: null, accessory: null});
+  s.pets.push({slot, character: pick.id, name: pick.name, chosen: true, level: 1, xp: 0, energy: PET_MAX_ENERGY, maxEnergy: PET_MAX_ENERGY, learnedPhrases: [], clothing: null, accessories: {}});
   s.currentPetSlot = slot;
   return {slot};
 }
@@ -146,7 +153,7 @@ export function importLocalPet(s: ServerPetState, local: any) {
   s.inventory = [...new Set((Array.isArray(local.inventory) ? local.inventory : []).filter((id: any) => typeof id === 'string' && petItem(id) && petItem(id)!.category !== 'consumable' && !petItem(id)!.reward))] as string[];
   const owns = (id: any, cat: string) => typeof id === 'string' && petItem(id)?.category === cat && (id === 'default' || s.inventory.includes(id));
   currentPet(s).clothing = owns(local.clothing, 'clothing') ? local.clothing : null;
-  currentPet(s).accessory = owns(local.accessory, 'accessory') ? local.accessory : null;
+  currentPet(s).accessories = owns(local.accessory, 'accessory') ? {[accessorySlot(local.accessory)]: local.accessory} : {};
   s.background = owns(local.background, 'background') ? local.background : 'default';
   if (lp) {
     const pet = currentPet(s), chosen = typeof lp.name === 'string' && lp.name && lp.name !== PLACEHOLDER_PET_NAME;
@@ -204,7 +211,7 @@ export const parseAi = (text: string) => { try { return JSON.parse(text); } catc
 /** What the browser sees: everything but the bookkeeping. */
 export function publicPetState(s: ServerPetState) {
   const pet = currentPet(s);
-  return {points: s.points, inventory: s.inventory, clothing: pet.clothing, accessory: pet.accessory, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
+  return {points: s.points, inventory: s.inventory, clothing: pet.clothing, accessories: pet.accessories, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
     today: {studyPoints: s.today.studyPoints, studyCap: PET_DAILY_STUDY_POINTS, energyItemsLeft: Math.max(0, PET_ENERGY_ITEMS_PER_DAY - energyItemsUsed(s))}, stage: petStage(pet.level)};
 }
 /** For the teacher screens: the highest-level pet and how many live here. */

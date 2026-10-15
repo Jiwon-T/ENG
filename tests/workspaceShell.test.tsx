@@ -12,9 +12,11 @@ import DateStepper from '../src/components/teacher/DateStepper';
 import {readFileSync} from 'node:fs';
 import LessonActionBar from '../src/components/teacher/LessonActionBar';
 test('one navigation list retains principal/admin visibility and the requested mobile order',()=>{
- assert.equal(new Set(NAV_ITEMS.map(item=>item.id)).size,8);
+ assert.equal(new Set(NAV_ITEMS.map(item=>item.id)).size,9);
  assert.equal(visibleWorkspaceNav().some(item=>item.id==='settings'),false);
- assert.equal(visibleWorkspaceNav(true).length,8);assert.equal(visibleWorkspaceNav(false,true).length,8);
+ assert.equal(visibleWorkspaceNav(true).length,9);assert.equal(visibleWorkspaceNav(false,true).length,8);
+ // 워크북: the admin only (principals and teachers never see it).
+ assert.deepEqual([visibleWorkspaceNav(true).some(i=>i.id==='workbook'),visibleWorkspaceNav(false,true).some(i=>i.id==='workbook'),visibleWorkspaceNav().some(i=>i.id==='workbook')],[true,false,false]);
  assert.deepEqual(NAV_ITEMS.filter(item=>item.mobilePrimary).sort((a,b)=>a.mobileOrder-b.mobileOrder).map(item=>item.id),['lesson','schedule','students','academy']);
  const secondary=renderToStaticMarkup(<WorkspaceMobileNavigation tab="lesson" onTab={()=>{}} hidden={false}/>);
  assert.ok(secondary.includes('모바일 선생님방 메뉴'));assert.ok(!secondary.includes('관리자 설정'));

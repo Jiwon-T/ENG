@@ -3,8 +3,11 @@
 export type PetCharacterType = 'unicorn' | 'mymelody' | 'haemi' | 'molang' | 'mang_bear' | 'hodu';
 export type PetStage = 'baby' | 'child' | 'teen' | 'adult' | 'master';
 export type PetItemCategory = 'clothing' | 'accessory' | 'background' | 'consumable';
-/** `reward`: earned on the 원정대 (never sold in the shop). */
-export interface PetItem { id: string; name: string; price: number; icon: string; category: PetItemCategory; xp?: number; energy?: number; reward?: boolean }
+/** Accessories are worn one per place, all places at once (a hat, glasses, a scarf and a sword together). */
+export type AccessorySlot = 'head' | 'eyes' | 'neck' | 'hand';
+export const ACCESSORY_SLOTS: { id: AccessorySlot; label: string }[] = [{ id: 'head', label: '머리' }, { id: 'eyes', label: '눈' }, { id: 'neck', label: '목' }, { id: 'hand', label: '손' }];
+/** `reward`: earned on the 원정대 (never sold in the shop). `slot`: where an accessory is worn. */
+export interface PetItem { id: string; name: string; price: number; icon: string; category: PetItemCategory; xp?: number; energy?: number; reward?: boolean; slot?: AccessorySlot }
 
 export const PET_CHARACTERS: { id: PetCharacterType; name: string }[] = [
   { id: 'unicorn', name: '다롱' }, { id: 'mymelody', name: '아롱' }, { id: 'haemi', name: '해미' }, { id: 'molang', name: '말랑' }, { id: 'mang_bear', name: '고미' }, { id: 'hodu', name: '호두' },
@@ -37,19 +40,19 @@ export const PET_ITEMS: PetItem[] = [
   { id: 'star_pajama', name: '별 파자마', price: 70, icon: '🌙', category: 'clothing' },
   { id: 'raincoat', name: '노란 우비', price: 80, icon: '☔', category: 'clothing' },
   { id: 'overalls', name: '멜빵바지', price: 100, icon: '👖', category: 'clothing' },
-  { id: 'pink_ribbon', name: '리본', price: 50, icon: '🎀', category: 'accessory' },
-  { id: 'star_hat', name: '별핀', price: 80, icon: '⭐', category: 'accessory' },
-  { id: 'crown', name: '왕관', price: 200, icon: '👑', category: 'accessory' },
-  { id: 'sunglasses', name: '선글라스', price: 100, icon: '😎', category: 'accessory' },
-  { id: 'flower', name: '꽃핀', price: 60, icon: '🌸', category: 'accessory' },
-  { id: 'strawberry_pin', name: '딸기 핀', price: 50, icon: '🍓', category: 'accessory' },
-  { id: 'bow_tie', name: '나비넥타이', price: 60, icon: '🦋', category: 'accessory' },
-  { id: 'scarf', name: '체크 목도리', price: 80, icon: '🧣', category: 'accessory' },
-  { id: 'round_glasses', name: '동그란 안경', price: 90, icon: '👓', category: 'accessory' },
-  { id: 'beret', name: '베레모', price: 100, icon: '🎨', category: 'accessory' },
-  { id: 'heart_sunglasses', name: '하트 선글라스', price: 120, icon: '💕', category: 'accessory' },
-  { id: 'flower_crown', name: '꽃 화관', price: 150, icon: '💐', category: 'accessory' },
-  { id: 'headphones', name: '헤드폰', price: 180, icon: '🎧', category: 'accessory' },
+  { id: 'pink_ribbon', name: '리본', price: 50, icon: '🎀', category: 'accessory', slot: 'head' },
+  { id: 'star_hat', name: '별핀', price: 80, icon: '⭐', category: 'accessory', slot: 'head' },
+  { id: 'crown', name: '왕관', price: 200, icon: '👑', category: 'accessory', slot: 'head' },
+  { id: 'sunglasses', name: '선글라스', price: 100, icon: '😎', category: 'accessory', slot: 'eyes' },
+  { id: 'flower', name: '꽃핀', price: 60, icon: '🌸', category: 'accessory', slot: 'head' },
+  { id: 'strawberry_pin', name: '딸기 핀', price: 50, icon: '🍓', category: 'accessory', slot: 'head' },
+  { id: 'bow_tie', name: '나비넥타이', price: 60, icon: '🦋', category: 'accessory', slot: 'neck' },
+  { id: 'scarf', name: '체크 목도리', price: 80, icon: '🧣', category: 'accessory', slot: 'neck' },
+  { id: 'round_glasses', name: '동그란 안경', price: 90, icon: '👓', category: 'accessory', slot: 'eyes' },
+  { id: 'beret', name: '베레모', price: 100, icon: '🎨', category: 'accessory', slot: 'head' },
+  { id: 'heart_sunglasses', name: '하트 선글라스', price: 120, icon: '💕', category: 'accessory', slot: 'eyes' },
+  { id: 'flower_crown', name: '꽃 화관', price: 150, icon: '💐', category: 'accessory', slot: 'head' },
+  { id: 'headphones', name: '헤드폰', price: 180, icon: '🎧', category: 'accessory', slot: 'head' },
   { id: 'default', name: '기본 보금자리', price: 0, icon: '🏠', category: 'background' },
   { id: 'pink_cushion', name: '핑크 쿠션', price: 80, icon: '🛋️', category: 'background' },
   { id: 'bed', name: '작은 침대', price: 150, icon: '🛏️', category: 'background' },
@@ -58,6 +61,19 @@ export const PET_ITEMS: PetItem[] = [
   { id: 'forest_cabin', name: '숲속 오두막', price: 0, icon: '🏡', category: 'background', reward: true },
   { id: 'coral_sea', name: '산호 바다', price: 0, icon: '🪸', category: 'background', reward: true },
   { id: 'cloud_castle', name: '구름 성', price: 0, icon: '🏰', category: 'background', reward: true },
+  { id: 'oasis', name: '오아시스', price: 0, icon: '🏜️', category: 'background', reward: true },
+  { id: 'snow_cabin', name: '눈 오두막', price: 0, icon: '🏔️', category: 'background', reward: true },
+  { id: 'galaxy', name: '은하수', price: 0, icon: '🌌', category: 'background', reward: true },
+  { id: 'dream_garden', name: '꿈의 정원', price: 0, icon: '🌈', category: 'background', reward: true },
+  // 원정대 무기 (손): 4–6장은 검과 지팡이를 함께, 7장 꿈의 정원에서 고른 직업의 무기 하나.
+  { id: 'wood_sword', name: '나무 검', price: 0, icon: '🗡️', category: 'accessory', slot: 'hand', reward: true },
+  { id: 'wood_staff', name: '나무 지팡이', price: 0, icon: '🌿', category: 'accessory', slot: 'hand', reward: true },
+  { id: 'ice_sword', name: '얼음 검', price: 0, icon: '🧊', category: 'accessory', slot: 'hand', reward: true },
+  { id: 'ice_staff', name: '얼음 지팡이', price: 0, icon: '❄️', category: 'accessory', slot: 'hand', reward: true },
+  { id: 'star_sword', name: '별빛 검', price: 0, icon: '⭐', category: 'accessory', slot: 'hand', reward: true },
+  { id: 'moon_staff', name: '달빛 지팡이', price: 0, icon: '🌙', category: 'accessory', slot: 'hand', reward: true },
+  { id: 'dream_sword', name: '꿈의 검', price: 0, icon: '⚔️', category: 'accessory', slot: 'hand', reward: true },
+  { id: 'dream_staff', name: '꿈의 지팡이', price: 0, icon: '🪄', category: 'accessory', slot: 'hand', reward: true },
   { id: 'cookie', name: '쿠키', price: 30, xp: 5, icon: '🍪', category: 'consumable' },
   { id: 'macaron', name: '마카롱', price: 50, xp: 10, icon: '🍭', category: 'consumable' },
   { id: 'cake', name: '딸기케이크', price: 60, xp: 15, icon: '🍰', category: 'consumable' },
@@ -66,6 +82,10 @@ export const PET_ITEMS: PetItem[] = [
   { id: 'energy_drink', name: '에너지드링크', price: 70, energy: 60, icon: '⚡', category: 'consumable' },
 ];
 export const petItem = (id: string) => PET_ITEMS.find(item => item.id === id);
+export const accessorySlot = (id: string): AccessorySlot => petItem(id)?.slot || 'head';
+/** What a pet wears, in drawing order; older saves (and party snapshots) kept a single `accessory`. */
+export const wornAccessories = (p: { accessories?: Partial<Record<AccessorySlot, string | null>> | null; accessory?: string | null } | null | undefined): string[] =>
+  !p ? [] : p.accessories ? ACCESSORY_SLOTS.map(s => p.accessories![s.id]).filter((id): id is string => Boolean(id)) : p.accessory ? [p.accessory] : [];
 
 /** 공부로 받는 포인트 (per correct answer / word / review). Their sum is capped per day; 출석·과제 rewards are not. */
 export const PET_STUDY_RATES = {
@@ -120,10 +140,23 @@ export const PET_EXPEDITION = {
     { id: 'forest', title: '1장 숲', name: '속삭이는 숲', minLevel: 1, reward: 'forest_cabin', stages: ['숲 입구', '이끼 오솔길', '버섯 동굴 입구', '반딧불 개울', '숲의 왕관'] },
     { id: 'sea', title: '2장 바다', name: '반짝이는 바다', minLevel: 5, reward: 'coral_sea', stages: ['모래사장', '조개 언덕', '파도 다리', '산호 정원', '바다의 왕관'] },
     { id: 'castle', title: '3장 성', name: '구름 위 성', minLevel: 10, reward: 'cloud_castle', stages: ['구름 계단', '바람 탑', '별빛 복도', '무지개 문', '성의 왕관'] },
-  ],
+    { id: 'desert', title: '4장 사막', name: '모래바람 오아시스', minLevel: 20, reward: 'oasis', gear: ['wood_sword', 'wood_staff'], questions: 12, stages: ['모래 언덕', '선인장 길', '신기루 다리', '오아시스 샘', '사막의 왕관'] },
+    { id: 'snow', title: '5장 설산', name: '눈꽃 산맥', minLevel: 35, reward: 'snow_cabin', gear: ['ice_sword', 'ice_staff'], questions: 12, stages: ['눈길 입구', '얼음 호수', '눈꽃 동굴', '오로라 능선', '설산의 왕관'] },
+    { id: 'night', title: '6장 밤하늘', name: '별똥별 언덕', minLevel: 50, reward: 'galaxy', gear: ['star_sword', 'moon_staff'], questions: 15, stages: ['반딧불 들판', '달빛 계단', '별자리 다리', '별똥별 언덕', '밤하늘의 왕관'] },
+    { id: 'dream', title: '7장 꿈의 정원', name: '무지개 너머', minLevel: 70, reward: 'dream_garden', questions: 15, stages: ['솜사탕 구름', '꽃잎 미로', '무지개 다리', '꿈의 분수', '정원의 왕관'] },
+  ] as { id: string; title: string; name: string; minLevel: number; reward: string; gear?: string[]; questions?: number; stages: string[] }[],
   bonus: { clear: 20, star2: 10, star3: 10 },
   bossStars: 2,
+  /** Clearing this chapter's crown stage lets the main pet choose a job (once per pet). */
+  jobChapter: 'dream',
 } as const;
+export const stageQuestions = (stage?: string | null) => (stage && PET_EXPEDITION.chapters.find(c => stage.startsWith(c.id + '-'))?.questions) || PET_WORD_FEED.questions;
+/** 꿈의 정원에서 고르는 직업: 펫마다 한 번. 고른 직업의 최종 무기를 받아요. */
+export type PetJob = 'swordsman' | 'wizard';
+export const PET_JOBS: Record<PetJob, { label: string; weapon: string; icon: string; line: string }> = {
+  swordsman: { label: '검사', weapon: 'dream_sword', icon: '⚔️', line: '검사가 될래요' },
+  wizard: { label: '마법사', weapon: 'dream_staff', icon: '🪄', line: '마법사가 될래요' },
+};
 /** 파티 원정대: 2–4 students, one team a week (Monday–Sunday, Seoul). Every word a member answers right for the first time
  *  that week (in 단어 먹이 주기 or a stage) takes 1 off the boss. Rewards are paid after the week, by contribution, outside
  *  the daily study cap but at most `weeklyCap` per student. Names are picked from fixed words; nicknames are free text

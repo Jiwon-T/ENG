@@ -7,7 +7,7 @@ import {useTeacherPage} from '../../lib/useTeacherPage';
 import WorkspaceDialog from './WorkspaceDialog';
 import ExamFields from './AcademicExamFields';
 import {isCurrentStudent} from '../../lib/teacherLessonGrid';
-import {examPeriod,examDetail,examLabel,detailMetadata,suggestedExamTitle,withSuggestedTitle,schoolTagFrom,schoolTagOf} from '../../lib/academicExamPeriod';
+import {examPeriod,examDetail,examLabel,detailMetadata,suggestedExamTitle,withSuggestedTitle,schoolTagFrom,schoolTagOf,withDateExam} from '../../lib/academicExamPeriod';
 import {Fragment,useEffect,useRef,useState} from 'react';
 import {Plus,Users,RefreshCw,ChevronDown} from 'lucide-react';
 import {askConfirm} from './ConfirmDialog';
@@ -27,6 +27,10 @@ export default function TeacherAcademicManager({data,busy,request,act}:{data:any
  const [teacher,setTeacher]=useState(''),[kind,setKind]=useState('학교 내신'),[subject,setSubject]=useState(''),[page,setPage]=useState(1);
  const [batchOpen,setBatchOpen]=useState(false),[view,setView]=useState<'exam'|'table'|'student'>('exam'),[submission,setSubmission]=useState('');
  const [dialog,setDialog]=useState(false),[search,setSearch]=useState(''),[period,setPeriod]=useState(''),[more,setMore]=useState(false),[schoolTag,setSchoolTag]=useState('');
+ // 시험 구분은 시험일을 따라 자동으로 골라요(학교 내신). 선생님이 구분이나 연도를 직접 누르면 그때부터는 그대로 두고, '날짜로 자동 선택'으로 되돌려요.
+ const autoExamRef=useRef(true),[autoExam,setAutoExamState]=useState(true),subjectTouched=useRef(false);
+ const setAutoExam=(on:boolean)=>{autoExamRef.current=on;setAutoExamState(on);};
+ const ownScopes:any[]=data.principal?data.teachingScopes||[]:data.scopes||[];
  const editable=canEdit(selected);
  function canEdit(r:any){return !r||(!r.readOnly&&(data.admin||r.ownerUid===data.uid||r.source==='notion'));}
  const {result,loading,error,load}=useTeacherPage(data.uid,'academic-records',{page,teacher,student:'',kind,subject,period,search,submission},request);
@@ -36,10 +40,20 @@ export default function TeacherAcademicManager({data,busy,request,act}:{data:any
  const records:any[]=currentOnly?result.records.filter((r:any)=>currentKeys.has(r.data.studentKey)):result.records,loaded=!loading;
 
  useEffect(()=>{if(selected?.source==='notion')return;const current=result.records.find((r:any)=>r.id===selected?.id);if(current)setSelected(current);},[result.records]);
- function field(key:string,v:any){setValue((old:any)=>{const next=key==='examDetail'?({...old,examDetail:v,...detailMetadata(v)}):key==='examType'?({...old,examType:v,examDetail:'',semester:null,examPeriod:null}):({...old,[key]:v});return ['examDetail','examType','examYear'].includes(key)?withSuggestedTitle(old,next,schoolTag):next;});}
+ function field(key:string,v:any){
+  if(key==='examDetail'||key==='examYear')setAutoExam(false);
+  if(key==='subject')subjectTouched.current=true;
+  setValue((old:any)=>{let next=key==='examDetail'?({...old,examDetail:v,...detailMetadata(v)}):key==='examType'?({...old,examType:v,examDetail:'',semester:null,examPeriod:null}):({...old,[key]:v});
+   const follows=autoExamRef.current&&(key==='examDate'||key==='examType');if(follows)next=withDateExam(next);
+   return follows||['examDetail','examType','examYear'].includes(key)?withSuggestedTitle(old,next,schoolTag):next;});
+ }
+ function restoreAutoExam(){setAutoExam(true);setValue((old:any)=>withSuggestedTitle(old,withDateExam(old),schoolTag));}
  function changeTag(tag:string){setValue((old:any)=>withSuggestedTitle(old,old,schoolTag,tag));setSchoolTag(tag);}
  // The school tag comes from the school and grade entered in student management (e.g. 세교중학교 · 중2 → 세교중2).
- async function chooseStudent(key:string){field('studentKey',key);if(!key||selected?.revision)return;try{const r=await request('read:student-school',{studentKey:key});const tag=schoolTagFrom(r.school,r.grade);if(tag){setValue((old:any)=>withSuggestedTitle(old,old,schoolTag,tag));setSchoolTag(tag);}}catch{/* The tag is only a convenience; it can be typed. */}}
+ async function chooseStudent(key:string){field('studentKey',key);if(!key||selected?.revision)return;
+  // 과목: 이 선생님이 그 학생에게 맡은 과목이 하나뿐이면 미리 골라요. 직접 고른 과목은 그 학생에게도 맞으면 그대로 둬요.
+  const mine=[...new Set(ownScopes.filter((s:any)=>s.studentKey===key).map((s:any)=>s.subject))].filter(s=>SUBJECTS.includes(s));
+  if(mine.length===1)setValue((old:any)=>!subjectTouched.current||!mine.includes(old.subject)?{...old,subject:mine[0]}:old);try{const r=await request('read:student-school',{studentKey:key});const tag=schoolTagFrom(r.school,r.grade);if(tag){setValue((old:any)=>withSuggestedTitle(old,old,schoolTag,tag));setSchoolTag(tag);}}catch{/* The tag is only a convenience; it can be typed. */}}
  async function persist(reflect:boolean){const id=selected?.id||editId.current||(editId.current=crypto.randomUUID());let record=selected;if(!record?.revision||changed){record=await saveAcademicBatchRow(request,{id,revision:record?.revision,notionEditedAt:record?.notionEditedAt,payload:{...value,title:(value.title.trim()||suggestedExamTitle(value,schoolTag))}});if(!record)throw Error('저장 결과를 확인해야 합니다.');setSelected(record);setSaved(record.data);setValue(record.data);}if(reflect){const result=await request('publish-academic',{id:record.id,revision:record.revision});if(result.record)setSelected(result.record);}await load(true);}
  const pages=result.pages,current=result.page;
  const writableStudents=data.students.filter((s:any)=>data.admin||(data.principal?data.teachingScopes||[]:data.scopes).some((scope:any)=>scope.studentKey===s.studentKey));
@@ -48,8 +62,8 @@ export default function TeacherAcademicManager({data,busy,request,act}:{data:any
  useLeaveProtection(dialog&&changed);
  const nameOf=(key:string)=>data.students.find((s:any)=>s.studentKey===key)?.studentDisplayName||'학생';
  const subjects=SUBJECTS.filter(subject=>data.admin||(data.principal?data.teachingScopes||[]:data.scopes).some((s:any)=>s.subject===subject&&(!value.studentKey||s.studentKey===value.studentKey)));
- function openNew(){editId.current=crypto.randomUUID();setSelected(null);setSaved(null);setMore(false);setSchoolTag('');const next={...blank(),examType:kind,examDetail:kind==='학교 내신'?'1학기 중간고사':'',semester:kind==='학교 내신'?1:null,examPeriod:kind==='학교 내신'?'중간고사':null,subject:data.scopes?.[0]?.subject||'영어'};setValue({...next,title:suggestedExamTitle(next)});setDialog(true);}
- function openRecord(r:any){const p=examPeriod(r.data);const v={...r.data,examDetail:examDetail(r.data),examYear:p?.year??r.data.examYear??(Number(r.data.examDate?.slice(0,4))||null),semester:p?.semester??r.data.semester??null,examPeriod:p?.period??r.data.examPeriod??null};setSelected(r);setSaved(r.source==='notion'?null:v);setValue(v);setSchoolTag(schoolTagOf(v.title));setMore(Boolean(v.note||v.deadline));setDialog(true);}
+ function openNew(){editId.current=crypto.randomUUID();setSelected(null);setSaved(null);setMore(false);setSchoolTag('');setAutoExam(true);subjectTouched.current=false;const own=[...new Set(ownScopes.map((s:any)=>s.subject))].filter(s=>SUBJECTS.includes(s));const next=withDateExam({...blank(),examType:kind,examDetail:'',semester:null,examPeriod:null,subject:own.length===1?own[0]:data.scopes?.[0]?.subject||'영어'});setValue({...next,title:suggestedExamTitle(next)});setDialog(true);}
+ function openRecord(r:any){setAutoExam(false);subjectTouched.current=true;const p=examPeriod(r.data);const v={...r.data,examDetail:examDetail(r.data),examYear:p?.year??r.data.examYear??(Number(r.data.examDate?.slice(0,4))||null),semester:p?.semester??r.data.semester??null,examPeriod:p?.period??r.data.examPeriod??null};setSelected(r);setSaved(r.source==='notion'?null:v);setValue(v);setSchoolTag(schoolTagOf(v.title));setMore(Boolean(v.note||v.deadline));setDialog(true);}
  // 시험별: one group per exam period across schools (e.g. "26년도 2학기 중간고사"), so a few students per school no longer make a long column.
  const periodOf=(d:any)=>{const p=examPeriod(d);return p?{key:p.key,label:p.label}:{key:(d.examType||'')+'|'+examLabel(d)+'|'+String(d.examDate||'').slice(0,7),label:examLabel(d)+(d.examDate?` · ${Number(d.examDate.slice(5,7))}월`:'')};};
  const examGroups=new Map<string,{label:string;rows:any[]}>();
@@ -72,7 +86,7 @@ export default function TeacherAcademicManager({data,busy,request,act}:{data:any
  <section className="gs-sec"><h3><span className="gs-num">1</span>학생·과목</h3>
   <StudentCombobox students={writableStudents} value={value.studentKey} disabled={busy||!canWrite||!editable} onChange={key=>{if(!busy&&canWrite&&editable)void chooseStudent(key);}}/>
   <div className="gs-chips" role="group" aria-label="과목">{subjects.map(s=><button key={s} type="button" className="rv-chip" aria-pressed={value.subject===s} onClick={()=>field('subject',s)}>{s}</button>)}</div></section>
- <section className="gs-sec"><h3><span className="gs-num">2</span>시험</h3><Fragment key={selected?.id||editId.current}><ExamFields value={value} onField={field} schoolTag={schoolTag} onSchoolTag={changeTag}/></Fragment></section>
+ <section className="gs-sec"><h3><span className="gs-num">2</span>시험</h3><Fragment key={selected?.id||editId.current}><ExamFields value={value} onField={field} schoolTag={schoolTag} onSchoolTag={changeTag} autoExam={autoExam} onAutoExam={restoreAutoExam}/></Fragment></section>
  <section className="gs-sec"><h3><span className="gs-num">3</span>점수</h3>
   <div className="gs-seg" role="group" aria-label="제출 상태">{['제출 완료','미제출','제출 대상 아님'].map(k=><button key={k} type="button" aria-pressed={status===k} onClick={()=>setValue((v:any)=>({...v,submissionStatus:k,score:k==='제출 완료'?v.score:null}))}>{k==='제출 대상 아님'?'대상 아님':k}</button>)}</div>
   {status==='제출 완료'?<div className="gs-score"><input type="number" inputMode="decimal" step="any" min={0} aria-label="원점수" placeholder="점수" value={value.score??''} onChange={e=>field('score',e.target.value===''?null:Number(e.target.value))}/><span>/</span><input className="gs-max" type="number" inputMode="decimal" step="any" min={0.01} aria-label="만점" value={value.maxScore??''} onChange={e=>field('maxScore',e.target.value===''?null:Number(e.target.value))}/>{percent!==null&&<small>{Math.round(percent)}%</small>}</div>

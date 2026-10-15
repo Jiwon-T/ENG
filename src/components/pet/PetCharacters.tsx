@@ -6,7 +6,8 @@ import type { PetStage } from '../../lib/petCatalog';
 interface CharacterProps {
   stage: PetStage;
   clothing?: string | null;
-  accessory?: string | null;
+  /** One id, or everything worn (one per place: 머리·눈·목·손). */
+  accessory?: string | string[] | null;
   background?: string | null;
   className?: string;
   /** Head only (small icons in the teacher screens). */
@@ -207,6 +208,18 @@ const OUTFITS: Record<string, { back?: React.ReactNode; front: React.ReactNode; 
 
 /** Neck items go under the chin (drawn before the head); everything else sits on the head. */
 const NECK = new Set(['scarf', 'bow_tie']);
+/** 원정대 무기, held in the right hand (the arm ends at 86,100 on every character); the blade or staff rises beside the head. */
+const WEAPONS: Record<string, React.ReactNode> = {
+  wood_sword: <g transform="translate(92 98) rotate(14)"><rect x="-3" y="-34" width="6" height="30" rx="3" fill="#d8b48a" stroke="#b58a5c" /><rect x="-8" y="-4" width="16" height="3.5" rx="1.75" fill="#a07a5a" /><rect x="-1.8" y="-0.5" width="3.6" height="9" rx="1.8" fill="#8a5a44" /></g>,
+  wood_staff: <g transform="translate(91 104) rotate(10)"><rect x="-2.2" y="-44" width="4.4" height="52" rx="2.2" fill="#b58a5c" /><path d="M0 -44 q-8 -4 -6 -10 q6 2 6 10 q0 -8 6 -10 q2 6 -6 10" fill="#8fcf98" stroke="#6fb57c" strokeWidth=".6" /></g>,
+  ice_sword: <g transform="translate(92 98) rotate(14)"><path d="M0 -38 L4.5 -31 L4.5 -4 L-4.5 -4 L-4.5 -31Z" fill="#cfe8f8" stroke="#8fc3e6" /><path d="M0 -34 L0 -6" stroke="#fff" strokeWidth="1.3" /><path d="M-9 -4 h18 l-2.5 3.5 h-13z" fill="#9cc7e6" /><rect x="-1.8" y="-0.5" width="3.6" height="9" rx="1.8" fill="#6f8fb8" /><circle cy="10" r="2" fill="#cfe8f8" /></g>,
+  ice_staff: <g transform="translate(91 104) rotate(10)"><rect x="-2.2" y="-40" width="4.4" height="48" rx="2.2" fill="#9cc7e6" /><path d="M0 -54 l6 7 l-6 7 l-6 -7z" fill="#cfe8f8" stroke="#8fc3e6" /><path d="M0 -51 l0 8" stroke="#fff" strokeWidth="1.2" /></g>,
+  star_sword: <g transform="translate(92 98) rotate(14)"><path d="M0 -38 L4.5 -31 L4.5 -4 L-4.5 -4 L-4.5 -31Z" fill="#e8e3ff" stroke="#a99be6" /><path d="M0 -26 l1.3 2.8 l2.8 .4 l-2 1.9 l.5 2.8 l-2.6 -1.5 l-2.6 1.5 l.5 -2.8 l-2 -1.9 l2.8 -.4z" fill="#ffd166" /><path d="M-10 -4 h20 l-3.5 4 h-13z" fill="#6c67a8" /><rect x="-1.8" y="0" width="3.6" height="8.5" rx="1.8" fill="#4c4882" /><circle cy="10" r="2.2" fill="#ffd166" /></g>,
+  moon_staff: <g transform="translate(91 104) rotate(10)"><rect x="-2.2" y="-40" width="4.4" height="48" rx="2.2" fill="#6c67a8" /><path d="M-1 -58 A8 8 0 1 0 7 -45 A6.5 6.5 0 1 1 -1 -58Z" fill="#ffd166" stroke="#e6a92e" strokeWidth=".8" strokeLinejoin="round" /><circle cx="7" cy="-55" r="1.4" fill="#fff3c4" /></g>,
+  dream_sword: <g transform="translate(92 98) rotate(14)"><path d="M0 -40 L5.5 -32 L5.5 -4 L-5.5 -4 L-5.5 -32Z" fill="#fff0f6" stroke="#f49bb8" /><path d="M-2.6 -30 L-2.6 -6" stroke="#a8dcf2" strokeWidth="1.4" /><path d="M0 -34 L0 -6" stroke="#f7b8d4" strokeWidth="1.4" /><path d="M2.6 -30 L2.6 -6" stroke="#fff0a8" strokeWidth="1.4" /><path d="M-12 -4 q12 -5 24 0 l-3.5 4.5 h-17z" fill="#f49bb8" /><circle cx="-12" cy="-4" r="2" fill="#ffd166" /><circle cx="12" cy="-4" r="2" fill="#ffd166" /><rect x="-1.8" y="0.5" width="3.6" height="8.5" rx="1.8" fill="#c96a8e" /><path d="M0 9 l2.2 2.6 l-2.2 2.6 l-2.2 -2.6z" fill="#c9b8f0" /></g>,
+  dream_staff: <g transform="translate(91 104) rotate(10)"><rect x="-2.2" y="-40" width="4.4" height="48" rx="2.2" fill="#f49bb8" /><path d="M0 -58 l2.4 5 l5.6 .8 l-4 3.8 l1 5.4 l-5 -2.6 l-5 2.6 l1 -5.4 l-4 -3.8 l5.6 -.8z" fill="#ffd166" stroke="#f0b429" strokeLinejoin="round" /><circle cx="-7.5" cy="-46" r="1.5" fill="#a8dcf2" /><circle cx="7.5" cy="-44" r="1.5" fill="#f7b8d4" /></g>,
+};
+
 /** `top` is the highest point of the head (hair for 다롱) and `side` a point on the upper-right outline, so hats and pins sit on the head, never above it. */
 function Accessory({ id, look }: { id: string; look: Look }) {
   const [sx, sy] = look.side;
@@ -255,13 +268,15 @@ export const MiniDeskSVG = ({ className }: { className?: string }) => (
 const SIZE: Record<PetStage, number> = { baby: 84, child: 100, teen: 116, adult: 132, master: 140 };
 
 export const PetCharacter = ({ character, stage, clothing, accessory, background, className = '', portrait, size: fixedSize }: CharacterProps & { character: string }) => {
+  const worn = (Array.isArray(accessory) ? accessory : accessory ? [accessory] : []).filter(Boolean) as string[];
   const look = LOOKS[character] || LOOKS.molang, outfit = clothing ? OUTFITS[clothing] : undefined, [fill, stroke, belly] = look.body;
   const size = fixedSize || SIZE[stage] || SIZE.baby;
   const art = <svg viewBox={portrait ? '14 8 92 88' : '0 0 120 130'} width={size} height={portrait ? size : size * 130 / 120} className="relative z-10" aria-hidden="true">
     {outfit?.back}{look.tail}
     <ellipse cx="47" cy="121" rx="8" ry="5" fill={fill} stroke={stroke} /><ellipse cx="73" cy="121" rx="8" ry="5" fill={fill} stroke={stroke} />
     <path d={BODY} fill={fill} stroke={stroke} />{belly && <ellipse cx="60" cy="104" rx="13" ry="10" fill={belly} />}{arms(fill, stroke)}
-    {outfit?.front}{accessory && NECK.has(accessory) && <Accessory id={accessory} look={look} />}{look.front}{look.head}{outfit?.top?.(look)}{accessory && !NECK.has(accessory) && <Accessory id={accessory} look={look} />}
+    {outfit?.front}{worn.filter(id => NECK.has(id)).map(id => <React.Fragment key={id}><Accessory id={id} look={look} /></React.Fragment>)}{look.front}{look.head}{outfit?.top?.(look)}{worn.filter(id => !NECK.has(id) && !WEAPONS[id]).map(id => <React.Fragment key={id}><Accessory id={id} look={look} /></React.Fragment>)}
+    {worn.filter(id => WEAPONS[id]).map(id => <React.Fragment key={id}>{WEAPONS[id]}</React.Fragment>)}
     {stage === 'master' && <><Sparkle x={16} y={30} s={1} /><Sparkle x={104} y={44} s={0.8} /><Sparkle x={100} y={14} s={0.6} /></>}
   </svg>;
   if (portrait) return <div className={className}>{art}</div>;

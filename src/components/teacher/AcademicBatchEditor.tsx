@@ -4,7 +4,7 @@ import StudentCombobox from './StudentCombobox';
 import WorkspaceDialog from './WorkspaceDialog';
 import StatusBadge from './StatusBadge';
 import ExamFields from './AcademicExamFields';
-import { detailMetadata, suggestedExamTitle, withSuggestedTitle, schoolTagFrom } from '../../lib/academicExamPeriod';
+import { detailMetadata, suggestedExamTitle, withSuggestedTitle, schoolTagFrom, withDateExam } from '../../lib/academicExamPeriod';
 import { academicBatchPayload, academicBatchError, applyAcademicBatchChunks } from '../../lib/academicBatch';
 import {askDiscard} from './ConfirmDialog';
 import {useLeaveProtection} from '../../lib/leaveProtection';
@@ -21,7 +21,7 @@ export default function AcademicBatchEditor({ data, kind, onClose, request, act,
     act: (f: () => Promise<any>) => Promise<void>;
     onSaved: () => Promise<any>;
 }) {
-    const [common, setCommon] = useState(() => { const value = { subject: data.scopes?.[0]?.subject || '영어', examType: kind, examDetail: kind === '학교 내신' ? '1학기 중간고사' : '', examYear: new Date().getFullYear(), title: '', examDate: today(), maxScore: 100 as number | null, deadline: null as string | null, ...detailMetadata(kind === '학교 내신' ? '1학기 중간고사' : '') }; return { ...value, title: suggestedExamTitle(value) }; });
+    const [common, setCommon] = useState(() => { const value = withDateExam({ subject: data.scopes?.[0]?.subject || '영어', examType: kind, examDetail: '', examYear: new Date().getFullYear(), title: '', examDate: today(), maxScore: 100 as number | null, deadline: null as string | null, ...detailMetadata('') }); return { ...value, title: suggestedExamTitle(value) }; });
     const [rows, setRows] = useState<any[]>([]), [working, setWorking] = useState(false), [message, setMessage] = useState('');
     useLeaveProtection(rows.some(row => ['new', 'failed-save'].includes(row.phase)));
     const [schoolTag, setSchoolTag] = useState(''), [editingExam, setEditingExam] = useState(true), [notes, setNotes] = useState<Record<string, boolean>>({});

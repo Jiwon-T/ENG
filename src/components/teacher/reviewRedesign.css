@@ -907,8 +907,8 @@
 .teacher-workspace .today-lesson-time s{color:#94a3b8;font-weight:500}
 .teacher-workspace .today-moved{display:inline-block;margin-left:2px;padding:0 6px;border-radius:999px;background:#fef3c7;color:#b45309;font-size:11px;font-weight:800;white-space:nowrap}
 /* 1단계: one header row (home + teacher room menu + profile), compact lesson top row and 출결·평가 chips */
-.teacher-workspace .workspace-home{flex:none;display:grid;place-items:center;width:34px;height:34px;min-height:34px;padding:0;border:0;border-radius:11px;background:#fef2f3;font-size:16px;cursor:pointer}
-.teacher-workspace .workspace-home:hover{background:#fde3e6}
+.teacher-workspace .workspace-home{flex:none;display:inline-flex;align-items:center;gap:1px;height:34px;min-height:34px;padding:0 10px 0 6px;border:1px solid #f3e6e8;border-radius:999px;background:#fff;color:#8b2f40;cursor:pointer;transition:background-color .15s,border-color .15s}
+.teacher-workspace .workspace-home:hover{background:#fef2f3;border-color:#eaa9b3}
 .teacher-workspace .workspace-profile{position:relative;flex:none;display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:3px 10px 3px 4px;border:1px solid #f1f5f9;border-radius:999px;background:#fff;color:#94a3b8;cursor:pointer}
 .teacher-workspace .workspace-profile:hover{background:#f8fafc}
 .teacher-workspace .workspace-profile-face{display:grid;place-items:center;width:26px;height:26px;overflow:hidden;border-radius:9px;background:#fef2f3;font-size:14px}
@@ -941,6 +941,8 @@
 .teacher-workspace .today-row-main{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
 .teacher-workspace .today-row-main .today-lesson-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .teacher-workspace .today-row-main .workspace-status-badge{flex:none}
+/* A student's own time (saved with a changed time) goes on its own line under the name, never beside it. */
+.teacher-workspace .today-student-row>.today-lesson-entry>:is(.today-row-main,.today-moved-line){grid-column:1/-1}
 .teacher-workspace .today-late{flex:none;display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:999px;background:#fef3c7;color:#b45309;font-size:var(--workspace-font-xs);font-weight:800;white-space:nowrap}
 .teacher-workspace .today-dismiss.is-row{position:static;flex:none;width:22px;height:22px}
 @media(hover:hover) and (pointer:fine){.teacher-workspace .today-dismiss{opacity:0;transition:opacity .12s}.teacher-workspace .today-lesson-card:hover>.today-dismiss,.teacher-workspace .today-time-head:hover .today-dismiss,.teacher-workspace .today-time-card:hover .today-time-head .today-dismiss,.teacher-workspace .today-student-row:hover .today-dismiss,.teacher-workspace .today-dismiss:focus-visible{opacity:1}}

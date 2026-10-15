@@ -14,7 +14,8 @@ test('담당 시작일: the stored day, else the 담당 변경 that added the te
  assert.deepEqual(resolveStarts(pairs,stored,transfers).map(r=>[r.uid,r.since,r.known]),[['a','2025-09-01',true],['b','2026-05-11',false],['c','2025-03-04',false]],'the latest transfer, in Seoul time');
  assert.equal(startDayFor('2099-01-01'),'2099-01-01','a later 과목 시작일 wins');assert.match(startDayFor('2000-01-01'),/^\d{4}-\d{2}-\d{2}$/);
 });
-test('담당 시작일 is corrected by the teacher themselves, the principal or the admin, only for a student they teach',async()=>{
+test('담당 시작일 is corrected by the teacher themselves, the principal or the admin, only for a student they teach',async t=>{
+ t.mock.method(Date,'now',()=>Date.parse('2026-10-15T01:00:00Z'));// both changes in the same millisecond
  const f=templateFirestore();
  f.rows.set('teacherWorkspaceAccess/t1',{academyId:'main',scopes:[{studentKey:K,subject:'영어'}]});
  const input={uid:'t1',studentKey:K,subject:'영어',since:'2026-05-11'};
@@ -23,7 +24,8 @@ test('담당 시작일 is corrected by the teacher themselves, the principal or 
  assert.equal(f.rows.get('teacherAssignmentStarts/'+startId('t1',K,'영어')).since,'2026-05-11');
  await setAssignmentStart(f.db,{uid:'p',academyId:'main',admin:false,principal:true},{...input,since:'2026-05-12'});
  assert.equal(f.rows.get('teacherAssignmentStarts/'+startId('t1',K,'영어')).since,'2026-05-12','the principal');
- assert.equal([...f.rows.keys()].filter(k=>k.startsWith('teacherAssignmentStartHistory/')).length,2,'each change kept');
+ const history=[...f.rows].filter(([k])=>k.startsWith('teacherAssignmentStartHistory/')).map(([,r])=>[r.before,r.after,r.by]).sort((a,b)=>a[1].localeCompare(b[1]));
+ assert.deepEqual(history,[[null,'2026-05-11','t1'],['2026-05-11','2026-05-12','p']],'each change kept');
  await assert.rejects(setAssignmentStart(f.db,{uid:'t1',academyId:'main',admin:true},{...input,subject:'수학'}),/ASSIGNMENT_NOT_FOUND/,'not their subject');
  await assert.rejects(setAssignmentStart(f.db,{uid:'t1',academyId:'main',admin:true},{...input,since:'5월'}));
 });

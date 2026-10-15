@@ -9,6 +9,7 @@ import {
   PET_ACTIONS, PET_ASSIGNMENT_REWARD, PET_ATTENDANCE_REWARD, PET_CHARACTERS, PET_ITEMS, PET_MAX_LEVEL, PET_MAX_PETS, PET_STAGE_LABEL, PET_STUDY_RATES,
   cleanPetSpeech, petEmojiLimit, petIdleLine, petItem, petStage, xpNeeded, PET_EXPEDITION, PET_WORD_FEED, type PetItem,
 } from '../../lib/petCatalog';
+import { ACCESSORY_SLOTS, PET_JOBS, PET_PARTY, accessorySlot, wornAccessories } from '../../lib/petCatalog';
 import { PetCharacter } from './PetCharacters';
 import WordFeed, { type FeedRunView } from './WordFeed';
 import ExpeditionMap, { type ExpeditionView } from './ExpeditionMap';
@@ -16,11 +17,17 @@ import { SceneArt } from './PetScenes';
 import GuildHall from './GuildHall';
 
 // 나만의 펫: white page, rose accents (the 선생님방 palette). Everything that changes the pet is decided by the server.
-type Tab = 'snacks' | 'closet' | 'talk' | 'shop';
-const TABS: { id: Tab; icon: string; label: string }[] = [{ id: 'snacks', icon: '🍪', label: '간식' }, { id: 'closet', icon: '👗', label: '옷장' }, { id: 'talk', icon: '💬', label: '말하기' }, { id: 'shop', icon: '🛍️', label: '상점' }];
-const SHOP_GROUPS: { id: PetItem['category']; label: string }[] = [{ id: 'clothing', label: '옷' }, { id: 'accessory', label: '소품' }, { id: 'background', label: '배경' }];
+type Tab = 'home' | 'snacks' | 'closet' | 'talk' | 'shop';
+const TABS: { id: Tab; icon: string; label: string }[] = [{ id: 'home', icon: '🏠', label: '홈' }, { id: 'snacks', icon: '🍪', label: '간식' }, { id: 'closet', icon: '👗', label: '옷장' }, { id: 'talk', icon: '💬', label: '말하기' }, { id: 'shop', icon: '🛍️', label: '상점' }];
+/** Shop order: cheapest first; expedition rewards (not for sale) at the end. */
+const byPrice = (items: readonly PetItem[]) => [...items].sort((a, b) => Number(Boolean(a.reward)) - Number(Boolean(b.reward)) || a.price - b.price);
+/** Shop and closet chips: 소품 split by where they're worn (머리·눈·목·손). */
+const SHOP_GROUPS: { id: string; label: string }[] = [{ id: 'all', label: '전체' }, { id: 'clothing', label: '옷' }, ...ACCESSORY_SLOTS, { id: 'background', label: '배경' }];
+const inGroup = (i: PetItem, g: string) => g === 'all' || i.category === g || (i.category === 'accessory' && accessorySlot(i.id) === g);
+/** Which chapter (or the job choice) gives an expedition item. */
+const rewardSource = (id: string) => { const c = PET_EXPEDITION.chapters.find(x => x.reward === id || x.gear?.includes(id)); if (c) return `${c.title} 완료 보상`; const job = Object.values(PET_JOBS).find(j => j.weapon === id); return job ? `7장 꿈의 정원에서 ${job.label}(으)로 전직하면` : '원정대 보상'; };
 // White pets (해미·말랑) need a faint fill to show; solid colours only.
-const SCENE: Record<string, string> = { forest_cabin: 'bg-[#eef6ea]', coral_sea: 'bg-[#e8f3fb]', cloud_castle: 'bg-[#f3f0fb]', default: 'bg-[#fdf6f7]', pink_cushion: 'bg-[#fff5f7]', bed: 'bg-[#f2f7fd]', desk: 'bg-[#fffaf1]', star_room: 'bg-[#1e1b4b]' };
+const SCENE: Record<string, string> = { forest_cabin: 'bg-[#eef6ea]', coral_sea: 'bg-[#e8f3fb]', cloud_castle: 'bg-[#f3f0fb]', oasis: 'bg-[#fdf3e1]', snow_cabin: 'bg-[#eef4fb]', galaxy: 'bg-[#3d3a6b]', dream_garden: 'bg-[#fdf0f5]', default: 'bg-[#fdf6f7]', pink_cushion: 'bg-[#fff5f7]', bed: 'bg-[#f2f7fd]', desk: 'bg-[#fffaf1]', star_room: 'bg-[#1e1b4b]' };
 // Fixed star positions (not random on every render).
 const STARS = Array.from({ length: 18 }, (_, i) => ({ top: (i * 37) % 100, left: (i * 61 + 13) % 100, size: 1 + (i % 3), delay: (i % 5) * 0.7 }));
 const idleLine = (level: number, seed: number) => petIdleLine(level, seed);
@@ -33,8 +40,8 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   const [state, setState] = useState<PetState | null>(null);
   const [pending, setPending] = useState(0);
   const [loadError, setLoadError] = useState('');
-  const [tab, setTab] = useState<Tab>('snacks');
-  const [shopGroup, setShopGroup] = useState<PetItem['category']>('clothing');
+  const [tab, setTab] = useState<Tab>('home');
+  const [shopGroup, setShopGroup] = useState('all'), [closetGroup, setClosetGroup] = useState('all');
   const [trial, setTrial] = useState<string | null>(null); // 상점에서 입어 보는 물건 (서버에는 아무것도 안 바뀜)
   const [talkMode, setTalkMode] = useState<'teach' | 'chat'>('teach');
   const [busy, setBusy] = useState(false);
@@ -105,9 +112,10 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
 
   const stage = petStage(pet.level), atMax = pet.level >= PET_MAX_LEVEL, need = xpNeeded(pet.level);
   const owned = (id: string) => id === 'default' || state.inventory.includes(id);
-  const worn = (item: PetItem) => item.category === 'clothing' ? state.clothing === item.id : item.category === 'accessory' ? state.accessory === item.id : state.background === item.id;
+  const worn = (item: PetItem) => item.category === 'clothing' ? state.clothing === item.id : item.category === 'accessory' ? state.accessories?.[accessorySlot(item.id)] === item.id : state.background === item.id;
   const tried = trial ? petItem(trial) : undefined;
-  const look = { clothing: tried?.category === 'clothing' ? tried.id : state.clothing, accessory: tried?.category === 'accessory' ? tried.id : state.accessory, background: tried?.category === 'background' ? tried.id : state.background };
+  // Trying on an accessory swaps only its place (머리·눈·목·손); the others stay on.
+  const look = { clothing: tried?.category === 'clothing' ? tried.id : state.clothing, accessories: wornAccessories({ accessories: tried?.category === 'accessory' ? { ...state.accessories, [accessorySlot(tried.id)]: tried.id } : state.accessories || {} }), background: tried?.category === 'background' ? tried.id : state.background };
   const buyTried = async () => { if (!tried) return; const r = await act('buy', { itemId: tried.id, wear: true }); if (r) { setTrial(null); say(`${tried.name} 구매 완료! 바로 입혀 줬어요`); } };
   const wearTried = async () => { if (!tried) return; if (!worn(tried)) await act('equip', { itemId: tried.id }); setTrial(null); };
   const petIt = async () => { const r = await act('pet'); if (r) { const id = Date.now(); setHearts(h => [...h, id]); window.setTimeout(() => setHearts(h => h.filter(x => x !== id)), 900); } };
@@ -148,7 +156,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="mx-auto max-w-md px-4 pb-10">
+      <div className="mx-auto max-w-md px-4 pb-28">
         <header className="flex items-center justify-between py-3">
           <button type="button" onClick={onBack} className="flex items-center gap-0.5 text-sm font-bold text-[#8b2f40]"><ChevronLeft size={18} aria-hidden="true" />홈</button>
           <h1 className="text-base font-black text-[#5e1e2a]">나만의 펫</h1>
@@ -157,7 +165,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
 
         {(many || canAdopt) && <div role="tablist" aria-label="내 펫" className="-mx-1 mb-2 flex gap-2 overflow-x-auto px-1 pb-1">
           {state.pets.map(p => <button key={p.slot} type="button" role="tab" aria-selected={p.slot === pet.slot} disabled={busy} onClick={() => void switchTo(p.slot)} className="flex w-14 flex-none flex-col items-center text-[11px] font-bold text-[#8b2f40]">
-            <span className={`flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-[#fdf6f7] ${p.slot === pet.slot ? 'border-2 border-[#d26272]' : 'border border-[#f3e6e8]'}`}><PetCharacter character={p.character} stage={petStage(p.level)} accessory={p.accessory} portrait size={44} /></span>
+            <span className={`flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-[#fdf6f7] ${p.slot === pet.slot ? 'border-2 border-[#d26272]' : 'border border-[#f3e6e8]'}`}><PetCharacter character={p.character} stage={petStage(p.level)} accessory={wornAccessories(p)} portrait size={44} /></span>
             <span className="mt-0.5 max-w-full truncate">{p.name}</span><span className="font-medium text-slate-500">Lv.{p.level}</span>
           </button>)}
           {canAdopt && <button type="button" onClick={openAdopt} className="relative flex w-14 flex-none flex-col items-center text-[11px] font-bold text-[#d26272]">
@@ -173,10 +181,10 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
             {look.background === 'star_room' && STARS.map((s, i) => <span key={i} aria-hidden="true" className="absolute animate-pulse rounded-full bg-white" style={{ top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size, animationDelay: `${s.delay}s` }} />)}
             <p className="relative z-10 mb-2 max-w-[85%] rounded-2xl border border-[#f3d5da] bg-white px-3 py-1.5 text-center text-xs font-medium text-[#5e1e2a]">{cleanPetSpeech(speech, petEmojiLimit(pet.level)) || '…'}</p>
             {others.slice(0, SPOTS.length).map((p, i) => <button key={p.slot} type="button" disabled={busy} onClick={() => void switchTo(p.slot)} aria-label={`${p.name}(으)로 바꾸기`} className="absolute bottom-3 z-[5]" style={SPOTS[i]}>
-              <PetCharacter character={p.character} stage={petStage(p.level)} clothing={p.clothing} accessory={p.accessory} size={58} />
+              <PetCharacter character={p.character} stage={petStage(p.level)} clothing={p.clothing} accessory={wornAccessories(p)} size={58} />
             </button>)}
             <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => void petIt()} aria-label={`${pet.name} 쓰다듬기 (기운 -${PET_ACTIONS.pet.energy})`} className="relative z-10">
-              <PetCharacter character={pet.character} stage={stage} clothing={look.clothing} accessory={look.accessory} background={look.background} />
+              <PetCharacter character={pet.character} stage={stage} clothing={look.clothing} accessory={look.accessories} background={look.background} />
               <AnimatePresence>{hearts.map(id => <motion.span key={id} initial={{ opacity: 1, y: 0 }} animate={{ opacity: 0, y: -60 }} exit={{ opacity: 0 }} className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2"><Heart size={22} className="fill-[#e07a87] text-[#e07a87]" aria-hidden="true" /></motion.span>)}</AnimatePresence>
             </motion.button>
           </div>
@@ -185,6 +193,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
               {editing ? <span className="flex items-center gap-1"><input value={newName} maxLength={12} autoFocus onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void rename(); if (e.key === 'Escape') setEditing(false); }} aria-label="펫 이름" className="w-28 rounded-lg border border-[#f3d5da] px-2 py-1 text-sm" /><button type="button" onClick={() => void rename()} aria-label="이름 저장" className="text-[#8b2f40]"><Check size={16} /></button><button type="button" onClick={() => setEditing(false)} aria-label="취소" className="text-slate-400"><X size={16} /></button></span>
                 : <><b className="text-base font-black text-[#5e1e2a]">{pet.name}</b><button type="button" onClick={() => { setNewName(pet.name); setEditing(true); }} aria-label="이름 바꾸기" className="text-slate-300 hover:text-[#8b2f40]"><Pencil size={13} /></button></>}
               <span className="rounded-full bg-[#8b2f40] px-2 py-0.5 text-[11px] font-bold text-white">Lv.{pet.level}</span>
+              {pet.job && <span className="rounded-full bg-[#fef2f3] px-2 py-0.5 text-[11px] font-bold text-[#8b2f40]">{PET_JOBS[pet.job].icon} {PET_JOBS[pet.job].label}</span>}
               <span className="text-xs text-slate-500">{PET_STAGE_LABEL[stage]}{many && ' · 대표 펫'}</span>
             </div>
             <div className="mt-3 space-y-2 text-xs text-slate-500">
@@ -197,40 +206,51 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
           </div>
         </section>
 
-        <section aria-label="오늘의 포인트" className="mt-3 rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
-          <div className="flex items-center justify-between"><b className="text-sm font-black text-[#5e1e2a]">오늘의 포인트</b><span className="text-xs text-slate-500">{won(state.today.studyPoints)} / {won(state.today.studyCap)}P</span></div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f6e3e6]"><div className="h-full rounded-full bg-[#f5a3a8]" style={{ width: `${Math.min(100, (state.today.studyPoints / Math.max(1, state.today.studyCap)) * 100)}%` }} /></div>
-          {pending > 0 ? <div className="mt-3 flex items-center gap-2 rounded-xl bg-[#fef2f3] px-3 py-2"><Gift size={16} className="flex-none text-[#d26272]" aria-hidden="true" /><span className="flex-1 text-xs text-[#5e1e2a]"><b className="font-bold">공부 보상 {pending}개 도착</b><span className="block text-slate-500">출석 +{PET_ATTENDANCE_REWARD.points}P · 과제 완료 +{PET_ASSIGNMENT_REWARD.points}P</span></span><button type="button" disabled={busy} onClick={() => void claim()} className="rounded-lg bg-[#d26272] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60">받기</button></div>
-            : <p className="mt-2 text-xs text-slate-400">수업에 출석하거나 과제를 완료하면 보상이 와요.</p>}
-        </section>
-
-        {expedition && (() => { const c = expedition.chapters.find(x => expedition.current.startsWith(x.id + '-'))!, n = Number(expedition.current.split('-')[1]); return <section aria-label="원정대" className="mt-3 flex items-center gap-3 rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
-          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#eef6ea] text-lg" aria-hidden="true">🗺️</span>
-          <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">원정대</b><span className="block text-xs text-slate-500">{expedition.allCleared ? '모든 장 완료!' : expedition.currentNeedsLevel ? `${c.title} · 대표 펫 Lv.${expedition.currentNeedsLevel}부터` : `${c.title} ${n}단계`} · ★ {expedition.totalStars} / {expedition.maxStars}</span></span>
-          <span className="flex flex-none gap-1.5"><button type="button" onClick={() => setGuildOpen(true)} className="rounded-xl border border-[#f3d5da] px-3 py-2 text-xs font-bold text-[#8b2f40]">길드</button><button type="button" onClick={() => setMapOpen(true)} className="rounded-xl bg-[#e0587a] px-3.5 py-2 text-xs font-bold text-white">지도</button></span>
-        </section>; })()}
-
-        <section aria-label="단어 먹이 주기" className="mt-3 flex items-center gap-3 rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
-          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#fef2f3] text-lg" aria-hidden="true">🍪</span>
-          <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">단어 먹이 주기</b><span className="block text-xs text-slate-500">{feedResume ? `하던 곳이 저장돼 있어요 · ${feedRun!.index + 1}번째 문제부터` : `최근 공부한 단어장으로 ${PET_WORD_FEED.questions}문제 · 기운 ${PET_WORD_FEED.energy}`}</span></span>
-          <button type="button" disabled={busy} onClick={() => void openFeed()} className="flex-none rounded-xl bg-[#e0587a] px-3.5 py-2 text-xs font-bold text-white disabled:opacity-60">{feedResume ? '이어 하기' : '시작'}</button>
-        </section>
-
-        <div role="tablist" aria-label="펫 메뉴" className="mt-3 grid grid-cols-4 gap-1 rounded-2xl border border-[#f3e6e8] bg-white p-1">
-          {TABS.map(t => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => { setTab(t.id); setText(''); setTrial(null); }} className={`rounded-xl py-2 text-xs font-bold transition-colors ${tab === t.id ? 'bg-[#fef2f3] text-[#8b2f40]' : 'text-slate-400 hover:text-slate-600'}`}><span className="block text-base" aria-hidden="true">{t.icon}</span>{t.label}</button>)}
-        </div>
-
-        <section className="mt-3" role="tabpanel">
-          {tab === 'snacks' && <div className="grid grid-cols-3 gap-2">{PET_ITEMS.filter(i => i.category === 'consumable').map(i => itemCard(i, 'buy'))}</div>}
-          {tab === 'closet' && (() => { const mine = PET_ITEMS.filter(i => i.category !== 'consumable' && owned(i.id)); return mine.length > 1 ? <div className="grid grid-cols-3 gap-2">{mine.map(i => itemCard(i, 'wear'))}</div> : <p className="rounded-2xl border border-dashed border-[#f3d5da] px-4 py-6 text-center text-sm text-slate-500">아직 옷이 없어요. 상점에서 골라 보세요!</p>; })()}
+        <section className="mt-3 space-y-3" role="tabpanel">
+          {tab === 'home' && <>
+          <section aria-label="오늘의 포인트" className="rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
+            <div className="flex items-center justify-between"><b className="text-sm font-black text-[#5e1e2a]">오늘의 포인트</b><span className="text-xs text-slate-500">{won(state.today.studyPoints)} / {won(state.today.studyCap)}P</span></div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f6e3e6]"><div className="h-full rounded-full bg-[#f5a3a8]" style={{ width: `${Math.min(100, (state.today.studyPoints / Math.max(1, state.today.studyCap)) * 100)}%` }} /></div>
+            {pending > 0 ? <div className="mt-3 flex items-center gap-2 rounded-xl bg-[#fef2f3] px-3 py-2"><Gift size={16} className="flex-none text-[#d26272]" aria-hidden="true" /><span className="flex-1 text-xs text-[#5e1e2a]"><b className="font-bold">공부 보상 {pending}개 도착</b><span className="block text-slate-500">출석 +{PET_ATTENDANCE_REWARD.points}P · 과제 완료 +{PET_ASSIGNMENT_REWARD.points}P</span></span><button type="button" disabled={busy} onClick={() => void claim()} className="rounded-lg bg-[#d26272] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60">받기</button></div>
+              : <p className="mt-1.5 text-[11px] text-slate-400">공부로 받는 하루 포인트예요 · 받는 법은 맨 아래에 있어요</p>}
+          </section>
+          {expedition && (() => { const c = expedition.chapters.find(x => expedition.current.startsWith(x.id + '-'))!, n = Number(expedition.current.split('-')[1]); return <section aria-label="원정대" className="mt-3 flex items-center gap-3 rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
+            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#eef6ea] text-lg" aria-hidden="true">🗺️</span>
+            <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">원정대</b><span className="block text-xs text-slate-500">{!pet.job && (expedition.jobReady || []).includes(pet.slot) ? '꿈의 정원 통과! 지도에서 전직할 수 있어요' : expedition.allCleared ? '모든 장 완료!' : expedition.currentNeedsLevel ? `${c.title} · 대표 펫 Lv.${expedition.currentNeedsLevel}부터` : `${c.title} ${n}단계`} · ★ {expedition.totalStars} / {expedition.maxStars}</span></span>
+            <span className="flex flex-none gap-1.5"><button type="button" onClick={() => setGuildOpen(true)} className="rounded-xl border border-[#f3d5da] px-3 py-2 text-xs font-bold text-[#8b2f40]">길드</button><button type="button" onClick={() => setMapOpen(true)} className="rounded-xl bg-[#e0587a] px-3.5 py-2 text-xs font-bold text-white">지도</button></span>
+          </section>; })()}
+          <section aria-label="단어 먹이 주기" className="mt-3 flex items-center gap-3 rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
+            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#fef2f3] text-lg" aria-hidden="true">🍪</span>
+            <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">단어 먹이 주기</b><span className="block text-xs text-slate-500">{feedResume ? `하던 곳이 저장돼 있어요 · ${feedRun!.index + 1}번째 문제부터` : `최근 공부한 단어장으로 ${PET_WORD_FEED.questions}문제 · 기운 ${PET_WORD_FEED.energy}`}</span></span>
+            <button type="button" disabled={busy} onClick={() => void openFeed()} className="flex-none rounded-xl bg-[#e0587a] px-3.5 py-2 text-xs font-bold text-white disabled:opacity-60">{feedResume ? '이어 하기' : '시작'}</button>
+          </section>
+          {/* How to earn points: one small card at the bottom, a row per way. */}
+          <section aria-label="포인트 받는 법" className="rounded-2xl bg-[#fdf6f7] px-4 py-3">
+            <h2 className="text-xs font-black text-[#8b2f40]">포인트 받는 법</h2>
+            <ul className="mt-2 space-y-2 text-xs text-slate-600">
+              {([
+                ['📚', '공부', `단어 테스트 1문제 ${PET_STUDY_RATES['vocab-test'].points}P · 단어장 퀴즈 ${PET_STUDY_RATES['wordbook-quiz'].points}P · 오답 복습 ${PET_STUDY_RATES['review-confirm'].points}P (하루 최대 ${won(state.today.studyCap)}P)`],
+                ['🏫', '수업', `출석 +${PET_ATTENDANCE_REWARD.points}P · 과제 완료 +${PET_ASSIGNMENT_REWARD.points}P (하루 한도와 별도)`],
+                ['🗺️', '원정대', `스테이지 첫 클리어 +${PET_EXPEDITION.bonus.clear}P · ★2·★3 처음 +${PET_EXPEDITION.bonus.star2}P씩 · 파티 원정대 보상은 한 주 최대 ${PET_PARTY.weeklyCap}P`],
+                ['⚡', '기운', '매일 다시 가득 차요 · 기운 간식은 하루 두 번까지'],
+              ] as const).map(([icon, title, text]) => <li key={title} className="flex gap-2"><span aria-hidden="true">{icon}</span><span><b className="font-bold text-[#5e1e2a]">{title}</b> <span className="text-slate-500">{text}</span></span></li>)}
+            </ul>
+          </section>
+          </>}
+          {tab === 'snacks' && <div className="grid grid-cols-3 gap-2">{byPrice(PET_ITEMS.filter(i => i.category === 'consumable')).map(i => itemCard(i, 'buy'))}</div>}
+          {tab === 'closet' && (() => { const mine = PET_ITEMS.filter(i => i.category !== 'consumable' && owned(i.id)); return mine.length > 1 ? <>
+            {/* What each place has on now; tap a place to see only its items. */}
+            <div className="mb-2 grid grid-cols-4 gap-1.5">{ACCESSORY_SLOTS.map(s => { const id = state.accessories?.[s.id]; return <button key={s.id} type="button" aria-pressed={closetGroup === s.id} onClick={() => setClosetGroup(closetGroup === s.id ? 'all' : s.id)} className={`rounded-xl border px-1.5 py-1.5 text-center text-[11px] ${closetGroup === s.id ? 'border-[#d26272] bg-[#fef2f3]' : 'border-[#f3e6e8] bg-white'}`}><span className="block text-slate-400">{s.label}</span><b className="block truncate font-bold text-[#5e1e2a]">{id ? `${petItem(id)?.icon} ${petItem(id)?.name}` : '—'}</b></button>; })}</div>
+            <div className="-mx-1 mb-2 flex gap-1 overflow-x-auto px-1">{SHOP_GROUPS.map(g => <button key={g.id} type="button" aria-pressed={closetGroup === g.id} onClick={() => setClosetGroup(g.id)} className={`flex-none rounded-xl px-3 py-1.5 text-xs font-bold ${closetGroup === g.id ? 'bg-[#fef2f3] text-[#8b2f40]' : 'text-slate-400'}`}>{g.label}</button>)}</div>
+            <div className="grid grid-cols-3 gap-2">{mine.filter(i => inGroup(i, closetGroup)).map(i => itemCard(i, 'wear'))}</div></> : <p className="rounded-2xl border border-dashed border-[#f3d5da] px-4 py-6 text-center text-sm text-slate-500">아직 옷이 없어요. 상점에서 골라 보세요!</p>; })()}
           {tab === 'shop' && <>
-            <div className="mb-2 flex gap-1">{SHOP_GROUPS.map(g => <button key={g.id} type="button" aria-pressed={shopGroup === g.id} onClick={() => { setShopGroup(g.id); setTrial(null); }} className={`flex-1 rounded-xl py-1.5 text-xs font-bold ${shopGroup === g.id ? 'bg-[#fef2f3] text-[#8b2f40]' : 'text-slate-400'}`}>{g.label}</button>)}</div>
-            <div className="grid grid-cols-3 gap-2">{PET_ITEMS.filter(i => i.category === shopGroup && i.id !== 'default').map(i => itemCard(i, 'try'))}</div>
-            {tried?.reward && !owned(tried.id) ? (() => { const c = PET_EXPEDITION.chapters.find(x => x.reward === tried.id); return <div className="sticky bottom-2 mt-3 flex items-center gap-2 rounded-2xl border border-[#d9e8d2] bg-white px-3 py-2.5">
-              <div className="min-w-0 flex-1 text-xs text-[#5e1e2a]"><b className="font-bold">{tried.icon} {tried.name}</b><span className="block text-[#4f7a43]">원정대에서만 얻어요 · {c?.title} 완료 보상</span></div>
+            <div className="-mx-1 mb-2 flex gap-1 overflow-x-auto px-1">{SHOP_GROUPS.map(g => <button key={g.id} type="button" aria-pressed={shopGroup === g.id} onClick={() => { setShopGroup(g.id); setTrial(null); }} className={`flex-none rounded-xl px-3 py-1.5 text-xs font-bold ${shopGroup === g.id ? 'bg-[#fef2f3] text-[#8b2f40]' : 'text-slate-400'}`}>{g.label}</button>)}</div>
+            <div className="grid grid-cols-3 gap-2">{byPrice(PET_ITEMS.filter(i => i.category !== 'consumable' && inGroup(i, shopGroup) && i.id !== 'default')).map(i => itemCard(i, 'try'))}</div>
+            {tried?.reward && !owned(tried.id) ? (() => { return <div className="sticky bottom-24 mt-3 flex items-center gap-2 rounded-2xl border border-[#d9e8d2] bg-white px-3 py-2.5">
+              <div className="min-w-0 flex-1 text-xs text-[#5e1e2a]"><b className="font-bold">{tried.icon} {tried.name}</b><span className="block text-[#4f7a43]">원정대에서만 얻어요 · {rewardSource(tried.id)}</span></div>
               <button type="button" onClick={() => setTrial(null)} className="rounded-xl border border-[#f3d5da] px-3 py-1.5 text-xs font-bold text-[#8b2f40]">원래대로</button>
               <button type="button" onClick={() => { setTrial(null); setMapOpen(true); }} className="rounded-xl bg-[#e0587a] px-3.5 py-1.5 text-xs font-bold text-white">원정대 가기</button>
-            </div>; })() : tried ? (() => { const has = owned(tried.id), short = tried.price - state.points; return <div className="sticky bottom-2 mt-3 flex items-center gap-2 rounded-2xl border border-[#f3e6e8] bg-white px-3 py-2.5">
+            </div>; })() : tried ? (() => { const has = owned(tried.id), short = tried.price - state.points; return <div className="sticky bottom-24 mt-3 flex items-center gap-2 rounded-2xl border border-[#f3e6e8] bg-white px-3 py-2.5">
               <div className="min-w-0 flex-1 text-xs text-[#5e1e2a]"><b className="font-bold">{tried.name} · {won(tried.price)}P</b>
                 <span className={`block ${!has && short > 0 ? 'text-[#b04a5a]' : 'text-slate-500'}`}>{has ? (worn(tried) ? '지금 입고 있어요' : '이미 가지고 있어요') : short > 0 ? `${won(short)}P 더 모으면 살 수 있어요` : '사면 바로 입혀 줘요'}</span></div>
               <button type="button" onClick={() => setTrial(null)} className="rounded-xl border border-[#f3d5da] px-3 py-1.5 text-xs font-bold text-[#8b2f40]">원래대로</button>
@@ -249,16 +269,14 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
           </div>}
         </section>
 
-        <details className="mt-4 rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3 text-xs text-slate-500">
-          <summary className="cursor-pointer font-bold text-[#8b2f40]">포인트 받는 법</summary>
-          <ul className="mt-2 space-y-1">
-            <li>단어 테스트 1문제 맞힐 때마다 {PET_STUDY_RATES['vocab-test'].points}P · 단어장 퀴즈 1문제 {PET_STUDY_RATES['wordbook-quiz'].points}P · 오답 복습 {PET_STUDY_RATES['review-confirm'].points}P</li>
-            <li>공부로 받는 포인트는 하루 최대 {won(state.today.studyCap)}P</li>
-            <li>수업 출석 +{PET_ATTENDANCE_REWARD.points}P · 과제 완료 +{PET_ASSIGNMENT_REWARD.points}P (하루 한도와 별도)</li>
-            <li>기운은 매일 다시 가득 차요. 기운 회복 간식은 하루에 두 번까지</li>
-          </ul>
-        </details>
       </div>
+
+      {/* The menu stays at the bottom of the screen; each tab shows its content under the pet. */}
+      <nav aria-label="펫 메뉴" className="fixed inset-x-0 bottom-0 z-40 border-t border-[#f3e6e8] bg-white/95 backdrop-blur-sm" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div role="tablist" aria-label="펫 메뉴" className="mx-auto grid max-w-md grid-cols-5 px-2 py-1.5">
+          {TABS.map(t => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => { setTab(t.id); setText(''); setTrial(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className={`flex flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px] font-bold transition-colors ${tab === t.id ? 'bg-[#fef2f3] text-[#8b2f40]' : 'text-slate-400 hover:text-slate-600'}`}><span className="text-lg leading-none" aria-hidden="true">{t.icon}</span>{t.label}</button>)}
+        </div>
+      </nav>
 
       <AnimatePresence>{(!pet.chosen || adopting) && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4">
         <div role="dialog" aria-modal="true" aria-labelledby="pet-pick-title" className="w-full max-w-md rounded-3xl bg-white p-5 text-center">
@@ -276,7 +294,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
 
       <AnimatePresence>{celebrate && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4">
         <div role="dialog" aria-modal="true" aria-labelledby="pet-max-title" className="w-full max-w-xs rounded-3xl bg-white p-5 text-center">
-          <div className="flex items-end justify-center gap-2"><PetCharacter character={pet.character} stage={stage} clothing={pet.clothing} accessory={pet.accessory} size={84} /><span className="mb-8 text-xl font-black text-[#d26272]">+</span><span className="mb-2 flex h-20 w-16 items-center justify-center rounded-2xl border-[1.5px] border-dashed border-[#e6a3b0] text-2xl font-black text-[#d26272]">?</span></div>
+          <div className="flex items-end justify-center gap-2"><PetCharacter character={pet.character} stage={stage} clothing={pet.clothing} accessory={wornAccessories(pet)} size={84} /><span className="mb-8 text-xl font-black text-[#d26272]">+</span><span className="mb-2 flex h-20 w-16 items-center justify-center rounded-2xl border-[1.5px] border-dashed border-[#e6a3b0] text-2xl font-black text-[#d26272]">?</span></div>
           <h2 id="pet-max-title" className="mt-2 text-base font-black text-[#5e1e2a]">{pet.name}이(가) Lv.{PET_MAX_LEVEL}이 됐어요!</h2>
           <p className="mt-1 text-xs text-[#8b2f40]">새 친구를 한 마리 더 데려올 수 있어요</p>
           <button type="button" onClick={openAdopt} className="mt-4 w-full rounded-xl bg-[#d26272] py-2.5 text-sm font-bold text-white">새 친구 고르기</button>

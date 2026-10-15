@@ -11,10 +11,10 @@ import {
   PET_STATES, addXP, adoptPet, awardStudy, buyItem, chatRequest, chooseCharacter, claimStudyRewards, currentPet, equipItem, evolveRequest, importLocalPet,
   initialPetState, parseAi, pendingStudyRewards, petSummary, petThePet, publicPetState, renamePet, rollDay, seoulDay, switchPet, teachRequest, wearItem, type ServerPetState,
 } from '../pet.js';
-import { cleanPetSpeech, petEmojiLimit, PET_ACTIONS, PET_STUDY_RATES, PET_WORD_FEED } from '../../../src/lib/petCatalog.js';
+import { cleanPetSpeech, petEmojiLimit, PET_ACTIONS, PET_STUDY_RATES, PET_WORD_FEED, stageQuestions } from '../../../src/lib/petCatalog.js';
 import { PET_GAMES, answerRun, buildRun, initialGameState, loadFeedSource, publicRun, rollGameDay, runSummary, type FeedSource, type PetGameState } from '../petWordFeed.js';
 import { PET_GUILD, PET_PARTIES, addContribution, boardCard, createParty, initialGuild, joinParty, leaveParty, petLook, publicParty, rankingRow, setNickname, settleParty, shownNickname, voteKick, weekOf, type GuildProfile, type Party } from '../petParty.js';
-import { PET_EXPEDITIONS, finishStage, initialExpedition, levelOk, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
+import { PET_EXPEDITIONS, chooseJob, finishStage, initialExpedition, levelOk, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
 
 // GET /api/student/pet → the pet state (+ 공부 보상 waiting). POST {action,...} → one change, decided here.
 type Deps = { verify: (token: string) => Promise<{uid: string}>; db: () => any; generate: (request: any) => Promise<string>; now: () => number; feedSource?: (db: any, uid: string) => Promise<FeedSource> };
@@ -25,6 +25,7 @@ const defaults = (): Deps => ({
   now: () => Date.now(),
 });
 const MESSAGES: Record<string, string> = {
+  PET_JOB_BAD: '검사나 마법사 중에서 골라 주세요.', PET_JOB_TAKEN: '이 친구는 이미 전직했어요.', PET_JOB_LOCKED: '7장 꿈의 정원의 왕관 스테이지를 이 친구와 통과하면 전직할 수 있어요.',
   PET_NOT_ENOUGH_POINTS: '포인트가 부족해요!', PET_ENERGY_ITEM_USED: '기운 회복 간식은 하루에 두 번까지 먹을 수 있어요!', PET_TIRED: '펫이 너무 지쳤어요. 기운을 회복시켜 주세요!',
   PET_ITEM_NOT_FOUND: '없는 물건이에요.', PET_ITEM_NOT_OWNED: '먼저 상점에서 사 주세요.', PET_ALREADY_CHOSEN: '이미 친구를 골랐어요.', PET_BAD_NAME: '이름을 입력해 주세요.',
   FEED_NO_BOOKS: '단어장을 한 번 공부하면 시작할 수 있어요. 학습 세트에서 단어장을 공부해 보세요!', FEED_STALE: '다른 화면에서 진행이 바뀌었어요. 최신 상태로 불러올게요.', FEED_BAD_CHOICE: '카드를 다시 골라 주세요.', FEED_NO_RUN: '진행 중인 게임이 없어요.', FEED_OTHER_RUN: '하던 판이 있어요. 먼저 끝내거나 그만둬 주세요.', EXPEDITION_BAD_STAGE: '없는 스테이지예요.', EXPEDITION_LOCKED: '앞 스테이지를 먼저 통과해 주세요.', EXPEDITION_LEVEL: '대표 펫 레벨이 더 높아야 갈 수 있어요.',
@@ -207,7 +208,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       const current = gameSnap.data() as PetGameState | undefined, active = current?.run && !current.run.finished ? current.run : null;
       if (stage && !stageUnlocked(expSnap.exists ? expSnap.data() : initialExpedition(now), stage)) return fail('EXPEDITION_LOCKED');
       if (active && !restart && (active.stage || null) !== stage) return fail('FEED_OTHER_RUN', 409);
-      const fresh = active && !restart ? null : buildRun(await (deps.feedSource || loadFeedSource)(db, uid), current?.day === seoulDay(now) ? current.rewardedToday : [], now, Math.random, stage || undefined);
+      const fresh = active && !restart ? null : buildRun(await (deps.feedSource || loadFeedSource)(db, uid), current?.day === seoulDay(now) ? current.rewardedToday : [], now, Math.random, stage || undefined, stageQuestions(stage));
       if (!fresh && !(active && !restart)) return fail('FEED_NO_BOOKS');
       return feedDone(await changeGame(db, uid, now, (s, g, e) => {
         if (stage && !levelOk(stage, currentPet(s).level)) throw Error('EXPEDITION_LEVEL');
@@ -227,6 +228,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       if (!r.repeat && g.run?.finished && g.run.stage) r.expedition = finishStage(e, s, g.run.stage, runSummary(g.run).stars);
       return r;
     }));
+    if (action === 'choose-job') return feedDone(await changeGame(db, uid, now, (s, _g, e) => chooseJob(e, s, body.job)));
     if (action === 'feed-quit') return feedDone(await changeGame(db, uid, now, (_s, g) => { g.run = null; return {quit: true}; }));
     if (action.startsWith('guild-') || action.startsWith('party-')) return handleGuild(action, body, db, uid, now, res, fail);
     if (action === 'rename') return done(await change(db, uid, now, s => renamePet(s, String(body.name || ''))));

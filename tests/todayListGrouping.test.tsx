@@ -77,3 +77,10 @@ test('진행 중 is a small ▷ beside the time, on the same line as the lesson 
  const css=fs.readFileSync(new URL('../src/components/teacher/reviewRedesign.css',import.meta.url),'utf8');
  assert.match(css,/\.today-time-head \.today-now\{flex:none;justify-content:center;width:18px;height:18px;/);
 });
+test('여러 학생 card: a student saved with a changed time keeps the name on its row and the time on its own line',()=>{
+ const drafts=[{id:'d1',stage:'draft',ownerUid:'u',data:{studentKey:'k0',date:day,subject:'영어',start:'18:30',end:'20:10'}}];
+ const html=renderToStaticMarkup(<TeacherTodayLessons data={{uid:'u7',admin:true,students,classes,drafts,schedules:[],reflectedSchedules:[]}} date={day} onDate={()=>{}} request={async()=>({})} onStudent={()=>{}}/>);
+ assert.match(html,/<span class="today-row-main"><span class="today-lesson-name" title="류현수 \(용죽고1\)">류현수<\/span>.*?<\/span><span class="today-moved-line">→ 18:30–20:10<\/span><\/button>/,'the name row, then the changed time');
+ const css=fs.readFileSync(new URL('../src/components/teacher/reviewRedesign.css',import.meta.url),'utf8');
+ assert.match(css,/\.today-student-row>\.today-lesson-entry>:is\(\.today-row-main,\.today-moved-line\)\{grid-column:1\/-1\}/,'both span the row grid, so the time never squeezes the name');
+});

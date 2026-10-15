@@ -117,25 +117,33 @@ interface UserProfile {
 }
 
 // Helper to run teacher seeding logic
+// Runs only when the built-in grammar data differs from what this device last synced: each seed deletes and rewrites
+// its words, which held up every read after an admin login (시험기간, 단어장) and gave the words new ids each time.
+let seedingStarted = false;
 const runTeacherSeeding = async () => {
+  if (seedingStarted) return;
+  seedingStarted = true;
   try {
-    const [{ seedIrregularVerbs }, { seedObjectPatternGrammar, seedComplementGrammar, seedConversionGrammar, seedRelativeGrammar, seedModalGrammar, seedBasicModalGrammar, seedVerbFormGrammar, seedGrammarCramming }, { seedComparativeGrammar }] = await Promise.all([
+    const modules = await Promise.all([
       import('./lib/irregularVerbsData'),
       import('./lib/grammarSets'),
-      import('./lib/comparativeData')
+      import('./lib/comparativeData'),
+      import('./lib/grammarCrammingPool')
     ]);
-    seedIrregularVerbs();
-    seedComparativeGrammar();
-    seedObjectPatternGrammar();
-    seedComplementGrammar();
-    seedConversionGrammar();
-    seedRelativeGrammar();
-    seedModalGrammar();
-    seedBasicModalGrammar();
-    seedVerbFormGrammar();
-    seedGrammarCramming();
-  } catch (error) {
-    console.error('Seeding failed:', error);
+    const [{ seedIrregularVerbs }, { seedObjectPatternGrammar, seedComplementGrammar, seedConversionGrammar, seedRelativeGrammar, seedModalGrammar, seedBasicModalGrammar, seedVerbFormGrammar, seedGrammarCramming }, { seedComparativeGrammar }] = modules;
+    // The version covers every data module the seeds read and the seed functions themselves (titles and field mapping
+    // written inside them), so a change to any of them syncs again once.
+    const text = JSON.stringify(modules.map(m => Object.entries(m).map(([k, v]) => [k, typeof v === 'function' ? String(v) : v])));
+    let hash = 0; for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) | 0;
+    const key = `grammar-seed:${auth.currentUser?.uid || ''}`, version = `${text.length}:${hash}`;
+    try { if (localStorage.getItem(key) === version) return; } catch { /* no storage: seed as before */ }
+    const results = await Promise.allSettled([seedIrregularVerbs(), seedComparativeGrammar(), seedObjectPatternGrammar(), seedComplementGrammar(), seedConversionGrammar(),
+      seedRelativeGrammar(), seedModalGrammar(), seedBasicModalGrammar(), seedVerbFormGrammar(), seedGrammarCramming()]);
+    // Remembered only when every set synced; otherwise the next login tries again.
+    if (results.every(r => r.status === 'fulfilled')) { try { localStorage.setItem(key, version); } catch { /* optional */ } }
+    else console.error('Seeding failed:', 'SEED_PARTIAL');
+  } catch {
+    console.error('Seeding failed:', 'SEED_FAILED');
   }
 };
 
@@ -234,7 +242,8 @@ export default function App() {
             // Fetch the screen people open next while the home is idle, so the first click doesn't wait for the download.
             const prefetch = ['teacher', 'principal', 'admin'].includes(data.role) ? () => import('./components/teacher/TeacherRoom') : () => import('./components/pet/PetHome');
             const idle = (window as any).requestIdleCallback as ((cb: () => void) => number) | undefined;
-            if (idle) idle(() => { void prefetch().catch(() => {}); }); else setTimeout(() => { void prefetch().catch(() => {}); }, 1500);
+            const prefetchAll = () => { void prefetch().catch(() => {}); void import('./components/student/WordbookView').catch(() => {}); };
+            if (idle) idle(prefetchAll); else setTimeout(prefetchAll, 1500);
             
             if (firebaseUser.email === 'lizzieshere1@gmail.com') {
               setTimeout(runTeacherSeeding, 1000); // Defer seeding

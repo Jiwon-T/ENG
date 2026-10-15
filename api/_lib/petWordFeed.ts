@@ -35,11 +35,12 @@ function distractors(answer: FeedWord, pool: FeedWord[], rand: () => number) {
 function shuffle<T>(list: T[], rand: () => number) { const a = [...list]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 /** One game: up to 3 wrong answers first, then words not rewarded today; a word whose 3 cards can't be made is skipped. */
-export function buildRun(source: FeedSource, rewardedToday: string[], now: number, rand: () => number = Math.random, stage?: string): FeedRun | null {
+/** `count`: questions in this game (later 원정대 chapters ask more). */
+export function buildRun(source: FeedSource, rewardedToday: string[], now: number, rand: () => number = Math.random, stage?: string, count: number = PET_WORD_FEED.questions): FeedRun | null {
   const poolOf = new Map(source.books.map(b => [b.id, b.words.filter(w => w.word.trim() && w.meaning.trim())]));
   const used = new Set<string>(), questions: FeedQuestion[] = [];
   const add = (w: FeedWord, fromWrong: boolean) => {
-    const key = wordKey(w); if (used.has(key) || questions.length >= PET_WORD_FEED.questions) return;
+    const key = wordKey(w); if (used.has(key) || questions.length >= count) return;
     const wrong = distractors(w, poolOf.get(w.wordbookId) || [], rand); if (!wrong) return;
     const choices = shuffle([w.meaning.trim(), ...wrong], rand);
     used.add(key); questions.push({key, wordbookId: w.wordbookId, word: w.word.trim(), choices, answer: choices.indexOf(w.meaning.trim()), ...(fromWrong ? {fromWrong: true} : {})});

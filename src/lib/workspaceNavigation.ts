@@ -1,4 +1,4 @@
-import {ClipboardList,CalendarDays,Users,BookOpen,Settings} from 'lucide-react';
+import {ClipboardList,CalendarDays,Users,BookOpen,Settings,FileText} from 'lucide-react';
 export const NAV_ITEMS=[
  {id:'lesson',label:'수업 일지 작성',mobileLabel:'일지',icon:ClipboardList,group:0,mobilePrimary:true,mobileOrder:0},
  {id:'academy',label:'일지 조회',mobileLabel:'조회',icon:ClipboardList,group:0,mobilePrimary:true,mobileOrder:3},
@@ -7,7 +7,9 @@ export const NAV_ITEMS=[
  {id:'academic',label:'성적 관리',mobileLabel:'성적',icon:BookOpen,group:1,mobilePrimary:false,mobileOrder:99},
  {id:'curriculum',label:'커리큘럼',mobileLabel:'커리큘럼',icon:BookOpen,group:2,mobilePrimary:false,mobileOrder:99},
  {id:'word',label:'학습 세트',mobileLabel:'학습 세트',icon:BookOpen,group:2,mobilePrimary:false,mobileOrder:99},
+ // 워크북 만들기: the admin only for now (each AI translation is billed).
+ {id:'workbook',label:'워크북',mobileLabel:'워크북',icon:FileText,group:2,mobilePrimary:false,mobileOrder:99},
  {id:'settings',label:'관리자 설정',mobileLabel:'관리자 설정',icon:Settings,group:2,mobilePrimary:false,mobileOrder:99},
 ] as const;
-export function visibleWorkspaceNav(admin=false,principal=false){return NAV_ITEMS.filter(item=>item.id!=='settings'||admin||principal);}
+export function visibleWorkspaceNav(admin=false,principal=false){return NAV_ITEMS.filter(item=>item.id==='workbook'?admin:item.id!=='settings'||admin||principal);}
 export function adjacentWorkspaceTab(items:readonly {id:string}[],current:string,key:string){const index=Math.max(0,items.findIndex(item=>item.id===current));return key==='Home'?items[0]?.id:key==='End'?items.at(-1)?.id:key==='ArrowRight'?items[(index+1)%items.length]?.id:key==='ArrowLeft'?items[(index+items.length-1)%items.length]?.id:undefined;}

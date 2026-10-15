@@ -8,7 +8,8 @@ export interface GrammarWord {
   pattern: string;
 }
 
-const objectPatternData: GrammarWord[] = [
+/** Exported so the seed version (App.tsx) covers it. */
+export const objectPatternData: GrammarWord[] = [
   // to부정사만 (to-only)
   { word: 'want', meaning: '원하다', pattern: 'to부정사만 목적어로 오는 동사' },
   { word: 'promise', meaning: '약속하다', pattern: 'to부정사만 목적어로 오는 동사' },

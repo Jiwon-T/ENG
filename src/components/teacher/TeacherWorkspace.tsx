@@ -1,5 +1,6 @@
 import LessonRestorePanel from './LessonRestorePanel';
 import WorkspaceSkeleton from './WorkspaceSkeleton';
+const WorkbookMaker = lazy(() => import('./WorkbookMaker'));
 import AdminDashboard from './AdminDashboard';
 import StudentMasterPanel from './StudentMasterPanel';
 import ScheduleViewHeader,{type ScheduleView} from './ScheduleViewHeader';
@@ -159,7 +160,7 @@ export default function TeacherWorkspace({ onNavigate }: {
         }
         if (!result.ok || !result.data?.ok)
             throw Object.assign(new Error(`${result.data?.message || errors[result.data?.error] || result.userMessage || '처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'}${result.data?.diagnosticId ? ` (오류 ID: ${result.data.diagnosticId})` : ''}`),{code:result.data?.error,blocker:result.data?.blocker});
-        if(posting&&action!=='previous-lesson'&&action!=='report-review') {
+        if(posting&&action!=='previous-lesson'&&action!=='report-review'&&!action!.startsWith('workbook-')) {
             if(currentContext.current===operationContext)loadVersion.current++;if(action==='save-draft'||action==='publish')draftVersion.current++;invalidateTeacherReads(action!);
             dirtyResources.current.add(action==='save-class'&&result.data.statusOnly?'save-class-status':action!);
             const kind=action==='save-draft'||action==='publish'?'lesson':action==='save-academic'||action==='publish-academic'?'academic':action==='save-schedule'||action==='publish-schedule'?'schedule':action==='save-class'&&result.data.statusOnly?'class':null;
@@ -381,6 +382,7 @@ export default function TeacherWorkspace({ onNavigate }: {
   {tab === 'curriculum' && <TeacherClassManager data={data} busy={busy} request={request} refresh={refresh} act={act} mode="curriculum"/>}
   {tab === 'word' && <section className="panel"><h2>내 학습 세트 관리</h2><div className="set-tabs" role="tablist" aria-label="관리할 세트 종류">{([['word', '단어장', '단어 암기·테스트'], ['grammar', '문법 세트', '문법 개념·문제'], ['exam', '시험기간', '시험 대비 묶음']] as const).map(([value, label, hint]) => <button key={value} type="button" role="tab" className="set-tab" aria-selected={setCategory === value} onClick={() => setSetCategory(value)}><strong>{label}</strong><small>{hint}</small></button>)}</div><Suspense fallback={<p className="text-sm text-slate-500">세트를 불러오는 중…</p>}><WordbookManager key={setCategory} category={setCategory}/></Suspense></section>}
   {/* After the app-only switch the settings tab is for everyday management; migration tools move into one collapsed section. */}
+  {tab === 'workbook' && data.admin && <Suspense fallback={<WorkspaceSkeleton/>}><WorkbookMaker request={request}/></Suspense>}
   {tab === 'settings' && (data.admin || data.principal) && data.coreMode && <AdminDashboard data={data} request={request} act={act} busy={busy} refresh={refresh}/>}
   {tab === 'settings' && !data.coreMode && (data.admin || data.principal) && <LessonRestorePanel request={request} act={act} busy={busy} students={data.students} staff={data.staff} onRestored={refresh}/>}
   </>}

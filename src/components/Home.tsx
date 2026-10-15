@@ -70,7 +70,7 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
       <header className="bg-[#fde3e6] px-5 pt-4 pb-12 text-[#5e1e2a] md:mt-8 md:rounded-[28px] md:px-8 md:pt-6 md:pb-16">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-2"><RosyLogo size={32} /><span className="text-sm font-black tracking-tight md:text-base">지원T English</span></span>
-          {onOpenMenu && <button type="button" onClick={onOpenMenu} aria-label="메뉴 열기" className="relative flex items-center gap-1.5 rounded-full border border-[#f6d3d8] bg-white/80 py-1 pl-1 pr-2.5">
+          {onOpenMenu && <button type="button" onClick={onOpenMenu} aria-label="메뉴 열기" className="relative flex items-center gap-1.5 rounded-full border border-[#f6d3d8] bg-white/80 py-1 pl-1 pr-2.5 transition-colors hover:border-[#eaa9b3] hover:bg-white">
             {hasNewAssignment && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" aria-hidden="true" />}
             <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-[#fef2f3] text-sm">{avatar && avatar.startsWith('http') ? <img src={avatar} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : (avatar || '🙂')}</span>
             <Menu size={16} className="text-[#8b2f40]" aria-hidden="true" />

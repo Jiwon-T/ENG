@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
 import { PetCharacter } from './PetCharacters';
-import { PET_EXPEDITION, PET_WORD_FEED, petItem, petStage } from '../../lib/petCatalog';
+import { PET_EXPEDITION, PET_WORD_FEED, petItem, petStage, wornAccessories } from '../../lib/petCatalog';
 import type { PetResponse, PetState } from '../../lib/petService';
 
 // 단어 먹이 주기: the pet holds a word, the student feeds it the right meaning. The server builds and grades every
@@ -56,7 +56,7 @@ export default function WordFeed({ run: initial, state, send, onClose, title, on
         {done ? <div className="mt-6 text-center">
           <h2 className="text-lg font-black text-[#5e1e2a]">{outcome ? (outcome.cleared ? `${title || '스테이지'} 통과!` : outcome.boss ? '조금만 더! 별 2개면 통과예요' : '조금만 더! 절반 이상 맞히면 통과예요') : '다 먹었어요!'}</h2>
           <p className="mt-1 text-2xl tracking-widest text-[#f2b84b]" aria-label={`별 ${run.summary!.stars}개`}>{'★'.repeat(run.summary!.stars)}<span className="text-[#ece3e5]">{'★'.repeat(3 - run.summary!.stars)}</span></p>
-          <div className="mt-2 flex justify-center"><PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={pet.accessory} size={110} /></div>
+          <div className="mt-2 flex justify-center"><PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet)} size={110} /></div>
           <div className="mx-auto mt-3 max-w-xs rounded-2xl bg-[#fdf6f7] px-4 py-3 text-left text-xs leading-6 text-[#5e1e2a]">
             처음 맞힌 문제 {run.summary!.correct} / {run.summary!.total}개 · <b className="font-bold">+{run.summary!.points}P</b><br />
             {outcome && outcome.bonuses.map(b => { const full = PET_EXPEDITION.bonus[b as keyof typeof PET_EXPEDITION.bonus], got = outcome.paid?.[b] ?? 0; return <span key={b} className="block">{b === 'clear' ? '처음 통과 보너스' : b === 'star2' ? '★★ 처음 달성' : '★★★ 처음 달성'} <b className="font-bold">+{got}P</b>{got < full && <span className="text-slate-400"> (오늘 공부 포인트가 가득 찼어요)</span>}</span>; })}
@@ -74,7 +74,7 @@ export default function WordFeed({ run: initial, state, send, onClose, title, on
             <span className="absolute left-1/2 top-4 -translate-x-1/2 rounded-2xl border border-[#f3d5da] bg-white px-5 py-2 text-xl font-black text-[#1f1a24]" lang="en">{q.word}</span>
             {q.retry && <span className="absolute left-3 top-3 rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[#b04a5a]">다시 나온 단어</span>}
             <motion.div key={`${at}-${mood}`} initial={{ rotate: 0, y: 0 }} animate={mood === 'yum' ? { y: [0, -14, 0] } : mood === 'huh' ? { rotate: [0, -10, -8] } : { rotate: 0 }} transition={{ duration: 0.5 }} className="mb-2">
-              <PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={pet.accessory} size={120} />
+              <PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet)} size={120} />
             </motion.div>
             <AnimatePresence>{answered && <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="absolute right-6 top-16 rounded-2xl border border-[#f3d5da] bg-white px-3 py-1 text-xs font-bold text-[#8b2f40]">{q.correct ? `냠냠!${q.points ? ` +${q.points}P` : ''}` : '음…?'}</motion.span>}</AnimatePresence>
           </div>

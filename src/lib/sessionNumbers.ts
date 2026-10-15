@@ -11,6 +11,18 @@ export function sessionMinutes(start:string,end:string):number|null {
  const minutes=(s:string)=>Number(s.slice(0,2))*60+Number(s.slice(3));
  const difference=minutes(end)-minutes(start);return difference>0?difference:null;
 }
+/** Extra 자습 pieces (자습을 나눠 할 때): the first piece stays in selfStudyStart/End, the others here. */
+export type StudyPiece={start:string;end:string};
+export const studyPieces=(d:any):StudyPiece[]=>[{start:d?.selfStudyStart||'',end:d?.selfStudyEnd||''},...(Array.isArray(d?.selfStudyMore)?d.selfStudyMore:[])];
+/** All 자습 pieces together (30 + 30 minutes count like one 60-minute 자습); null while any piece is incomplete. */
+export function studyMinutes(d:any):number|null{
+ let total=0;for(const p of studyPieces(d)){const m=sessionMinutes(p.start,p.end);if(m===null)return null;total+=m;}return total;
+}
+/** "16:00–16:30, 18:20–18:50": every 자습 piece, for reviews, messages and the spreadsheet. */
+export const studyTimeText=(d:any,dash='–')=>studyPieces(d).map(p=>`${p.start||'미입력'}${dash}${p.end||'미입력'}`).join(', ');
+/** The end of the last 자습 piece. */
+export const studyLastEnd=(d:any)=>{const pieces=studyPieces(d);return pieces[pieces.length-1].end;};
+export const kindMinutes=(kind:SessionKind,d:any)=>kind==='lesson'?sessionMinutes(d?.start,d?.end):studyMinutes(d);
 export function numberTenths(value:number):number|null {
  if(!Number.isFinite(value)||value<0)return null;
  const [whole,fraction='']=String(value).split('.');
@@ -21,13 +33,13 @@ export function numberTenths(value:number):number|null {
 export function formatSessionNumber(value:number):string {const tenths=numberTenths(value);return tenths===null?'':tenths%10===0?String(tenths/10):`${Math.floor(tenths/10)}.${tenths%10}`;}
 /** Only counter metadata is added to the existing response; no other history content. */
 export function sessionRecordSummaries(records:readonly any[]):any[] {
- const keys=['studentKey','subject','date','classSession','start','end','round','attendance','selfStudy','selfStudyStart','selfStudyEnd','selfStudyRound'];
+ const keys=['studentKey','subject','date','classSession','start','end','round','attendance','selfStudy','selfStudyStart','selfStudyEnd','selfStudyMore','selfStudyRound'];
  return records.map(r=>({id:r.id,stage:r.stage,archived:r.archived,deleteRequested:r.deleteRequested,updatedAt:r.updatedAt,data:Object.fromEntries(keys.map(key=>[key,(r.data??r)[key]]))}));
 }
 const absent=(d:any)=>d.attendance==='결석'||d.attendance==='보강 결석';
 export function sessionHasIncrement(d:any,kind:SessionKind):boolean {
  const enabled=kind==='lesson'?d.classSession==='있음':d.selfStudy==='있음';
- const minutes=sessionMinutes(kind==='lesson'?d.start:d.selfStudyStart,kind==='lesson'?d.end:d.selfStudyEnd);
+ const minutes=kindMinutes(kind,d);
  return enabled&&!absent(d)&&minutes!==null&&(sessionIncrement(kind,minutes)||0)>0;
 }
 /** The record the next counter builds on: the latest earlier attended record with a counter. An absent record
@@ -43,7 +55,7 @@ function latestSessionRecord(records:readonly any[],input:any,kind:SessionKind,s
  for(const d of earlier){
   if(sameMonth&&d.date.slice(0,7)!==month){month=d.date.slice(0,7);base=undefined;}
   if(sessionHasIncrement(d,kind)){base=d;continue;}
-  const enabled=(kind==='lesson'?d.classSession:d.selfStudy)==='있음',minutes=sessionMinutes(startOf(d),kind==='lesson'?d.end:d.selfStudyEnd);
+  const enabled=(kind==='lesson'?d.classSession:d.selfStudy)==='있음',minutes=kindMinutes(kind,d);
   if(!absent(d)||!enabled||minutes===null)continue;
   const before=base?roundOf(base)!:0,raised=roundOf(d)!;
   if(raised>before&&raised<=before+(sessionIncrement(kind,minutes)||0))base=d;
@@ -56,7 +68,7 @@ export function sessionBase(records:readonly any[],input:any,kind:SessionKind):a
 }
 export function nextSessionNumbers(records:readonly any[],input:any):{lesson:number|null;study:number|null} {
  const next=(kind:SessionKind)=>{if((kind==='lesson'?input.classSession:input.selfStudy)!=='있음')return null;
-  const minutes=sessionMinutes(kind==='lesson'?input.start:input.selfStudyStart,kind==='lesson'?input.end:input.selfStudyEnd);if(minutes===null)return null;
+  const minutes=kindMinutes(kind,input);if(minutes===null)return null;
   const base=sessionBase(records,input,kind);if(!base&&!latestSessionRecord(records,input,kind,false))return null;
   const tenths=(base?numberTenths(kind==='lesson'?base.round:base.selfStudyRound)!:0)+(absent(input)?0:sessionIncrement(kind,minutes)!);return tenths/10;
  };return {lesson:next('lesson'),study:next('study')};
@@ -66,12 +78,12 @@ export function autoSessionNumbers<T extends Record<string,any>>(data:T,records:
  const edited=new Set(touched),result=nextSessionNumbers(records,data),next:any={...data},hints:Record<string,string>={};
  for(const [kind,key] of [['lesson','round'],['study','selfStudyRound']] as const){
   if(edited.has(key))continue;
-  if(result[kind]!==null){next[key]=result[kind];const base=sessionBase(records,data,kind);const minutes=sessionMinutes(kind==='lesson'?data.start:data.selfStudyStart,kind==='lesson'?data.end:data.selfStudyEnd)!;
+  if(result[kind]!==null){next[key]=result[kind];const base=sessionBase(records,data,kind);const minutes=kindMinutes(kind,data)!;
    const increment=formatSessionNumber(absent(data)?0:sessionIncrement(kind,minutes)!/10);
    hints[key]=base?`자동 입력 · 직전 ${formatSessionNumber(kind==='lesson'?base.round:base.selfStudyRound)}회차(${base.date.slice(5).replace('-','/')}) +${increment}`:`자동 입력 · ${data.date.slice(0,7)} 월별 시작 0 +${increment}`;
   }else{next[key]=null;
    // On but without times yet: still show the previous round so the teacher knows where it continues from.
-   const enabled=kind==='lesson'?data.classSession==='있음':data.selfStudy==='있음',base=enabled&&sessionMinutes(kind==='lesson'?data.start:data.selfStudyStart,kind==='lesson'?data.end:data.selfStudyEnd)===null?sessionBase(records,data,kind):undefined;
+   const enabled=kind==='lesson'?data.classSession==='있음':data.selfStudy==='있음',base=enabled&&kindMinutes(kind,data)===null?sessionBase(records,data,kind):undefined;
    if(base)hints[key]=`자동 입력 대기 · 직전 ${formatSessionNumber(kind==='lesson'?base.round:base.selfStudyRound)}회차(${base.date.slice(5).replace('-','/')}) · 시간 입력 필요`;
   }
  }return {data:next,hints};
@@ -83,8 +95,8 @@ export function editedSessionNumbers<T extends Record<string,any>>(data:T,baseli
  const edited=new Set(touched),next:any={...data};
  for(const [kind,key,fields] of [['lesson','round',['start','end','classSession','attendance','date']],['study','selfStudyRound',['selfStudyStart','selfStudyEnd','selfStudy','attendance','date']]] as const){
   if(edited.has(key)||!fields.some(field=>!Object.is(data[field],baseline[field])))continue;
-  const minutes=sessionMinutes(kind==='lesson'?data.start:data.selfStudyStart,kind==='lesson'?data.end:data.selfStudyEnd);
-  const oldMinutes=sessionMinutes(kind==='lesson'?baseline.start:baseline.selfStudyStart,kind==='lesson'?baseline.end:baseline.selfStudyEnd);
+  const minutes=kindMinutes(kind,data);
+  const oldMinutes=kindMinutes(kind,baseline);
   const old=numberTenths(baseline[key]);
   const enabled=(kind==='lesson'?data.classSession:data.selfStudy)==='있음';
   // Newly turned on (no counter or no times before): count from the earlier lessons, as for a new lesson.

@@ -1028,3 +1028,11 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 .teacher-workspace .report-preview .teacher-academic [role=tab][aria-selected=true]{background:#e0587a;color:#fff;}
 .teacher-workspace .report-preview .teacher-academic [role=tab][aria-selected=false]{background:#f8f1f2;color:#8b2f40;}
 .teacher-workspace .report-preview .teacher-academic h3{margin:0;}
+/* 자습을 나눠 할 때: extra pieces under the 자습 row, and a small + button. */
+.lesson-study-more{grid-column:1/-1;display:grid;gap:6px;}
+.lesson-study-piece{display:grid;grid-template-columns:max-content minmax(0,1fr) max-content minmax(0,1fr) 24px;align-items:center;gap:6px;font-size:12px;color:var(--workspace-neutral-fg,#64748b);}
+.teacher-workspace .lesson-study-piece input{width:100%;min-width:0;}
+.lesson-study-piece-name{font-weight:700;white-space:nowrap;}
+.teacher-workspace .lesson-study-remove{min-height:24px;width:24px;height:24px;padding:0;border:0;border-radius:999px;background:#f8f1f2;color:#9a8a8f;font-size:14px;line-height:1;}
+.teacher-workspace .lesson-study-add{justify-self:end;min-height:26px;padding:2px 10px;border:1px dashed #eaa9b3;border-radius:999px;background:#fff;color:#8b2f40;font-size:12px;font-weight:700;}
+.teacher-workspace .lesson-study-add:hover{background:#fef2f3;}

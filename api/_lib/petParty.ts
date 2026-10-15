@@ -3,12 +3,13 @@
 // and up), shared by contribution among members who answered 10+ words, at most 500P each. Students only ever see
 // nicknames and pets (never real names, even from the same academy); teachers see more on their own screens.
 import {seoulDay, type ServerPetState, currentPet} from './pet.js';
-import {PET_PARTY} from '../../src/lib/petCatalog.js';
+import {PET_PARTY, wornAccessories} from '../../src/lib/petCatalog.js';
 
 export const PET_GUILD = 'petGuild', PET_PARTIES = 'petParties';
 export interface GuildProfile { version: 1; nickname: string; warned: boolean; banned: string[]; parties: Record<string, string>; lastResult?: PartyResult | null; updatedAt: number }
 export interface PartyResult { week: string; party: string; progress: number; reward: number; counted: boolean }
-export interface PetLook { character: string; name: string; level: number; clothing: string | null; accessory: string | null }
+/** Party snapshots: `accessories` (each place); snapshots saved before carry a single `accessory`. */
+export interface PetLook { character: string; name: string; level: number; clothing: string | null; accessories?: string[]; accessory?: string | null }
 export interface PartyMember { uid: string; nickname: string; pet: PetLook; joinedDay: string; lastActiveDay: string | null; count: number; words: string[]; status: 'active' | 'left' | 'kicked' }
 export interface Party { id: string; week: string; name: string; boss: string; size: number; phrases: string[]; createdAt: number; hp: number; hpMax: number; members: PartyMember[]; votes: Record<string, string[]>; settled: boolean; results?: Record<string, number> }
 
@@ -40,7 +41,7 @@ export function setNickname(g: GuildProfile, raw: unknown) { g.nickname = checkN
 export function warnNickname(g: GuildProfile) { if (g.nickname && !g.banned.includes(norm(g.nickname))) g.banned.push(norm(g.nickname)); g.warned = true; }
 export const shownNickname = (g: GuildProfile | {nickname: string; warned: boolean}) => g.warned ? '별칭 바꾸는 중' : g.nickname;
 
-export const petLook = (s: ServerPetState): PetLook => { const p = currentPet(s); return {character: p.character, name: p.name, level: p.level, clothing: p.clothing ?? null, accessory: p.accessory ?? null}; };
+export const petLook = (s: ServerPetState): PetLook => { const p = currentPet(s); return {character: p.character, name: p.name, level: p.level, clothing: p.clothing ?? null, accessories: wornAccessories(p)}; };
 export const activeMembers = (p: Party) => p.members.filter(m => m.status === 'active');
 const ready = (g: GuildProfile) => { if (!g.nickname) throw Error('PARTY_NEED_NICK'); if (g.warned) throw Error('PARTY_NICK_WARNED'); };
 

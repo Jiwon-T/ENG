@@ -195,8 +195,8 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{uid} {
-      // 이메일·UID 등 회원 정보는 본인, 관리자, 원장님만 읽습니다. 선생님 화면은 서버를 통해 필요한 것만 받습니다.
-      allow read: if isAuthenticated() && (isOwner(uid) || isAdmin() || isPrincipalUser());
+      // 이메일·UID 등 회원 정보는 본인과 관리자만 직접 읽습니다. 원장님·선생님 화면은 서버를 통해 자기 학원·담당 학생 것만 받습니다.
+      allow read: if isAuthenticated() && (isOwner(uid) || isAdmin());
       // 일반 사용자는 student 역할로만 본인 문서 생성 가능. notionStudentKey 등 관리자 필드 설정 불가.
       allow create: if isOwner(uid) && isValidNewUserCreation(uid, request.resource.data);
       allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
@@ -254,7 +254,7 @@ service cloud.firestore {
     }
 
     match /wordProgress/{progressId} {
-      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isTeacher() || isAdmin());
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
       // Own progress only: the document id starts with the student's uid ({uid}_{wordId}), so nobody can overwrite another's.
       allow create, update: if isAuthenticated() && (
         (progressId.matches('^' + request.auth.uid + '_.+') && request.resource.data.uid == request.auth.uid &&
@@ -265,15 +265,16 @@ service cloud.firestore {
     }
 
     match /attendance/{attendanceId} {
+      // The student's own login attendance; teachers and principals see attendance through the server only.
       allow read: if isAuthenticated() && (
-        isTeacher() || 
+        isAdmin() ||
         (resource != null && resource.data.studentId == request.auth.uid) ||
-        attendanceId.matches("^" + request.auth.uid + ".*")
+        attendanceId.matches("^" + request.auth.uid + "_.*")
       );
-      allow create: if isAuthenticated() && isValidAttendance(request.resource.data) && 
-                    (request.resource.data.studentId == request.auth.uid || isTeacher());
-      allow update: if isAuthenticated() && isValidAttendance(request.resource.data) && 
-                    isTeacher();
+      allow create: if isAuthenticated() && isValidAttendance(request.resource.data) &&
+                    (request.resource.data.studentId == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && isValidAttendance(request.resource.data) &&
+                    isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -321,18 +322,19 @@ service cloud.firestore {
     }
 
     match /assignments/{assignmentId} {
-      allow read: if isAuthenticated() && (resource.data.studentUid == request.auth.uid || isTeacher() || isAdmin());
-      allow create: if isTeacher() || isAdmin();
+      // Written by the server (online learning); the student reads their own and marks it seen or done.
+      allow read: if isAuthenticated() && (resource.data.studentUid == request.auth.uid || isAdmin());
+      allow create: if isAdmin();
       // A student only marks their own assignment as seen (isNew) or done (isDone); teachers change the rest.
       allow update: if isAuthenticated() && (
         (resource.data.studentUid == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isNew', 'isDone'])) ||
-        isTeacher() || isAdmin()
+        isAdmin()
       );
-      allow delete: if isTeacher() || isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /studySessions/{sessionId} {
-      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isTeacher());
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid && isValidStudySession(request.resource.data);
       allow update: if isAuthenticated() && (
         (resource.data.uid == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['incorrectAnswers'])) ||
@@ -451,5 +453,7 @@ service cloud.firestore {
     match /studentLinkCodeIndex/{id} { allow read, write: if false; }
     match /studentLinkAttempts/{id} { allow read, write: if false; }
     match /teacherTransfers/{id} { allow read, write: if false; }
+    // 워크북 재생성 기록 (빈칸 위치·배열 순서): server only.
+    match /workbookHistory/{id} { allow read, write: if false; }
   }
 }

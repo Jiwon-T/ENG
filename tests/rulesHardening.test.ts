@@ -35,3 +35,9 @@ test('old leaderboard names: only unmasked ones change, to the masked form', () 
   assert.deepEqual({total: plan.total, alreadyMasked: plan.alreadyMasked}, {total: 4, alreadyMasked: 2});
   assert.deepEqual(plan.changes, [{id: 'a', name: '김*원'}, {id: 'd', name: '익명'}]);
 });
+test('study records: the student and the admin read them; principals and teachers go through the server (own academy only)', () => {
+  for (const name of ['wordProgress', 'studySessions', 'attendance', 'assignments']) assert.doesNotMatch(block(name), /isTeacher\(\)/, name);
+  assert.doesNotMatch(block('users'), /isPrincipalUser\(\)/);
+  assert.match(block('attendance'), /attendanceId\.matches\("\^" \+ request\.auth\.uid \+ "_\.\*"\)/);
+  assert.match(block('assignments'), /allow create: if isAdmin\(\);/);
+});

@@ -43,3 +43,20 @@ export function schoolTagFrom(school:string,grade:string){
  const year=String(grade||'').match(/\d/)?.[0]||'';
  return name?name+year:'';
 }
+/** When each school exam usually starts (month-day). Grades are entered after the exam, so a date picks the latest exam
+ *  that has started by then: 4/10–6/9 1학기 중간, 6/10–9/19 1학기 기말, 9/20–11/14 2학기 중간, 11/15–12/31 2학기 기말,
+ *  and 1/1–4/9 the previous year's 2학기 기말. One place to adjust (or later to refine per school). */
+export const SCHOOL_EXAM_STARTS=[{detail:'1학기 중간고사',from:'04-10'},{detail:'1학기 기말고사',from:'06-10'},{detail:'2학기 중간고사',from:'09-20'},{detail:'2학기 기말고사',from:'11-15'}] as const;
+export function examDetailForDate(date:string):{detail:string;year:number}|null{
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||'')))return null;
+ const year=Number(date.slice(0,4)),md=date.slice(5);
+ const started=SCHOOL_EXAM_STARTS.filter(w=>md>=w.from).pop();
+ return started?{detail:started.detail,year}:{detail:'2학기 기말고사',year:year-1};
+}
+/** The year (and, for school exams, the exam chips) following the date. A 학력평가 takes the date's own year, so a
+ *  year moved back for last year's 2학기 기말 never stays behind after switching the type. */
+export function withDateExam(value:any){
+ if(value.examType!=='학교 내신')return /^\d{4}-/.test(String(value.examDate||''))?{...value,examYear:Number(value.examDate.slice(0,4))}:value;
+ const pick=examDetailForDate(value.examDate);
+ return pick?{...value,examDetail:pick.detail,examYear:pick.year,...detailMetadata(pick.detail)}:value;
+}

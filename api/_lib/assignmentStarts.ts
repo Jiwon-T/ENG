@@ -2,7 +2,7 @@
 // from the 학원 등록일 and from the 과목 시작일 when the student came from another teacher. Stored when a teacher is
 // put on a subject (원서, 수강 관리, 선생님 관리, an account link); for assignments made before that, the latest
 // 담당 변경 that added them, else the 과목 시작일. The teacher themselves, the principal and the admin may correct it.
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {subjects} from './teacherWorkspacePolicy.js';
@@ -46,7 +46,8 @@ export async function setAssignmentStart(db:any,actor:any,input:unknown){
   if(!actor.admin&&!actor.principal&&actor.uid!==v.uid)throw Error('FORBIDDEN');
   const at=Date.now();
   writeAssignmentStart(tx,db,{uid:v.uid,studentKey:key,subject:v.subject,since:v.since,by:actor.uid,at,source:'edit'});
-  tx.set(db.collection('teacherAssignmentStartHistory').doc(`${ref.id}:${at}`),{uid:v.uid,studentKey:key,subject:v.subject,before:old?.since??null,after:v.since,by:actor.uid,at});
+  // One row per change: two changes in the same millisecond must not overwrite each other.
+  tx.set(db.collection('teacherAssignmentStartHistory').doc(`${ref.id}:${at}:${randomUUID()}`),{uid:v.uid,studentKey:key,subject:v.subject,before:old?.since??null,after:v.since,by:actor.uid,at});
   return {since:v.since};
  });
 }

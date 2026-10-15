@@ -95,7 +95,7 @@ export async function previousAppSourceLesson(db: any, actor: any, studentKey: s
     const pick = date ? docs.find((s: any) => (s.data?.date || '') <= date) : docs[0];
     const sessionRecords = docs.map((s: any) => ({ id: s.sourceId, archived: false, updatedAt: Date.parse(s.notionEditedAt) || 0,
         data: { studentKey, subject, date: s.data.date, classSession: s.data.classSession, start: s.data.start, end: s.data.end, round: s.data.round ?? null, attendance: s.data.attendance,
-            selfStudy: s.data.selfStudy, selfStudyStart: s.data.selfStudyStart, selfStudyEnd: s.data.selfStudyEnd, selfStudyRound: s.data.selfStudyRound ?? null } }));
+            selfStudy: s.data.selfStudy, selfStudyStart: s.data.selfStudyStart, selfStudyEnd: s.data.selfStudyEnd, selfStudyMore: s.data.selfStudyMore ?? [], selfStudyRound: s.data.selfStudyRound ?? null } }));
     if (!pick) return { sessionRecords };
     const d = pick.data, wrong = d.total !== null && d.total !== undefined && d.correct !== null && d.correct !== undefined ? d.total - d.correct : null;
     const examWrong = d.examTotal !== null && d.examTotal !== undefined && d.examCorrect !== null && d.examCorrect !== undefined ? d.examTotal - d.examCorrect : null;
