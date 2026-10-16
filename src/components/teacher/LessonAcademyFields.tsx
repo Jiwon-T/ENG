@@ -1,5 +1,6 @@
 import { shortRoundHint } from '../../lib/sessionNumbers';
 import LessonTimePresets from './LessonTimePresets';
+import {AudienceTag} from './LessonAudience';
 export default function LessonAcademyFields({ value, onChange,regularTime,roundHints={},error=false }: { value: any; onChange: (key: string, value: any,manual?:boolean) => void;regularTime?:{start:string;end:string};roundHints?:Record<string,string>;error?:boolean }) {
   const changeSession = (kind: 'classSession' | 'selfStudy', choice: string) => {
     onChange(kind, choice);
@@ -16,6 +17,7 @@ export default function LessonAcademyFields({ value, onChange,regularTime,roundH
   const more: {start: string; end: string}[] = Array.isArray(value.selfStudyMore) ? value.selfStudyMore : [];
   const setPiece = (i: number, patch: Partial<{start: string; end: string}>) => onChange('selfStudyMore', more.map((p, j) => j === i ? {...p, ...patch} : p));
   return <div className="lesson-time-block" aria-label="수업·자습 시간과 회차">
+    <p className="lesson-audience-line">시간<AudienceTag to="parent"/><span aria-hidden="true">·</span>회차<AudienceTag to="teacher"/></p>
     {([
       ['classSession', '수업', 'start', 'end', 'round'],
       ['selfStudy', '자습', 'selfStudyStart', 'selfStudyEnd', 'selfStudyRound'],

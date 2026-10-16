@@ -4,11 +4,23 @@
 // browser. One game is also one 원정대 stage later on.
 import {FieldPath} from 'firebase-admin/firestore';
 import {awardStudy, seoulDay, type ServerPetState} from './pet.js';
-import {PET_WORD_FEED} from '../../src/lib/petCatalog.js';
+import {PET_WORD_FEED, type StageGame} from '../../src/lib/petCatalog.js';
+import {orderPieces, shuffledOrder} from '../../src/lib/sentenceGame.js';
 
 export const PET_GAMES = 'petGames';
 export interface FeedWord { wordbookId: string; wordId: string; word: string; meaning: string }
-export interface FeedQuestion { key: string; wordbookId: string; word: string; choices: string[]; answer: number; retry?: boolean; fromWrong?: boolean }
+/**
+ * One question. `type` (none = 'meaning'): 뜻 고르기 / 듣고 고르기 (the same cards; the word is heard, not shown) are graded
+ * by the card; 철자 맞히기 by the spelled word; 문장 배열 by the sentence put together; 짝 맞추기 (`pairs`, one board) and
+ * 낭독 (speech is heard in the browser) report how it went. `meaning` is the Korean prompt for spelling and sentences.
+ */
+export type FeedType = 'meaning' | 'listen' | 'spell' | 'match' | 'order' | 'read';
+export interface FeedQuestion { key: string; wordbookId: string; word: string; choices: string[]; answer: number; retry?: boolean; fromWrong?: boolean; type?: FeedType; meaning?: string; chunked?: string; pairs?: {word: string; meaning: string; key: string}[];
+  /** Kept on the server, shown without the answer: 철자's given letters and shuffled rest, 문장 배열's shuffled pieces,
+   *  짝 맞추기's shuffled meanings (`meaningOrder[i]` = the pair shown i-th), and the tries, matches and mistakes so far. */
+  hint?: string; letters?: string[]; pieces?: string[]; meaningOrder?: number[]; tries?: number; matched?: number[]; mistakes?: number }
+/** A sentence from the 원정대 문장 세트: `text` without the / marks, `chunked` as registered (the pieces). */
+export interface FeedSentence { wordbookId: string; text: string; chunked: string; meaning: string }
 /** `stage`: the 원정대 stage this game is for (none for a plain game). */
 export interface FeedRun { id: string; questions: FeedQuestion[]; results: {choice: number; correct: boolean; points: number}[]; startedAt: number; finished: boolean; stage?: string; slot?: number }
 export interface PetGameState { version: 1; day: string; rewardedToday: string[]; run: FeedRun | null; updatedAt: number }
@@ -34,16 +46,27 @@ function distractors(answer: FeedWord, pool: FeedWord[], rand: () => number) {
 }
 function shuffle<T>(list: T[], rand: () => number) { const a = [...list]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-/** One game: up to 3 wrong answers first, then words not rewarded today; a word whose 3 cards can't be made is skipped. */
-/** `count`: questions in this game (later 원정대 chapters ask more). */
-export function buildRun(source: FeedSource, rewardedToday: string[], now: number, rand: () => number = Math.random, stage?: string, count: number = PET_WORD_FEED.questions): FeedRun | null {
+/** Build options: the stage's game, the sentences for it, and a quiet place (듣고 고르기 → 뜻 고르기, 낭독 → 문장 배열) or no
+ *  speech recognition here (낭독 → 문장 배열). No sentences: 문장 배열 → 듣고 고르기 (뜻 고르기 when quiet), 낭독 → 철자. */
+export interface BuildOptions { game?: StageGame; sentences?: FeedSentence[]; quiet?: boolean; noMic?: boolean }
+const spellable = (w: string) => /^[a-z]{3,12}$/i.test(w.trim());
+const sentenceKey = (s: FeedSentence) => `${s.wordbookId}:s:${s.text.toLowerCase().slice(0, 80)}`;
+
+/** One game. 뜻 고르기 (and 듣고 고르기): up to 3 wrong answers first, then words not rewarded today; a word whose 3 cards
+ *  can't be made is skipped. Other games follow `options.game` (see stageGame); `count`: questions (boards for 짝 맞추기). */
+export function buildRun(source: FeedSource, rewardedToday: string[], now: number, rand: () => number = Math.random, stage?: string, count: number = PET_WORD_FEED.questions, options: BuildOptions = {}): FeedRun | null {
+  const game = options.game || 'meaning';
+  if (game !== 'meaning') return buildGameRun(source, rewardedToday, now, rand, stage, count, options);
+  return buildMeaningRun(source, rewardedToday, now, rand, stage, count, 'meaning');
+}
+function buildMeaningRun(source: FeedSource, rewardedToday: string[], now: number, rand: () => number, stage: string | undefined, count: number, type: 'meaning' | 'listen'): FeedRun | null {
   const poolOf = new Map(source.books.map(b => [b.id, b.words.filter(w => w.word.trim() && w.meaning.trim())]));
   const used = new Set<string>(), questions: FeedQuestion[] = [];
   const add = (w: FeedWord, fromWrong: boolean) => {
     const key = wordKey(w); if (used.has(key) || questions.length >= count) return;
     const wrong = distractors(w, poolOf.get(w.wordbookId) || [], rand); if (!wrong) return;
     const choices = shuffle([w.meaning.trim(), ...wrong], rand);
-    used.add(key); questions.push({key, wordbookId: w.wordbookId, word: w.word.trim(), choices, answer: choices.indexOf(w.meaning.trim()), ...(fromWrong ? {fromWrong: true} : {})});
+    used.add(key); questions.push({key, wordbookId: w.wordbookId, word: w.word.trim(), choices, answer: choices.indexOf(w.meaning.trim()), ...(fromWrong ? {fromWrong: true} : {}), ...(type === 'listen' ? {type} : {})});
   };
   for (const w of shuffle(source.wrongs, rand).slice(0, PET_WORD_FEED.wrongAnswers * 2)) { if (questions.filter(q => q.fromWrong).length < PET_WORD_FEED.wrongAnswers) add(w, true); }
   const rewarded = new Set(rewardedToday), all = [...poolOf.values()].flat();
@@ -53,24 +76,98 @@ export function buildRun(source: FeedSource, rewardedToday: string[], now: numbe
   return {id: `${now.toString(36)}${Math.floor(rand() * 1e9).toString(36)}`, questions: shuffle(questions, rand), results: [], startedAt: now, finished: false, ...(stage ? {stage} : {})};
 }
 
+/** The other games: words for 철자 / 짝 맞추기 / 듣고 고르기, sentences for 문장 배열 / 낭독, the crown stage mixing them. */
+function buildGameRun(source: FeedSource, rewardedToday: string[], now: number, rand: () => number, stage: string | undefined, count: number, options: BuildOptions): FeedRun | null {
+  const game = options.game!, sentences = shuffle((options.sentences || []).filter(x => x.text.trim() && x.meaning.trim()), rand);
+  const listenOr = (): 'listen' | 'meaning' => options.quiet ? 'meaning' : 'listen';
+  const rewarded = new Set(rewardedToday);
+  const words = shuffle([...new Map(source.books.flatMap(b => b.words).filter(w => w.word.trim() && w.meaning.trim()).map(w => [wordKey(w), w])).values()], rand)
+    .sort((a, b) => Number(rewarded.has(wordKey(a))) - Number(rewarded.has(wordKey(b))));
+  const used = new Set<string>(), questions: FeedQuestion[] = [];
+  const spell = (n: number) => { for (const w of words) { if (n <= 0) break; const key = wordKey(w); if (used.has(key) || !spellable(w.word)) continue; used.add(key);
+    const word = w.word.trim(), hint = word.slice(0, Math.min(2, word.length - 1)), rest = word.slice(hint.length).split('');
+    questions.push({key, wordbookId: w.wordbookId, word, meaning: w.meaning.trim(), choices: [], answer: -1, type: 'spell', hint, letters: shuffledOrder(rest, rand).map(i => rest[i]), tries: 0}); n--; } };
+  const boards = (n: number) => {
+    for (let b = 0; b < n; b++) {
+      const pairs: {word: string; meaning: string; key: string}[] = [];
+      for (const w of words) { const key = wordKey(w); if (pairs.length === 4) break; if (used.has(key) || pairs.some(p => meaningsOverlap(p.meaning, w.meaning) || p.word === w.word.trim())) continue; pairs.push({word: w.word.trim(), meaning: w.meaning.trim(), key}); }
+      if (pairs.length < 3) break;
+      pairs.forEach(p => used.add(p.key));
+      questions.push({key: pairs.map(p => p.key).join('|'), wordbookId: '', word: '', choices: [], answer: -1, type: 'match', pairs, meaningOrder: shuffledOrder(pairs.map(p => p.meaning), rand), matched: [], mistakes: 0});
+    }
+  };
+  const meaningLike = (n: number, type: 'meaning' | 'listen') => {
+    const run = buildMeaningRun({books: source.books, wrongs: source.wrongs}, rewardedToday, now, rand, stage, Math.max(n, PET_WORD_FEED.minQuestions), type);
+    for (const q of run?.questions || []) { if (n <= 0) break; if (used.has(q.key)) continue; used.add(q.key); questions.push(q); n--; }
+  };
+  const sentence = (n: number, type: 'order' | 'read') => {
+    for (const x of sentences) { if (n <= 0) break; const key = sentenceKey(x); if (used.has(key)) continue; used.add(key);
+      const pieces = type === 'order' ? orderPieces({word: x.text, chunked: x.chunked, meaning: x.meaning}) : [];
+      questions.push({key, wordbookId: x.wordbookId, word: x.text, chunked: x.chunked, meaning: x.meaning, choices: [], answer: -1, type, ...(type === 'order' ? {pieces: shuffledOrder(pieces, rand).map(i => pieces[i]), tries: 0} : {})}); n--; }
+  };
+  const readType = (): 'read' | 'order' => options.quiet || options.noMic ? 'order' : 'read';
+  if (game === 'spell') spell(count);
+  else if (game === 'listen') meaningLike(count, listenOr());
+  else if (game === 'match') boards(Math.max(1, Math.ceil(count / 4)));
+  else if (game === 'order') { if (sentences.length) sentence(Math.min(count, 8), 'order'); else meaningLike(count, listenOr()); }
+  else {
+    // 👑 the crown stage: a little of everything (sentences from 4장, when the grade's 문장 세트 has some).
+    const withSentences = sentences.length > 0 && Boolean(options.sentences);
+    const sent = withSentences ? Math.min(4, Math.floor(count / 3)) : 0, rest = count - sent;
+    meaningLike(Math.ceil(rest / 3), 'meaning'); spell(Math.ceil(rest / 3)); meaningLike(rest - Math.ceil(rest / 3) * 2, listenOr());
+    if (sent) { sentence(Math.ceil(sent / 2), 'order'); sentence(Math.floor(sent / 2), readType()); }
+  }
+  // Too few for a game (a tiny book): fall back to 뜻 고르기.
+  if (questions.length < (game === 'match' ? 1 : Math.min(PET_WORD_FEED.minQuestions, count))) return buildMeaningRun(source, rewardedToday, now, rand, stage, count, 'meaning');
+  const ordered = game === 'mix' ? shuffle(questions, rand) : questions;
+  return {id: `${now.toString(36)}${Math.floor(rand() * 1e9).toString(36)}`, questions: ordered, results: [], startedAt: now, finished: false, ...(stage ? {stage} : {})};
+}
+
+/** What an answer brings for each kind: the card (뜻 고르기, 듣고 고르기), the spelled word or the sentence put together (a
+ *  try: wrong ones come back `pending` until the third), one pick on the 짝 맞추기 board ([word, shown meaning]), or how
+ *  the 낭독 went (heard in the browser, so it counts for the stars but pays no points). */
+export interface FeedAnswer { choice?: number; text?: string; correct?: boolean; pick?: [number, number] }
+export const FEED_TRIES = 3;
+const normText = (t: string) => t.toLowerCase().replace(/[^a-z0-9']+/g, ' ').trim();
+
 /**
  * Grade one answer. The same (runId, index) twice returns the stored result and never pays twice; an older index from
  * another device is refused so the newer progress is kept. A miss brings the word back 3 questions later, once, for 0P.
  */
-export function answerRun(g: PetGameState, pet: ServerPetState, runId: string, index: number, choice: number) {
-  const run = g.run;
+export function answerRun(g: PetGameState, pet: ServerPetState, runId: string, index: number, input: number | FeedAnswer) {
+  const run = g.run, a: FeedAnswer = typeof input === 'number' ? {choice: input} : input || {};
   if (!run || run.id !== runId) throw Error('FEED_STALE');
   if (index < run.results.length) return {repeat: true, ...run.results[index]};
   if (index !== run.results.length || run.finished) throw Error('FEED_STALE');
-  const q = run.questions[index];
-  if (!Number.isInteger(choice) || choice < 0 || choice >= q.choices.length) throw Error('FEED_BAD_CHOICE');
-  const correct = choice === q.answer;
+  const q = run.questions[index], type = q.type || 'meaning';
+  let correct: boolean, choice = -1;
+  if (type === 'meaning' || type === 'listen') {
+    choice = Number(a.choice);
+    if (!Number.isInteger(choice) || choice < 0 || choice >= q.choices.length) throw Error('FEED_BAD_CHOICE');
+    correct = choice === q.answer;
+  } else if (type === 'spell' || type === 'order') {
+    if (typeof a.text !== 'string') throw Error('FEED_BAD_CHOICE');
+    correct = type === 'spell' ? a.text.trim().toLowerCase() === q.word.toLowerCase() : normText(a.text) === normText(q.word);
+    // A wrong try: three in all, the answer stays hidden until the last.
+    if (!correct) { q.tries = (q.tries || 0) + 1; if (q.tries < FEED_TRIES) return {repeat: false, pending: true, correct: false, triesLeft: FEED_TRIES - q.tries}; }
+  } else if (type === 'match') {
+    // One pick at a time; the server knows the pairs. The board ends when every pair is found (one slip still passes).
+    const [w, m] = Array.isArray(a.pick) ? a.pick.map(Number) : [NaN, NaN], pairs = q.pairs || [];
+    if (!Number.isInteger(w) || !Number.isInteger(m) || w < 0 || m < 0 || w >= pairs.length || m >= pairs.length || q.matched!.includes(w)) throw Error('FEED_BAD_CHOICE');
+    if (q.meaningOrder![m] !== w) { q.mistakes = (q.mistakes || 0) + 1; return {repeat: false, pending: true, correct: false, mistakes: q.mistakes}; }
+    q.matched!.push(w);
+    if (q.matched!.length < pairs.length) return {repeat: false, pending: true, correct: true, mistakes: q.mistakes || 0};
+    correct = (q.mistakes || 0) <= 1;
+  } else correct = a.correct === true;
+  // Points: one study unit a word (a board pays its pairs); words already paid today, retries and 낭독 pay nothing.
   let points = 0, xp = 0;
-  if (correct && !q.retry && !g.rewardedToday.includes(q.key)) {
-    const r = awardStudy(pet, 'wordbook-quiz', 1); points = r.points; xp = r.xp;
-    if (points > 0) g.rewardedToday.push(q.key); // capped today: not marked, and nothing carried over
+  const units = type === 'read' ? 0 : type === 'match' ? (q.pairs || []).filter(p => !g.rewardedToday.includes(p.key)).length : g.rewardedToday.includes(q.key) ? 0 : 1;
+  if (correct && !q.retry && units > 0) {
+    const r = awardStudy(pet, 'wordbook-quiz', units); points = r.points; xp = r.xp;
+    if (points > 0) { if (type === 'match') q.pairs!.forEach(p => { if (!g.rewardedToday.includes(p.key)) g.rewardedToday.push(p.key); }); else g.rewardedToday.push(q.key); } // capped today: not marked
   }
-  if (!correct && !q.retry) run.questions.splice(Math.min(run.questions.length, index + 1 + PET_WORD_FEED.retryAfter), 0, {...q, retry: true});
+  // A missed word comes back 3 questions later, once (뜻 고르기, 듣고 고르기, 철자).
+  if (!correct && !q.retry && (type === 'meaning' || type === 'listen' || type === 'spell')) run.questions.splice(Math.min(run.questions.length, index + 1 + PET_WORD_FEED.retryAfter), 0, {...q, retry: true, ...(type === 'spell' ? {tries: 0} : {})});
   run.results.push({choice, correct, points});
   if (run.results.length === run.questions.length) run.finished = true;
   return {repeat: false, choice, correct, points, xp};
@@ -87,7 +184,18 @@ export function runSummary(run: FeedRun) {
 export function publicRun(run: FeedRun | null) {
   if (!run) return null;
   return {id: run.id, stage: run.stage || null, finished: run.finished, total: run.questions.length, index: run.results.length,
-    questions: run.questions.map((q, i) => ({word: q.word, choices: q.choices, retry: Boolean(q.retry), ...(i < run.results.length ? {answer: q.answer, ...run.results[i]} : {})})),
+    questions: run.questions.map((q, i) => {
+      const type = q.type || 'meaning', done = i < run.results.length;
+      // Never the answer before it is given: 철자 gets the given letters and the shuffled rest, 문장 배열 the shuffled pieces,
+      // 짝 맞추기 the words and the shuffled meanings (the server checks each pick). 듣고 고르기 needs the word for the voice;
+      // 낭독 shows the sentence to read.
+      const hidden = (type === 'spell' || type === 'order') && !done;
+      const extra = type === 'spell' ? {meaning: q.meaning, hint: q.hint, letters: q.letters, triesLeft: FEED_TRIES - (q.tries || 0)}
+        : type === 'order' ? {meaning: q.meaning, pieces: q.pieces, triesLeft: FEED_TRIES - (q.tries || 0)}
+        : type === 'match' ? {words: q.pairs!.map(p => p.word), meanings: q.meaningOrder!.map(k => q.pairs![k].meaning), matched: q.matched || [], mistakes: q.mistakes || 0}
+        : type === 'read' ? {meaning: q.meaning} : {};
+      return {type, word: hidden ? '' : q.word, choices: q.choices, retry: Boolean(q.retry), ...extra, ...(done ? {answer: q.answer, ...run.results[i]} : {})};
+    }),
     ...(run.finished ? {summary: runSummary(run)} : {})};
 }
 

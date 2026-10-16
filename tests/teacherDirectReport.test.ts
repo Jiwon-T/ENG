@@ -14,3 +14,12 @@ test('direct app report preserves fractional score, homework and audience separa
  const mirror=directLessonReport(id,{...draft,notionPageId:pageId},mapping,r);assert.equal(lessonReportId(mirror as any),lessonReportId(r as any));
 });
 
+
+test('선생님 메모, 시험범위 and 회차 never reach the report; the preview text is the server text', async () => {
+ const {parentFeedbackText} = await import('../src/lib/lessonReportText.ts');
+ const secret={...draft,data:{...draft.data,teacherNote:'상담 필요(비공개)',examScope:'3과~5과',specialNote:'집중 잘함'}};
+ const r=directLessonReport(id,secret,mapping),all=JSON.stringify([r,studentLessonDTO(r as any),parentLessonDTO(r as any)]);
+ assert.ok(!all.includes('상담 필요') && !all.includes('3과~5과'), 'teacher-only fields stay out');
+ assert.equal(r.feedback, parentFeedbackText(secret.data));
+ assert.equal(r.feedback, '수업 내용\n\n과제: 교재 10쪽\n\n특이 사항: 집중 잘함');
+});

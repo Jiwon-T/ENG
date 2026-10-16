@@ -4,14 +4,15 @@
 // are items the student already owns, so they are given once per student.
 // Finishing a stage is applied in the same transaction as the last answer, so a bonus can never be paid twice.
 import {awardCapped, currentPet, type ServerPetState} from './pet.js';
-import {PET_EXPEDITION, PET_JOBS, PET_MAX_LEVEL, petItem, stageQuestions, type PetJob} from '../../src/lib/petCatalog.js';
+import {PET_EXPEDITION, PET_JOB2, PET_JOBS, PET_MAX_LEVEL, petItem, stageQuestions, type PetJob, type PetJob2} from '../../src/lib/petCatalog.js';
 
 export const PET_EXPEDITIONS = 'petExpeditions';
 /** One pet's map: best stars per stage and the bonuses already paid. */
 export interface PetProgress { stars: Record<string, number>; bonuses: Record<string, string[]> }
 /** `pets`: progress by pet slot. `stars`/`bonuses` at the top are the old shared map (before per-pet progress): it
- *  belongs to the first pet. `jobReady`: pets (by slot) that cleared the 꿈의 정원 crown stage and may choose a job. */
-export interface ExpeditionState { version: 1; pets?: Record<string, PetProgress>; stars?: Record<string, number>; bonuses?: Record<string, string[]>; chapterRewards: string[]; jobReady?: number[]; updatedAt: number }
+ *  belongs to the first pet. `jobReady`: pets (by slot) that cleared the 5장 설산 crown stage and may take the 1차 전직;
+ *  `job2Ready`: pets that cleared the 7장 꿈의 정원 crown stage with a job and may take the 2차 전직. */
+export interface ExpeditionState { version: 1; pets?: Record<string, PetProgress>; stars?: Record<string, number>; bonuses?: Record<string, string[]>; chapterRewards: string[]; jobReady?: number[]; job2Ready?: number[]; updatedAt: number }
 export const initialExpedition = (now = Date.now()): ExpeditionState => ({version: 1, pets: {}, chapterRewards: [], updatedAt: now});
 /** The map of one pet (created empty for a pet that hasn't played yet; the old shared map moves to the first pet). */
 export function petProgress(e: ExpeditionState, slot: number): PetProgress {
@@ -42,7 +43,7 @@ export function finishStage(state: ExpeditionState, s: ServerPetState, id: strin
   const info = stageInfo(id); if (!info) throw Error('EXPEDITION_BAD_STAGE');
   const e = petProgress(state, slot), wasCleared = stageCleared(e, id), best = Math.max(e.stars[id] || 0, stars);
   e.stars[id] = best;
-  const cleared = stageCleared(e, id), paid = e.bonuses[id] || [], out = {stage: id, boss: info.boss, stars, best, cleared, bonus: 0, bonuses: [] as string[], paid: {} as Record<string, number>, unlocked: null as string | null, chapterReward: null as string | null, gear: [] as string[], jobChoice: false};
+  const cleared = stageCleared(e, id), paid = e.bonuses[id] || [], out = {stage: id, boss: info.boss, stars, best, cleared, bonus: 0, bonuses: [] as string[], paid: {} as Record<string, number>, unlocked: null as string | null, chapterReward: null as string | null, gear: [] as string[], jobChoice: false, job2Choice: false};
   const pay = (key: keyof typeof PET_EXPEDITION.bonus) => { if (paid.includes(key)) return; paid.push(key); out.bonuses.push(key); const amount = PET_EXPEDITION.bonus[key], got = awardCapped(s, amount, amount * 2).points; out.paid[key] = got; out.bonus += got; };
   if (cleared) pay('clear');
   if (stars >= 2) pay('star2');
@@ -55,23 +56,45 @@ export function finishStage(state: ExpeditionState, s: ServerPetState, id: strin
     out.chapterReward = info.chapter.reward;
     for (const id of info.chapter.gear || []) if (petItem(id) && !s.inventory.includes(id)) { s.inventory.push(id); out.gear.push(id); }
   }
-  // 꿈의 정원: every clear of its crown stage (the stages can be replayed) lets that pet choose a job if it has none.
-  const pet = s.pets.find(p => p.slot === slot) || currentPet(s);
-  if (info.boss && info.chapter.id === PET_EXPEDITION.jobChapter && stars >= PET_EXPEDITION.bossStars && !pet.job) {
+  // Crown stages can be replayed: each clear by a pet that hasn't taken the job yet lets it choose.
+  const pet = s.pets.find(p => p.slot === slot) || currentPet(s), crown = info.boss && stars >= PET_EXPEDITION.bossStars;
+  const give = (item: string) => { if (petItem(item) && !s.inventory.includes(item)) { s.inventory.push(item); out.gear.push(item); } };
+  if (crown && info.chapter.id === PET_EXPEDITION.jobChapter && !pet.job) {
     state.jobReady = [...new Set([...(state.jobReady || []), pet.slot])]; out.jobChoice = pet.slot === currentPet(s).slot;
+  }
+  // 6장 밤하늘: the better weapon of this pet's job (a pet without a job gets it when it takes one).
+  if (crown && info.chapter.id === PET_EXPEDITION.weaponChapter && pet.job) give(PET_JOBS[pet.job].nextWeapon);
+  if (crown && info.chapter.id === PET_EXPEDITION.job2Chapter) {
+    if (pet.job && !pet.job2) { state.job2Ready = [...new Set([...(state.job2Ready || []), pet.slot])]; out.job2Choice = pet.slot === currentPet(s).slot; }
+    if (stars >= 3 && !state.chapterRewards.includes(`${info.chapter.id}-perfect`)) { state.chapterRewards.push(`${info.chapter.id}-perfect`); PET_EXPEDITION.perfectGear.forEach(give); }
   }
   return out;
 }
 
-/** The main pet becomes a 검사 or 마법사 (once) and gets that job's weapon in its hand. */
+/** 1차 전직: the main pet becomes a 검사 or 마법사 (once) and holds that job's weapon. If this pet already cleared the
+ *  6장 crown stage, the better weapon comes too. */
 export function chooseJob(e: ExpeditionState, s: ServerPetState, jobInput: unknown) {
   const job = String(jobInput || '') as PetJob; if (!Object.hasOwn(PET_JOBS, job)) throw Error('PET_JOB_BAD');
   const pet = currentPet(s); if (pet.job) throw Error('PET_JOB_TAKEN');
   if (!(e.jobReady || []).includes(pet.slot)) throw Error('PET_JOB_LOCKED');
-  const weapon = PET_JOBS[job].weapon;
-  pet.job = job; if (!s.inventory.includes(weapon)) s.inventory.push(weapon); pet.accessories.hand = weapon;
+  const weapon = PET_JOBS[job].weapon, gear = [weapon];
+  if ((petProgress(e, pet.slot).stars[`${PET_EXPEDITION.weaponChapter}-5`] || 0) >= PET_EXPEDITION.bossStars) gear.push(PET_JOBS[job].nextWeapon);
+  pet.job = job; for (const id of gear) if (!s.inventory.includes(id)) s.inventory.push(id);
+  pet.accessories.hand = gear[gear.length - 1];
   e.jobReady = (e.jobReady || []).filter(slot => slot !== pet.slot);
   return {job, weapon};
+}
+/** 2차 전직: a pet with a 1차 job chooses its light or dark branch (once) and holds the branch's weapon. */
+export function chooseJob2(e: ExpeditionState, s: ServerPetState, branchInput: unknown) {
+  const branch = String(branchInput || '') as PetJob2; if (!Object.hasOwn(PET_JOB2, branch)) throw Error('PET_JOB2_BAD');
+  const pet = currentPet(s);
+  if (!pet.job || PET_JOB2[branch].base !== pet.job) throw Error('PET_JOB2_BAD');
+  if (pet.job2) throw Error('PET_JOB_TAKEN');
+  if (!(e.job2Ready || []).includes(pet.slot)) throw Error('PET_JOB2_LOCKED');
+  const weapon = PET_JOB2[branch].weapon;
+  pet.job2 = branch; if (!s.inventory.includes(weapon)) s.inventory.push(weapon); pet.accessories.hand = weapon;
+  e.job2Ready = (e.job2Ready || []).filter(slot => slot !== pet.slot);
+  return {job2: branch, weapon};
 }
 
 /** One pet's map as the browser draws it (the main pet's unless `slot` is given). */
@@ -82,7 +105,7 @@ export function publicExpedition(state: ExpeditionState, level = PET_MAX_LEVEL, 
   const next = STAGE_IDS.find(id => stageUnlocked(e, id) && !stageCleared(e, id)), current = next || STAGE_IDS[STAGE_IDS.length - 1];
   const needs = next && !levelOk(next, level) ? stageInfo(next)!.chapter.minLevel : null;
   return {
-    slot, current, allCleared: !next, currentNeedsLevel: needs, jobReady: state.jobReady || [], totalStars: Object.values(e.stars).reduce((a, n) => a + n, 0), maxStars: STAGE_IDS.length * 3,
+    slot, current, allCleared: !next, currentNeedsLevel: needs, jobReady: state.jobReady || [], job2Ready: state.job2Ready || [], totalStars: Object.values(e.stars).reduce((a, n) => a + n, 0), maxStars: STAGE_IDS.length * 3,
     chapters: PET_EXPEDITION.chapters.map(c => ({id: c.id, title: c.title, name: c.name, reward: c.reward, gear: c.gear || [], questions: stageQuestions(`${c.id}-1`), rewarded: state.chapterRewards.includes(c.id), minLevel: c.minLevel, levelOk: c.minLevel <= level,
       unlocked: stageUnlocked(e, `${c.id}-1`, level),
       stages: c.stages.map((name, i) => { const id = `${c.id}-${i + 1}`; return {id, name, boss: i === c.stages.length - 1, stars: e.stars[id] || 0, unlocked: stageUnlocked(e, id, level), cleared: stageCleared(e, id), bonuses: e.bonuses[id] || []}; })})),

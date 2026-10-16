@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { PetCharacter } from '../pet/PetCharacters';
 import { SCENE, STARS, SceneArt } from '../pet/PetScenes';
-import { ACCESSORY_SLOTS, PET_JOBS, PET_MAX_LEVEL, petItem, petStageLabel, petStage, wornAccessories, xpNeeded, type PetJob } from '../../lib/petCatalog';
+import { ACCESSORY_SLOTS, PET_JOB2, PET_JOBS, petJobLabel, PET_MAX_LEVEL, petItem, petStageLabel, petStage, wornAccessories, xpNeeded, type PetJob, type PetJob2 } from '../../lib/petCatalog';
 import WorkspaceDialog from './WorkspaceDialog';
 
 // 펫 보기 (선생님방 › 학생 관리): the student's pet screen as the student sees it — the room, the pet, level, energy,
 // points, wardrobe and expedition — but read only. Own students for a teacher, the academy for a principal, all for the admin.
-interface PetSlot { slot: number; character: string; name: string; level: number; xp: number; energy: number; maxEnergy: number; clothing: string | null; accessories?: Record<string, string>; job?: PetJob | null }
+interface PetSlot { slot: number; character: string; name: string; level: number; xp: number; energy: number; maxEnergy: number; clothing: string | null; accessories?: Record<string, string>; job?: PetJob | null; job2?: PetJob2 | null }
 interface PetView {
   points: number; inventory: string[]; background: string; currentPetSlot: number; pets: PetSlot[]; today: { studyPoints: number; studyCap: number };
   nickname: string; rewards: { attendance: number; assignment: number };
@@ -41,7 +41,7 @@ export default function TeacherPetView({ studentKey, name, request, onClose }: {
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <b className="text-base font-black">{pet.name}</b>
                 <span className="rounded-full bg-[#8b2f40] px-2 py-0.5 text-[11px] font-bold text-white">Lv.{pet.level}</span>
-                {pet.job && <span className="rounded-full bg-[#fef2f3] px-2 py-0.5 text-[11px] font-bold text-[#8b2f40]">{PET_JOBS[pet.job].icon} {PET_JOBS[pet.job].label}</span>}
+                {pet.job && <span className="rounded-full bg-[#fef2f3] px-2 py-0.5 text-[11px] font-bold text-[#8b2f40]" title={pet.job2 ? PET_JOB2[pet.job2].title : undefined}>{pet.job2 ? PET_JOB2[pet.job2].icon : PET_JOBS[pet.job].icon} {petJobLabel(pet)}</span>}
                 <span className="text-xs text-slate-500">{petStageLabel(pet.level)}{view.pets.length > 1 && main && ' · 대표 펫'}</span>
               </div>
               <div className="mt-3 space-y-2 text-xs text-slate-500">

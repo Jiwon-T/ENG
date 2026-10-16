@@ -1,10 +1,10 @@
-import {Fragment,useId,useRef} from 'react';
+import {Fragment,useId,useRef,type ReactNode} from 'react';
 import {lessonOptionTone} from '../../lib/lessonOptions';
-interface Props {label:string;options:readonly string[];value:string;onChange:(value:string)=>void;disabled?:boolean;splitAt?:number}
-export default function ChipGroup({label,options,value,onChange,disabled=false,splitAt}:Props){
+interface Props {label:string;options:readonly string[];value:string;onChange:(value:string)=>void;disabled?:boolean;splitAt?:number;tag?:ReactNode}
+export default function ChipGroup({label,options,value,onChange,disabled=false,splitAt,tag}:Props){
  const labelId=useId(),buttons=useRef<(HTMLButtonElement|null)[]>([]);
  const selected=options.indexOf(value),tabIndex=selected<0?0:selected;
- return <div className="lesson-chip-field"><span id={labelId} className="lesson-chip-label">{label}</span>
+ return <div className="lesson-chip-field"><span id={labelId} className="lesson-chip-label">{label}{tag}</span>
   <div role="radiogroup" aria-labelledby={labelId} aria-disabled={disabled||undefined} className="lesson-chip-options">
    {options.map((option,index)=><Fragment key={option}>
     {index===splitAt&&<span className="lesson-chip-divider" aria-hidden="true"/>}

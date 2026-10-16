@@ -31,12 +31,13 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-import type { Wordbook, Word } from './wordbookTypes';
+import type { SetCategory, Wordbook, Word } from './wordbookTypes';
 import { shuffleArray } from './wordbookUtils';
 import { SortableWordbookCard, SortableWordCard } from './WordbookSortableCards';
 import {askConfirm} from './ConfirmDialog';
+import SentenceImportDialog from './SentenceImportDialog';
 
-export default function WordbookManager({ category = 'word' }: { category?: 'word' | 'grammar' | 'exam' }) {
+export default function WordbookManager({ category = 'word' }: { category?: SetCategory }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [selectedWordbook, setSelectedWordbook] = useState<Wordbook | null>(null);
   const [words, setWords] = useState<Word[]>([]);
@@ -70,18 +71,20 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
   const [editWbTitleValue, setEditWbTitleValue] = useState('');
   const [editWbDistractorsValue, setEditWbDistractorsValue] = useState('');
   const [editWbUnitSizeValue, setEditWbUnitSizeValue] = useState(10);
-  const [editWbCategoryValue, setEditWbCategoryValue] = useState<'word' | 'grammar' | 'exam'>(category);
-  const [editWbTypeValue, setEditWbTypeValue] = useState<'standard' | 'sentence-order'>('standard');
+  const [editWbCategoryValue, setEditWbCategoryValue] = useState<SetCategory>(category);
+  const [editWbTypeValue, setEditWbTypeValue] = useState<'standard' | 'sentence-order' | 'sentence'>('standard');
 
   // Category navigation & creation states
-  const [newWbCategory, setNewWbCategory] = useState<'word' | 'grammar' | 'exam'>(category);
-  const [newWbType, setNewWbType] = useState<'standard' | 'sentence-order'>('standard');
-  const [mergeTargetCategory, setMergeTargetCategory] = useState<'word' | 'grammar' | 'exam'>(category);
+  const [newWbCategory, setNewWbCategory] = useState<SetCategory>(category);
+  const [newWbType, setNewWbType] = useState<'standard' | 'sentence-order' | 'sentence'>(category === 'sentence' ? 'sentence' : 'standard');
+  const [mergeTargetCategory, setMergeTargetCategory] = useState<SetCategory>(category);
   const [moveToastMessage, setMoveToastMessage] = useState<string | null>(null);
   const [allWordbooks, setAllWordbooks] = useState<Wordbook[]>([]);
 
   // Sentence-order passage modal states
   const [isPassageModalOpen, setIsPassageModalOpen] = useState(false);
+  // 문장 세트: paste sentences (numbers off, preview, AI 해석 for empty ones).
+  const [isSentenceImportOpen, setIsSentenceImportOpen] = useState(false);
   const [passageInputText, setPassageInputText] = useState('');
   const [passageTargetDay, setPassageTargetDay] = useState(1);
   const [passageTitleInput, setPassageTitleInput] = useState('');
@@ -200,7 +203,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
   const handleMoveWordbookCategory = async (wbId: string, targetCategory: 'word' | 'grammar' | 'exam', currentTitle?: string) => {
     try {
-      const categoryNames: Record<string, string> = { word: '단어장', grammar: '문법 세트', exam: '시험기간' };
+      const categoryNames: Record<string, string> = { word: '단어장', grammar: '문법 세트', exam: '시험기간', sentence: '문장 세트' };
       await updateDoc(doc(db, 'wordbooks', wbId), {
         category: targetCategory,
         updatedAt: Timestamp.now()
@@ -777,6 +780,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
 
   const handleCreateWordbook = async () => {
     if (!newTitle.trim() || !auth.currentUser) return;
+    const createType = newWbCategory === 'sentence' ? 'sentence' : newWbCategory === 'exam' && newWbType === 'sentence-order' ? 'sentence-order' : 'standard';
     try {
       const maxOrder = wordbooks.length > 0 ? Math.max(...wordbooks.map(wb => wb.order ?? 0)) : -1;
       await addDoc(collection(db, 'wordbooks'), {
@@ -785,11 +789,11 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         createdAt: Timestamp.now(),
         order: maxOrder + 1,
         category: newWbCategory || category,
-        type: newWbType || 'standard',
-        defaultUnitSize: newWbType === 'sentence-order' ? 1 : 10
+        type: createType,
+        defaultUnitSize: createType === 'sentence-order' ? 1 : 10
       });
       setNewTitle('');
-      setNewWbType('standard');
+      setNewWbType(category === 'sentence' ? 'sentence' : 'standard');
       setIsAddModalOpen(false);
     } catch (error) {
       console.error('Failed to create wordbook:', error);
@@ -1155,7 +1159,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       
       const prevCat = editingWordbook.category || (editingWordbook.type === 'irregular' ? 'grammar' : 'word');
       if (editWbCategoryValue !== prevCat) {
-        const categoryNames: Record<string, string> = { word: '단어장', grammar: '문법 세트', exam: '시험기간' };
+        const categoryNames: Record<string, string> = { word: '단어장', grammar: '문법 세트', exam: '시험기간', sentence: '문장 세트' };
         setMoveToastMessage(`'${editWbTitleValue.trim()}'이(가) [${categoryNames[editWbCategoryValue]}] 탭으로 이동되었습니다.`);
         setTimeout(() => setMoveToastMessage(null), 3500);
       }
@@ -1579,7 +1583,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   <Plus size={24} />
                 </div>
                 <span className="font-bold">
-                  {category === 'exam' ? '새 시험기간 단어장 만들기' : category === 'grammar' ? '새 문법 세트 만들기' : '새 단어장 만들기'}
+                  {category === 'exam' ? '새 시험기간 단어장 만들기' : category === 'grammar' ? '새 문법 세트 만들기' : category === 'sentence' ? '새 문장 세트 만들기' : '새 단어장 만들기'}
                 </span>
               </button>
               <button
@@ -1670,7 +1674,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                       setEditWbUnitSizeValue(wb.defaultUnitSize || 10);
                       setEditWbDistractorsValue(wb.customDistractors?.join(', ') || '');
                       setEditWbCategoryValue(wb.category || (wb.type === 'irregular' ? 'grammar' : 'word'));
-                      setEditWbTypeValue(wb.type === 'sentence-order' ? 'sentence-order' : 'standard');
+                      setEditWbTypeValue(wb.type === 'sentence-order' || wb.type === 'sentence' ? wb.type : 'standard');
                     }}
                     onMoveCategory={(targetCat) => handleMoveWordbookCategory(wb.id, targetCat, wb.title)}
                   />
@@ -1715,6 +1719,13 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                 </>
               ) : (
                 <>
+                  {selectedWordbook.type === 'sentence' && <button disabled={wordsLoading || Boolean(wordLoadError)}
+                    onClick={() => setIsSentenceImportOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-pastel-pink-500 text-white rounded-xl font-bold text-sm hover:bg-pastel-pink-600 transition-all"
+                  >
+                    <FileText size={16} />
+                    문장 붙여넣기
+                  </button>}
                   <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => {
                       setTestPaperConfig({
@@ -1782,7 +1793,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                       setEditWbUnitSizeValue(selectedWordbook.defaultUnitSize || 10);
                       setEditWbDistractorsValue(selectedWordbook.customDistractors?.join(', ') || '');
                       setEditWbCategoryValue(selectedWordbook.category || (selectedWordbook.type === 'irregular' ? 'grammar' : 'word'));
-                      setEditWbTypeValue(selectedWordbook.type === 'sentence-order' ? 'sentence-order' : 'standard');
+                      setEditWbTypeValue(selectedWordbook.type === 'sentence-order' || selectedWordbook.type === 'sentence' ? selectedWordbook.type : 'standard');
                     }}
                     className="p-1.5 text-slate-300 hover:text-pastel-pink-500 transition-colors"
                     title="단어장 설정 및 카테고리 수정"
@@ -1790,6 +1801,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     <Edit3 size={18} />
                   </button>
                 </h2>
+                {selectedWordbook.type !== 'sentence' && (
                 <label 
                   className="wb-tab-pill"
                   title="소속 탭(카테고리) 변경"
@@ -1809,6 +1821,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                     <option value="exam">🎯 시험기간</option>
                   </select>
                 </label>
+                )}
               </div>
               <button disabled={wordsLoading || Boolean(wordLoadError)}
                 onClick={() => setDeleteTarget({ id: selectedWordbook.id, title: selectedWordbook.title, type: 'wordbook' })}
@@ -1996,215 +2009,46 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
         </motion.div>
       )}
 
-      {/* Create Wordbook Modal */}
-      {isExampleModalOpen && currentWordForExamples && selectedWordbook && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-2xl w-full bg-white rounded-[3rem] p-10 shadow-2xl max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h2 className="text-2xl font-black text-slate-900 leading-tight">[{currentWordForExamples.word}] 랜덤 예문 풀</h2>
-                <p className="text-sm font-bold text-slate-400 mt-1">퀴즈 시 이 중 하나의 문장이 랜덤으로 추출됩니다.</p>
-              </div>
-              <button 
-                onClick={() => {
-                  setIsExampleModalOpen(false);
-                  setIsAddingExample(false);
-                }} 
-                className="p-2 text-slate-400 hover:text-slate-600"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto pr-2 space-y-4 min-h-[10rem]">
-              {isAddingExample ? (
-                <div className="bg-indigo-50/50 p-6 rounded-3xl border-2 border-indigo-100 space-y-4">
-                  <h4 className="font-black text-indigo-600">새 예문 추가</h4>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 mb-1 ml-1">문제 문장 (빈칸은 (___)로 표시)</label>
-                      <textarea 
-                        value={newExSentence}
-                        onChange={(e) => setNewExSentence(e.target.value)}
-                        placeholder="예: This is the news (___) surprised everyone."
-                        className="w-full p-3 bg-white border-2 border-slate-100 rounded-xl font-bold text-sm outline-none focus:border-indigo-200"
-                        rows={2}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 mb-1 ml-1">문제 유형</label>
-                        <select 
-                          value={newExType}
-                          onChange={(e) => setNewExType(e.target.value as 'A' | 'B')}
-                          className="w-full p-3 bg-white border-2 border-slate-100 rounded-xl font-bold text-sm outline-none"
-                        >
-                          <option value="A">유형 A (빈칸 채우기)</option>
-                          <option value="B">유형 B (쓰임 구별)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 mb-1 ml-1">정답 및 오답 (쉼표 구분, 첫번째가 정답)</label>
-                        <input 
-                          type="text"
-                          value={newExChoices}
-                          onChange={(e) => setNewExChoices(e.target.value)}
-                          placeholder="that, which, what, where"
-                          className="w-full p-3 bg-white border-2 border-slate-100 rounded-xl font-bold text-sm outline-none"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 mb-1 ml-1">해설 (정답 이유)</label>
-                      <textarea 
-                        value={newExExplanation}
-                        onChange={(e) => setNewExExplanation(e.target.value)}
-                        placeholder="이 문장에서 that은 동격으로 쓰였습니다..."
-                        className="w-full p-3 bg-white border-2 border-slate-100 rounded-xl font-bold text-sm outline-none focus:border-indigo-200"
-                        rows={2}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setIsAddingExample(false)} className="flex-1 py-3 bg-white text-slate-500 rounded-xl font-bold text-sm border-2 border-slate-100">취소</button>
-                    <button onClick={handleAddExample} className="flex-1 py-3 bg-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-100">저장하기</button>
-                  </div>
-                </div>
-              ) : (
-                <button 
-                  onClick={() => setIsAddingExample(true)}
-                  className="w-full py-4 border-2 border-dashed border-indigo-200 text-indigo-400 rounded-2xl font-bold text-sm hover:bg-indigo-50 transition-all flex items-center justify-center gap-2"
-                >
-                  <Plus size={16} /> 예문 추가하기
-                </button>
-              )}
-
-              {examples.map((ex) => (
-                <div key={ex.id} className="p-5 bg-slate-50 rounded-2xl border border-slate-100 relative group">
-                  <div className="flex justify-between items-start pe-10">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${ex.type === 'A' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'}`}>
-                          유형 {ex.type}
-                        </span>
-                        <span className="text-xs font-black text-indigo-500">{ex.choices?.[0]} (정답)</span>
-                      </div>
-                      <div className="font-bold text-slate-800 mb-2 leading-snug">{ex.sentence}</div>
-                      <div className="text-xs text-slate-400 font-medium leading-relaxed bg-white/50 p-2 rounded-lg">{ex.explanation}</div>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => handleDeleteExample(ex.id)}
-                    className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
-
-              {examples.length === 0 && !isAddingExample && (
-                <div className="py-12 text-center text-slate-300 font-bold text-sm">
-                  등록된 예문이 없습니다.
-                </div>
-              )}
-            </div>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Create Wordbook Modal */}
+      {/* Create Wordbook Modal: the tab first, then the name, then only the types that tab has */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl">
-            <h2 className="text-2xl font-black text-slate-900 mb-6">새 단어장 만들기</h2>
-            <div className="space-y-4 mb-6">
+          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-md w-full bg-white rounded-3xl p-6 shadow-2xl">
+            <h2 className="text-lg font-black text-slate-900 mb-4">새 세트 만들기</h2>
+            <div className="space-y-4 mb-5">
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">단어장 제목</label>
-                <input
-                  type="text"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="단어장 제목 (예: 고1 필수 어휘, 비전고 중간고사)"
-                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">단어장 유형</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setNewWbType('standard')}
-                    className={`py-3 px-3 rounded-xl text-xs font-black border transition-all ${
-                      newWbType === 'standard'
-                        ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    📖 일반 단어장
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewWbType('sentence-order');
-                      setNewWbCategory('exam');
-                    }}
-                    className={`py-3 px-3 rounded-xl text-xs font-black border transition-all ${
-                      newWbType === 'sentence-order'
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    🧩 문장 순서 배열
-                  </button>
-                </div>
-                {newWbType === 'sentence-order' && (
-                  <p className="text-[11px] text-indigo-700 font-bold mt-2 ml-1 bg-indigo-50 p-2.5 rounded-xl border border-indigo-100 leading-relaxed">
-                    ✨ <strong>시험기간 대비 문장 순서 배열:</strong> 여러 지문의 문장들을 순서대로 등록하고, 퀴즈에서는 "다음으로 올 문장을 고르시오" 객관식으로 지문을 완성합니다. (오답 선지는 다른 지문에서 무작위 추출)
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">소속 탭 (카테고리)</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setNewWbCategory('word')}
-                    className={`py-3 px-2 rounded-xl text-xs font-black border transition-all ${
-                      newWbCategory === 'word'
-                        ? 'bg-pastel-pink-500 text-white border-pastel-pink-500 shadow-sm'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    📘 단어장
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewWbCategory('grammar')}
-                    className={`py-3 px-2 rounded-xl text-xs font-black border transition-all ${
-                      newWbCategory === 'grammar'
-                        ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    🎓 문법 세트
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewWbCategory('exam')}
-                    className={`py-3 px-2 rounded-xl text-xs font-black border transition-all ${
-                      newWbCategory === 'exam'
-                        ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    🎯 시험기간
-                  </button>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">어디에 만들까요?</label>
+                <div className="grid grid-cols-4 gap-1.5" role="radiogroup" aria-label="소속 탭">
+                  {([['word', '단어장'], ['grammar', '문법 세트'], ['exam', '시험기간'], ['sentence', '문장 세트']] as const).map(([value, label]) => (
+                    <button key={value} type="button" role="radio" aria-checked={newWbCategory === value}
+                      onClick={() => { setNewWbCategory(value); setNewWbType(value === 'sentence' ? 'sentence' : 'standard'); }}
+                      className={`py-2 rounded-xl text-xs font-bold border transition-all ${newWbCategory === value ? 'bg-pastel-pink-50 text-pastel-pink-700 border-pastel-pink-400' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                    >{label}</button>
+                  ))}
                 </div>
               </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5" htmlFor="new-set-title">세트 이름</label>
+                <input id="new-set-title" type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder={newWbCategory === 'sentence' ? '예: 중2 교과서 핵심 문장' : newWbCategory === 'grammar' ? '예: to부정사 기초' : newWbCategory === 'exam' ? '예: 비전고 1학기 중간고사' : '예: 고1 필수 어휘'}
+                  className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:border-pastel-pink-400 outline-none text-sm font-bold" />
+              </div>
+              {newWbCategory === 'exam' && <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5">유형</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {([['standard', '일반 단어장', '단어와 뜻을 외워요'], ['sentence-order', '문장 순서 배열', '지문 문장 순서를 맞혀요']] as const).map(([value, label, hint]) => (
+                    <button key={value} type="button" aria-pressed={newWbType === value} onClick={() => setNewWbType(value)}
+                      className={`px-3 py-2 rounded-xl border text-left transition-all ${newWbType === value ? 'bg-pastel-pink-50 border-pastel-pink-400 text-pastel-pink-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                    ><b className="block text-xs font-bold">{label}</b><span className="text-[11px] opacity-80">{hint}</span></button>
+                  ))}
+                </div>
+              </div>}
+              {newWbCategory === 'sentence' && <p className="text-[11px] leading-relaxed text-pastel-pink-700 bg-pastel-pink-50 border border-pastel-pink-100 rounded-xl px-3 py-2">
+                <b>문장 세트:</b> 한 문장씩 영어와 해석을 등록해요. 만든 뒤 '문장 붙여넣기'로 한 번에 넣을 수 있어요(번호는 자동으로 떼요).
+              </p>}
             </div>
-            <div className="flex gap-3">
-              <button onClick={() => setIsAddModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold">취소</button>
-              <button onClick={handleCreateWordbook} className="flex-1 py-4 bg-pastel-pink-500 text-white rounded-2xl font-bold shadow-lg shadow-pastel-pink-200">만들기</button>
+            <div className="flex gap-2">
+              <button onClick={() => setIsAddModalOpen(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm">취소</button>
+              <button onClick={handleCreateWordbook} disabled={!newTitle.trim()} className="flex-[1.4] py-3 bg-pastel-pink-500 text-white rounded-xl font-bold text-sm disabled:opacity-50">만들기</button>
             </div>
           </motion.div>
         </div>
@@ -2226,6 +2070,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
                 />
               </div>
+              {editWbTypeValue !== 'sentence' && (
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">단어장 유형</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -2253,6 +2098,8 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   </button>
                 </div>
               </div>
+              )}
+              {editWbTypeValue !== 'sentence' && (
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">소속 탭 (카테고리 이동)</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -2294,6 +2141,7 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
                   * 탭을 변경하면 해당 화면(단어장, 문법 세트, 시험기간)으로 단어장이 즉시 이동됩니다.
                 </p>
               </div>
+              )}
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">학습 기본 단위 (DAY당 단어 수)</label>
                 <input
@@ -2334,6 +2182,10 @@ export default function WordbookManager({ category = 'word' }: { category?: 'wor
       )}
 
       {/* Passage Bulk Add Modal for sentence-order */}
+      {isSentenceImportOpen && selectedWordbook && <SentenceImportDialog wordbookId={selectedWordbook.id} words={words}
+        defaultDay={typeof activeDayFilter === 'number' ? activeDayFilter : (words.length > 0 ? Math.max(...currentDays, 0) + 1 : 1)}
+        onClose={() => setIsSentenceImportOpen(false)}
+        onSaved={(count, day) => { setIsSentenceImportOpen(false); alert(`Day ${day}에 ${count}개 문장을 등록했어요.`); }} />}
       {isPassageModalOpen && selectedWordbook && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-2xl w-full bg-white rounded-[2.5rem] p-8 md:p-10 shadow-2xl max-h-[90vh] flex flex-col">

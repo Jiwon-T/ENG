@@ -1,4 +1,4 @@
-import { aiFetch } from './aiFetch';
+import { aiStream } from './aiFetch';
 
 export interface Chunk {
   text: string;
@@ -58,7 +58,9 @@ export async function analyzeEnglishText(
   text: string, 
   generateQuestions: boolean, 
   selectedTypes: QuestionType[] = [],
-  questionsOnly: boolean = false
+  questionsOnly: boolean = false,
+  onThought: (text: string) => void = () => {},
+  onLeft: (left: number | null) => void = () => {}
 ): Promise<AnalysisResult> {
   const prompt = `Analyze the following English text for a Korean high school student.
     
@@ -138,12 +140,14 @@ export async function analyzeEnglishText(
     Text: ${text}`;
 
   try {
-    const apiResponse = await aiFetch({
+    const streamed = await aiStream({
         model: "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
-          maxOutputTokens: 8192,
+          // 변형문제 생성 (questions only): think more carefully and leave room for the answers; the full analysis stays quick.
+          maxOutputTokens: questionsOnly ? 16384 : 8192,
+          thinkingLevel: questionsOnly ? "MEDIUM" : "LOW",
           responseSchema: {
             type: "OBJECT",
             properties: {
@@ -241,18 +245,11 @@ export async function analyzeEnglishText(
             required: ["title", "englishTitle", "examInfo", "topic", "mainIdea", "summaryLong", "plotPoints", "logicType", "purpose", "keySentence", "keywords", "sentences", "summary"]
           }
         }
-      });
+      }, questionsOnly ? 'generator' : 'analyzer', onThought);
 
-    if (!apiResponse.ok) {
-      const errorData = await apiResponse.json();
-      const errorMessage = errorData.error || "";
-      if (apiResponse.status === 503 || errorMessage.includes("503") || errorMessage.includes("high demand")) {
-        throw new Error("현재 AI 서비스 이용자가 많습니다. 잠시 후 다시 시도해주세요.");
-      }
-      throw new Error(errorMessage || "Gemini API 호출 실패");
-    }
-
-    const { text: responseText } = await apiResponse.json();
+    // The model's thinking streams in (shown as "AI가 생각하는 중"); the answer comes at the end.
+    const responseText = streamed.text;
+    onLeft(streamed.left);
     
     // Clean potential markdown formatting if the model ignored responseMimeType
     const cleanedText = responseText.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();

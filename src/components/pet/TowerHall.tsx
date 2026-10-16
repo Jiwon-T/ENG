@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { PET_TOWER, towerGear } from '../../lib/petCatalog';
+import { PET_TOWER, towerGearFor, type PetJob } from '../../lib/petCatalog';
 import './towerHall.css';
 
 // 채움의 탑 inside: a dark stone hall lit by torches. The gate opens first; on floor 1 a lone treasure chest waits; every
@@ -28,7 +28,7 @@ export function TowerGearIcon({ id, size = 22 }: { key?: string; id: string; siz
     <path d="M10 34 Q24 28 38 34 L36 40 Q24 35 12 40Z" fill="#888780" stroke="#444441" strokeWidth="1.8" strokeLinejoin="round" />
     <path d="M16 18 l4 3 M30 15 l-3 4" stroke="#5f5e5a" strokeWidth="1.6" strokeLinecap="round" /><circle cx="24" cy="19" r="3" fill="#ba7517" stroke="#633806" strokeWidth="1.2" />
   </svg>;
-  return <span style={{ fontSize: size * 0.8 }} aria-hidden="true">{towerGear(id)?.icon}</span>;
+  return <span style={{ fontSize: size * 0.8 }} aria-hidden="true">{towerGearFor(id)?.icon}</span>;
 }
 
 /** A pointed (gothic) oak leaf: planks, wrought-iron strap hinges with studs, a ring knocker and a painted shield.
@@ -91,8 +91,8 @@ export function TowerGate({ floor, onOpen }: { floor: number; onOpen: () => void
 }
 
 /** Floor 1: a lone chest in the dark; tapping opens it and the 견습 장비 rises out. */
-export function TowerChest({ busy, loot, onOpen, onNext }: { busy: boolean; loot: { gear: string[]; potions: number } | null; onOpen: () => void; onNext: () => void }) {
-  return <Hall caption={loot ? `${loot.gear.map(id => towerGear(id)?.name).join(', ')}${loot.potions ? ` · 물약 ${loot.potions}개` : ''}를 얻었어요!` : '어둠 속에 보물상자가 하나 놓여 있어요'}>
+export function TowerChest({ busy, loot, onOpen, onNext, job }: { busy: boolean; loot: { gear: string[]; potions: number } | null; onOpen: () => void; onNext: () => void; job?: PetJob | null }) {
+  return <Hall caption={loot ? `${loot.gear.map(id => towerGearFor(id, job)?.name).join(', ')}${loot.potions ? ` · 물약 ${loot.potions}개` : ''}를 얻었어요!` : '어둠 속에 보물상자가 하나 놓여 있어요'}>
     {loot && <div className="absolute inset-x-0 top-10 flex justify-center"><div className="tower-loot flex items-end gap-4 text-4xl" aria-hidden="true">{loot.gear.map(id => <TowerGearIcon key={id} id={id} size={64} />)}{loot.potions > 0 && <span className="pb-1">🧪</span>}</div></div>}
     <button type="button" disabled={busy || Boolean(loot)} onClick={onOpen} aria-label="보물상자 열기" className={`absolute bottom-[30px] left-1/2 -translate-x-1/2 ${loot ? 'is-open' : 'tower-chest-idle'} tower-chest`}>
       <svg viewBox="0 0 120 89" width="132" height="98" className="block">

@@ -3,6 +3,11 @@
   "regions": [
     "hkg1"
   ],
+  "functions": {
+    "api/gemini.ts": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/lesson-migration",

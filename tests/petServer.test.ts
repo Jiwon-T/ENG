@@ -224,36 +224,111 @@ test('pet speech without Intl.Segmenter: no half emoji is left (all emoji droppe
   } finally { (Intl as any).Segmenter = saved; }
 });
 
-test('pet AI: room for Gemini 3 thinking, the failure kind is told apart, and each student has daily limits per action', async () => {
+test('pet AI: room for Gemini 3 thinking, the failure kind is told apart; talks count a month (free: each pet 150), 50 a day', async () => {
   const {teachRequest, chatRequest, evolveRequest} = await import('../api/_lib/pet.js');
-  const {PET_AI_LIMITS} = await import('../src/lib/petCatalog.js');
+  const {AI_PLANS, PET_TALK_DAILY_GUARD} = await import('../src/lib/aiPlans.js');
   const pet = currentPet(initialPetState(NOW));
   for (const r of [teachRequest(pet, '안녕'), chatRequest(pet, '안녕', []), evolveRequest(pet, '안녕')] as any[]) {
     assert.ok(r.config.maxOutputTokens >= 1024, 'a small cap cut the answer off'); assert.equal(r.config.thinkingConfig.thinkingLevel, 'LOW');
   }
   const f = registrationFirestore();
   const s = initialPetState(NOW); currentPet(s).energy = 100; f.rows.set('petStates/kid', s);
+  const slot = currentPet(s).slot, fill = () => { const st = f.rows.get('petStates/kid'); currentPet(st).energy = 100; f.rows.set('petStates/kid', st); };
   const where = await call('POST', {action: 'chat', text: '안녕'}, {verify: async () => ({uid: 'kid'}), db: () => f.db, generate: async () => { throw Error('[400] User location is not supported for the API use.'); }, now: () => NOW});
   assert.equal(where.out.error, 'AI_REGION_UNSUPPORTED');
   const ok: any = {verify: async () => ({uid: 'kid'}), db: () => f.db, generate: async () => '{"response":"응!","remembered":"안녕"}', now: () => NOW};
-  for (let i = 0; i < PET_AI_LIMITS.teach; i++) { const st = f.rows.get('petStates/kid'); currentPet(st).energy = 100; f.rows.set('petStates/kid', st); assert.equal((await call('POST', {action: 'teach', text: `말${i}`}, ok)).out.ok, true); }
-  const over = await call('POST', {action: 'teach', text: '하나 더'}, ok);
-  assert.deepEqual([over.status, over.out.error], [429, 'PET_AI_TEACH_LIMIT']);
-  const st = f.rows.get('petStates/kid'); currentPet(st).energy = 100; f.rows.set('petStates/kid', st);
-  assert.equal((await call('POST', {action: 'chat', text: '안녕'}, ok)).out.ok, true, 'the chat limit is separate');
+  fill(); const first = await call('POST', {action: 'teach', text: '말'}, ok);
+  assert.deepEqual(first.out.aiTalk, {plan: 'free', limit: AI_PLANS.free.petTalkPerPet, left: AI_PLANS.free.petTalkPerPet! - 1, perPet: true}, 'the talk tab learns what is left');
+  assert.deepEqual((await call('GET', null, ok)).out.aiTalk.left, AI_PLANS.free.petTalkPerPet! - 1);
+  f.rows.set('aiMonthly/kid_2026-10', {uid: 'kid', month: '2026-10', petTalk: AI_PLANS.free.petTalkPerPet, petTalkBySlot: {[slot]: AI_PLANS.free.petTalkPerPet}});
+  fill(); const over = await call('POST', {action: 'chat', text: '안녕'}, ok);
+  assert.deepEqual([over.status, over.out.error], [429, 'PET_TALK_LIMIT']);
+  assert.match(over.out.message, /펫 패스/, 'the free plan is told about the 펫 패스');
+  const {takePetTalkQuota} = await import('../api/_lib/aiModel.js');
+  assert.equal((await takePetTalkQuota(f.db, 'kid', slot + 1, 'talk', NOW)).ok, true, 'another pet has its own 150');
+  f.rows.set('aiPasses/kid', {plan: 'pet', until: '2026-10-14'});
+  fill(); const passed = await call('POST', {action: 'chat', text: '안녕'}, ok);
+  assert.deepEqual([passed.out.ok, passed.out.aiTalk.plan, passed.out.aiTalk.perPet, passed.out.aiTalk.left], [true, 'pet', false, AI_PLANS.pet.petTalk! - AI_PLANS.free.petTalkPerPet! - 2], 'a 펫 패스: 600 for all pets, through its last day');
+  f.rows.set('aiPasses/kid', {plan: 'pet', until: '2026-10-13'});
+  fill(); assert.equal((await call('POST', {action: 'chat', text: '안녕'}, ok)).out.error, 'PET_TALK_LIMIT', 'an ended pass is the free plan again');
+  f.rows.set('aiPasses/kid', {plan: 'premium', until: '2026-12-31'});
+  f.rows.set('aiUsage/kid:2026-10-14', {uid: 'kid', count: 0, pet: {talk: PET_TALK_DAILY_GUARD}});
+  fill(); assert.equal((await call('POST', {action: 'chat', text: '안녕'}, ok)).out.error, 'PET_TALK_DAILY', 'at most 50 a day on any plan');
 });
 
-test('pet AI limits: other AI use keeps the pet counts; a failed reply gives the action back but still counts toward the 60', async () => {
+test('pet AI: the reply goes to the pet it was asked of, even if the main pet changes during the call', async () => {
+  const f = registrationFirestore(), s = initialPetState(NOW), first = currentPet(s);
+  first.energy = 100; s.pets.push({...structuredClone(first), slot: first.slot + 1, name: '둘째', xp: 0, learnedPhrases: []}); s.unlockedSlots = Math.max(s.unlockedSlots, 2);
+  f.rows.set('petStates/kid', s);
+  const deps: any = {verify: async () => ({uid: 'kid'}), db: () => f.db, now: () => NOW, generate: async () => {
+    const st = f.rows.get('petStates/kid'); st.currentPetSlot = first.slot + 1; f.rows.set('petStates/kid', st); // another tab switches pets
+    return '{"response":"응!","remembered":"안녕"}'; }};
+  assert.equal((await call('POST', {action: 'teach', text: '안녕'}, deps)).out.ok, true);
+  const after = f.rows.get('petStates/kid'), one = after.pets.find((p: any) => p.slot === first.slot), two = after.pets.find((p: any) => p.slot === first.slot + 1);
+  assert.deepEqual([one.learnedPhrases.length, two.learnedPhrases.length, two.energy], [1, 0, 100], 'the second pet is untouched');
+  assert.equal(f.rows.get('aiMonthly/kid_2026-10').petTalkBySlot[first.slot], 1);
+});
+
+test('pet AI limits: other AI use keeps the pet counts; a failed reply gives the talk back but still counts toward the 60', async () => {
   const {takeAiQuota} = await import('../api/_lib/aiModel.js');
-  const {PET_AI_LIMITS} = await import('../src/lib/petCatalog.js');
   const f = registrationFirestore();
   const fill = () => { const st = f.rows.get('petStates/kid') || initialPetState(NOW); currentPet(st).energy = 100; f.rows.set('petStates/kid', st); };
   const ok: any = {verify: async () => ({uid: 'kid'}), db: () => f.db, generate: async () => '{"response":"응!","remembered":"안녕"}', now: () => NOW};
-  for (let i = 0; i < PET_AI_LIMITS.teach; i++) { fill(); assert.equal((await call('POST', {action: 'teach', text: `말${i}`}, ok)).out.ok, true); }
+  for (let i = 0; i < 3; i++) { fill(); assert.equal((await call('POST', {action: 'teach', text: `말${i}`}, ok)).out.ok, true); }
   assert.equal(await takeAiQuota(f.db, 'kid', NOW), true, 'another AI feature');
-  fill(); assert.equal((await call('POST', {action: 'teach', text: '또'}, ok)).out.error, 'PET_AI_TEACH_LIMIT', 'the teach count was not reset');
   const broken: any = {...ok, generate: async () => { throw Error('503 overloaded'); }};
   fill(); assert.equal((await call('POST', {action: 'chat', text: '안녕'}, broken)).out.error, 'AI_BUSY');
-  const usage = [...f.rows.entries()].find(([k]) => k.startsWith('aiUsage/kid:'))![1];
-  assert.deepEqual([usage.pet.chat, usage.count], [0, PET_AI_LIMITS.teach + 2], 'chat given back; the attempt still counts toward 60');
+  const usage = f.rows.get('aiUsage/kid:2026-10-14'), month = f.rows.get('aiMonthly/kid_2026-10');
+  assert.deepEqual([usage.pet.talk, usage.count, month.petTalk], [3, 5, 3], 'the talk given back; the attempt still counts toward 60');
+});
+
+test('AI passes: the admin turns a pass on until a day or off; others are refused; the month list shows the plan', async () => {
+  const {readAiPasses, setAiPass, readAiMonthly, takeMonthlyQuota} = await import('../api/_lib/aiModel.js');
+  const f = registrationFirestore(), admin = {admin: true, academyId: 'main', uid: 'admin'};
+  f.rows.set('users/kid', {name: '김하늘', role: 'student'});
+  await assert.rejects(() => setAiPass(f.db, {admin: false, academyId: 'main'}, {uid: 'kid', plan: 'premium', until: '2026-11-13'}), /FORBIDDEN/);
+  await assert.rejects(() => setAiPass(f.db, admin, {uid: 'nobody', plan: 'pet', until: '2026-11-13'}), /BAD_REQUEST/);
+  await assert.rejects(() => setAiPass(f.db, admin, {uid: 'kid', plan: 'gold', until: '2026-11-13'}), /BAD_REQUEST/);
+  await setAiPass(f.db, admin, {uid: 'kid', plan: 'premium', until: '2026-11-13'}, NOW);
+  assert.deepEqual([f.rows.get('aiPasses/kid').plan, f.rows.get('aiPasses/kid').until, f.rows.get('users/kid').aiPass], ['premium', '2026-11-13', undefined], 'the user doc is untouched');
+  const list = await readAiPasses(f.db, admin, NOW);
+  assert.deepEqual(list.rows.map((r: any) => [r.name, r.plan, r.active]), [['김하늘', 'premium', true]]);
+  assert.equal(await takeMonthlyQuota(f.db, 'kid', 'analyzer', NOW), 79, '프리미엄: 지문 분석 80 a month');
+  assert.deepEqual((await readAiMonthly(f.db, admin, NOW)).rows.map((r: any) => [r.plan, r.analyzer]), [['premium', 1]]);
+  await setAiPass(f.db, admin, {uid: 'kid', plan: 'none'}, NOW);
+  assert.equal(f.rows.has('aiPasses/kid'), false);
+  assert.deepEqual((await readAiPasses(f.db, admin, NOW)).rows, []);
+});
+
+test('pet teaching grows with the pet: a baby catches a word or two, a teen copies exactly, an adult rephrases; 혼잣말 sees the original', async () => {
+  const {teachGuide, teachRequest, evolveRequest} = await import('../api/_lib/pet.js');
+  assert.match(teachGuide(5), /낱말 한두 개/); assert.match(teachGuide(30), /틀리거나 빼먹어/); assert.match(teachGuide(50), /그대로 정확하게/);
+  assert.match(teachGuide(80), /다른 표현/); assert.match(teachGuide(150), /응용/);
+  const pet = currentPet(initialPetState(NOW)); pet.level = 5;
+  assert.match((teachRequest(pet, '지원이는 최고야') as any).config.systemInstruction, /낱말 한두 개/);
+  pet.level = 70;
+  assert.match(JSON.stringify((evolveRequest(pet, '최고', '지원이는 최고야') as any).contents), /지원이는 최고야/);
+});
+
+test('pet summary (home chip and pass badge): points and the pass in force, nothing written', async () => {
+  const f = registrationFirestore(), deps: any = {verify: async () => ({uid: 'kid'}), db: () => f.db, now: () => NOW};
+  const get = async () => { let out: any; const req: any = {method: 'GET', url: '/api/student?__endpoint=pet&summary=1', headers: {authorization: 'Bearer t'}};
+    await handlePet(req, {setHeader() {}, end(v: string) { out = JSON.parse(v); }, statusCode: 0} as any, deps); return out; };
+  assert.deepEqual(await get(), {ok: true, hasPet: false, points: 0, pass: null, coupon: null, rank: null});
+  assert.equal(f.rows.has('petStates/kid'), false, 'no pet is made by looking');
+  const s = initialPetState(NOW); s.points = 1240; f.rows.set('petStates/kid', s);
+  f.rows.set('aiPasses/kid', {plan: 'premium', until: '2026-10-14'});
+  assert.deepEqual(await get(), {ok: true, hasPet: true, points: 1240, pass: {plan: 'premium', until: '2026-10-14'}, coupon: null, rank: null}, 'not a 장학 쿠폰 student: no coupon; no chosen pet: no place');
+  f.rows.set('aiPasses/kid', {plan: 'pet', until: '2026-10-13'});
+  assert.equal((await get()).pass, null, 'an ended pass shows no badge');
+});
+
+test('AI usage page: admin only, newest day first, empty days left out', async () => {
+  const {readAiUsage} = await import('../api/_lib/aiModel.js');
+  const f = registrationFirestore();
+  f.rows.set('aiUsageStats/2026-10-13', {pet: {calls: 3, input: 900, output: 120, thoughts: 300}, analyzer: {calls: 1, input: 4000, output: 3000, thoughts: 500}, generator: {calls: 2, input: 8000, output: 9000, thoughts: 4000}});
+  f.rows.set('aiUsageStats/2026-10-12', {generator: {calls: 1, input: 100, output: 100, thoughts: 0}});
+  await assert.rejects(() => readAiUsage(f.db, {admin: false, principal: true, academyId: 'main'}), /FORBIDDEN/);
+  const {days} = await readAiUsage(f.db, {admin: true, academyId: 'main'}, 5, NOW);
+  assert.deepEqual(days.map((d: any) => [d.day, d.pet.calls, d.analyzer.calls, d.workbook.calls, d.generator.calls]), [['2026-10-13', 3, 1, 0, 2], ['2026-10-12', 0, 0, 0, 1]], 'a day with only 변형문제 생성기 is kept');
 });

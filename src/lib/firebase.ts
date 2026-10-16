@@ -160,116 +160,6 @@ export async function recordAttendance(uid: string) {
   }
 }
 
-export async function saveAnalysisHistory(uid: string, text: string, result: any, folderId: string | null = null) {
-  const historyRef = collection(db, 'analysisHistory');
-  // Only count recent items (not in folders)
-  const q = query(historyRef, where('uid', '==', uid), where('folderId', '==', null));
-  
-  try {
-    const snapshot = await getDocs(q);
-    const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
-    docs.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-
-    // Add new record
-    await addDoc(historyRef, {
-      uid,
-      text: text,
-      title: result.title,
-      result: result,
-      createdAt: Timestamp.now(),
-      folderId: folderId
-    });
-
-    // If more than 5 recent items and we just added a recent item, delete oldest
-    if (folderId === null && docs.length >= 5) {
-      const toDelete = docs.slice(4);
-      for (const d of toDelete) {
-        await deleteDoc(doc(db, 'analysisHistory', d.id));
-      }
-    }
-  } catch (error) {
-    console.error('Failed to save history:', error);
-  }
-}
-
-export async function saveGeneratorHistory(uid: string, text: string, result: any, folderId: string | null = null) {
-  const historyRef = collection(db, 'generatorHistory');
-  // Only count recent items (not in folders)
-  const q = query(historyRef, where('uid', '==', uid), where('folderId', '==', null));
-  
-  try {
-    const snapshot = await getDocs(q);
-    const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
-    docs.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-
-    // Add new record
-    await addDoc(historyRef, {
-      uid,
-      text: text,
-      title: result.title || '변형 문제 세트',
-      result: result,
-      createdAt: Timestamp.now(),
-      folderId: folderId
-    });
-
-    // If more than 5 recent items and we just added a recent item, delete oldest
-    if (folderId === null && docs.length >= 5) {
-      const toDelete = docs.slice(4);
-      for (const d of toDelete) {
-        await deleteDoc(doc(db, 'generatorHistory', d.id));
-      }
-    }
-  } catch (error) {
-    console.error('Failed to save generator history:', error);
-  }
-}
-
-export async function createFolder(uid: string, name: string) {
-  const folderRef = collection(db, 'folders');
-  return await addDoc(folderRef, {
-    uid,
-    name,
-    createdAt: Timestamp.now()
-  });
-}
-
-export async function deleteFolder(folderId: string) {
-  // Delete folder
-  await deleteDoc(doc(db, 'folders', folderId));
-  
-  // Update items in folder to be "orphaned" or delete them? 
-  // User said "manage files in folders", so deleting folder should probably delete contents or move them back to history.
-  // Let's move them back to history (folderId = null) but they might get auto-deleted if > 5.
-  // Actually, let's just delete them for simplicity in this "file management" context.
-  const analysisRef = collection(db, 'analysisHistory');
-  const genRef = collection(db, 'generatorHistory');
-  
-  const q1 = query(analysisRef, where('folderId', '==', folderId));
-  const q2 = query(genRef, where('folderId', '==', folderId));
-  
-  const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-  
-  const deletions = [
-    ...s1.docs.map(d => deleteDoc(doc(db, 'analysisHistory', d.id))),
-    ...s2.docs.map(d => deleteDoc(doc(db, 'generatorHistory', d.id)))
-  ];
-  
-  await Promise.all(deletions);
-}
-
-export async function moveToFolder(recordId: string, type: 'analysis' | 'generator', folderId: string | null) {
-  const collectionName = type === 'analysis' ? 'analysisHistory' : 'generatorHistory';
-  await updateDoc(doc(db, collectionName, recordId), {
-    folderId: folderId
-  });
-}
-
-export async function renameFolder(folderId: string, newName: string) {
-  await updateDoc(doc(db, 'folders', folderId), {
-    name: newName
-  });
-}
-
 export async function logout() {
   await signOut(auth);
 }
@@ -353,7 +243,7 @@ export async function recordStudySession(data: {
   wordbookTitle?: string;
   wordbookType?: string;
   type: 'quiz' | 'flashcard' | 'match' | 'conjugation' | 'test';
-  category?: 'word' | 'grammar' | 'exam';
+  category?: 'word' | 'grammar' | 'exam' | 'sentence';
   duration: number; // in seconds
   score?: number;
   totalItems?: number;
@@ -418,7 +308,7 @@ export async function recordStudySession(data: {
       wordbookTitle: (data.wordbookTitle || '단어장').slice(0, 450),
       wordbookType: data.wordbookType || undefined,
       type: data.type,
-      category: data.category || 'word',
+      category: data.category === 'sentence' ? 'word' : data.category || 'word', // the rules allow word, grammar, exam
       duration: safeDuration,
       score: safeScore,
       totalItems: safeTotal,

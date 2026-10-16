@@ -6,39 +6,43 @@ import { verifyFirebaseSession } from '../firebaseSession.js';
 import { readStudentMapping } from '../studentIdentity.js';
 import { lessonReportId } from '../reportAudienceDTO.js';
 import type { StoredLessonReport } from '../reportSchemas.js';
-import { PET_AI_LIMITS, aiErrorCode, generateAi, refundPetAiQuota, takePetAiQuota } from '../aiModel.js';
+import { aiErrorCode, generateAi, readPetTalk, refundPetTalkQuota, takePetTalkQuota } from '../aiModel.js';
+import { AI_PLANS, PASS_NOTE, PET_TALK_DAILY_GUARD, activePlan } from '../../../src/lib/aiPlans.js';
 import {
   PET_STATES, addXP, adoptPet, awardStudy, buyItem, chatRequest, chooseCharacter, claimStudyRewards, currentPet, earnPoints, equipItem, evolveRequest, importLocalPet,
   initialPetState, parseAi, pendingStudyRewards, petSummary, petThePet, publicPetState, renamePet, rollDay, seoulDay, switchPet, teachRequest, wearItem, type ServerPetState,
 } from '../pet.js';
-import { cleanPetSpeech, petEmojiLimit, PET_ACTIONS, PET_STUDY_RATES, PET_WORD_FEED, stageQuestions } from '../../../src/lib/petCatalog.js';
-import { PET_GAMES, answerRun, buildRun, initialGameState, loadFeedSource, publicRun, rollGameDay, runSummary, type FeedSource, type PetGameState } from '../petWordFeed.js';
-import { PET_GUILD, PET_PARTIES, addContribution, boardCard, createParty, initialGuild, joinParty, leaveParty, petLook, publicParty, rankingRow, setNickname, settleParty, shownNickname, voteKick, weekOf, type GuildProfile, type Party } from '../petParty.js';
-import { PET_TOWERS, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSession, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
+import { cleanPetSpeech, petEmojiLimit, PET_ACTIONS, PET_STUDY_RATES, PET_WORD_FEED, stageGame, stageQuestions, stageWithSentences } from '../../../src/lib/petCatalog.js';
+import { loadSentencesFor } from '../petSentences.js';
+import { PET_GAMES, answerRun, buildRun, initialGameState, loadFeedSource, publicRun, rollGameDay, runSummary, type FeedSentence, type FeedSource, type PetGameState } from '../petWordFeed.js';
+import { PET_GUILD, PET_NAMES, PET_PARTIES, addContribution, nameDocId, boardCard, checkNickname, createParty, initialGuild, joinParty, leaveParty, norm, normalizeGuild, petLook, publicParty, rankingRow, setAlias, setGuildName, settleParty, shownAlias, shownGuild, updateMemberNames, voteKick, weekOf, type GuildProfile, type Party } from '../petParty.js';
+import { readTowerHall, recordTowerHall } from '../petTowerHall.js';
+import { PET_RANKINGS, myPetRank, readRankProfile, readRankings } from '../petRanking.js';
+import { PET_TOWERS, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
 import { couponStudentKey, couponView, placeDecor, readCoupon, requestCoupon } from '../petCoupon.js';
-import { PET_EXPEDITIONS, chooseJob, finishStage, initialExpedition, levelOk, petProgress, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
+import { PET_EXPEDITIONS, chooseJob, chooseJob2, finishStage, initialExpedition, levelOk, petProgress, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
 
 // GET /api/student/pet → the pet state (+ 공부 보상 waiting). POST {action,...} → one change, decided here.
-type Deps = { verify: (token: string) => Promise<{uid: string}>; db: () => any; generate: (request: any) => Promise<string>; now: () => number; feedSource?: (db: any, uid: string) => Promise<FeedSource>; towerPool?: (db: any, uid: string) => Promise<{words: {w: string; m: string}[]; wordbookId: string; wordbookTitle: string}> };
+type Deps = { verify: (token: string) => Promise<{uid: string}>; db: () => any; generate: (request: any) => Promise<string>; now: () => number; feedSource?: (db: any, uid: string) => Promise<FeedSource>; sentences?: (db: any, uid: string) => Promise<FeedSentence[]>; towerPool?: (db: any, uid: string) => Promise<{words: {w: string; m: string}[]; wordbookId: string; wordbookTitle: string}> };
 const defaults = (): Deps => ({
   verify: token => { const {auth} = getFirebaseAdmin(); return verifyFirebaseSession(auth, token) as any; },
   db: () => getFirebaseAdmin().db,
-  generate: generateAi,
+  generate: request => generateAi(request, 'pet'),
   now: () => Date.now(),
 });
 const MESSAGES: Record<string, string> = {
   TOWER_NOT_READY: '선생님이 탑 단어장을 아직 정하지 않았어요.', TOWER_CHEST_FIRST: '먼저 1층 보물상자를 열어 보세요!', TOWER_CHEST_OPENED: '이미 연 보물상자예요.', TOWER_TOP: '지금은 여기가 꼭대기예요. 더 높은 층은 곧 열려요!',
-  TOWER_NO_RUN: '전투가 끝났어요. 다시 들어가 주세요.', TOWER_WAIT: '지금은 문제에 답할 차례예요.', TOWER_SKILL_LOCKED: '스킬은 원정대 꿈의 정원에서 전직한 뒤에 쓸 수 있어요.', TOWER_NO_POTION: '물약이 없어요.', TOWER_IN_BATTLE: '전투 중에는 장비를 바꿀 수 없어요.', TOWER_GEAR_JOB: '이 장비는 그 직업으로 전직한 펫만 낄 수 있어요.', TOWER_SOLD_OUT: '다 팔렸어요.', TOWER_MAX_ENHANCE: '이미 최고 강화(+5)예요.', TOWER_NO_STONES: '강화석이 모자라요.', TOWER_SNEAK_INVALID: '조금 더 천천히, 길을 따라 지나가 보세요.',
+  TOWER_NO_RUN: '전투가 끝났어요. 다시 들어가 주세요.', TOWER_WAIT: '지금은 문제에 답할 차례예요.', TOWER_SKILL_LOCKED: '스킬은 전직 후에 쓸 수 있어요. 1차 전직은 원정대 5장 설산의 왕관 스테이지에서 해요.', TOWER_SKILL_NOT_LEARNED: '아직 배우지 않은 스킬이에요.', TOWER_NO_MP: 'MP가 모자라요. 단어를 맞히면 MP가 2씩 차요.', TOWER_NO_POTION: '물약이 없어요.', TOWER_IN_BATTLE: '전투 중에는 장비를 바꿀 수 없어요.', TOWER_GEAR_JOB: '이 장비는 그 직업으로 전직한 펫만 낄 수 있어요.', TOWER_SOLD_OUT: '다 팔렸어요.', TOWER_MAX_ENHANCE: '이미 최고 강화(+5)예요.', TOWER_NO_STONES: '강화석이 모자라요.', TOWER_SNEAK_INVALID: '조금 더 천천히, 길을 따라 지나가 보세요.',
   COUPON_NOT_ELIGIBLE: '이달의 장학 쿠폰은 영어 이지원T 반 친구들이 받을 수 있어요.', COUPON_TAKEN: '이번 달 쿠폰은 이미 신청했어요.', COUPON_NOT_YET: '이번 달에 모은 포인트가 아직 10,000P가 안 됐어요.',
-  PET_JOB_BAD: '검사나 마법사 중에서 골라 주세요.', PET_JOB_TAKEN: '이 친구는 이미 전직했어요.', PET_JOB_LOCKED: '7장 꿈의 정원의 왕관 스테이지를 이 친구와 통과하면 전직할 수 있어요.',
+  PET_JOB_BAD: '검사나 마법사 중에서 골라 주세요.', PET_JOB_TAKEN: '이 친구는 이미 전직했어요.', PET_JOB_LOCKED: '5장 설산의 왕관 스테이지를 이 친구와 통과하면 1차 전직할 수 있어요.', PET_JOB2_BAD: '이 친구의 직업에 맞는 갈래를 골라 주세요.', PET_JOB2_LOCKED: '1차 전직한 친구와 7장 꿈의 정원의 왕관 스테이지를 통과하면 2차 전직할 수 있어요.',
   PET_NOT_ENOUGH_POINTS: '포인트가 부족해요!', PET_ENERGY_ITEM_USED: '기운 회복 간식은 하루에 두 번까지 먹을 수 있어요!', PET_EXHAUSTED: '펫이 탈진했어요. 몬스터를 먹여야 깨어나요!', PET_NOT_EXHAUSTED: '몬스터는 기운을 다 써서 탈진했을 때만 먹일 수 있어요.', PET_REVIVE_USED: '몬스터는 하루에 한 번만 먹일 수 있어요.', PET_TIRED: '펫이 너무 지쳤어요. 기운을 회복시켜 주세요!',
   PET_ITEM_NOT_FOUND: '없는 물건이에요.', PET_ITEM_NOT_OWNED: '먼저 상점에서 사 주세요.', PET_ALREADY_CHOSEN: '이미 친구를 골랐어요.', PET_BAD_NAME: '이름을 입력해 주세요.',
   FEED_NO_BOOKS: '단어장을 한 번 공부하면 시작할 수 있어요. 학습 세트에서 단어장을 공부해 보세요!', FEED_STALE: '다른 화면에서 진행이 바뀌었어요. 최신 상태로 불러올게요.', FEED_BAD_CHOICE: '카드를 다시 골라 주세요.', FEED_NO_RUN: '진행 중인 게임이 없어요.', FEED_OTHER_RUN: '하던 판이 있어요. 먼저 끝내거나 그만둬 주세요.', EXPEDITION_BAD_STAGE: '없는 스테이지예요.', EXPEDITION_LOCKED: '앞 스테이지를 먼저 통과해 주세요.', EXPEDITION_LEVEL: '대표 펫 레벨이 더 높아야 갈 수 있어요.',
-  PARTY_NICK_LENGTH: '별칭은 2~10자로 정해 주세요.', PARTY_NICK_CONTACT: '별칭에 연락처나 주소는 쓸 수 없어요.', PARTY_NICK_BANNED: '이 별칭은 다시 쓸 수 없어요. 다른 별칭을 정해 주세요.', PARTY_NEED_NICK: '먼저 길드에서 쓸 별칭을 정해 주세요.', PARTY_NICK_WARNED: '관리자가 별칭을 바꿔 달라고 했어요. 새 별칭을 정해 주세요.',
+  RANK_STALE: '순위가 새로 바뀌었어요. 순위를 다시 열어 주세요.', RANK_BUILDING: '순위를 만드는 중이에요. 잠시 후 다시 열어 주세요.', PARTY_NICK_LENGTH: '이름은 2~10자로 정해 주세요.', PARTY_NICK_CONTACT: '이름에 연락처나 주소는 쓸 수 없어요.', PARTY_NICK_BANNED: '이 이름은 다시 쓸 수 없어요. 다른 이름을 정해 주세요.', PARTY_NEED_NICK: '먼저 원정대 이름과 이 펫의 모험가 별칭을 정해 주세요.', NAME_TAKEN: '이미 같은 이름을 쓰는 친구가 있어요. 그래도 이 이름으로 할까요?', PARTY_NICK_WARNED: '관리자가 이름을 바꿔 달라고 했어요. 새 이름을 정해 주세요.',
   PARTY_ONE_A_WEEK: '파티는 한 주에 한 팀만 들어갈 수 있어요.', PARTY_BAD_INPUT: '모집글을 다시 골라 주세요.', PARTY_CLOSED: '이번 주 모집이 끝난 팀이에요.', PARTY_FULL: '자리가 다 찼어요.', PARTY_NOT_MEMBER: '이 팀의 팀원이 아니에요.', PARTY_BAD_VOTE: '투표할 수 없어요.', PARTY_VOTE_TOO_SOON: '2명 팀은 상대가 3일 이상 쉬었을 때만 내보낼 수 있어요.', PARTY_NOT_FOUND: '팀을 찾을 수 없어요.',
   PET_BAD_CHARACTER: '친구를 다시 골라 주세요.', PET_NO_SLOT: '펫을 Lv.100까지 키우면 새 친구를 데려올 수 있어요.', PET_ALREADY_OWNED: '이미 함께 사는 친구예요.', PET_BAD_SLOT: '없는 펫이에요.', PET_BAD_SOURCE: '알 수 없는 학습이에요.', PET_IMPORT_CLOSED: '이미 서버에 펫이 있어요.', AI_DAILY_LIMIT: '오늘 펫과 이야기할 수 있는 횟수를 다 썼어요. 내일 또 만나요!',
   AI_BUSY: '지금은 펫이 조금 바빠요. 잠시 후 다시 해 주세요!', AI_QUOTA: '지금은 펫이 조금 바빠요. 잠시 후 다시 해 주세요!', AI_NOT_CONFIGURED: '펫이 지금은 말을 할 수 없어요. 선생님께 알려 주세요.', AI_REGION_UNSUPPORTED: '펫이 지금은 말을 할 수 없어요. 선생님께 알려 주세요.',
-  PET_AI_TEACH_LIMIT: `말 가르치기는 하루 ${PET_AI_LIMITS.teach}번까지예요. 내일 또 가르쳐 주세요!`, PET_AI_CHAT_LIMIT: `대화하기는 하루 ${PET_AI_LIMITS.chat}번까지예요. 내일 또 이야기해요!`, PET_AI_EVOLVE_LIMIT: '오늘은 펫이 충분히 혼잣말을 했어요.', AI_FAILED: '펫이 잘 못 알아들었어요. 다시 말해 줄래요?', PET_BAD_ACTION: '알 수 없는 동작이에요.',
+  PET_TALK_DAILY: `오늘은 펫이 ${PET_TALK_DAILY_GUARD}번이나 이야기했어요. 내일 또 해요!`, PET_AI_EVOLVE_LIMIT: '오늘은 펫이 충분히 혼잣말을 했어요.',
 };
 
 /** The linked student's lessons for 공부 보상: id, date, attendance, and whether the student checked the assignment done. */
@@ -80,8 +84,7 @@ async function changeTower(db: any, uid: string, now: number, apply: (s: ServerP
     s.updatedAt = now; t.updatedAt = now;
     tx.set(ref, s); tx.set(towerRef, t);
     // A finished battle's missed words (오답 복습) are saved together with its end.
-    const session = result?.end ? towerWrongsSession(uid, result.end, now) : null;
-    if (session) tx.set(db.collection('studySessions').doc(session.id), session.data);
+    for (const session of result?.end ? towerWrongsSessions(uid, result.end, now) : []) tx.set(db.collection('studySessions').doc(session.id), session.data);
     if (user) tx.set(userRef, {petStats: petSummary(s)}, {merge: true});
     return {state: s, tower: t, result};
   });
@@ -132,24 +135,42 @@ async function settleIfDue(db: any, partyId: string, now: number) {
 /** 길드·파티: nickname, board, ranking, create/join/leave/vote. Students only get nicknames and pets back. */
 async function handleGuild(action: string, body: any, db: any, uid: string, now: number, res: ServerResponse, fail: (code: string, status?: number) => any) {
   const week = weekOf(now), guildRef = db.collection(PET_GUILD).doc(uid);
-  const readGuild = async () => { const d = await guildRef.get(); return (d.exists ? d.data() : initialGuild(now)) as GuildProfile; };
+  const petsOf = (st: any) => st ? rollDay(st, now) as ServerPetState : null;
+  // The old nickname moves to the main pet's 별칭 (in memory when only reading; saved with the next change).
+  const readGuild = async () => { const [d, st] = await Promise.all([guildRef.get(), db.collection(PET_STATES).doc(uid).get()]); const g = (d.exists ? d.data() : initialGuild(now)) as GuildProfile, s = petsOf(st.data()); if (s) normalizeGuild(g, currentPet(s).slot); return {g, s}; };
+  /** My names: the 원정대 이름 and each chosen pet's 별칭 (with warnings), and whether the playing pet may join a team. */
+  const names = (g: GuildProfile, s: ServerPetState | null) => { const slot = s ? currentPet(s).slot : 1;
+    return {guildName: g.guildName || '', guildWarned: Boolean(g.guildWarned), movedNickname: Boolean(g.movedNickname), currentSlot: slot,
+      pets: (s?.pets || []).filter(p => p.chosen).map(p => ({slot: p.slot, name: p.name, alias: g.aliases?.[p.slot] || '', warned: Boolean(g.aliasWarned?.[p.slot])})),
+      ready: Boolean(g.guildName && g.aliases?.[slot] && !g.guildWarned && !g.aliasWarned?.[slot])}; };
   const view = async () => {
-    const g = await readGuild(), id = g.parties[week], p = id ? (await db.collection(PET_PARTIES).doc(id).get()).data() as Party | undefined : undefined;
-    return {ok: true, guild: {nickname: g.nickname, shown: g.nickname ? shownNickname(g) : '', warned: g.warned, joinedThisWeek: Boolean(id), lastResult: g.lastResult || null}, party: p ? publicParty(p, uid, now) : null, week};
+    const {g, s} = await readGuild(), id = g.parties[week], p = id ? (await db.collection(PET_PARTIES).doc(id).get()).data() as Party | undefined : undefined, slot = s ? currentPet(s).slot : 1;
+    return {ok: true, guild: {shown: [shownGuild(g), shownAlias(g, slot)].filter(Boolean).join(' · '), names: names(g, s), joinedThisWeek: Boolean(id), lastResult: g.lastResult || null}, party: p ? publicParty(p, uid, now) : null, week};
   };
-  const inTx = (work: (tx: any, g: GuildProfile) => Promise<any>) => db.runTransaction(async (tx: any) => { const snap = await tx.get(guildRef); const g: GuildProfile = snap.exists ? snap.data() : initialGuild(now); const r = await work(tx, g); g.updatedAt = now; tx.set(guildRef, g); return r; });
+  const inTx = (work: (tx: any, g: GuildProfile, s: ServerPetState | null) => Promise<any>) => db.runTransaction(async (tx: any) => { const snap = await tx.get(guildRef), st = await tx.get(db.collection(PET_STATES).doc(uid)); const g: GuildProfile = snap.exists ? snap.data() : initialGuild(now), s = petsOf(st.data()); if (s) normalizeGuild(g, currentPet(s).slot); const r = await work(tx, g, s); g.updatedAt = now; tx.set(guildRef, g); return r; });
   try {
     if (action === 'guild-state') {
-      const g = await readGuild();
+      const {g} = await readGuild();
       for (const [w, id] of Object.entries(g.parties)) if (w < week) await settleIfDue(db, id, now); // a past week is paid when a member looks
       return sendJson(res, 200, await view());
     }
-    if (action === 'guild-nickname') {
-      await inTx(async (tx, g) => {
+    // 원정대 이름 / 모험가 별칭: the same name as another student's is allowed once the student confirms (`confirm`).
+    if (action === 'guild-name' || action === 'guild-alias') {
+      const name = checkNickname(body.name, []), slot = Math.floor(Number(body.slot)), kind = action === 'guild-name' ? 'guild' : 'alias', owner = kind === 'guild' ? uid : `${uid}:${slot}`;
+      await inTx(async (tx, g, s) => {
         const id = g.parties[week], ref = id ? db.collection(PET_PARTIES).doc(id) : null, p = ref ? (await tx.get(ref)).data() as Party | undefined : undefined;
-        const nick = setNickname(g, body.nickname);
-        if (p && ref) { for (const m of p.members) if (m.uid === uid) m.nickname = nick; tx.set(ref, p); }
+        if (kind === 'alias' && !s?.pets.some(x => x.slot === slot && x.chosen)) throw Error('PARTY_BAD_INPUT');
+        // The name registry (petNames), read and written here: another student on it means asking first.
+        const old = kind === 'guild' ? g.guildName : g.aliases?.[slot], newRef = db.collection(PET_NAMES).doc(nameDocId(kind, name));
+        const oldRef = old && norm(old) !== norm(name) ? db.collection(PET_NAMES).doc(nameDocId(kind, old)) : null;
+        const newSnap = await tx.get(newRef), oldSnap = oldRef ? await tx.get(oldRef) : null, owners: string[] = newSnap.exists ? newSnap.data()?.owners || [] : [];
+        if (body.confirm !== true && owners.some(o => o.split(':')[0] !== uid)) throw Error('NAME_TAKEN');
+        if (kind === 'guild') setGuildName(g, name); else setAlias(g, slot, name);
+        tx.set(newRef, {owners: [...new Set([...owners, owner])]});
+        if (oldRef && oldSnap?.exists) tx.set(oldRef, {owners: (oldSnap.data()?.owners || []).filter((o: string) => o !== owner)});
+        if (p && ref) { updateMemberNames(p, uid, g, s ? currentPet(s).slot : undefined); tx.set(ref, p); }
       });
+      await db.collection(PET_RANKINGS).doc('current').set({builtAt: 0}, {merge: true}); // the ranking shows the new name on its next look
       return sendJson(res, 200, await view());
     }
     if (action === 'guild-board' || action === 'guild-ranking') {
@@ -159,12 +180,12 @@ async function handleGuild(action: string, body: any, db: any, uid: string, now:
     }
     if (action === 'party-create') {
       const id = crypto.randomBytes(10).toString('hex');
-      await inTx(async (tx, g) => { const st = (await tx.get(db.collection(PET_STATES).doc(uid))).data(); if (!st) throw Error('PARTY_BAD_INPUT'); tx.set(db.collection(PET_PARTIES).doc(id), createParty(g, uid, petLook(rollDay(st, now)), body, now, id)); });
+      await inTx(async (tx, g, s) => { if (!s) throw Error('PARTY_BAD_INPUT'); tx.set(db.collection(PET_PARTIES).doc(id), createParty(g, uid, petLook(s), body, now, id)); });
       return sendJson(res, 200, await view());
     }
     if (action === 'party-join') {
       const ref = db.collection(PET_PARTIES).doc(String(body.partyId || '_'));
-      await inTx(async (tx, g) => { const snap = await tx.get(ref), st = (await tx.get(db.collection(PET_STATES).doc(uid))).data(); if (!snap.exists || !st) throw Error('PARTY_NOT_FOUND'); const p: Party = snap.data(); joinParty(p, g, uid, petLook(rollDay(st, now)), now); tx.set(ref, p); });
+      await inTx(async (tx, g, s) => { const snap = await tx.get(ref); if (!snap.exists || !s) throw Error('PARTY_NOT_FOUND'); const p: Party = snap.data(); joinParty(p, g, uid, petLook(s), now); tx.set(ref, p); });
       return sendJson(res, 200, await view());
     }
     if (action === 'party-leave' || action === 'party-vote') {
@@ -183,6 +204,7 @@ async function handleGuild(action: string, body: any, db: any, uid: string, now:
   } catch (e: any) {
     const code = String(e?.message || '');
     if (code.startsWith('PARTY_')) return fail(code);
+    if (code === 'NAME_TAKEN') return fail(code, 409);
     console.warn('PET_PARTY_FAILED', {code: 'unknown'});
     return sendJson(res, 500, {ok: false, error: 'SERVER_ERROR', message: '잠시 후 다시 해 주세요.'});
   }
@@ -196,6 +218,17 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
   const db = deps.db(), now = deps.now();
   const fail = (code: string, status = 400) => sendJson(res, status, {ok: false, error: code, message: MESSAGES[code] || '잠시 후 다시 해 주세요.'});
   try {
+    if (req.method === 'GET' && new URL(req.url || '', 'http://localhost').searchParams.get('summary') === '1') {
+      // The home screen and the top bar: points, the AI pass, the best 모험가 place and, for 장학 쿠폰 students, this month's
+      // progress (reads only; the ranking snapshot is used as it is, rebuilt here only when over 6 hours old).
+      const [st, pass, couponKey] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection('aiPasses').doc(uid).get(), couponStudentKey(db, uid).catch(() => null)]);
+      const plan = activePlan(pass.data(), seoulDay(now)), state = st.exists ? rollDay(st.data(), now) : null;
+      const coupon = couponKey && state ? couponView(state, true, await readCoupon(db, uid, state.day.slice(0, 7))) : null;
+      // A failed ranking read leaves `rank` out (not null = 'no place'), so the chip just waits for the next visit.
+      const rank = state ? await myPetRank(db, uid, now).then(r => ({rank: r}), () => { console.warn('PET_RANK_FAILED'); return {}; }) : {rank: null};
+      return sendJson(res, 200, {ok: true, hasPet: st.exists, points: state ? Number(state.points || 0) : 0, pass: plan === 'free' ? null : {plan, until: String(pass.data()?.until || '')},
+        coupon: coupon ? {earned: coupon.earned, goal: coupon.goal, requested: coupon.requested} : null, ...rank});
+    }
     if (req.method === 'GET') {
       // Opening the screen: every document is read at once, and the unfinished game comes along (no second request).
       const [snap, userSnap, g, e] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection('users').doc(uid).get(), db.collection(PET_GAMES).doc(uid).get(), db.collection(PET_EXPEDITIONS).doc(uid).get()]);
@@ -203,7 +236,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       const pending = pendingStudyRewards(s, await studyReports(db, uid, user).catch(() => []), now);
       const couponKey = await couponStudentKey(db, uid).catch(() => null), coupon = couponView(s, Boolean(couponKey), couponKey ? await readCoupon(db, uid, s.day.slice(0, 7)) : null);
       return sendJson(res, 200, {ok: true, state: publicPetState(s), saved: snap.exists, pendingRewards: pending.length,
-        run: publicRun(g.data()?.run || null), expedition: publicExpedition(e.exists ? e.data() : initialExpedition(now), currentPet(s).level, currentPet(s).slot), coupon});
+        run: publicRun(g.data()?.run || null), aiTalk: await readPetTalk(db, uid, currentPet(s).slot, now).catch(() => null), expedition: publicExpedition(e.exists ? e.data() : initialExpedition(now), currentPet(s).level, currentPet(s).slot), coupon});
     }
     if (req.method !== 'POST') return fail('PET_BAD_ACTION', 405);
     const body = await parseJsonBody(req).catch(() => ({}));
@@ -239,7 +272,10 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       const mainSlot = petSnap.exists ? currentPet(petSnap.data()).slot : 1;
       if (stage && !stageUnlocked(petProgress(expSnap.exists ? expSnap.data() : initialExpedition(now), mainSlot), stage)) return fail('EXPEDITION_LOCKED');
       if (active && !restart && (active.stage || null) !== stage) return fail('FEED_OTHER_RUN', 409);
-      const fresh = active && !restart ? null : buildRun(await (deps.feedSource || loadFeedSource)(db, uid), current?.day === seoulDay(now) ? current.rewardedToday : [], now, Math.random, stage || undefined, stageQuestions(stage));
+      // The stage's game (원정대: 철자, 듣고 고르기, 짝 맞추기, 문장 배열, 섞어서); sentences from the grade's 문장 세트.
+      const sentences = !(active && !restart) && stage && stageWithSentences(stage) ? await (deps.sentences || loadSentencesFor)(db, uid).catch(() => []) : undefined;
+      const fresh = active && !restart ? null : buildRun(await (deps.feedSource || loadFeedSource)(db, uid), current?.day === seoulDay(now) ? current.rewardedToday : [], now, Math.random, stage || undefined, stageQuestions(stage),
+        {game: stageGame(stage), sentences, quiet: body.quiet === true, noMic: body.noMic === true});
       if (!fresh && !(active && !restart)) return fail('FEED_NO_BOOKS');
       return feedDone(await changeGame(db, uid, now, (s, g, e) => {
         if (stage && !levelOk(stage, currentPet(s).level)) throw Error('EXPEDITION_LEVEL');
@@ -253,13 +289,15 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       }));
     }
     if (action === 'feed-answer') return feedDone(await changeGame(db, uid, now, (s, g, e, party) => {
-      const index = Number(body.index), r: any = answerRun(g, s, String(body.runId || ''), index, Number(body.choice)), q = g.run?.questions[index];
-      if (party && !r.repeat && r.correct && q && !q.retry) r.party = addContribution(party, uid, q.key, petLook(s), now);
+      const index = Number(body.index), r: any = answerRun(g, s, String(body.runId || ''), index, {choice: body.choice === undefined ? undefined : Number(body.choice), text: typeof body.text === 'string' ? body.text.slice(0, 400) : undefined, correct: body.correct === true, pick: Array.isArray(body.pick) ? [Number(body.pick[0]), Number(body.pick[1])] : undefined}), q = g.run?.questions[index];
+      // Party: a word answered right for the first time (sentences and boards don't count toward the boss).
+      if (party && !r.repeat && !r.pending && r.correct && q && !q.retry && ['meaning', 'listen', 'spell', undefined].includes(q.type)) r.party = addContribution(party, uid, q.key, petLook(s), now);
       // The last answer of a stage game settles the stage here, once (a resent answer comes back as `repeat`).
       if (!r.repeat && g.run?.finished && g.run.stage) r.expedition = finishStage(e, s, g.run.stage, runSummary(g.run).stars, g.run.slot);
       return r;
     }));
     if (action === 'choose-job') return feedDone(await changeGame(db, uid, now, (s, _g, e) => chooseJob(e, s, body.job)));
+    if (action === 'choose-job2') return feedDone(await changeGame(db, uid, now, (s, _g, e) => chooseJob2(e, s, body.job2)));
     if (action === 'feed-quit') return feedDone(await changeGame(db, uid, now, (_s, g) => { g.run = null; return {quit: true}; }));
     // 채움의 탑. The end of a battle (won, lost, ran away) sends its missed words to 오답 복습.
     if (action.startsWith('tower-')) {
@@ -281,11 +319,22 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
         const pool = live ? null : await (deps.towerPool || loadTowerPool)(db, uid);
         return towerDone(await changeTower(db, uid, now, (s, tw) => { const tp = towerPet(tw, currentPet(s).slot); if (tp.run || tp.event) return {resumed: true}; if (!pool) throw Error('TOWER_NO_RUN'); return openTowerDoor(tw, s, uid, pool, now, Math.random, body.door, undefined, body.requestId); }));
       }
-      if (action === 'tower-act') return towerDone(await changeTower(db, uid, now, (s, t) => towerAct(t, s, body.move, now)));
+      if (action === 'tower-act') return towerDone(await changeTower(db, uid, now, (s, t) => towerAct(t, s, body.move, now, Math.random, body.skill)));
       if (action === 'tower-event') return towerDone(await changeTower(db, uid, now, (s, t) => towerEvent(t, s, body.move, body, now)));
-      if (action === 'tower-answer') return towerDone(await changeTower(db, uid, now, (s, t) => towerAnswer(t, s, body.runId, body.choice, now)));
+      if (action === 'tower-answer') {
+        const out = await changeTower(db, uid, now, (s, t) => towerAnswer(t, s, body.runId, body.choice, now));
+        // A boss beaten: 명예의 전당 (its own small transaction; a failure there never undoes the win).
+        if (out.result?.won) {
+          try { const hall = await recordTowerHall(db, uid, out.result.floor, out.result.attacks, out.state, out.tower, now); if (hall) out.result.hall = hall; } catch { console.error('TOWER_HALL_FAILED'); }
+        }
+        return towerDone(out);
+      }
+      if (action === 'tower-hall') return sendJson(res, 200, {ok: true, hall: await readTowerHall(db, uid, body.teachers === true)});
       return fail('PET_BAD_ACTION');
     }
+    // 순위 (모험가·원정대) and one pet's room from it.
+    if (action === 'rank-board') return sendJson(res, 200, {ok: true, ranking: await readRankings(db, uid, body.kind, body.teachers, now)});
+    if (action === 'rank-profile') return sendJson(res, 200, {ok: true, profile: await readRankProfile(db, uid, body.at, body.id, body.kind, body.teachers, now)});
     if (action.startsWith('guild-') || action.startsWith('party-')) return handleGuild(action, body, db, uid, now, res, fail);
     if (action === 'rename') return done(await change(db, uid, now, s => renamePet(s, String(body.name || ''))));
     if (action === 'pet') return done(await change(db, uid, now, s => petThePet(s)));
@@ -299,22 +348,27 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       if (pet.energy < cost) return fail('PET_TIRED');
       const phrase = action === 'evolve' ? pet.learnedPhrases.find(p => p.original === text) : null;
       if (action === 'evolve' && !phrase) return fail('PET_BAD_ACTION');
-      const quota = await takePetAiQuota(db, uid, action, now);
-      if (quota !== 'ok') return fail(quota === 'daily' ? 'AI_DAILY_LIMIT' : `PET_AI_${action.toUpperCase()}_LIMIT`, 429);
+      const kind = action === 'evolve' ? 'evolve' : 'talk', quota = await takePetTalkQuota(db, uid, pet.slot, kind, now);
+      if ('code' in quota) return quota.code === 'PET_TALK_LIMIT' ? sendJson(res, 429, {ok: false, error: quota.code, message: quota.plan === 'free' ? `이번 달 이 펫과의 대화 ${AI_PLANS.free.petTalkPerPet}번을 다 썼어요. ${PASS_NOTE.pet}` : `이번 달 펫 대화 ${AI_PLANS[quota.plan].petTalk}번을 다 썼어요. 다음 달에 또 이야기해요!`}) : fail(quota.code, 429);
       let reply: any;
-      try { reply = parseAi(await deps.generate(action === 'teach' ? teachRequest(pet, text) : action === 'chat' ? chatRequest(pet, text, Array.isArray(body.history) ? body.history : []) : evolveRequest(pet, phrase!.remembered))); }
-      catch (e: any) { const code = aiErrorCode(e); console.warn('PET_AI_FAILED', {action, code}); await refundPetAiQuota(db, uid, action, now).catch(() => undefined); return fail(code, 503); } // the code only, never the words
+      try { reply = parseAi(await deps.generate(action === 'teach' ? teachRequest(pet, text) : action === 'chat' ? chatRequest(pet, text, Array.isArray(body.history) ? body.history : []) : evolveRequest(pet, phrase!.remembered, phrase!.original))); }
+      catch (e: any) { const code = aiErrorCode(e); console.warn('PET_AI_FAILED', {action, code}); await refundPetTalkQuota(db, uid, pet.slot, kind, now).catch(() => undefined); return fail(code, 503); } // the code only, never the words
       const say = cleanPetSpeech(String(reply.response || reply.monologue || ''), petEmojiLimit(pet.level)).slice(0, 200);
-      if (!say) { console.warn('PET_AI_FAILED', {action, code: 'AI_EMPTY_REPLY'}); await refundPetAiQuota(db, uid, action, now).catch(() => undefined); return fail('AI_FAILED', 502); }
-      return done(await change(db, uid, now, s => {
-        const p = currentPet(s), key = String(Math.floor(p.level / 10) * 10);
+      if (!say) { console.warn('PET_AI_FAILED', {action, code: 'AI_EMPTY_REPLY'}); await refundPetTalkQuota(db, uid, pet.slot, kind, now).catch(() => undefined); return fail('AI_FAILED', 502); }
+      // The reply goes to the pet it was asked of (counted for that slot), even if the main pet changed meanwhile.
+      const talked = await change(db, uid, now, s => {
+        const p = s.pets.find(x => x.slot === pet.slot);
+        if (!p) throw Error('PET_BAD_ACTION');
+        const key = String(Math.floor(p.level / 10) * 10);
         if (action === 'evolve') { const lp = p.learnedPhrases.find(x => x.original === text); if (lp) lp.evolvedVersions[key] = say; return {reply: say}; }
         if (p.energy < cost) throw Error('PET_TIRED');
         p.energy -= cost;
         if (action === 'teach') { p.learnedPhrases = [...p.learnedPhrases, {original: text.slice(0, 100), remembered: String(reply.remembered || text).slice(0, 100), learnedAtLevel: p.level, evolvedVersions: {[key]: say}}].slice(-50); }
-        const {leveledUp} = addXP(s, PET_ACTIONS[action].xp);
+        const {leveledUp} = addXP(s, PET_ACTIONS[action].xp, p);
         return {reply: say, leveledUp};
-      }));
+      }).catch(async (e: any) => { await refundPetTalkQuota(db, uid, pet.slot, kind, now).catch(() => undefined); throw e; }); // not saved: the talk is given back
+      // The talk tab shows how many talks are left this month.
+      return done(talked, kind === 'talk' ? {aiTalk: await readPetTalk(db, uid, pet.slot, now).catch(() => null)} : {});
     }
     return fail('PET_BAD_ACTION');
   } catch (e: any) {

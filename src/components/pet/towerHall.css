@@ -32,3 +32,21 @@
 .tower-shake{display:inline-block;animation:tower-shake .5s infinite}
 @keyframes tower-shake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
 @media (prefers-reduced-motion:reduce){.tower-gate-leaf,.tower-door-leaf,.tower-chest-lid{transition-duration:.01s}.tower-chest-idle,.tower-loot,.tower-torch::after,.tower-float,.tower-shake{animation:none}}
+/* 탑 4단계 전투 효과 (0.5–1s): hit spark and damage number, miss swoosh, crit flash, monster lunge, shield bubble, hurt shake, 도감 toast */
+.tw-pop{animation:tw-pop .95s ease-out forwards}
+@keyframes tw-pop{0%{opacity:0;transform:translateY(6px) scale(.7)}20%{opacity:1;transform:translateY(0) scale(1.15)}100%{opacity:0;transform:translateY(-28px) scale(1)}}
+.tw-spark{animation:tw-spark .5s ease-out forwards}
+@keyframes tw-spark{0%{opacity:1;transform:scale(.4) rotate(0)}100%{opacity:0;transform:scale(1.6) rotate(40deg)}}
+.tw-swoosh{animation:tw-swoosh .7s ease-out forwards}
+@keyframes tw-swoosh{0%{opacity:0;transform:translateX(-26px)}30%{opacity:1}100%{opacity:0;transform:translateX(30px)}}
+.tw-crit{animation:tw-crit .9s ease-out}
+@keyframes tw-crit{0%,60%{box-shadow:inset 0 0 0 4px var(--tw-crit,#e24b4a),inset 0 0 26px var(--tw-crit,#e24b4a)}100%{box-shadow:inset 0 0 0 0 transparent}}
+.tw-lunge{animation:tw-lunge .5s ease-in-out}
+@keyframes tw-lunge{45%{transform:translate(-26px,20px) scale(1.06)}}
+.tw-shield{animation:tw-shield .85s ease-out forwards}
+@keyframes tw-shield{0%{opacity:.95;transform:scale(.55)}60%{opacity:.8;transform:scale(1.08)}100%{opacity:0;transform:scale(1.2)}}
+.tw-hurt{animation:tw-hurt .55s ease-in-out}
+@keyframes tw-hurt{20%{transform:translateX(-5px);filter:drop-shadow(0 0 6px #e24b4a)}40%{transform:translateX(5px)}60%{transform:translateX(-3px);filter:drop-shadow(0 0 6px #e24b4a)}80%{transform:translateX(2px)}}
+.tw-toast{animation:tw-toast 2.4s ease-out forwards}
+@keyframes tw-toast{0%{opacity:0;transform:translate(-50%,-6px)}12%,80%{opacity:1;transform:translate(-50%,0)}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.tw-pop,.tw-spark,.tw-swoosh,.tw-crit,.tw-lunge,.tw-shield,.tw-hurt,.tw-toast{animation-duration:.01s}}

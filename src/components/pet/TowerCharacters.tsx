@@ -47,10 +47,13 @@ export const DRAGON_COLORS = [
   { body: '#e24b4a', dark: '#a32d2d', belly: '#fac775', wing: '#f09595' }, { body: '#378add', dark: '#185fa5', belly: '#d6ecfb', wing: '#85b7eb' },
   { body: '#639922', dark: '#3b6d11', belly: '#eaf3de', wing: '#97c459' }, { body: '#7f77dd', dark: '#534ab7', belly: '#eeedfe', wing: '#afa9ec' },
   { body: '#2c2c2a', dark: '#111110', belly: '#888780', wing: '#5f5e5a' }, { body: '#ba7517', dark: '#854f0b', belly: '#fac775', wing: '#ef9f27' },
+  // 서리 용 (the 40층 boss), not among the sleeping dragon's random looks.
+  { body: '#b5d4f4', dark: '#378add', belly: '#ffffff', wing: '#e6f1fb' },
 ];
+export const FROST_DRAGON_COLOR = 6;
 /** 드래곤: horns, spines, folded wings, a long tail; curled up asleep (closed eyes, Zz) or awake and fierce. */
 export function TowerDragon({ color = 0, asleep = true, size = 150 }: { color?: number; asleep?: boolean; size?: number }) {
-  const c = DRAGON_COLORS[color % DRAGON_COLORS.length];
+  const c = DRAGON_COLORS[color] || DRAGON_COLORS[color % DRAGON_COLORS.length];
   return <svg viewBox="0 0 160 110" width={size} height={size * 110 / 160} role="img" aria-label={asleep ? '잠든 드래곤' : '깨어난 드래곤'}>
     <ellipse cx="80" cy="104" rx="64" ry="5" fill="#000" opacity=".25" />
     <path d="M118 92 Q150 90 152 70 Q154 56 142 60 Q146 78 120 82Z" fill={c.body} stroke={c.dark} strokeWidth="1.6" />
@@ -99,3 +102,78 @@ export function TowerBossGolem({ size = 130 }: { size?: number }) {
     <circle cx="100" cy="16" r="3.5" fill={glow} stroke={crownLn} strokeWidth="1.2" />
   </svg>;
 }
+
+/** 20층 수정 여왕 거미: a big violet queen — jointed legs with dark tips, a crystal cluster glowing on her back, a crystal
+ *  tiara, six glowing eyes and fangs, a faint web behind her. */
+export function TowerBossSpider({ size = 150 }: { size?: number }) {
+  const legs = [[-1, 30], [-1, 50], [-1, 66], [-1, 80], [1, 30], [1, 50], [1, 66], [1, 80]] as const;
+  return <svg viewBox="0 0 160 110" width={size} height={size * 110 / 160} role="img" aria-label="수정 여왕 거미">
+    <g stroke="#cecbf6" strokeWidth=".8" fill="none" opacity=".7"><path d="M80 4 V40 M40 8 L80 40 L120 8 M20 30 L80 40 L140 30" /><path d="M56 14 Q80 24 104 14 M44 24 Q80 36 116 24" /></g>
+    <ellipse cx="80" cy="104" rx="60" ry="5" fill="#000" opacity=".22" />
+    {legs.map(([d, y], i) => { const x0 = 80 + d * 16, kx = 80 + d * (46 + (i % 4) * 4), ky = y - 18, fx = 80 + d * (64 + (i % 4) * 5), fy = y + 22;
+      return <g key={i}><path d={`M${x0} ${y + 12} L${kx} ${ky} L${fx} ${fy}`} fill="none" stroke="#26215c" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" /><path d={`M${x0} ${y + 12} L${kx} ${ky} L${fx} ${fy}`} fill="none" stroke="#534ab7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /><circle cx={kx} cy={ky} r="2.6" fill="#7f77dd" /><path d={`M${fx} ${fy} l${d * 4} 6`} stroke="#111110" strokeWidth="3" strokeLinecap="round" /></g>; })}
+    <ellipse cx="80" cy="74" rx="30" ry="24" fill="#3c3489" stroke="#26215c" strokeWidth="2.4" />
+    <path d="M80 56 l6 10 -6 10 -6 -10z M80 78 l5 8 -5 8 -5 -8z" fill="#e24b4a" opacity=".85" />
+    <g stroke="#185fa5" strokeWidth="1.4" strokeLinejoin="round"><path d="M60 62 l5 -22 7 20z" fill="#b5e3f4" /><path d="M70 58 l6 -30 8 28z" fill="#e6f7fd" /><path d="M84 58 l8 -26 6 26z" fill="#b5e3f4" /><path d="M94 62 l9 -16 3 18z" fill="#85b7eb" /></g>
+    <circle cx="75" cy="40" r="2" fill="#ffffff" opacity=".9" /><circle cx="90" cy="46" r="1.5" fill="#ffffff" opacity=".9" />
+    <ellipse cx="80" cy="44" rx="16" ry="14" fill="#534ab7" stroke="#26215c" strokeWidth="2.2" transform="translate(0 4)" />
+    <g stroke="#185fa5" strokeWidth="1.2" strokeLinejoin="round"><path d="M68 38 l3 -9 4 8z M76 35 l4 -12 4 12z M85 37 l4 -9 3 9z" fill="#e6f7fd" /></g>
+    <circle cx="80" cy="25" r="2.2" fill="#e24b4a" />
+    <g fill="#e24b4a"><circle cx="73" cy="46" r="3" /><circle cx="87" cy="46" r="3" /><circle cx="69" cy="52" r="2" /><circle cx="91" cy="52" r="2" /><circle cx="76" cy="40" r="1.6" /><circle cx="84" cy="40" r="1.6" /></g>
+    <g fill="#fff"><circle cx="74" cy="45" r="1" /><circle cx="88" cy="45" r="1" /></g>
+    <path d="M74 58 Q72 66 76 68 Q76 62 78 60 Z M86 58 Q88 66 84 68 Q84 62 82 60 Z" fill="#f1efe8" stroke="#26215c" strokeWidth="1" />
+  </svg>;
+}
+
+/** 30층 스핑크스: a great golden lion lying with paws forward under a sun disk — a striped blue-gold headdress with the
+ *  royal cobra, kohl-lined eyes looking straight ahead, a jewelled collar and a braided beard. */
+export function TowerBossSphinx({ size = 150 }: { size?: number }) {
+  return <svg viewBox="0 0 160 110" width={size} height={size * 110 / 160} role="img" aria-label="스핑크스">
+    <circle cx="66" cy="34" r="30" fill="#fac775" opacity=".35" /><circle cx="66" cy="34" r="24" fill="none" stroke="#ef9f27" strokeWidth="1.4" opacity=".6" />
+    <ellipse cx="82" cy="104" rx="66" ry="5" fill="#000" opacity=".22" />
+    <path d="M150 96 Q158 80 148 74" fill="none" stroke="#ba7517" strokeWidth="4" strokeLinecap="round" /><path d="M146 72 l6 -4 1 7z" fill="#854f0b" />
+    <path d="M60 100 Q58 66 96 62 H130 Q152 66 150 100 Z" fill="#ef9f27" stroke="#854f0b" strokeWidth="2" />
+    <path d="M100 74 Q120 70 138 76 M98 84 Q120 80 142 86" stroke="#ba7517" strokeWidth="1.4" fill="none" opacity=".7" />
+    <path d="M14 100 Q12 90 26 88 H62 V100 Z M30 92 h4 M40 92 h4 M50 92 h4" fill="#ef9f27" stroke="#854f0b" strokeWidth="2" />
+    <path d="M40 54 Q42 20 66 16 Q90 20 92 54 L96 82 H36 Z" fill="#378add" stroke="#0c447c" strokeWidth="2.2" />
+    <g stroke="#fac775" strokeWidth="3.4"><path d="M43 40 H89 M41 50 H91 M39 60 H93 M38 70 H94" /></g>
+    <path d="M36 82 Q66 96 96 82 L92 76 Q66 88 40 76 Z" fill="#fac775" stroke="#854f0b" strokeWidth="1.4" />
+    <g fill="#e24b4a"><circle cx="50" cy="83" r="1.6" /><circle cx="66" cy="87" r="1.8" /><circle cx="82" cy="83" r="1.6" /></g><g fill="#378add"><circle cx="58" cy="85.5" r="1.4" /><circle cx="74" cy="85.5" r="1.4" /></g>
+    <path d="M50 30 Q52 22 66 22 Q80 22 82 30 L82 62 Q74 72 66 72 Q58 72 50 62 Z" fill="#fac775" stroke="#854f0b" strokeWidth="1.8" />
+    <path d="M62 16 Q66 8 70 16 Q72 22 66 24 Q60 22 62 16 Z" fill="#e24b4a" stroke="#791f1f" strokeWidth="1.2" /><circle cx="66" cy="14" r="1.2" fill="#fac775" />
+    <path d="M54 40 H62 M70 40 H78" stroke="#0c447c" strokeWidth="2" strokeLinecap="round" />
+    <path d="M53 46 Q58 42 63 46 Q58 49 53 46 Z M69 46 Q74 42 79 46 Q74 49 69 46 Z" fill="#ffffff" stroke="#26215c" strokeWidth="1.4" />
+    <circle cx="58" cy="46" r="2" fill="#26215c" /><circle cx="74" cy="46" r="2" fill="#26215c" />
+    <path d="M52 47 l-3 2 M80 47 l3 2" stroke="#26215c" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M66 48 V56 Q64 58 62 57 M66 56 Q68 58 70 57" fill="none" stroke="#854f0b" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M60 62 Q66 65 72 62" fill="none" stroke="#633806" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M62 70 h8 v12 q-4 3 -8 0 Z" fill="#378add" stroke="#0c447c" strokeWidth="1.2" /><path d="M62 74 h8 M62 78 h8" stroke="#fac775" strokeWidth="1" />
+  </svg>;
+}
+
+/** 40층 서리 용: an ice dragon rearing up — a crystal crown, ice spikes down its back, frost-edged wings with icicles,
+ *  glowing eyes and an icy breath with snowflakes. */
+export function TowerBossFrostDragon({ size = 150 }: { size?: number }) {
+  const c = { body: '#b5d4f4', dark: '#185fa5', belly: '#ffffff', wing: '#e6f1fb', ice: '#85f0ff' };
+  return <svg viewBox="0 0 160 110" width={size} height={size * 110 / 160} role="img" aria-label="서리 용">
+    <ellipse cx="84" cy="104" rx="64" ry="5" fill="#000" opacity=".22" />
+    <path d="M120 94 Q152 92 154 70 Q156 54 142 58 Q148 78 122 84Z" fill={c.body} stroke={c.dark} strokeWidth="1.6" /><path d="M146 56 l8 -8 l-1 12z" fill={c.ice} stroke={c.dark} strokeWidth="1" />
+    <path d="M70 46 Q66 2 106 6 Q96 22 112 30 Q100 30 102 42 Q90 36 84 50Z" fill={c.wing} stroke={c.dark} strokeWidth="1.6" />
+    <path d="M78 42 L96 12 M84 46 L104 24 M90 48 L106 38" stroke={c.dark} strokeWidth="1" opacity=".55" />
+    <path d="M96 12 l-2 8 3 -3z M104 26 l-1 7 3 -4z M108 32 l0 7 2 -5z" fill={c.ice} stroke={c.dark} strokeWidth=".6" />
+    <path d="M46 98 Q38 56 84 50 Q128 52 126 92 Q126 102 104 102 H60 Q48 102 46 98Z" fill={c.body} stroke={c.dark} strokeWidth="2" />
+    <path d="M64 100 Q66 70 90 68 Q114 70 112 100Z" fill={c.belly} opacity=".95" /><path d="M68 76 h40 M66 84 h46 M66 92 h46" stroke={c.dark} strokeWidth=".8" opacity=".3" />
+    {[0, 1, 2, 3, 4].map(i => <path key={i} d={`M${72 + i * 10} ${52 - Math.sin(i / 1.3) * 3} l4 -12 l5 12z`} fill={c.ice} stroke={c.dark} strokeWidth=".8" />)}
+    <ellipse cx="64" cy="101" rx="9" ry="4" fill={c.dark} /><ellipse cx="108" cy="101" rx="9" ry="4" fill={c.dark} />
+    <path d="M44 74 Q34 60 34 46" fill="none" stroke={c.body} strokeWidth="14" strokeLinecap="round" /><path d="M44 74 Q34 60 34 46" fill="none" stroke={c.dark} strokeWidth="1.6" opacity=".5" />
+    <path d="M10 40 Q8 20 30 18 Q50 18 52 34 Q52 50 32 52 Q12 52 10 40Z" fill={c.body} stroke={c.dark} strokeWidth="2" />
+    <path d="M22 20 Q16 4 26 0 Q26 10 32 18Z M40 19 Q44 4 54 2 Q48 12 46 20Z" fill={c.belly} stroke={c.dark} strokeWidth="1.2" />
+    <path d="M24 18 l3 -10 4 8 4 -11 4 11 4 -8 2 10z" fill={c.ice} stroke={c.dark} strokeWidth="1" strokeLinejoin="round" />
+    <path d="M22 30 l11 3 M48 30 l-11 3" stroke={c.dark} strokeWidth="2.4" strokeLinecap="round" />
+    <ellipse cx="28" cy="36" rx="3.6" ry="4" fill={c.ice} /><ellipse cx="42" cy="36" rx="3.6" ry="4" fill={c.ice} /><rect x="27" y="33" width="2" height="6.5" rx="1" fill="#042c53" /><rect x="41" y="33" width="2" height="6.5" rx="1" fill="#042c53" />
+    <path d="M12 44 q10 6 22 0 l-3 4 -3 -3 -3 4 -3 -4 -3 4 -3 -4z" fill="#fff" stroke={c.dark} strokeWidth="1" />
+    <path d="M10 46 Q-2 52 2 64 Q8 56 14 60 Q8 50 14 48Z" fill={c.ice} opacity=".55" />
+    <g stroke={c.ice} strokeWidth="1.2" strokeLinecap="round"><path d="M4 70 v8 M0 74 h8 M1.2 71.2 l5.6 5.6 M6.8 71.2 l-5.6 5.6" /><path d="M14 80 v6 M11 83 h6" /></g>
+  </svg>;
+}
+

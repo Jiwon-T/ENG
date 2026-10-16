@@ -18,7 +18,7 @@ export function SortableWordbookCard({
   onClick: () => void; 
   onDelete: () => void; 
   onEdit: () => void; 
-  onMoveCategory?: (targetCategory: 'word' | 'grammar' | 'exam') => void;
+  onMoveCategory?: (targetCategory: 'word' | 'grammar' | 'exam') => void; // 문장 세트 stay in their tab
   key?: string;
 }) {
   const {
@@ -105,6 +105,7 @@ export function SortableWordbookCard({
         <p className="text-[11px] text-slate-400 font-medium">
           {wb.createdAt?.toDate ? wb.createdAt.toDate().toLocaleDateString() : '등록됨'}
         </p>
+        {wbCat !== 'sentence' && (
         <div 
           className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold hover:bg-white hover:border-slate-300 transition-all shadow-2xs"
           onClick={(e) => e.stopPropagation()}
@@ -124,6 +125,7 @@ export function SortableWordbookCard({
             <option value="exam">🎯 시험기간</option>
           </select>
         </div>
+        )}
       </div>
     </motion.div>
   );

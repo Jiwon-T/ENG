@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {chooseJob, finishStage, initialExpedition, publicExpedition} from '../api/_lib/petExpedition.js';
+import {chooseJob, chooseJob2, finishStage, initialExpedition, publicExpedition} from '../api/_lib/petExpedition.js';
 import {currentPet, equipItem, initialPetState, normalizePets, publicPetState, wearItem} from '../api/_lib/pet.js';
 import {buildRun} from '../api/_lib/petWordFeed.js';
 import {STAGE_IDS} from '../api/_lib/petExpedition.js';
@@ -42,22 +42,41 @@ test('chapters 4–6: the crown stage gives the background and both a sword and 
   assert.equal(s.inventory.filter(id => id === 'wood_sword').length, 1);
 });
 
-test('꿈의 정원: clearing its crown stage lets the main pet choose 검사 or 마법사, once per pet; replays stay playable', () => {
+test('1차 전직 at 5장 설산: the crown stage lets the main pet choose 검사 or 마법사, once per pet; replays stay playable', () => {
   const e = initialExpedition(NOW), s = initialPetState(NOW);
-  assert.equal(finishStage(e, s, 'dream-5', 1).jobChoice, false, 'one star does not clear a crown stage');
-  assert.equal(finishStage(e, s, 'dream-5', 2).jobChoice, true);
+  assert.equal(finishStage(e, s, 'snow-5', 1).jobChoice, false, 'one star does not clear a crown stage');
+  assert.equal(finishStage(e, s, 'dream-5', 2).jobChoice, false, '꿈의 정원 is the 2차 전직 now');
+  assert.equal(finishStage(e, s, 'snow-5', 2).jobChoice, true);
   assert.deepEqual(publicExpedition(e, 70).jobReady, [currentPet(s).slot]);
   assert.throws(() => chooseJob(e, s, 'king'), /PET_JOB_BAD/);
-  assert.deepEqual(chooseJob(e, s, 'wizard'), {job: 'wizard', weapon: 'dream_staff'});
-  assert.deepEqual([currentPet(s).job, currentPet(s).accessories.hand, s.inventory.includes('dream_staff'), e.jobReady], ['wizard', 'dream_staff', true, []]);
+  assert.deepEqual(chooseJob(e, s, 'wizard'), {job: 'wizard', weapon: 'ice_staff'});
+  assert.deepEqual([currentPet(s).job, currentPet(s).accessories.hand, s.inventory.includes('ice_staff'), s.inventory.includes('ice_sword'), e.jobReady], ['wizard', 'ice_staff', true, false, []], 'only the chosen job weapon');
   assert.throws(() => chooseJob(e, s, 'swordsman'), /PET_JOB_TAKEN/);
-  assert.equal(finishStage(e, s, 'dream-5', 3).jobChoice, false, 'a pet with a job just replays');
-  // A second pet (from Lv.100) has to clear 꿈의 정원 itself before it can choose (it may pick the other job).
-  s.pets.push({...s.pets[0], slot: 2, character: 'hodu', job: null, accessories: {}}); s.currentPetSlot = 2;
+  assert.equal(finishStage(e, s, 'snow-5', 3).jobChoice, false, 'a pet with a job just replays');
+  // A second pet (from Lv.100) has to clear 5장 itself before it can choose (it may pick the other job).
+  s.pets.push({...s.pets[0], slot: 2, character: 'hodu', job: null, job2: null, accessories: {}}); s.currentPetSlot = 2;
   assert.throws(() => chooseJob(e, s, 'swordsman'), /PET_JOB_LOCKED/);
-  finishStage(e, s, 'dream-5', 2);
-  assert.equal(chooseJob(e, s, 'swordsman').weapon, 'dream_sword');
+  finishStage(e, s, 'snow-5', 2);
+  assert.equal(chooseJob(e, s, 'swordsman').weapon, 'ice_sword');
   assert.deepEqual(s.pets.map(p => p.job), ['wizard', 'swordsman']);
+});
+
+test('6장 gives the job a better weapon; 2차 전직 at 7장 꿈의 정원 (light or dark of that job); ★3 there gives the dream weapons once', () => {
+  const e = initialExpedition(NOW), s = initialPetState(NOW);
+  assert.deepEqual(finishStage(e, s, 'night-5', 2).gear, [], 'no job yet: nothing');
+  finishStage(e, s, 'snow-5', 2);
+  assert.deepEqual(chooseJob(e, s, 'swordsman').weapon, 'ice_sword');
+  assert.ok(s.inventory.includes('star_sword') && currentPet(s).accessories.hand === 'star_sword', '6장 already cleared: the better weapon comes with the job');
+  assert.deepEqual(finishStage(e, s, 'night-5', 3).gear, [], 'already owned');
+  assert.throws(() => chooseJob2(e, s, 'paladin'), /PET_JOB2_LOCKED/);
+  const out = finishStage(e, s, 'dream-5', 2);
+  assert.deepEqual([out.job2Choice, publicExpedition(e, 70).job2Ready], [true, [currentPet(s).slot]]);
+  assert.throws(() => chooseJob2(e, s, 'white_mage'), /PET_JOB2_BAD/, 'a 검사 chooses a 검사 branch');
+  assert.deepEqual(chooseJob2(e, s, 'dark_knight'), {job2: 'dark_knight', weapon: 'obsidian_sword'});
+  assert.deepEqual([currentPet(s).job2, currentPet(s).accessories.hand, e.job2Ready], ['dark_knight', 'obsidian_sword', []]);
+  assert.throws(() => chooseJob2(e, s, 'paladin'), /PET_JOB_TAKEN/);
+  assert.deepEqual(finishStage(e, s, 'dream-5', 3).gear, ['dream_sword', 'dream_staff'], '★3: the dream weapons (looks only)');
+  assert.deepEqual(finishStage(e, s, 'dream-5', 3).gear, [], 'once');
 });
 
 test('later chapters ask more questions: 1–3장 10, 4·5장 12, 6·7장 15', () => {

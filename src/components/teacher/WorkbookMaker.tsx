@@ -5,7 +5,7 @@ import {
   type WorkbookBuild, type WorkbookHistory, type WorkbookSentence,
 } from '../../lib/workbook';
 import { readWorkbookFile } from '../../lib/workbookImport';
-import { auth } from '../../lib/firebase';
+import { AiWorking, workbookTranslate } from './workbookAi';
 
 // 워크북 만들기 (관리자): 1 지문 입력 → 2 문장·해석 확인 → 3 미리보기·Word. The sentence list keeps each sentence's
 // translation by id, so moving, splitting or merging never pairs a translation with the wrong sentence.
@@ -71,7 +71,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
     // Only the ones still empty are filled: anything typed meanwhile stays.
     // Applied only to sentences whose English is unchanged since the request (and still empty).
     setSentences(list => applyAiTranslations(list, asked, r.translations || [])); setBuild(null); setReviewedKey('');
-    setMessage(`해석 ${todo.length}개를 채웠어요. 확인하고 고쳐 주세요.`);
+    setMessage(`해석 ${todo.length}개를 채웠어요. 확인하고 고쳐 주세요.${typeof r.left === 'number' ? ` (이번 달 남은 AI 해석 ${r.left}번)` : ''}`);
   });
 
   const generate = (again = false) => run('build', async () => {
@@ -125,7 +125,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
     {step === 2 && <div className="space-y-2">
       <div className={`${card} flex flex-wrap items-center justify-between gap-2`}>
         <span className="text-sm text-slate-600"><b className="text-[#5e1e2a]">{sentences.length}문장</b> · 해석 {sentences.length - missing}/{sentences.length}{missing > 0 && <span className="ml-1 font-bold text-[#b04a5a]">({missing}개 비어 있음)</span>}</span>
-        <span className="flex flex-wrap gap-1.5"><button type="button" className={quiet} disabled={!!busy || !missing} onClick={() => void translate()}><Sparkles size={13} aria-hidden="true" />{busy === 'translate' ? 'AI 해석 중…' : '빈 해석 AI로 채우기'}</button><button type="button" className={quiet} onClick={() => setPasteOpen(o => !o)}><ClipboardPaste size={13} aria-hidden="true" />해석 줄 단위 붙여넣기</button></span>
+        <span className="flex flex-wrap items-center gap-1.5">{busy === 'translate' && <AiWorking />}<button type="button" className={quiet} disabled={!!busy || !missing} onClick={() => void translate()}><Sparkles size={13} aria-hidden="true" />{busy === 'translate' ? 'AI 해석 중…' : '빈 해석 AI로 채우기'}</button><button type="button" className={quiet} onClick={() => setPasteOpen(o => !o)}><ClipboardPaste size={13} aria-hidden="true" />해석 줄 단위 붙여넣기</button></span>
       </div>
       {pasteOpen && <div className={`${card} space-y-2`}>
         <textarea value={pasteText} onChange={e => setPasteText(e.target.value)} rows={5} aria-label="해석 붙여넣기" placeholder="한 줄에 한 문장의 해석. 1번 문장부터 순서대로 짝지어요." className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
@@ -174,13 +174,6 @@ export default function WorkbookMaker({ request }: { request: Request }) {
   </section>;
 }
 const FOOTER_KEY = 'workbook-footer';
-/** AI 해석 from /api/gemini?task=workbook (the Seoul function: Gemini does not serve the Hong Kong region). */
-async function workbookTranslate(sentences: string[]): Promise<{ translations: string[] }> {
-  const token = await auth.currentUser?.getIdToken();
-  const r = await fetch('/api/gemini?task=workbook', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ sentences }) });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok || !data?.ok) throw Error(data?.message || 'AI 해석을 받지 못했어요. 잠시 후 다시 해 주세요.');
-  return data;
-}
 /** "1. 해석" / "1) 해석" pasted from a numbered list: the number is not part of the translation. */
 const stripKoNumber = (line: string) => line.replace(/^\s*(?:\(?\d{1,3}[).]|[①-⑳])\s*/, '').trim();
+

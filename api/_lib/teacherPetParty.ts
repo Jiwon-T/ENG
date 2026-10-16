@@ -2,12 +2,13 @@ import {z} from 'zod';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
-import {PET_GUILD, PET_PARTIES, inactiveDays, progressOf, shownNickname, warnNickname, weekOf, type GuildProfile, type Party} from './petParty.js';
-import {PET_STATES, publicPetState, rollDay, type ServerPetState} from './pet.js';
+import {PET_GUILD, PET_PARTIES, inactiveDays, memberNames, normalizeGuild, progressOf, shownGuild, shownNickname, updateMemberNames, warnName, weekOf, type GuildProfile, type Party} from './petParty.js';
+import {PET_STATES, currentPet, publicPetState, rollDay, type ServerPetState} from './pet.js';
 import {PET_EXPEDITIONS, initialExpedition, publicExpedition} from './petExpedition.js';
 
 // 원정대 파티 for teachers: a teacher sees the whole team of their own student (students of the same academy by name,
-// others by nickname only); the admin sees every nickname and can warn one (the student must then pick a new one).
+// others by 원정대 이름·별칭 only); the admin sees every 원정대 이름 and 모험가 별칭 and can warn one (the student must then
+// pick a new one).
 const allowedStudent = (actor: any, key: string) => actor.admin || actor.principal || [...(actor.scopes || []), ...(actor.teachingScopes || [])].some((s: any) => s.studentKey === key);
 function admin(actor: any) { if (!actor.admin || actor.academyId !== 'main') throw Error('FORBIDDEN'); }
 
@@ -30,34 +31,43 @@ export async function readStudentParty(db: any, actor: any, id: unknown, now = D
   if (!uid) return {party: null};
   const guild = (await db.collection(PET_GUILD).doc(uid).get()).data() as GuildProfile | undefined, partyId = guild?.parties?.[weekOf(now)];
   const party = partyId ? (await db.collection(PET_PARTIES).doc(partyId).get()).data() as Party | undefined : undefined;
-  if (!party) return {party: null, nickname: guild?.nickname || ''};
+  const own = guild ? shownGuild(guild) || shownNickname(guild) : '';
+  if (!party) return {party: null, nickname: own};
   const members = await Promise.all([...party.members].sort((a, b) => b.count - a.count).map(async m => {
     const name = await nameInAcademy(db, m.uid, actor.academyId);
-    return {name, ourAcademy: Boolean(name), nickname: m.nickname, pet: m.pet, count: m.count, status: m.status, idleDays: inactiveDays(m, now), isStudent: m.uid === uid};
+    return {name, ourAcademy: Boolean(name), nickname: memberNames(m).nickname, pet: m.pet, count: m.count, status: m.status, idleDays: inactiveDays(m, now), isStudent: m.uid === uid};
   }));
-  return {party: {name: party.name, boss: party.boss, size: party.size, progress: progressOf(party), hp: party.hp, hpMax: party.hpMax, week: party.week, members}, nickname: guild?.nickname || ''};
+  return {party: {name: party.name, boss: party.boss, size: party.size, progress: progressOf(party), hp: party.hp, hpMax: party.hpMax, week: party.week, members}, nickname: own};
 }
 
-/** Admin: every guild nickname with the account name, newest first. */
+/** Admin: every student's 원정대 이름 and each pet's 모험가 별칭 with the account name, newest first. */
 export async function listGuildNicknames(db: any, actor: any) {
   admin(actor);
-  const docs = (await db.collection(PET_GUILD).limit(1000).get()).docs.filter((d: any) => d.data()?.nickname);
-  const rows = await Promise.all(docs.map(async (d: any) => { const g = d.data() as GuildProfile, u = (await db.collection('users').doc(d.id).get()).data() || {};
-    return {uid: d.id, nickname: g.nickname, warned: Boolean(g.warned), banned: g.banned?.length || 0, account: String(u.alias || u.name || '').slice(0, 80), updatedAt: g.updatedAt || 0}; }));
+  const docs = (await db.collection(PET_GUILD).limit(1000).get()).docs.filter((d: any) => { const g = d.data(); return g?.nickname || g?.guildName || Object.keys(g?.aliases || {}).length; });
+  const rows = await Promise.all(docs.map(async (d: any) => {
+    const g = d.data() as GuildProfile, [u, st] = await Promise.all([db.collection('users').doc(d.id).get(), db.collection(PET_STATES).doc(d.id).get()]), s = st.exists ? st.data() as ServerPetState : null;
+    if (s) normalizeGuild(g, currentPet(rollDay(s, Date.now())).slot);
+    const petName = (slot: number) => s?.pets?.find(p => p.slot === slot)?.name || `펫 ${slot}`;
+    return {uid: d.id, guildName: g.guildName || '', guildWarned: Boolean(g.guildWarned), aliases: Object.entries(g.aliases || {}).filter(([, a]) => a).map(([slot, alias]) => ({slot: Number(slot), pet: petName(Number(slot)), alias, warned: Boolean(g.aliasWarned?.[slot])})),
+      banned: g.banned?.length || 0, account: String(u.data()?.alias || u.data()?.name || '').slice(0, 80), updatedAt: g.updatedAt || 0};
+  }));
   return {rows: rows.sort((a, b) => b.updatedAt - a.updatedAt)};
 }
 
-/** Admin warning: the nickname is shown as "별칭 바꾸는 중" until the student picks a new one, and can't be used again. */
+/** Admin warning on a 원정대 이름 (`target: 'guild'`) or one pet's 별칭 (`target`: the pet's slot): shown as "…바꾸는 중"
+ *  until the student picks a new one, and this student can't use it again. */
 export async function warnGuildNickname(db: any, actor: any, input: unknown, now = Date.now()) {
   admin(actor);
-  const {uid} = z.object({uid: z.string().min(1).max(128)}).strict().parse(input);
-  const ref = db.collection(PET_GUILD).doc(uid);
+  const {uid, target} = z.object({uid: z.string().min(1).max(128), target: z.union([z.literal('guild'), z.number().int().min(1).max(20)])}).strict().parse(input);
+  const ref = db.collection(PET_GUILD).doc(uid), stateRef = db.collection(PET_STATES).doc(uid);
   return db.runTransaction(async (tx: any) => {
-    const snap = await tx.get(ref); if (!snap.exists || !snap.data()?.nickname) throw Error('NOT_FOUND');
+    const snap = await tx.get(ref), st = await tx.get(stateRef); if (!snap.exists) throw Error('NOT_FOUND');
     const g = snap.data() as GuildProfile, partyId = g.parties?.[weekOf(now)], partyRef = partyId ? db.collection(PET_PARTIES).doc(partyId) : null;
     const party = partyRef ? (await tx.get(partyRef)).data() as Party | undefined : undefined;
-    warnNickname(g); g.updatedAt = now; tx.set(ref, g);
-    if (party && partyRef) { for (const m of party.members) if (m.uid === uid) m.nickname = '별칭 바꾸는 중'; tx.set(partyRef, party); }
+    const slot = st.exists ? currentPet(rollDay(st.data(), now)).slot : undefined;
+    if (slot != null) normalizeGuild(g, slot);
+    warnName(g, target); g.updatedAt = now; tx.set(ref, g);
+    if (party && partyRef) { updateMemberNames(party, uid, g, slot); tx.set(partyRef, party); }
     return {warned: true};
   });
 }
@@ -77,8 +87,8 @@ export async function readStudentPet(db: any, actor: any, id: unknown, now = Dat
   // 공부 보상 already received: lesson attendance and completed assignments (counts only).
   const rewards = Object.values(s.rewarded || {}).flat();
   return {pet: {
-    ...view, pets: view.pets.map(p => ({slot: p.slot, character: p.character, name: p.name, level: p.level, xp: p.xp, energy: p.energy, maxEnergy: p.maxEnergy, clothing: p.clothing, accessories: p.accessories, job: p.job || null})),
-    nickname: guild?.nickname ? shownNickname(guild) : '',
+    ...view, pets: view.pets.map(p => ({slot: p.slot, character: p.character, name: p.name, level: p.level, xp: p.xp, energy: p.energy, maxEnergy: p.maxEnergy, clothing: p.clothing, accessories: p.accessories, job: p.job || null, job2: p.job2 || null})),
+    nickname: guild ? shownGuild(guild) || (guild.nickname ? shownNickname(guild) : '') : '',
     // Each pet has its own map (a new pet starts again from the first stage).
     expeditions: Object.fromEntries(s.pets.map(p => { const x = publicExpedition(expState, p.level, p.slot); return [p.slot, {current: x.current, allCleared: x.allCleared, currentNeedsLevel: x.currentNeedsLevel, totalStars: x.totalStars, maxStars: x.maxStars, chapters: x.chapters.map(c => ({id: c.id, title: c.title}))}]; })),
     rewards: {attendance: rewards.filter(r => r === 'attendance').length, assignment: rewards.filter(r => r === 'assignment').length},

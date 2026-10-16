@@ -3,14 +3,14 @@
 // teacher screens. The AI talk uses fixed instructions written here; the student's text is only ever passed as data.
 import {
   PET_ACTIONS, PET_ASSIGNMENT_REWARD, PET_ATTENDANCE_REWARD, PET_CHARACTERS, PET_DAILY_STUDY_POINTS, PET_ENERGY_ITEMS_PER_DAY, PET_FRIEND_LEVEL, PET_MAX_ENERGY, PET_MAX_LEVEL, PET_MAX_PETS, PET_REVIVES_PER_DAY,
-  PET_COUPON, PET_REWARD_WINDOW_DAYS, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, petItem, petStage, xpNeeded, type PetStudySource, accessorySlot, type AccessorySlot, type PetJob} from '../../src/lib/petCatalog.js';
+  PET_COUPON, PET_REWARD_WINDOW_DAYS, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, accessorySlot, type AccessorySlot, type PetJob} from '../../src/lib/petCatalog.js';
 
 export const PET_STATES = 'petStates';
 export interface ServerPhrase { original: string; remembered: string; learnedAtLevel: number; evolvedVersions: Record<string, string> }
 /** Each pet wears its own outfit; the shop items (inventory), points and the room are shared. */
 /** `accessories`: one per place (머리·눈·목·손). `accessory`: what older saves kept (one item), moved into its place on load.
- *  `job`: chosen once on 7장 꿈의 정원. */
-export interface ServerPet { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: ServerPhrase[]; clothing: string | null; accessories: Partial<Record<AccessorySlot, string>>; accessory?: string | null; job?: PetJob | null }
+ *  `job`: 1차 전직, chosen once on 5장 설산; `job2`: 2차 전직 (light or dark branch), chosen once on 7장 꿈의 정원. */
+export interface ServerPet { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: ServerPhrase[]; clothing: string | null; accessories: Partial<Record<AccessorySlot, string>>; accessory?: string | null; job?: PetJob | null; job2?: PetJob2 | null }
 export interface ServerPetState {
   version: 1; points: number; inventory: string[]; /** before 여러 마리: what pet 1 wore */ clothing?: string | null; accessory?: string | null; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: ServerPet[];
@@ -66,8 +66,8 @@ export function rollDay(s: ServerPetState, now = Date.now()) {
 }
 
 /** Add XP with level-ups; reaching PET_FRIEND_LEVEL opens a place for a new friend; at the top level the XP stops. */
-export function addXP(s: ServerPetState, amount: number) {
-  const pet = currentPet(s); let leveledUp = false;
+export function addXP(s: ServerPetState, amount: number, pet = currentPet(s)) {
+  let leveledUp = false;
   if (pet.level >= PET_MAX_LEVEL) { pet.xp = 0; return {leveledUp}; }
   pet.xp += Math.max(0, Math.floor(amount));
   while (pet.level < PET_MAX_LEVEL && pet.xp >= xpNeeded(pet.level)) {
@@ -209,9 +209,17 @@ const SAFETY = '학원 학생과 노는 귀여운 펫이야. 항상 한국어로
 // Gemini 3 thinks before it answers and that counts toward maxOutputTokens: a small cap cut the answer off (empty or
 // broken JSON = "잘 못 알아들었어요"). Light thinking and enough room for a short reply.
 const PET_AI_OUTPUT = {maxOutputTokens: 2048, thinkingConfig: {thinkingLevel: 'LOW'}};
+/** How well the pet learns a taught sentence at its stage: a baby catches a word or two, a child gets most of it with a
+ *  slip, a teen copies it exactly, an adult copies and rephrases it, Lv.100+ uses it in a new situation too. */
+export const teachGuide = (level: number) => level <= 20
+  ? '아직 말을 잘 못 배우는 아기야. 가르쳐 준 문장에서 가장 쉬운 낱말 한두 개만 겨우 따라 해(예: "지원이는 최고야!" → "최고!"). remembered에도 그 낱말만 적어.'
+  : level <= 40 ? '말을 배우는 어린이야. 문장을 거의 따라 하지만 조사나 어려운 낱말 하나쯤을 틀리거나 빼먹어. remembered에는 그렇게 조금 틀린 문장을 적어.'
+  : level <= 60 ? '이제 가르쳐 준 문장을 그대로 정확하게 따라 할 수 있어. remembered에는 원래 문장을 그대로 적어.'
+  : level < 100 ? '문장을 정확하게 따라 하고, 뜻이 같은 다른 표현으로도 한 번 바꿔 말해 봐. remembered에는 원래 문장을 그대로 적어.'
+  : '문장을 정확하게 기억하고, 상황에 맞게 응용한 새 문장으로도 말해. 어울리면 쉬운 영어로 바꿔 말해도 좋아. remembered에는 원래 문장을 그대로 적어.';
 export function teachRequest(pet: ServerPet, text: string) {
   return {contents: [{role: 'user', parts: [{text: `학생이 가르쳐 준 문장: """${cleanText(text, 100)}"""`}]}], config: {
-    systemInstruction: `${SAFETY}\n너는 레벨 ${pet.level} 펫(${levelGuide(pet.level)})이야. 학생이 문장을 가르쳐 주면 그 수준으로 따라 해 봐. remembered에는 네가 기억한 문장(30자 이내), response에는 반응.`,
+    systemInstruction: `${SAFETY}\n너는 레벨 ${pet.level} 펫(${levelGuide(pet.level)})이야. ${teachGuide(pet.level)} response에는 그 수준으로 따라 하거나 반응하는 말을 적어.`,
     responseMimeType: 'application/json', responseSchema: {type: 'OBJECT', properties: {response: {type: 'STRING'}, remembered: {type: 'STRING'}}, required: ['response', 'remembered']}, ...PET_AI_OUTPUT}};
 }
 export function chatRequest(pet: ServerPet, text: string, history: {role: string; text: string}[]) {
@@ -220,9 +228,11 @@ export function chatRequest(pet: ServerPet, text: string, history: {role: string
     systemInstruction: `${SAFETY}\n너의 이름은 "${cleanText(pet.name, 12)}", 레벨 ${pet.level}(${levelGuide(pet.level)}).`,
     responseMimeType: 'application/json', responseSchema: {type: 'OBJECT', properties: {response: {type: 'STRING'}}, required: ['response']}, ...PET_AI_OUTPUT}};
 }
-export function evolveRequest(pet: ServerPet, remembered: string) {
-  return {contents: [{role: 'user', parts: [{text: `예전에 배운 말: """${cleanText(remembered, 100)}"""`}]}], config: {
-    systemInstruction: `${SAFETY}\n너는 레벨 ${pet.level} 펫(${levelGuide(pet.level)})이야. 예전에 배운 말을 지금 수준으로 혼잣말처럼 한 문장(40자 이내)으로 말해.`,
+/** 혼잣말: a phrase learned earlier, said at today's level. A grown pet now understands what it only half caught as a baby
+ *  (`original`), so the line grows with it. */
+export function evolveRequest(pet: ServerPet, remembered: string, original = remembered) {
+  return {contents: [{role: 'user', parts: [{text: `예전에 배운 말: """${cleanText(remembered, 100)}"""\n원래 가르쳐 준 문장: """${cleanText(original, 100)}"""`}]}], config: {
+    systemInstruction: `${SAFETY}\n너는 레벨 ${pet.level} 펫(${levelGuide(pet.level)})이야. ${teachGuide(pet.level)} 예전에 배운 말을 지금 수준으로 혼잣말처럼 한 문장(40자 이내)으로 말해 (monologue).`,
     responseMimeType: 'application/json', responseSchema: {type: 'OBJECT', properties: {monologue: {type: 'STRING'}}, required: ['monologue']}, ...PET_AI_OUTPUT}};
 }
 export const parseAi = (text: string) => { try { return JSON.parse(text); } catch { return {}; } };

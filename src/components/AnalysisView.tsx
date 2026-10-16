@@ -1,9 +1,7 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { AnalysisResult, SentenceAnalysis } from '../lib/gemini';
-import { Download, FileText, File as FileIcon, Sparkles, Printer, Folder, Archive, CheckCircle2, X, Loader2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { db, auth } from '../lib/firebase';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { FileText, Sparkles, Printer } from 'lucide-react';
+import { motion } from 'motion/react';
 
 interface AnalysisViewProps {
   result: AnalysisResult;
@@ -13,45 +11,8 @@ interface AnalysisViewProps {
 
 export default function AnalysisView({ result, isMobile, questionsOnly }: AnalysisViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [showFolderModal, setShowFolderModal] = useState(false);
-  const [folders, setFolders] = useState<any[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // while the PDF or Word file is being made
 
-  useEffect(() => {
-    if (showFolderModal && auth.currentUser) {
-      const fetchFolders = async () => {
-        const q = query(
-          collection(db, 'folders'),
-          where('uid', '==', auth.currentUser?.uid),
-          orderBy('createdAt', 'desc')
-        );
-        const snap = await getDocs(q);
-        setFolders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      };
-      fetchFolders();
-    }
-  }, [showFolderModal]);
-
-  const handleSaveToArchive = async (folderId: string | null) => {
-    if (!auth.currentUser) return;
-    setIsSaving(true);
-    try {
-      const { saveAnalysisHistory, saveGeneratorHistory } = await import('../lib/firebase');
-      if (questionsOnly) {
-        await saveGeneratorHistory(auth.currentUser.uid, result.originalText || '', result, folderId);
-      } else {
-        await saveAnalysisHistory(auth.currentUser.uid, result.originalText || '', result, folderId);
-      }
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (error) {
-      console.error('Failed to save to archive:', error);
-    } finally {
-      setIsSaving(false);
-      setShowFolderModal(false);
-    }
-  };
 
   const exportToPDF = async () => {
     if (!containerRef.current) return;
@@ -545,21 +506,6 @@ export default function AnalysisView({ result, isMobile, questionsOnly }: Analys
   return (
     <div className="space-y-6 print-container">
       <div className="flex justify-end items-center gap-3 no-print">
-        {saveSuccess ? (
-          <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-xl font-bold text-sm border border-green-100">
-            <CheckCircle2 size={18} />
-            보관소에 저장됨
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowFolderModal(true)}
-            disabled={isSaving}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors font-medium text-sm border border-blue-100 disabled:opacity-50"
-          >
-            {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Archive size={18} />}
-            보관소 저장
-          </button>
-        )}
         <button
           onClick={handlePrint}
           className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors font-medium text-sm"
@@ -576,71 +522,6 @@ export default function AnalysisView({ result, isMobile, questionsOnly }: Analys
         </button>
       </div>
 
-      {/* Folder Selection Modal */}
-      <AnimatePresence>
-        {showFolderModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm no-print">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white p-8 rounded-[2.5rem] w-full max-w-md shadow-2xl"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-black text-slate-900">보관 폴더 선택</h3>
-                <button onClick={() => setShowFolderModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                  <X size={20} className="text-slate-400" />
-                </button>
-              </div>
-              
-              <div className="space-y-3 mb-8 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-                <button
-                  onClick={() => handleSaveToArchive(null)}
-                  disabled={isSaving}
-                  className="w-full p-4 text-left bg-slate-50 rounded-2xl border border-slate-100 hover:border-blue-500 transition-all font-bold flex items-center gap-3 group"
-                >
-                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 group-hover:text-blue-500 shadow-sm transition-colors">
-                    <Archive size={20} />
-                  </div>
-                  <div>
-                    <div className="text-slate-900">최근 기록 (폴더 없음)</div>
-                    <div className="text-[10px] text-slate-400">최근 5개까지만 보관됩니다.</div>
-                  </div>
-                </button>
-                
-                {folders.map(folder => (
-                  <button
-                    key={folder.id}
-                    onClick={() => handleSaveToArchive(folder.id)}
-                    disabled={isSaving}
-                    className="w-full p-4 text-left bg-slate-50 rounded-2xl border border-slate-100 hover:border-blue-500 transition-all font-bold flex items-center gap-3 group"
-                  >
-                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-blue-500 shadow-sm transition-colors">
-                      <Folder size={20} />
-                    </div>
-                    <span className="text-slate-900">{folder.name}</span>
-                  </button>
-                ))}
-
-                {folders.length === 0 && (
-                  <div className="py-8 text-center text-slate-400 font-medium bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    생성된 폴더가 없습니다.
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setShowFolderModal(false)} 
-                  className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all"
-                >
-                  취소
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       <div ref={containerRef} className={`analysis-container ${isMobile ? 'mobile-mode' : ''}`}>
         {!questionsOnly && (

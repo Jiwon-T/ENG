@@ -4,16 +4,15 @@ import {registrationFirestore} from './helpers/registrationFirestore.js';
 import {readWorkbookHistory, saveWorkbookVersion, translateWorkbook} from '../api/_lib/teacherWorkbook.ts';
 import {docxXmlText} from '../src/lib/workbookImport.ts';
 
-const admin = {uid: 'admin', admin: true}, teacher = {uid: 't1', admin: false}, principal = {uid: 'p1', admin: false, principal: true};
+const admin = {uid: 'admin', admin: true}, teacher = {uid: 't1', admin: false, academyId: 'main'}, principal = {uid: 'p1', admin: false, principal: true, academyId: 'main'};
 
-test('workbook: the admin only (teachers and principals are refused before any AI call or read)', async () => {
+test('workbook: teachers, principals and the admin; anyone else is refused before any AI call or read', async () => {
   let calls = 0; const generate = async () => { calls++; return JSON.stringify({translations: ['안녕']}); };
-  for (const actor of [teacher, principal]) {
-    await assert.rejects(translateWorkbook(actor, {sentences: ['Hi.']}, generate), /FORBIDDEN/);
-    await assert.rejects(readWorkbookHistory(registrationFirestore().db, actor, 'abc123def'), /FORBIDDEN/);
-    await assert.rejects(saveWorkbookVersion(registrationFirestore().db, actor, {key: 'abc123def', blanks: [[1]], orders: [[0]]}), /FORBIDDEN/);
-  }
+  const stranger = {uid: 'kid'};
+  await assert.rejects(translateWorkbook(stranger, {sentences: ['Hi.']}, generate), /FORBIDDEN/);
+  await assert.rejects(readWorkbookHistory(registrationFirestore().db, stranger, 'abc123def'), /FORBIDDEN/);
   assert.equal(calls, 0);
+  for (const actor of [teacher, principal]) assert.deepEqual((await translateWorkbook(actor, {sentences: ['Hi.']}, generate)).translations, ['안녕']);
 });
 
 test('AI translations: one per sentence in order, otherwise nothing is used', async () => {
@@ -71,15 +70,27 @@ test('AI errors become codes the screen can explain (region refusal, busy, quota
   await assert.rejects(translateWorkbook(admin, {sentences: ['Hi.']}, async () => { throw Error('User location is not supported for the API use.'); }), /AI_REGION_UNSUPPORTED/);
 });
 
-test('워크북 AI route (/api/gemini?task=workbook, the Seoul function): admin only, clear error codes', async () => {
+test('워크북 AI route (/api/gemini?task=workbook): teachers with a monthly limit, the admin without; students refused', async () => {
   const {handleWorkbookAi} = await import('../api/gemini.ts');
+  const {AI_MONTHLY_LIMITS} = await import('../api/_lib/aiModel.ts');
+  const f = registrationFirestore();
+  f.rows.set('users/teacher', {role: 'teacher'}); f.rows.set('teacherWorkspaceAccess/teacher', {academyId: 'main'}); f.rows.set('users/kid', {role: 'student'});
   const call = async (body: any, uid: string, generate: any) => { let status = 0, out: any; const req: any = {method: 'POST', headers: {authorization: 'Bearer t'}, body};
     const res: any = {setHeader() {}, end(v: string) { out = JSON.parse(v); }, set statusCode(v: number) { status = v; }, get statusCode() { return status; }};
-    await handleWorkbookAi(req, res, {verify: async () => ({uid}), db: () => ({}), generate, adminUid: 'admin'}); return {status, out}; };
+    await handleWorkbookAi(req, res, {verify: async () => ({uid}), db: () => f.db, generate, adminUid: 'admin'}); return {status, out}; };
   let calls = 0; const ok = async () => { calls++; return JSON.stringify({translations: ['나는 달린다.']}); };
-  assert.deepEqual((await call({sentences: ['I run.']}, 'admin', ok)).out, {ok: true, translations: ['나는 달린다.']});
-  const refused = await call({sentences: ['I run.']}, 'teacher', ok);
-  assert.deepEqual([refused.status, refused.out.error, calls], [403, 'FORBIDDEN', 1], 'a teacher never reaches the model');
+  assert.deepEqual((await call({sentences: ['I run.']}, 'admin', ok)).out, {ok: true, left: null, translations: ['나는 달린다.']});
+  const byTeacher = await call({sentences: ['I run.']}, 'teacher', ok);
+  assert.deepEqual([byTeacher.out.ok, byTeacher.out.left], [true, AI_MONTHLY_LIMITS.workbook - 1]);
+  const refused = await call({sentences: ['I run.']}, 'kid', ok);
+  assert.deepEqual([refused.status, refused.out.error, calls], [403, 'FORBIDDEN', 2], 'a student never reaches the model');
+  const failed = await call({sentences: ['I run.']}, 'teacher', async () => { throw Error('503 overloaded'); });
+  assert.equal(failed.out.error, 'AI_BUSY');
+  assert.equal([...f.rows.entries()].find(([k]) => k.startsWith('aiMonthly/teacher_'))![1].workbook, 1, 'a failed call is given back');
+  f.rows.set([...f.rows.keys()].find(k => k.startsWith('aiMonthly/teacher_'))!, {uid: 'teacher', month: 'x', workbook: AI_MONTHLY_LIMITS.workbook});
+  const month = new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Seoul'}).format(new Date()).slice(0, 7);
+  f.rows.set(`aiMonthly/teacher_${month}`, {uid: 'teacher', month, workbook: AI_MONTHLY_LIMITS.workbook});
+  assert.equal((await call({sentences: ['I run.']}, 'teacher', ok)).out.error, 'AI_MONTHLY_LIMIT');
   const region = await call({sentences: ['I run.']}, 'admin', async () => { throw Error('User location is not supported for the API use.'); });
   assert.deepEqual([region.status, region.out.error], [502, 'AI_REGION_UNSUPPORTED']);
   assert.equal((await call({sentences: []}, 'admin', ok)).out.error, 'INVALID_INPUT');

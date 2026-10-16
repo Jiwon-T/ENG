@@ -1052,3 +1052,57 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 /* 학생 목록: 이달의 장학 쿠폰 badge (gold before it is handed out, grey after). */
 .student-master-row .smr-coupon{display:inline-flex;align-items:center;flex:none;padding:1px 7px;border-radius:999px;border:1px solid #efc77a;background:#fff8e8;color:#8a5a12;font-size:11px;font-weight:800;cursor:pointer;}
 .student-master-row .smr-coupon.is-paid{border-color:#e5e7eb;background:#f8fafc;color:#94a3b8;}
+/* 워크북: the robot at work while the AI translates (typing hands, blinking light, eyes looking around, dots). */
+.wb-robot-hand{animation:wb-type .32s ease-in-out infinite alternate}
+.wb-robot-hand.is-right{animation-delay:.16s}
+@keyframes wb-type{to{transform:translateY(2.5px)}}
+.wb-robot-light{fill:#e0587a;animation:wb-blink 1s steps(2) infinite}
+@keyframes wb-blink{50%{fill:#fde3e6}}
+.wb-robot-eye{animation:wb-look 2.4s ease-in-out infinite}
+@keyframes wb-look{0%,40%,100%{transform:translateX(0)}55%,70%{transform:translateX(1.5px)}85%{transform:translateX(-1.5px)}}
+.wb-dots::after{content:'';display:inline-block;width:1.2em;text-align:left;animation:wb-dots 1.2s steps(4) infinite}
+@keyframes wb-dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+@media (prefers-reduced-motion:reduce){.wb-robot-hand,.wb-robot-light,.wb-robot-eye,.wb-dots::after{animation:none}}
+/* 수업 일지: who sees each field (모두 = student and parent, 학부모, 선생님만), 수업 내용 above 특이 사항, and the 선생님만 box. */
+.audience-tag{display:inline-flex;align-items:center;gap:2px;margin-left:4px;padding:0 5px;border-radius:6px;font-size:10.5px;font-weight:500;line-height:16px;white-space:nowrap;vertical-align:middle}
+.audience-tag.is-all{background:#eaf3de;color:#27500a}
+.audience-tag.is-parent{background:#e6f1fb;color:#0c447c}
+.audience-tag.is-teacher{background:#f1efe8;color:#444441}
+.audience-legend{display:inline-flex;align-items:center;margin-left:auto;font-size:11px;font-weight:500;color:#64748b;white-space:nowrap}
+.lesson-audience-line{display:flex;align-items:center;margin:0 0 4px;font-size:11px;color:#64748b}
+.lesson-audience-line>span[aria-hidden]{margin:0 6px}
+.teacher-workspace .lesson-time-block:has(>.lesson-audience-line){grid-template-rows:auto;grid-auto-rows:1fr}
+.teacher-workspace .lesson-chip-label{display:flex;flex-direction:column;align-items:flex-start;justify-content:center}
+.lesson-chip-label .audience-tag{margin:2px 0 0}
+.teacher-workspace .lesson-content-split{display:flex;flex:1;flex-direction:column;gap:8px}
+.teacher-workspace .lesson-form-layout .lesson-content-split label.lesson-content-main{flex:1}
+.teacher-workspace .lesson-form-layout .lesson-content-split label.lesson-content-note{flex:none}
+.teacher-workspace .lesson-area-content .lesson-content-note textarea.auto-lesson-textarea{--textarea-min-rows:1;--textarea-max-rows:5;flex:none;min-height:44px;max-height:131px}
+@container lesson-input (min-width:900px){.teacher-workspace .lesson-area-content .lesson-content-main textarea.auto-lesson-textarea{--textarea-min-rows:4;min-height:96px}}
+.teacher-workspace .lesson-extras-stack{display:flex!important;flex-direction:column;gap:8px}
+.teacher-only-box{border:1px dashed #cbd5e1;border-radius:12px;padding:6px 8px 8px;background:#f8fafc}
+.teacher-only-title{display:flex;align-items:center;gap:4px;margin:0 0 4px;font-size:11px;font-weight:700;color:#475569}
+.teacher-only-note{margin-left:4px;font-weight:400;color:#64748b}
+.teacher-only-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px}
+.teacher-workspace .lesson-form-layout .teacher-only-fields label{display:flex;flex-direction:column;font-size:11px}
+.teacher-workspace .teacher-only-box textarea.auto-lesson-textarea{--textarea-min-rows:1;--textarea-max-rows:4;min-height:36px;max-height:110px;background:#fff}
+.lesson-preview-button{display:inline-flex;align-items:center;gap:4px}
+.lesson-preview-overlay{position:fixed;inset:0;z-index:1200;display:flex;align-items:flex-end;justify-content:center;background:#0f172a73}
+.lesson-preview-sheet{width:100%;max-width:460px;max-height:88vh;overflow-y:auto;padding:14px 16px 16px;border-radius:20px 20px 0 0;background:#fff;color:#334155}
+@media(min-width:640px){.lesson-preview-overlay{align-items:center;padding:16px}.lesson-preview-sheet{border-radius:20px}}
+.lesson-preview-head{display:flex;justify-content:space-between;gap:8px}
+.lesson-preview-head h2{margin:0;font-size:15px;font-weight:800;color:#334155}
+.lesson-preview-head p{margin:2px 0 0;font-size:12px;color:#64748b}
+.lesson-preview-close{padding:4px;border:0;border-radius:999px;background:none;color:#94a3b8;cursor:pointer}
+.lesson-preview-note{margin:8px 0 0;padding:6px 10px;border-radius:10px;background:#e6f1fb;color:#0c447c;font-size:12px}
+.lesson-preview-body{display:grid;gap:8px;margin-top:10px}
+.lesson-preview-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:12px}
+.lesson-preview-time b{margin-right:4px;font-weight:600;color:#64748b}
+.lesson-preview-badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:700}
+.lesson-preview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px}
+.lesson-preview-tile{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:12px;font-size:11px;color:#64748b}
+.lesson-preview-tile>b:not(.lesson-preview-badge){font-size:13px;color:#334155}
+.lesson-preview-feedback{padding:10px 12px;border:1px solid #e0e7ff;border-radius:16px;background:#f5f7ff}
+.lesson-preview-label{margin:0 0 4px;font-size:11px;font-weight:800;color:#64748b}
+.lesson-preview-text{margin:0;font-size:13px;line-height:1.6;white-space:pre-wrap}
+.lesson-preview-foot{margin:10px 0 0;font-size:11px;color:#94a3b8;text-align:center}

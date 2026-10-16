@@ -1,16 +1,27 @@
 // 파티 원정대: teams of 2–4 students for one week (Monday–Sunday, Seoul). A team picks a boss; every word a member answers
 // right for the first time that week takes 1 off it. After the week the team is settled once: a pool by progress (30%
 // and up), shared by contribution among members who answered 10+ words, at most 500P each. Students only ever see
-// nicknames and pets (never real names, even from the same academy); teachers see more on their own screens.
+// 원정대 names, 모험가 별칭 and pets (never real names, even from the same academy); teachers see more on their own screens.
+// Names: one 원정대 이름 per student and one 모험가 별칭 per pet, free text an admin can warn (then it must change).
 import {seoulDay, type ServerPetState, currentPet} from './pet.js';
 import {PET_PARTY, wornAccessories} from '../../src/lib/petCatalog.js';
 
 export const PET_GUILD = 'petGuild', PET_PARTIES = 'petParties';
-export interface GuildProfile { version: 1; nickname: string; warned: boolean; banned: string[]; parties: Record<string, string>; lastResult?: PartyResult | null; updatedAt: number }
+/** One document per name in use (by its normalized form) listing who uses it: `uid` for a 원정대 이름, `uid:slot` for a 별칭.
+ *  Read and written in the same transaction as the name, so 'another student already uses it' is never missed. */
+export const PET_NAMES = 'petNames';
+export const nameDocId = (kind: 'guild' | 'alias', name: string) => `${kind}_${encodeURIComponent(norm(name))}`;
+export interface GuildProfile {
+  version: 1; /** before 원정대 이름·별칭: one nickname per student (moved to the main pet's 별칭 on first use) */ nickname: string; warned: boolean; banned: string[];
+  parties: Record<string, string>; lastResult?: PartyResult | null; updatedAt: number;
+  guildName?: string; guildWarned?: boolean; aliases?: Record<string, string>; aliasWarned?: Record<string, boolean>;
+  /** normalized names, for the 'someone already uses this name' check */ guildKey?: string; aliasKeys?: string[]; /** the old nickname was moved: ask the student to look at it */ movedNickname?: boolean;
+}
 export interface PartyResult { week: string; party: string; progress: number; reward: number; counted: boolean }
 /** Party snapshots: `accessories` (each place); snapshots saved before carry a single `accessory`. */
-export interface PetLook { character: string; name: string; level: number; clothing: string | null; accessories?: string[]; accessory?: string | null }
-export interface PartyMember { uid: string; nickname: string; pet: PetLook; joinedDay: string; lastActiveDay: string | null; count: number; words: string[]; status: 'active' | 'left' | 'kicked' }
+export interface PetLook { character: string; name: string; level: number; clothing: string | null; accessories?: string[]; accessory?: string | null; slot?: number }
+/** `nickname`: what members saved before 원정대 이름·별칭 kept; now `guild` and the 별칭 of each pet (shown for the pet in `pet`). */
+export interface PartyMember { uid: string; nickname: string; guild?: string; aliases?: Record<string, string>; pet: PetLook; joinedDay: string; lastActiveDay: string | null; count: number; words: string[]; status: 'active' | 'left' | 'kicked' }
 export interface Party { id: string; week: string; name: string; boss: string; size: number; phrases: string[]; createdAt: number; hp: number; hpMax: number; members: PartyMember[]; votes: Record<string, string[]>; settled: boolean; results?: Record<string, number> }
 
 const DAY = 86_400_000;
@@ -21,7 +32,7 @@ export const weekEndDay = (week: string) => { const d = new Date(`${week}T00:00:
 export const weekOver = (week: string, now = Date.now()) => seoulDay(now) > weekEndDay(week);
 
 export const initialGuild = (now = Date.now()): GuildProfile => ({version: 1, nickname: '', warned: false, banned: [], parties: {}, lastResult: null, updatedAt: now});
-const norm = (nick: string) => nick.replace(/\s+/g, '').toLowerCase();
+export const norm = (nick: string) => nick.replace(/\s+/g, '').toLowerCase();
 /** Address-like text: two districts in a row (강남구 역삼동, 서울시 강남구), a numbered 동/로/길/가 (역삼1동, 테헤란로12길) or
  *  a building word (아파트, 빌라, 번지, 101호). A single word such as 구름, 꽃길 or 별동 stays allowed. */
 export const looksLikeAddress = (text: string) => {
@@ -41,12 +52,39 @@ export function setNickname(g: GuildProfile, raw: unknown) { g.nickname = checkN
 export function warnNickname(g: GuildProfile) { if (g.nickname && !g.banned.includes(norm(g.nickname))) g.banned.push(norm(g.nickname)); g.warned = true; }
 export const shownNickname = (g: GuildProfile | {nickname: string; warned: boolean}) => g.warned ? '별칭 바꾸는 중' : g.nickname;
 
-export const petLook = (s: ServerPetState): PetLook => { const p = currentPet(s); return {character: p.character, name: p.name, level: p.level, clothing: p.clothing ?? null, accessories: wornAccessories(p)}; };
+// ---- 원정대 이름 (one per student) and 모험가 별칭 (one per pet) ----
+export const WARNED_GUILD = '이름 바꾸는 중', WARNED_ALIAS = '별칭 바꾸는 중';
+const rekey = (g: GuildProfile) => { g.guildKey = g.guildName ? norm(g.guildName) : ''; g.aliasKeys = [...new Set(Object.values(g.aliases || {}).filter(Boolean).map(norm))]; };
+/** The old one-per-student nickname becomes the main pet's 별칭 (a warning carries over); the 원정대 이름 is the student's to pick. */
+export function normalizeGuild(g: GuildProfile, mainSlot: number) {
+  if (!g.nickname || g.aliases) return false;
+  g.aliases = {[mainSlot]: g.nickname}; g.aliasWarned = g.warned ? {[mainSlot]: true} : {}; g.movedNickname = true; g.nickname = ''; g.warned = false; rekey(g);
+  return true;
+}
+export function setGuildName(g: GuildProfile, raw: unknown) { g.guildName = checkNickname(raw, g.banned); g.guildWarned = false; g.movedNickname = false; rekey(g); return g.guildName; }
+export function setAlias(g: GuildProfile, slot: number, raw: unknown) { const name = checkNickname(raw, g.banned); g.aliases = {...g.aliases, [slot]: name}; g.aliasWarned = {...g.aliasWarned, [slot]: false}; rekey(g); return name; }
+/** Admin warning: shown as '…바꾸는 중' until the student picks a new name; this student can never use it again. */
+export function warnName(g: GuildProfile, target: 'guild' | number) {
+  const name = target === 'guild' ? g.guildName : g.aliases?.[target];
+  if (!name) throw Error('NOT_FOUND');
+  if (!g.banned.includes(norm(name))) g.banned.push(norm(name));
+  if (target === 'guild') g.guildWarned = true; else g.aliasWarned = {...g.aliasWarned, [target]: true};
+}
+export const shownGuild = (g: GuildProfile | undefined | null) => !g?.guildName ? '' : g.guildWarned ? WARNED_GUILD : g.guildName;
+export const shownAlias = (g: GuildProfile | undefined | null, slot: number) => !g?.aliases?.[slot] ? '' : g.aliasWarned?.[slot] ? WARNED_ALIAS : g.aliases[slot];
+/** Every pet's 별칭 as others see it (warned ones hidden). */
+export const shownAliases = (g: GuildProfile | undefined | null) => Object.fromEntries(Object.keys(g?.aliases || {}).map(slot => [slot, shownAlias(g, Number(slot))]));
+/** '원정대 이름 · 모험가 별칭' (whichever is set). */
+export const adventurerLabel = (guild: string, alias: string) => [guild, alias].filter(Boolean).join(' · ');
+
+export const petLook = (s: ServerPetState): PetLook => { const p = currentPet(s); return {character: p.character, name: p.name, level: p.level, clothing: p.clothing ?? null, accessories: wornAccessories(p), slot: p.slot}; };
 export const activeMembers = (p: Party) => p.members.filter(m => m.status === 'active');
-const ready = (g: GuildProfile) => { if (!g.nickname) throw Error('PARTY_NEED_NICK'); if (g.warned) throw Error('PARTY_NICK_WARNED'); };
+/** A team needs the 원정대 이름 and the playing pet's 별칭, neither under a warning. */
+const ready = (g: GuildProfile, slot = 1) => { if (!g.guildName || !g.aliases?.[slot]) throw Error('PARTY_NEED_NICK'); if (g.guildWarned || g.aliasWarned?.[slot]) throw Error('PARTY_NICK_WARNED'); };
+const member = (g: GuildProfile, uid: string, look: PetLook, now: number): PartyMember => ({uid, nickname: g.aliases?.[look.slot ?? 1] || '', guild: shownGuild(g), aliases: shownAliases(g), pet: look, joinedDay: seoulDay(now), lastActiveDay: null, count: 0, words: [], status: 'active'});
 
 export function createParty(g: GuildProfile, uid: string, look: PetLook, input: any, now: number, id: string): Party {
-  ready(g);
+  ready(g, look.slot);
   const week = weekOf(now); if (g.parties[week]) throw Error('PARTY_ONE_A_WEEK');
   const a = String(input?.nameA || ''), b = String(input?.nameB || ''), boss = String(input?.boss || ''), size = Number(input?.size);
   const phrases = Array.isArray(input?.phrases) ? [...new Set(input.phrases.map(String))] as string[] : [];
@@ -54,16 +92,16 @@ export function createParty(g: GuildProfile, uid: string, look: PetLook, input: 
     || !(PET_PARTY.sizes as readonly number[]).includes(size) || phrases.length < 1 || phrases.length > 2 || phrases.some(p => !(PET_PARTY.phrases as readonly string[]).includes(p))) throw Error('PARTY_BAD_INPUT');
   g.parties[week] = id;
   return {id, week, name: `${a} ${b} 원정대`, boss, size, phrases, createdAt: now, hp: 0, hpMax: size * PET_PARTY.hpPerMember, votes: {}, settled: false,
-    members: [{uid, nickname: g.nickname, pet: look, joinedDay: seoulDay(now), lastActiveDay: null, count: 0, words: [], status: 'active'}]};
+    members: [member(g, uid, look, now)]};
 }
 export function joinParty(p: Party, g: GuildProfile, uid: string, look: PetLook, now: number) {
-  ready(g);
+  ready(g, look.slot);
   const week = weekOf(now);
   if (p.week !== week || p.settled) throw Error('PARTY_CLOSED');
   if (g.parties[week]) throw Error('PARTY_ONE_A_WEEK');
   if (activeMembers(p).length >= p.size) throw Error('PARTY_FULL');
   g.parties[week] = p.id;
-  p.members.push({uid, nickname: g.nickname, pet: look, joinedDay: seoulDay(now), lastActiveDay: null, count: 0, words: [], status: 'active'});
+  p.members.push(member(g, uid, look, now));
 }
 /** Leaving is free but gives up this week's team reward; the place opens again. Still one team a week. */
 export function leaveParty(p: Party, uid: string) { const m = p.members.find(x => x.uid === uid && x.status === 'active'); if (!m) throw Error('PARTY_NOT_MEMBER'); m.status = 'left'; delete p.votes[uid]; for (const k of Object.keys(p.votes)) p.votes[k] = p.votes[k].filter(v => v !== uid); }
@@ -99,12 +137,23 @@ export function settleParty(p: Party, now: number) {
   return results;
 }
 
-/** What a member sees: nicknames and pets only (no uids, no real names); members are addressed by their position. */
+/** A member's names as shown now: the 별칭 of the pet they last played with. Members saved before 원정대 이름·별칭 have no
+ *  pet slot and only the old nickname, which is shown until the student's names are refreshed (never once refreshed). */
+export const memberNames = (m: PartyMember) => {
+  const alias = m.pet.slot != null ? m.aliases?.[m.pet.slot] ?? '' : m.aliases ? '' : m.nickname ?? '';
+  return {guild: m.guild || '', alias, nickname: adventurerLabel(m.guild || '', alias)};
+};
+/** Refresh one student's names in a party (after a rename or a warning). An old member without a pet slot gets
+ *  `slot` (the pet playing now) and loses the old nickname, so a warned one can't show again. */
+export const updateMemberNames = (p: Party, uid: string, g: GuildProfile, slot?: number) => {
+  for (const m of p.members) if (m.uid === uid) { m.guild = shownGuild(g); m.aliases = shownAliases(g); m.nickname = ''; if (m.pet.slot == null && slot != null) m.pet = {...m.pet, slot}; }
+};
+/** What a member sees: 원정대 names, 별칭 and pets only (no uids, no real names); members are addressed by their position. */
 export function publicParty(p: Party, viewer: string, now: number) {
   const ranked = [...p.members.keys()].sort((a, b) => p.members[b].count - p.members[a].count);
   const me = p.members.find(m => m.uid === viewer), eligible = activeMembers(p).length - 1;
   return {id: p.id, week: p.week, endDay: weekEndDay(p.week), name: p.name, boss: p.boss, size: p.size, phrases: p.phrases, hp: p.hp, hpMax: p.hpMax, progress: progressOf(p), settled: p.settled,
-    members: ranked.map((i, r) => { const m = p.members[i]; return {index: i, rank: r + 1, nickname: m.nickname, pet: m.pet, count: m.count, status: m.status, me: m.uid === viewer, idleDays: inactiveDays(m, now),
+    members: ranked.map((i, r) => { const m = p.members[i]; return {index: i, rank: r + 1, ...memberNames(m), pet: m.pet, count: m.count, status: m.status, me: m.uid === viewer, idleDays: inactiveDays(m, now),
       votes: (p.votes[m.uid] || []).length, votedByMe: Boolean(me && (p.votes[m.uid] || []).includes(viewer)), needVotes: Math.max(1, Math.ceil(eligible / 2)),
       canVote: Boolean(me?.status === 'active' && m.status === 'active' && m.uid !== viewer && (eligible > 1 || inactiveDays(m, now) >= PET_PARTY.inactiveDays))}; }),
     reward: p.results?.[viewer] ?? null};

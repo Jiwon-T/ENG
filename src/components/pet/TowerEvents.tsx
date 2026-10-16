@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { PET_TOWER, TOWER_ENHANCE, TOWER_EVENTS, petStage, towerGear, wornAccessories, type PetCharacterType } from '../../lib/petCatalog';
+import { PET_TOWER, TOWER_ENHANCE, TOWER_EVENTS, petStage, towerGearFor, wornAccessories, type PetCharacterType, type PetJob } from '../../lib/petCatalog';
 import { PetCharacter } from './PetCharacters';
 import { TowerMonster } from './TowerMonster';
 import { Hall, TowerGearIcon } from './TowerHall';
@@ -13,9 +13,9 @@ interface PetLook { character: string; level: number; clothing: string | null; a
 const won = (n: number) => n.toLocaleString('ko-KR');
 const Box = ({ children }: { children: ReactNode }) => <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-sm font-medium text-[#2c2c2a]">{children}</p>;
 
-export function TowerEventScreen({ event, busy, points, stones, potions, gear, levels, pet, send }: { event: TowerEventView; busy: boolean; points: number; stones: number; potions: number; gear: string[]; levels: Record<string, number>; pet: PetLook; send: Send }) {
+export function TowerEventScreen({ event, busy, points, stones, potions, gear, levels, pet, send, job }: { job?: PetJob | null; event: TowerEventView; busy: boolean; points: number; stones: number; potions: number; gear: string[]; levels: Record<string, number>; pet: PetLook; send: Send }) {
   const title = `${event.floor}층 · ${TOWER_EVENTS[event.type].name}`;
-  if (event.type === 'merchant') return <Merchant {...{ event, busy, points, stones, potions, gear, levels, send, title }} />;
+  if (event.type === 'merchant') return <Merchant job={job} {...{ event, busy, points, stones, potions, gear, levels, send, title }} />;
   if (event.type === 'fairy') return <div className="space-y-2">
     <Hall caption={title}><div className="absolute inset-x-0 top-14 flex justify-center tower-float"><TowerMonster kind="fairy" size={110} /></div></Hall>
     <Box>“도와주세요… 길을 잃었어요. 출구까지 데려다주실래요?”</Box>
@@ -28,12 +28,12 @@ export function TowerEventScreen({ event, busy, points, stones, potions, gear, l
   return <Sleeping {...{ busy, pet, send, title }} color={event.color ?? 0} />;
 }
 
-function Merchant({ event, busy, points, stones, potions, gear, levels, send, title }: { event: TowerEventView; busy: boolean; points: number; stones: number; potions: number; gear: string[]; levels: Record<string, number>; send: Send; title: string }) {
+function Merchant({ event, busy, points, stones, potions, gear, levels, send, title, job }: { job?: PetJob | null; event: TowerEventView; busy: boolean; points: number; stones: number; potions: number; gear: string[]; levels: Record<string, number>; send: Send; title: string }) {
   const [note, setNote] = useState('');
   const act = async (move: string, input: Record<string, unknown> = {}) => {
     const r = await send(move, input); const x = r?.result; if (!x) return;
     if (x.bought) setNote(x.bought === 'stone' ? `강화석을 샀어요 (-${x.price}P)` : `물약을 샀어요 (-${x.price}P)`);
-    if ('enhanced' in x) setNote(x.enhanced ? `강화 성공! ${towerGear(x.gearId)?.name} +${x.level}` : `강화 실패… 강화석 ${x.stones}개만 사라졌어요. 장비는 그대로예요.`);
+    if ('enhanced' in x) setNote(x.enhanced ? `강화 성공! ${towerGearFor(x.gearId, job)?.name} +${x.level}` : `강화 실패… 강화석 ${x.stones}개만 사라졌어요. 장비는 그대로예요.`);
   };
   const stock = event.stock || { stone: 0, potion: 0 };
   return <div className="space-y-2">
@@ -44,7 +44,7 @@ function Merchant({ event, busy, points, stones, potions, gear, levels, send, ti
       {([['stone', '💎 강화석', PET_TOWER.stonePrice, stock.stone], ['potion', '🧪 물약', PET_TOWER.potionPrice, stock.potion]] as const).map(([id, name, price, left]) => <div key={id} className="mt-1.5 flex items-center gap-2"><span className="flex-1 font-bold">{name}</span><span className="text-xs text-slate-500">{price}P · 남은 {left}</span>
         <button type="button" disabled={busy || left <= 0 || points < price} onClick={() => void act('buy', { item: id })} className="rounded-lg bg-[#534ab7] px-3 py-1 text-xs font-bold text-white disabled:opacity-40">사기</button></div>)}
       <b className="mt-3 block text-xs font-black text-[#3c3489]">장비 강화 (실패해도 장비는 안 깨져요)</b>
-      {gear.length ? gear.map(id => { const g = towerGear(id); if (!g) return null; const level = levels[id] || 0, step = TOWER_ENHANCE[level];
+      {gear.length ? gear.map(id => { const g = towerGearFor(id, job); if (!g) return null; const level = levels[id] || 0, step = TOWER_ENHANCE[level];
         return <div key={id} className="mt-1.5 flex items-center gap-2"><TowerGearIcon id={id} size={20} /><span className="flex-1 text-xs font-bold">{g.name} +{level}{step ? ` → +${step.to}` : ''}</span>
           {step ? <><span className="text-[11px] text-slate-500">강화석 {step.stones} · {Math.round(step.rate * 100)}%</span><button type="button" disabled={busy || stones < step.stones} onClick={() => void act('enhance', { gearId: id })} className="rounded-lg bg-[#ba7517] px-3 py-1 text-xs font-bold text-white disabled:opacity-40">강화</button></> : <span className="text-[11px] font-bold text-[#ba7517]">최고 강화</span>}
         </div>; }) : <p className="mt-1 text-xs text-slate-400">아직 장비가 없어요.</p>}
@@ -82,7 +82,8 @@ function Sleeping({ busy, pet, color, send, title }: { busy: boolean; pet: PetLo
   const track = useRef<HTMLDivElement>(null), last = useRef<{ p: number; t: number } | null>(null), start = useRef(0), samples = useRef<number[][]>([]), done = useRef(false);
   const [p, setP] = useState(0), [state, setState] = useState<'ready' | 'drag' | 'woke' | 'out'>('ready'), [off, setOff] = useState(false);
   const FLOOR = 34, DIP = 30, bottomAt = (q: number) => FLOOR - DIP * dipAt(q);
-  const finish = (ok: boolean) => { if (done.current) return; done.current = true; setState(ok ? 'out' : 'woke'); window.setTimeout(() => void send('sneak', ok ? { ok, samples: samples.current } : { ok }), 700); };
+  // If the server refuses the walk (too quick, off the path), the mini-game starts over instead of getting stuck.
+  const finish = (ok: boolean) => { if (done.current) return; done.current = true; setState(ok ? 'out' : 'woke'); window.setTimeout(async () => { const r = await send('sneak', ok ? { ok, samples: samples.current } : { ok }); if (!r && ok) { done.current = false; samples.current = []; start.current = 0; setP(0); setState('ready'); } }, 700); };
   const move = (e: ReactPointerEvent) => {
     if (state !== 'drag' || !track.current || done.current) return;
     const r = track.current.getBoundingClientRect(), np = Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width * 100 - 4) / 88)), now = performance.now();
@@ -101,7 +102,7 @@ function Sleeping({ busy, pet, color, send, title }: { busy: boolean; pet: PetLo
       <div ref={track} className="absolute inset-x-4 bottom-[30px] h-[150px] touch-none" onPointerMove={move} onPointerUp={() => { if (state === 'drag') setState('ready'); }}>
         <svg className="pointer-events-none absolute inset-0" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={path} fill="none" stroke="#fac775" strokeWidth="0.8" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" opacity=".7" /></svg>
         <span className="absolute bottom-[30px] right-0 rounded-md bg-[#3b6d11] px-1.5 py-0.5 text-[11px] font-bold text-white">출구 →</span>
-        <button type="button" disabled={busy || done.current} aria-label="펫을 길을 따라 천천히 끌어서 출구로" onPointerDown={e => { if (done.current) return; (e.currentTarget.parentElement as HTMLElement).setPointerCapture(e.pointerId); const now = performance.now(); if (!start.current) start.current = now; last.current = { p, t: now }; setState('drag'); }}
+        <button type="button" disabled={busy || done.current} aria-label="펫을 길을 따라 천천히 끌어서 출구로" onPointerDown={e => { if (done.current) return; (e.currentTarget.parentElement as HTMLElement).setPointerCapture(e.pointerId); const now = performance.now(); if (!start.current) start.current = now; samples.current.push([Math.round(now - start.current), Math.round(p * 1000) / 1000]); last.current = { p, t: now }; setState('drag'); }}
           className="absolute -translate-x-1/2 cursor-grab touch-none active:cursor-grabbing" style={{ left: `${pathX(p)}%`, bottom: bottomAt(p) - 30 }}>
           <PetCharacter character={pet.character as PetCharacterType} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet as any)} size={58} />
         </button>

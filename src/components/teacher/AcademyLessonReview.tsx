@@ -65,7 +65,7 @@ export default function AcademyLessonReview({data,request,act,busy,onEdit,onOpen
   ].filter(([text])=>text).map(([text,tone])=><span key={text} className={'rv-pill '+tone}>{text}</span>)}
  </div>
  <dl className="lesson-review-detail">{[
- ['수업 내용',selected.data.content],['과제',selected.data.assignment],['시험범위',selected.data.examScope],['특이사항',selected.data.specialNote],['피드백',selected.data.note],['다음 수업 메모',selected.data.nextPlan]
+ ['수업 내용',selected.data.content],['과제',selected.data.assignment],['시험범위',selected.data.examScope],['선생님 메모',selected.data.teacherNote],['특이사항',selected.data.specialNote],['피드백',selected.data.note],['다음 수업 메모',selected.data.nextPlan]
  ].filter(([,value])=>value).map(([name,value])=><div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl>
  
  </>}</WorkspaceDialog>

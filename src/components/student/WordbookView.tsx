@@ -1,3 +1,6 @@
+import { showSentence } from '../../lib/sentenceImport';
+import { pickSentences, speechRecognitionClass, type GameSentence } from '../../lib/sentenceGame';
+import SentenceGame, { QuietPrompt, type SentenceMode } from '../sentence/SentenceGame';
 import ExamMaterialCatalog from '../exam/ExamMaterialCatalog';
 import { maskName } from '../../lib/maskName';
 import React, { useState, useEffect, useRef } from 'react';
@@ -18,8 +21,8 @@ interface Wordbook {
   title: string;
   description: string;
   order?: number;
-  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming' | 'comparative-grammar' | 'sentence-order';
-  category?: 'word' | 'grammar' | 'exam';
+  type?: 'standard' | 'irregular' | 'to-ing-grammar' | 'complement-grammar' | 'conversion-grammar' | 'relative-grammar' | 'modal-grammar' | 'basic-modal-grammar' | 'verb-form-grammar' | 'grammar-cramming' | 'comparative-grammar' | 'sentence-order' | 'sentence';
+  category?: 'word' | 'grammar' | 'exam' | 'sentence';
   customDistractors?: string[];
   defaultUnitSize?: number;
 }
@@ -43,6 +46,7 @@ interface Word {
   quizSentence?: string; 
   quizExplanation?: string;
   quizChoices?: string[];
+  chunked?: string; // 문장 세트: the sentence with its / marks
 }
 
 interface Progress {
@@ -59,7 +63,7 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-export default function WordbookView({ isMobile, category = 'word', onNavigate, resumeTarget, onResumeHandled }: { isMobile?: boolean; category?: 'word' | 'grammar' | 'exam'; onNavigate?: (view: any) => void; resumeTarget?: RecentLearning | null; onResumeHandled?: () => void }) {
+export default function WordbookView({ isMobile, category = 'word', onNavigate, resumeTarget, onResumeHandled }: { isMobile?: boolean; category?: 'word' | 'grammar' | 'exam' | 'sentence'; onNavigate?: (view: any) => void; resumeTarget?: RecentLearning | null; onResumeHandled?: () => void }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [examBooks,setExamBooks]=useState<Wordbook[]>([]);
   // True while only the first ranges of a big word set are shown (the rest is still loading).
@@ -118,6 +122,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
   const [isFocusedMode, setIsFocusedMode] = useState(false);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [earnedPoints, setEarnedPoints] = useState(0);
+  // 문장 세트: 단어 순서 배열 / 낭독 over up to 10 sentences of the current Day (낭독 asks about a quiet place first, every time).
+  const [sentenceGame, setSentenceGame] = useState<{ mode: SentenceMode; items: GameSentence[]; note?: string; finished?: boolean } | null>(null);
+  const [quietAsk, setQuietAsk] = useState(false);
   const [earnedXP, setEarnedXP] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
   const [incorrectAnswers, setIncorrectAnswers] = useState<{ word: string; meaning: string; userChoice: string; correctAnswer: string; choices?: string[]; quizSentence?: string }[]>([]);
@@ -216,7 +223,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
        selectedWordbook.type === 'grammar-cramming' || 
        selectedWordbook.type === 'complement-grammar' || 
        selectedWordbook.type === 'to-ing-grammar' || 
-       selectedWordbook.type === 'conversion-grammar' ? 'grammar' : category) || 'word') as 'word' | 'grammar' | 'exam';
+       selectedWordbook.type === 'conversion-grammar' ? 'grammar' : category) || 'word') as 'word' | 'grammar' | 'exam' | 'sentence';
 
     const currentDay = currentChunk + 1;
     recordStudySession({
@@ -443,9 +450,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
       // counts as the whole book.
       const fromServer = !snapshot.metadata.fromCache;
       if (!fromServer && (full || !snapshot.size)) return;
-      const fetchedWords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Word));
+      const sentences = selectedWordbook.type === 'sentence';
+      // 문장 세트: shown without the / marks (끊어 읽기, kept in `chunked` for the games), in Day then order.
+      const fetchedWords = snapshot.docs.map(doc => { const w = { id: doc.id, ...doc.data() } as Word; return sentences ? { ...w, chunked: w.word, word: showSentence(w.word || ''), meaning: showSentence(w.meaning || '') } : w; });
       // Sort by order if available
-      fetchedWords.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      fetchedWords.sort((a, b) => sentences ? (Number(a.day) || 1) - (Number(b.day) || 1) || (a.order ?? 0) - (b.order ?? 0) : (a.order ?? 0) - (b.order ?? 0));
       if (fromServer) full = true;
       setWords(fetchedWords); setWordsPartial(!fromServer);
       setLoading(false);
@@ -768,6 +777,20 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
       generateQuizOptions(0, selectedSessionWords);
       setIsFocusedMode(true);
     }
+  };
+
+  const startSentenceGame = (mode: SentenceMode, note?: string) => {
+    const items = pickSentences(displayedWords.filter(w => w.word)).map(w => ({ word: w.word, meaning: w.meaning, chunked: (w as any).chunked }));
+    if (!items.length) return;
+    setIncorrectAnswers([]); setSessionWords(items as any); setEarnedPoints(0);
+    initActiveSession('quiz', items.length);
+    setSentenceGame({ mode, items, note });
+  };
+  const askReadAloud = () => speechRecognitionClass() ? setQuietAsk(true) : startSentenceGame('order', '이 기기에서는 음성 인식이 안 돼서 단어 순서 배열로 바꿨어요.');
+  const closeSentenceGame = () => {
+    // Closed before the end: nothing is recorded (the half-played round is dropped).
+    if (!sentenceGame?.finished && activeSessionRef.current) { activeSessionRef.current.isFinished = true; activeSessionRef.current.startTime = null; setSessionStartTime(null); }
+    setSentenceGame(null);
   };
 
   const startFlashcards = () => {
@@ -1581,6 +1604,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
   return (
     <div className={`${isMobile ? 'max-w-lg' : 'max-w-4xl'} mx-auto px-4 md:px-6 py-6 md:py-10`}>
       <AnimatePresence>
+        {quietAsk && <QuietPrompt onLoud={() => { setQuietAsk(false); startSentenceGame('read'); }} onQuiet={() => { setQuietAsk(false); startSentenceGame('order'); }} />}
+        {sentenceGame && <SentenceGame items={sentenceGame.items} mode={sentenceGame.mode} note={sentenceGame.note} earned={sentenceGame.finished ? earnedPoints : null} onClose={closeSentenceGame} onSwitchToOrder={() => { closeSentenceGame(); startSentenceGame('order'); }}
+          onFinish={r => { finishSession('quiz', r.correct, r.total, r.incorrect); setSentenceGame(g => g && { ...g, finished: true }); }} />}
         {pendingMode && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md">
             <motion.div
@@ -2616,13 +2642,15 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
           >
             <header className={`${isMobile ? 'mb-6' : 'mb-12'} text-center`}>
               <h1 className={`${isMobile ? 'text-2xl' : 'text-4xl'} font-black text-slate-900 mb-2 md:mb-4 tracking-tight`}>
-                {category === 'grammar' ? '반복 학습 (문법 세트)' : category === 'exam' ? '시험기간 대비 단어장' : '단어장 학습'}
+                {category === 'grammar' ? '반복 학습 (문법 세트)' : category === 'exam' ? '시험기간 대비 단어장' : category === 'sentence' ? '문장 세트' : '단어장 학습'}
               </h1>
               <p className="text-sm md:text-base text-slate-500 font-medium">
                 {category === 'grammar' 
                   ? '선생님이 등록한 학습 세트로 실력을 키워보세요!' 
                   : category === 'exam'
                   ? '각 학교별 시험기간 대비 맞춤 단어장으로 내신을 완벽 대비하세요!'
+                  : category === 'sentence'
+                  ? '선생님이 등록한 문장을 익히고 영어 어순에 익숙해져 보세요!'
                   : '선생님이 등록한 단어장을 학습하고 실력을 키워보세요!'}
               </p>
             </header>
@@ -2714,6 +2742,10 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                   </>
                 ) : (
                   <>
+                    {selectedWordbook.type === 'sentence' && <>
+                      <button type="button" onClick={() => startSentenceGame('order')} className="px-4 md:px-5 py-2 md:py-2.5 rounded-full text-xs md:text-sm font-black transition-all bg-pastel-pink-500 text-white shadow-sm hover:scale-105">단어 순서 배열</button>
+                      <button type="button" onClick={askReadAloud} className="px-4 md:px-5 py-2 md:py-2.5 rounded-full text-xs md:text-sm font-black transition-all bg-white text-[#8b2f40] border border-pastel-pink-200 hover:bg-pastel-pink-50">🎙️ 낭독</button>
+                    </>}
                     {(selectedWordbook.type === 'irregular' || selectedWordbook.type === 'comparative-grammar') && (
                       <button
                         onClick={() => setPendingMode('conjugation')}

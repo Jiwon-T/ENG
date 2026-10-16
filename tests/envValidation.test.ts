@@ -207,3 +207,11 @@ describe('Environment Variable and Configuration Enforcement Tests', () => {
   });
 });
 
+// The AI call (api/_lib/aiModel.ts, api/gemini.ts) is checked on its own: besides the official variables it may only use
+// these optional ones (Vertex location, the Gemini API key fallback, the admin who isn't limited).
+it('AI code uses only the official variables and its documented optional ones', () => {
+  const allowed = new Set<string>([...OFFICIAL_SERVER_ENV_VARS, 'NODE_ENV', 'AI_VERTEX_LOCATION', 'GOOGLE_GENAI_API_KEY', 'GEMINI_API_KEY', 'ADMIN_UID']);
+  for (const file of ['api/_lib/aiModel.ts', 'api/gemini.ts']) {
+    for (const m of fs.readFileSync(file, 'utf8').matchAll(/process\.env\.([A-Z0-9_]+)/g)) assert.ok(allowed.has(m[1]), `${file} uses an undocumented environment variable: ${m[1]}`);
+  }
+});

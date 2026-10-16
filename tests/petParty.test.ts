@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
-import {addContribution, checkNickname, createParty, initialGuild, joinParty, leaveParty, publicParty, settleParty, voteKick, warnNickname, weekOf, setNickname, type PetLook} from '../api/_lib/petParty.js';
+import {addContribution, checkNickname, createParty, initialGuild, joinParty, leaveParty, normalizeGuild, publicParty, setAlias, setGuildName, settleParty, voteKick, warnName, weekOf, type PetLook} from '../api/_lib/petParty.js';
 import {initialPetState} from '../api/_lib/pet.js';
 import {handlePet} from '../api/_lib/student/pet.js';
 import {buildRun} from '../api/_lib/petWordFeed.js';
@@ -9,21 +9,23 @@ import {warnGuildNickname} from '../api/_lib/teacherPetParty.js';
 
 const MON = Date.parse('2026-10-12T03:00:00Z'); // Monday noon in Seoul
 const DAY = 86_400_000;
-const look: PetLook = {character: 'hodu', name: '호두', level: 3, clothing: null, accessory: null};
+const look: PetLook = {character: 'hodu', name: '호두', level: 3, clothing: null, accessory: null, slot: 1};
 const input = {nameA: '반짝', nameB: '별빛', boss: 'forest', size: 4, phrases: ['매일 조금씩 해요']};
-const guild = (nick: string) => { const g = initialGuild(MON); setNickname(g, nick); return g; };
+/** A student with a 원정대 이름 ('<nick>단') and pet 1's 모험가 별칭 '<nick>'. */
+const guild = (nick: string) => { const g = initialGuild(MON); setGuildName(g, `${nick}단`); setAlias(g, 1, nick); return g; };
 
 test('party: weeks start on Monday in Seoul; nicknames are free text without contact details; a warned nickname cannot come back', () => {
   assert.equal(weekOf(MON), '2026-10-12'); assert.equal(weekOf(MON + 6 * DAY), '2026-10-12'); assert.equal(weekOf(MON + 7 * DAY), '2026-10-19');
   assert.equal(checkNickname('  별 사탕 ', []), '별 사탕');
   for (const bad of ['a', '열한글자가넘는별칭이에요', '01000001234', 'me@mail', 'insta_kim']) assert.throws(() => checkNickname(bad, []), /PARTY_NICK_/, bad);
-  const g = guild('바보멍청이'); warnNickname(g);
-  assert.equal(g.warned, true);
-  assert.throws(() => setNickname(g, '바보 멍청이'), /PARTY_NICK_BANNED/, 'the same nickname (spaces ignored) is refused');
-  setNickname(g, '별사탕'); assert.equal(g.warned, false);
+  const g = guild('바보멍청이'); warnName(g, 1);
+  assert.equal(g.aliasWarned?.[1], true);
+  assert.throws(() => setAlias(g, 1, '바보 멍청이'), /PARTY_NICK_BANNED/, 'the same name (spaces ignored) is refused');
+  assert.throws(() => setGuildName(g, '바보멍청이'), /PARTY_NICK_BANNED/, 'for the 원정대 이름 too');
+  setAlias(g, 1, '별사탕'); assert.equal(g.aliasWarned?.[1], false);
 });
 
-test('party: create and join (one team a week, a nickname first, no joining a full team); students only see nicknames and pets', () => {
+test('party: create and join (one team a week, names first, no joining a full team); students only see 원정대 이름·별칭 and pets', () => {
   const a = guild('별사탕'), p = createParty(a, 'ua', look, input, MON, 'p1');
   assert.deepEqual([p.name, p.hpMax, a.parties['2026-10-12']], ['반짝 별빛 원정대', 400, 'p1']);
   assert.throws(() => createParty(a, 'ua', look, input, MON, 'p2'), /PARTY_ONE_A_WEEK/);
@@ -33,7 +35,9 @@ test('party: create and join (one team a week, a nickname first, no joining a fu
   assert.throws(() => joinParty(p, guild('여우'), 'ue', look, MON), /PARTY_FULL/);
   const view = publicParty(p, 'ub', MON);
   assert.ok(!JSON.stringify(view).includes('"uid"') && !JSON.stringify(view).includes('ua'), 'no account ids for students');
-  assert.deepEqual(view.members.map(m => m.nickname), ['별사탕', '곰돌', '찹쌀', '토끼']);
+  assert.deepEqual(view.members.map(m => [m.guild, m.alias, m.nickname]).slice(0, 2), [['별사탕단', '별사탕', '별사탕단 · 별사탕'], ['곰돌단', '곰돌', '곰돌단 · 곰돌']]);
+  const noAlias = initialGuild(MON); setGuildName(noAlias, '여우단');
+  assert.throws(() => joinParty(createParty(guild('바람'), 'uy', look, input, MON, 'p9'), noAlias, 'uz', look, MON), /PARTY_NEED_NICK/, 'the playing pet needs its 별칭 too');
 });
 
 test('party: first-time words of the week take 1 off the boss; kick vote needs half of the others (2-person teams only after 3 idle days); leaving gives up the reward', () => {
@@ -79,24 +83,35 @@ test('party API: nickname, create, join; a right answer in a game adds to the te
   let now = MON;
   const deps: any = {db: () => f.db, generate: async () => '{}', now: () => now, feedSource: async () => ({books: [book('a', 60)], wrongs: []})};
   assert.equal((await call('ua', {action: 'party-create', ...input, size: 2}, deps)).out.error, 'PARTY_NEED_NICK');
-  assert.equal((await call('ua', {action: 'guild-nickname', nickname: '010-0000-1234'}, deps)).out.error, 'PARTY_NICK_CONTACT');
-  await call('ua', {action: 'guild-nickname', nickname: '별사탕'}, deps); await call('ub', {action: 'guild-nickname', nickname: '곰돌'}, deps);
+  assert.equal((await call('ua', {action: 'guild-name', name: '010-0000-1234'}, deps)).out.error, 'PARTY_NICK_CONTACT');
+  await call('ua', {action: 'guild-name', name: '반짝별'}, deps); await call('ua', {action: 'guild-alias', slot: 1, name: '별사탕'}, deps);
+  // the same name as another student's: asked first, allowed when confirmed
+  const same = await call('ub', {action: 'guild-name', name: '반짝 별'}, deps);
+  assert.deepEqual([same.status, same.out.error], [409, 'NAME_TAKEN']);
+  assert.equal((await call('ub', {action: 'guild-name', name: '반짝 별', confirm: true}, deps)).out.guild.names.guildName, '반짝 별');
+  assert.equal((await call('ub', {action: 'guild-alias', slot: 2, name: '곰돌'}, deps)).out.error, 'PARTY_BAD_INPUT', 'only a chosen pet');
+  await call('ub', {action: 'guild-alias', slot: 1, name: '곰돌'}, deps);
   const made = await call('ua', {action: 'party-create', ...input, size: 2}, deps);
   assert.equal(made.out.party.name, '반짝 별빛 원정대');
   const board = await call('ub', {action: 'guild-board'}, deps);
   assert.equal(board.out.notes.length, 1); assert.ok(!JSON.stringify(board.out).includes('ua'));
   const joined = await call('ub', {action: 'party-join', partyId: board.out.notes[0].id}, deps);
-  assert.deepEqual(joined.out.party.members.map((m: any) => m.nickname).sort(), ['곰돌', '별사탕']);
+  assert.deepEqual(joined.out.party.members.map((m: any) => m.nickname).sort(), ['반짝 별 · 곰돌', '반짝별 · 별사탕']);
   // ua plays: 12 right answers this week
   await call('ua', {action: 'feed-start'}, deps);
   for (let i = 0; i < 10; i++) { const run = f.rows.get('petGames/ua').run; await call('ua', {action: 'feed-answer', runId: run.id, index: i, choice: run.questions[i].answer}, deps); }
   const party = f.rows.get(`petParties/${made.out.party.id}`);
   assert.deepEqual([party.hp, party.members[0].count], [10, 10]);
-  // an admin warning shows "별칭 바꾸는 중" until a new nickname is picked
-  await warnGuildNickname(f.db, {admin: true, academyId: 'main'}, {uid: 'ub'}, now);
+  // an admin warning shows "…바꾸는 중" until a new name is picked (the 원정대 이름 and each 별칭 separately)
+  await warnGuildNickname(f.db, {admin: true, academyId: 'main'}, {uid: 'ub', target: 1}, now);
   const warned = await call('ub', {action: 'guild-state'}, deps);
-  assert.deepEqual([warned.out.guild.warned, warned.out.party.members.find((m: any) => m.me).nickname], [true, '별칭 바꾸는 중']);
-  assert.equal((await call('ub', {action: 'guild-nickname', nickname: '곰돌'}, deps)).out.error, 'PARTY_NICK_BANNED');
+  assert.deepEqual([warned.out.guild.names.pets[0].warned, warned.out.guild.names.ready, warned.out.party.members.find((m: any) => m.me).nickname], [true, false, '반짝 별 · 별칭 바꾸는 중']);
+  assert.equal((await call('ub', {action: 'guild-alias', slot: 1, name: '곰돌'}, deps)).out.error, 'PARTY_NICK_BANNED');
+  await warnGuildNickname(f.db, {admin: true, academyId: 'main'}, {uid: 'ub', target: 'guild'}, now);
+  assert.equal((await call('ua', {action: 'guild-state'}, deps)).out.party.members.find((m: any) => !m.me).guild, '이름 바꾸는 중');
+  const {listGuildNicknames} = await import('../api/_lib/teacherPetParty.js');
+  const rows = (await listGuildNicknames(f.db, {admin: true, academyId: 'main'})).rows, ub = rows.find((r: any) => r.uid === 'ub')!;
+  assert.deepEqual([ub.guildName, ub.guildWarned, ub.aliases.map((a: any) => [a.slot, a.alias, a.warned])], ['반짝 별', true, [[1, '곰돌', true]]]);
   // next Monday: paid once (10 of 200 = 5% → under 30%, so 0P; checks the settle path and the result note)
   now = MON + 7 * DAY;
   const next = await call('ua', {action: 'guild-state'}, deps);
@@ -117,7 +132,7 @@ test('party for teachers: the whole team of their own student, our academy by na
   f.rows.set('petParties/p1', p); f.rows.set('petGuild/ua', {...initialGuild(MON), nickname: '별사탕', parties: {'2026-10-12': 'p1'}});
   const actor = {academyId: 'main', scopes: [{studentKey: k1}], teachingScopes: []};
   const view: any = await readStudentParty(f.db, actor, k1, MON);
-  assert.deepEqual(view.party.members.map((m: any) => [m.name, m.nickname, m.ourAcademy]), [['김하늘', '별사탕', true], [null, '곰돌', false]]);
+  assert.deepEqual(view.party.members.map((m: any) => [m.name, m.nickname, m.ourAcademy]), [['김하늘', '별사탕단 · 별사탕', true], [null, '곰돌단 · 곰돌', false]]);
   await assert.rejects(() => readStudentParty(f.db, {academyId: 'main', scopes: [], teachingScopes: []}, k1, MON), /FORBIDDEN/);
   await assert.rejects(() => listGuildNicknames(f.db, {admin: false, academyId: 'main'}), /FORBIDDEN/, 'nicknames list is for the admin only');
 });
@@ -146,4 +161,39 @@ test('펫 보기 for teachers: the student pet as the student sees it, read only
   assert.equal(JSON.stringify([...f.rows.entries()]), before, 'nothing written');
   await assert.rejects(() => readStudentPet(f.db, {academyId: 'main', scopes: [{studentKey: k2}], teachingScopes: []}, k1, MON), /FORBIDDEN/, 'not their student');
   assert.deepEqual(await readStudentPet(f.db, {academyId: 'main', admin: true}, k2, MON), {pet: null}, 'no app account: no pet');
+});
+
+test("names: the old one-per-student nickname becomes the main pet's 별칭 (a warning carries over); the 원정대 이름 is picked anew", async () => {
+  const g = {...initialGuild(MON), nickname: '별사탕', warned: true, banned: ['별사탕']};
+  assert.equal(normalizeGuild(g, 2), true);
+  assert.deepEqual([g.nickname, g.aliases, g.aliasWarned, g.movedNickname, g.guildName, g.aliasKeys], ['', {2: '별사탕'}, {2: true}, true, undefined, ['별사탕']]);
+  assert.equal(normalizeGuild(g, 2), false, 'only once');
+  assert.throws(() => warnName(g, 'guild'), /NOT_FOUND/, 'no 원정대 이름 yet');
+  const f = registrationFirestore(), s = initialPetState(MON); s.pets[0].chosen = true; f.rows.set('petStates/ua', s); f.rows.set('petGuild/ua', {...initialGuild(MON), nickname: '곰돌'});
+  const deps: any = {db: () => f.db, generate: async () => '{}', now: () => MON};
+  const r = await call('ua', {action: 'guild-state'}, deps);
+  assert.deepEqual([r.out.guild.names.movedNickname, r.out.guild.names.pets[0].alias, r.out.guild.names.ready], [true, '곰돌', false]);
+  assert.equal(f.rows.get('petGuild/ua').nickname, '곰돌', 'reading moves it in memory only');
+  await call('ua', {action: 'guild-name', name: '반짝별'}, deps);
+  assert.deepEqual([f.rows.get('petGuild/ua').nickname, f.rows.get('petGuild/ua').aliases, f.rows.get('petGuild/ua').movedNickname], ['', {1: '곰돌'}, false]);
+});
+
+test('names: a party member saved before names (no pet slot) loses the old nickname once refreshed; a renamed name frees its registry entry', async () => {
+  const {updateMemberNames, memberNames} = await import('../api/_lib/petParty.js');
+  const p = createParty(guild('별사탕'), 'ua', look, input, MON, 'p1');
+  const old = {...p.members[0], nickname: '바보멍청이', guild: undefined, aliases: undefined, pet: {...look, slot: undefined}};
+  p.members[0] = old as any;
+  assert.equal(memberNames(p.members[0]).alias, '바보멍청이', 'shown until refreshed');
+  const g = initialGuild(MON); normalizeGuild(Object.assign(g, {nickname: '바보멍청이'}), 1); warnName(g, 1);
+  updateMemberNames(p, 'ua', g, 1);
+  assert.deepEqual([memberNames(p.members[0]).alias, p.members[0].nickname, p.members[0].pet.slot], ['별칭 바꾸는 중', '', 1]);
+  const f = registrationFirestore();
+  for (const uid of ['ua', 'ub']) { const s = initialPetState(MON); s.pets[0].chosen = true; f.rows.set(`petStates/${uid}`, s); }
+  const deps: any = {db: () => f.db, generate: async () => '{}', now: () => MON};
+  await call('ua', {action: 'guild-name', name: '반짝별'}, deps);
+  assert.deepEqual(f.rows.get(`petNames/guild_${encodeURIComponent('반짝별')}`).owners, ['ua']);
+  await call('ua', {action: 'guild-name', name: '구름빵'}, deps);
+  assert.deepEqual(f.rows.get(`petNames/guild_${encodeURIComponent('반짝별')}`).owners, [], 'the old name is free again');
+  assert.equal((await call('ub', {action: 'guild-name', name: '반짝별'}, deps)).out.ok, true, 'no question for a name nobody uses now');
+  assert.equal((await call('ub', {action: 'guild-alias', slot: 1, name: '반짝별'}, deps)).out.ok, true, '원정대 이름 and 별칭 are checked apart');
 });

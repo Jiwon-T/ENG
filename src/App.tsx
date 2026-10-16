@@ -1,3 +1,4 @@
+import AiThinking, { addThought } from './components/AiThinking';
 import { studentReportCache } from './lib/studentReportCache';
 import React, { useState, useEffect, Suspense, lazy, Component } from 'react';
 import { Analytics } from '@vercel/analytics/react';
@@ -5,12 +6,14 @@ import { SpeedInsights } from '@vercel/speed-insights/react';
 import { auth, db, recordAttendance, logout } from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, collection, query, where, setDoc } from 'firebase/firestore';
-import { ChevronLeft, Home as HomeIcon, Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, ArrowRight, AlertTriangle, RefreshCw, Menu, History, BarChart3, Users, Download, Share, Smartphone, X as CloseIcon, Info, Plus, Dog, Pencil } from 'lucide-react';
+import { ChevronLeft, Home as HomeIcon, Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, ArrowRight, AlertTriangle, RefreshCw, Menu, BarChart3, Users, Download, Share, Smartphone, X as CloseIcon, Info, Plus, Dog, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { RecentLearning } from './lib/recentLearning';
 import { AppChrome } from './lib/appChrome';
 import { lastSignedOut, loadLogin, rememberSignedIn } from './lib/authHint';
 import { NibTile } from './components/RosyLogo';
+import { PassBadge } from './components/PassBadge';
+import { PetService, type PetSummary } from './lib/petService';
 import type { AnalysisResult, QuestionType } from './lib/gemini';
 
 function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
@@ -97,16 +100,18 @@ class ErrorBoundary extends (Component as any) {
 const Login = lazy(loadLogin);
 const Home = lazy(() => import('./components/Home'));
 const AnalysisView = lazy(() => import('./components/AnalysisView'));
+const PassageAnalyzer = lazy(() => import('./components/passage/PassageAnalyzer'));
 const TeacherRoom = lazy(() => import('./components/teacher/TeacherRoom'));
 const WordbookView = lazy(() => import('./components/student/WordbookView'));
 const LearningReport = lazy(() => import('./components/student/LearningReport'));
-const ArchiveView = lazy(() => import('./components/student/ArchiveView'));
 const PetHome = lazy(() => import('./components/pet/PetHome'));
 const ParentReportView = lazy(() => import('./components/parent/ParentReportView').then(m => ({ default: m.ParentReportView })));
 
-type View = 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'exam' | 'tutor' | 'report' | 'archive' | 'teacher-room' | 'pet';
+/** 변형문제 생성기: question types made in one go (fewer at a time lets the AI think them through carefully). */
+const MAX_QUESTION_TYPES = 3;
+type View = 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'exam' | 'sentence' | 'tutor' | 'report' | 'teacher-room' | 'pet';
 /** The screen's name in the top bar (the same words as on the home tiles and in the menu). */
-const VIEW_TITLES: Partial<Record<View, string>> = { analyzer: '지문 분석기', generator: '문제 생성기', vocab: '단어 세트', grammar: '문법 세트', exam: '시험기간', tutor: 'AI 튜터', report: '학습 리포트', archive: '보관소', pet: '나만의 펫' };
+const VIEW_TITLES: Partial<Record<View, string>> = { analyzer: '지문 분석기', generator: '문제 생성기', vocab: '단어 세트', grammar: '문법 세트', exam: '시험기간', sentence: '문장 세트', tutor: 'AI 튜터', report: '학습 리포트', pet: '나만의 펫' };
 
 interface UserProfile {
   uid: string;
@@ -163,9 +168,20 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [generateQuestions, setGenerateQuestions] = useState(false);
   const [selectedQuestionTypes, setSelectedQuestionTypes] = useState<QuestionType[]>([]);
+  // "AI가 생각하는 중": the model's thought summaries while the analyzer or generator works; calls left this month.
+  const [thoughts, setThoughts] = useState<string[]>([]);
+  const [aiLeft, setAiLeft] = useState<number | null>(null);
   const [resumeTarget, setResumeTarget] = useState<RecentLearning | null>(null);
   const [pendingAssignmentCount, setPendingAssignmentCount] = useState<number | null>(null);
   const [hasNewAssignment, setHasNewAssignment] = useState(false);
+  // Pet points (home chip) and the AI pass (badge by the menu button); read again whenever home opens.
+  // Kept with the uid it belongs to: after signing out or switching accounts the old points and badge never show.
+  const [petSummaryOf, setPetSummaryOf] = useState<{ uid: string; summary: PetSummary } | null>(null);
+  const petSummary = user && petSummaryOf?.uid === user.uid ? petSummaryOf.summary : null;
+  // Home's 워크북 opens 선생님방 on that tab; the 선생님방 row opens it as usual.
+  const [teacherStartTab, setTeacherStartTab] = useState<string | undefined>(undefined);
+  useEffect(() => { if (currentView !== 'teacher-room') setTeacherStartTab(undefined); }, [currentView]);
+  useEffect(() => { if (!user) { setPetSummaryOf(null); return; } if (currentView !== 'home') return; const uid = user.uid; let live = true; PetService.summary().then(summary => { if (live) setPetSummaryOf({ uid, summary }); }).catch(() => undefined); return () => { live = false; }; }, [user, currentView]);
   const [showNameEditModal, setShowNameEditModal] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [newName, setNewName] = useState('');
@@ -311,22 +327,14 @@ export default function App() {
     
     setLoading(true);
     setError(null);
+    setThoughts([]);
     setResult(null); // Clear previous result
     try {
       const { analyzeEnglishText } = await import('./lib/gemini');
-      const analysis = await analyzeEnglishText(text, shouldGenerate, selectedQuestionTypes, questionsOnly);
+      const analysis = await analyzeEnglishText(text, shouldGenerate, selectedQuestionTypes, questionsOnly, piece => setThoughts(list => addThought(list, piece)), setAiLeft);
       setResult(analysis);
       setCurrentView(questionsOnly ? 'generator' : 'analyzer');
       
-      // Save to history
-      if (user) {
-        const { saveAnalysisHistory, saveGeneratorHistory } = await import('./lib/firebase');
-        if (questionsOnly) {
-          saveGeneratorHistory(user.uid, text, analysis);
-        } else {
-          saveAnalysisHistory(user.uid, text, analysis);
-        }
-      }
     } catch (err: any) {
       console.error(err);
       setError(err.message || '분석 중 오류가 발생했습니다. 다시 시도해주세요.');
@@ -452,6 +460,7 @@ export default function App() {
             {hasNewAssignment && (
               <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-bounce" />
             )}
+            <PassBadge pass={petSummary?.pass} />
             <div className="flex items-center gap-1.5">
               <div className="w-7 h-7 bg-pastel-pink-100 rounded-lg flex items-center justify-center text-sm shadow-inner overflow-hidden">
                 {profile?.photoURL && profile.photoURL.startsWith('http') ? (
@@ -460,6 +469,7 @@ export default function App() {
                   <span>{profile?.photoURL || '👤'}</span>
                 )}
               </div>
+              <span className="hidden max-w-[4.5rem] truncate text-xs md:inline font-bold text-[#5e1e2a]">{profile?.alias || profile?.name || ''}</span>
               <Menu size={16} className="text-[#8b2f40]" aria-hidden="true" />
             </div>
           </button>
@@ -526,14 +536,6 @@ export default function App() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-1">
-                {profile?.email === 'lizzieshere1@gmail.com' && (
-                  <MenuNavItem 
-                    icon={<History size={18} />} 
-                    label="보관소" 
-                    onClick={() => { setCurrentView('archive'); setIsMenuOpen(false); }}
-                    active={currentView === 'archive'}
-                  />
-                )}
                 <MenuNavItem 
                   icon={<BarChart3 size={18} />} 
                   label="학습 리포트" 
@@ -635,7 +637,7 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
             >
               <Home 
-                onNavigate={setCurrentView} 
+                onNavigate={view => { setTeacherStartTab(view === 'workbook' ? 'workbook' : undefined); setCurrentView(view === 'workbook' ? 'teacher-room' : view); }} 
                 userRole={profile?.role} 
                 userEmail={profile?.email}
                 studentLinked={Boolean((profile as any)?.notionStudentKey)}
@@ -647,6 +649,7 @@ export default function App() {
                 displayName={profile?.alias || profile?.name}
                 avatar={profile?.photoURL}
                 onOpenMenu={() => setIsMenuOpen(true)}
+                petSummary={petSummary}
               />
             </motion.div>
           ) : currentView === 'pet' ? (
@@ -658,90 +661,10 @@ export default function App() {
             >
               <PetHome onBack={() => setCurrentView('home')} />
             </motion.div>
-          ) : currentView === 'analyzer' && (profile?.email === 'lizzieshere1@gmail.com') ? (
-            <motion.div
-              key="analyzer"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="pt-12"
-            >
-              <header className="pb-8 text-center max-w-4xl mx-auto px-6 flex flex-col items-center">
-                <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-4 tracking-tight">
-                  지문 <span className="text-pastel-pink-500">분석기</span>
-                </h1>
-                <p className="text-slate-500 max-w-lg mx-auto font-medium">
-                  영어 지문을 붙여넣으면 분석해드려요.
-                </p>
-              </header>
-
-              <main className="max-w-4xl mx-auto px-6">
-                <AnimatePresence mode="wait">
-                  {!result ? (
-                    <motion.div
-                      key="input"
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      className="bg-white p-8 rounded-3xl shadow-xl shadow-blue-200/50 border border-blue-50"
-                    >
-                      <div className="mb-6">
-                        <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
-                          영어 지문 입력
-                        </label>
-                        <textarea
-                          value={text}
-                          onChange={(e) => setText(e.target.value)}
-                          placeholder="분석하고 싶은 영어 지문을 여기에 붙여넣으세요..."
-                          className="w-full h-64 p-6 bg-blue-50/30 border-2 border-blue-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-300 transition-all resize-none text-lg leading-relaxed outline-none"
-                        />
-                      </div>
-
-                      {error && (
-                        <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-100">
-                          {error}
-                        </div>
-                      )}
-
-                      <button
-                        onClick={() => handleAnalyze(false)}
-                        disabled={loading || !text.trim()}
-                        className="w-full py-5 bg-blue-500 text-white rounded-2xl font-black text-xl shadow-lg shadow-blue-200 hover:bg-blue-600 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="animate-spin" size={24} />
-                            AI가 분석 중...
-                          </>
-                        ) : (
-                          <>
-                            <Languages size={24} />
-                            분석 시작하기
-                            <ArrowRight size={24} />
-                          </>
-                        )}
-                      </button>
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="result"
-                      initial={{ opacity: 0, scale: 1.05 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="space-y-6"
-                    >
-                      <div className="flex justify-between items-center no-print">
-                        <button
-                          onClick={reset}
-                          className="text-slate-400 hover:text-pastel-pink-500 font-bold text-sm transition-colors flex items-center gap-1"
-                        >
-                          ← 처음으로 돌아가기
-                        </button>
-                      </div>
-                      <AnalysisView result={result} isMobile={isMobile} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </main>
+          ) : currentView === 'analyzer' && user ? (
+            <motion.div key="analyzer" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              {/* 지문 분석기 (Beta): app-first analysis, AI parts by button, shared stored analyses (components/passage). */}
+              <Suspense fallback={<p className="py-10 text-center text-sm text-slate-400">불러오는 중…</p>}><PassageAnalyzer /></Suspense>
             </motion.div>
           ) : currentView === 'generator' && (profile?.email === 'lizzieshere1@gmail.com') ? (
             <motion.div
@@ -803,6 +726,7 @@ export default function App() {
                               <input
                                 type="checkbox"
                                 checked={selectedQuestionTypes.includes(type.id)}
+                                disabled={!selectedQuestionTypes.includes(type.id) && selectedQuestionTypes.length >= MAX_QUESTION_TYPES}
                                 onChange={(e) => {
                                   if (e.target.checked) {
                                     setSelectedQuestionTypes([...selectedQuestionTypes, type.id]);
@@ -828,8 +752,8 @@ export default function App() {
 
                       <button
                         onClick={() => {
-                          if (selectedQuestionTypes.length > 4) {
-                            alert('문제 유형은 최대 4개까지 선택 가능합니다.');
+                          if (selectedQuestionTypes.length > MAX_QUESTION_TYPES) {
+                            alert(`문제 유형은 한 번에 ${MAX_QUESTION_TYPES}개까지 만들 수 있어요. (꼼꼼하게 만들기 위해서예요)`);
                             return;
                           }
                           handleAnalyze(true, true);
@@ -850,6 +774,7 @@ export default function App() {
                           </>
                         )}
                       </button>
+                      {loading && <AiThinking thoughts={thoughts} tone="amber" />}
                     </motion.div>
                   ) : (
                     <motion.div
@@ -880,10 +805,10 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
             >
               <AppChrome.Provider value={{ home: goHome, openMenu: () => setIsMenuOpen(true), name: profile?.alias || profile?.name || '', photo: profile?.photoURL, alert: hasNewAssignment }}>
-                <TeacherRoom onNavigate={setCurrentView} />
+                <TeacherRoom onNavigate={setCurrentView} initialTab={teacherStartTab} />
               </AppChrome.Provider>
             </motion.div>
-          ) : currentView === 'vocab' || currentView === 'grammar' || currentView === 'exam' ? (
+          ) : currentView === 'vocab' || currentView === 'grammar' || currentView === 'exam' || currentView === 'sentence' ? (
             <motion.div
               key={currentView}
               initial={{ opacity: 0, x: 20 }}
@@ -894,7 +819,7 @@ export default function App() {
                 isMobile={isMobile}
                 resumeTarget={resumeTarget}
                 onResumeHandled={() => setResumeTarget(null)}
-                category={currentView === 'grammar' ? 'grammar' : currentView === 'exam' ? 'exam' : 'word'} 
+                category={currentView === 'grammar' ? 'grammar' : currentView === 'exam' ? 'exam' : currentView === 'sentence' ? 'sentence' : 'word'} 
                 onNavigate={setCurrentView}
               />
             </motion.div>
@@ -906,15 +831,6 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
             >
               <LearningReport />
-            </motion.div>
-          ) : currentView === 'archive' && (profile?.email === 'lizzieshere1@gmail.com') ? (
-            <motion.div
-              key="archive"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-            >
-              <ArchiveView />
             </motion.div>
           ) : (
             <motion.div

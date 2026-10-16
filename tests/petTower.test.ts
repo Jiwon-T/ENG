@@ -61,6 +61,8 @@ test('tower: winning saves the floor and pays the first clear once; losing keeps
   currentPet(s).energy = 100;
   const boss = play(10);
   assert.deepEqual([boss.won, boss.chest?.gear, towerPet(t, 1).equip.shoulder], [true, ['golem_pauldron'], 'golem_pauldron'], 'the floor-10 boss guards a chest');
+  assert.equal(towerPet(t, 1).floor, 11, 'the climb goes on to the 수정 동굴');
+  towerPet(t, 1).floor = PET_TOWER.floors + 1; towerPet(t, 1).run = null;
   assert.throws(() => startTowerRun(t, s, pool, NOW), /TOWER_TOP/);
   // Losing: a weak pet at floor 9.
   const weak = ready(1); towerPet(weak.t, 1).floor = 9; startTowerRun(weak.t, weak.s, pool, NOW, seeded());
@@ -87,7 +89,7 @@ test('tower API: words from the admin-set book; the battle runs on the server; m
   const admin = {admin: true, academyId: 'main', uid: 'admin'};
   await assert.rejects(() => saveTowerSettings(f.db, {admin: false, principal: true, academyId: 'main'}, {middle: 'hard'}), /FORBIDDEN/);
   await saveTowerSettings(f.db, admin, {middle: 'hard', high: ''});
-  assert.deepEqual((await readTowerSettings(f.db, admin)).middle, 'hard');
+  assert.deepEqual((await readTowerSettings(f.db, admin)).middle, ['hard']);
   const call = async (body: any) => { let out: any; const res: any = {setHeader() {}, end(v: string) { out = JSON.parse(v); }, statusCode: 0};
     await handlePet({method: 'POST', headers: {authorization: 'Bearer t'}, body} as any, res, {verify: async () => ({uid: 'kid'}), db: () => f.db, generate: async () => '{}', now: () => NOW, towerPool: async (db: any, uid: string) => ({words, ...await towerBookFor(db, uid)})} as any); return out; };
   assert.equal((await call({action: 'tower-start'})).error, 'TOWER_CHEST_FIRST');
@@ -207,4 +209,162 @@ test('tower: a resent door request gets the same answer (no second 기운 or rew
   const run = towerPet(young.t, 1).run!; towerAct(young.t, young.s, 'attack', NOW, seeded());
   const hit: any = towerAnswer(young.t, young.s, run.id, right(young.t, young.s), NOW, seeded());
   assert.ok(hit.damage <= 2, `a Lv.30 pet barely scratches it (${hit.damage})`);
+});
+
+test('tower books: two books per level, words from both, missed words filed under their own book; teachers play the 고등 books', async () => {
+  const f = registrationFirestore(), admin = {admin: true, academyId: 'main', uid: 'admin'};
+  for (const id of ['m1', 'm2', 'h1']) f.rows.set(`wordbooks/${id}`, {title: `책 ${id}`, category: 'word'});
+  await saveTowerSettings(f.db, admin, {middle: ['m1', 'm2', 'm3x'].slice(0, 2), high: 'h1'});
+  assert.deepEqual(await readTowerSettings(f.db, admin).then(r => [r.middle, r.high]), [['m1', 'm2'], ['h1']]);
+  f.rows.set('users/kid', {role: 'student'}); f.rows.set('users/teach', {role: 'teacher'});
+  assert.deepEqual((await towerBookFor(f.db, 'kid')).books.map(b => b.id), ['m1', 'm2'], 'no grade known: 중등 books');
+  assert.deepEqual((await towerBookFor(f.db, 'teach')).books.map(b => b.id), ['h1'], 'a teacher: 고등 books');
+  const {towerWrongsSessions} = await import('../api/_lib/petTower.js');
+  const wrong = (w: string, b: string) => ({word: w, meaning: '뜻', userChoice: '', correctAnswer: '뜻', choices: [], quizSentence: '', wordbookId: b});
+  const sessions = towerWrongsSessions('kid', {runId: 'r1', wrongs: [wrong('a', 'm1'), wrong('b', 'm2'), wrong('c', 'm1')], right: 2, asked: 5, wordbookId: 'm1', wordbookTitle: '책 m1 · 책 m2', startedAt: NOW, books: [{id: 'm1', title: '책 m1'}, {id: 'm2', title: '책 m2'}]}, NOW + 5000);
+  assert.deepEqual(sessions.map(s => [s.id, s.data.wordbookId, s.data.incorrectAnswers.length, s.data.wordbookTitle]), [['tower_kid_r1', 'm1', 2, '채움의 탑 · 책 m1'], ['tower_kid_r1_1', 'm2', 1, '채움의 탑 · 책 m2']]);
+  assert.ok(!('wordbookId' in sessions[0].data.incorrectAnswers[0]), 'the review entries keep their usual shape');
+});
+
+test('탑 4단계 skills: need the job, the level and MP; right = power × 공격, wrong = a glancing 30% and half the MP; 방패 막기 blocks; 치유 heals', () => {
+  const {s, t} = ready(40); startTowerRun(t, s, pool, NOW, seeded());
+  const run = () => towerPet(t, currentPet(s).slot).run!;
+  assert.throws(() => towerAct(t, s, 'skill', NOW, seeded(), 'slash'), /TOWER_SKILL_LOCKED/);
+  currentPet(s).job = 'swordsman';
+  assert.throws(() => towerAct(t, s, 'skill', NOW, seeded(), 'smash'), /TOWER_SKILL_NOT_LEARNED/, 'Lv.60 skill');
+  assert.throws(() => towerAct(t, s, 'skill', NOW, seeded(), 'fire'), /TOWER_SKILL_NOT_LEARNED/, 'another job');
+  run().monster.hp = run().monster.max = 10_000; run().mp = 20;
+  towerAct(t, s, 'skill', NOW, seeded(), 'slash');
+  const hit = towerAnswer(t, s, run().id, right(t, s), NOW, seeded());
+  assert.equal(hit.skill, 'slash'); assert.ok(hit.damage > 0);
+  assert.equal(run().mp, 20 + 2 - 4, '+2 for the right word, −4 for 베기');
+  towerAnswer(t, s, run().id, right(t, s), NOW, seeded()); // the monster's turn
+  const mpBefore = run().mp;
+  towerAct(t, s, 'skill', NOW, seeded(), 'slash');
+  const miss = towerAnswer(t, s, run().id, (right(t, s) + 1) % 4, NOW, seeded());
+  assert.deepEqual([miss.glancing, miss.damage < hit.damage, run().mp], [true, true, mpBefore - 2], 'a miss still hits a little and costs half the MP');
+  towerAnswer(t, s, run().id, right(t, s), NOW, seeded());
+  // 방패 막기: the next monster attack is blocked even with a wrong answer.
+  towerAct(t, s, 'skill', NOW, seeded(), 'shield');
+  const blocked = towerAnswer(t, s, run().id, (right(t, s) + 1) % 4, NOW, seeded());
+  assert.deepEqual([blocked.shield, blocked.blocked], [true, true]);
+  run().mp = 0;
+  assert.throws(() => towerAct(t, s, 'skill', NOW, seeded(), 'slash'), /TOWER_NO_MP/);
+});
+
+test('탑 4단계 crits: only a weak-element skill can crit (×2), the first crit reveals the weakness; job weapons are tower gear', () => {
+  const {s, t} = ready(200); currentPet(s).job = 'wizard'; currentPet(s).job2 = 'white_mage';
+  s.inventory.push('ice_staff', 'dawn_scepter', 'ice_sword');
+  const view: any = publicTower(t, s, NOW);
+  assert.ok(view.gear.includes('ice_staff') && view.gear.includes('dawn_scepter') && !view.gear.includes('ice_sword'), 'only this pet’s job weapons');
+  assert.deepEqual(view.skills.map((k: any) => k.id), ['fire', 'heal', 'ice_arrow', 'holy_light', 'thunder', 'star_storm', 'eclipse']);
+  assert.equal(view.passive.name, '축복');
+  startTowerRun(t, s, pool, NOW, seeded());
+  const run = () => towerPet(t, currentPet(s).slot).run!;
+  run().monster.kind = 'golem'; run().monster.hp = run().monster.max = 1_000_000; run().mp = 100;
+  let crit: any = null;
+  for (let i = 0; i < 40 && !crit; i++) {
+    towerAct(t, s, 'skill', NOW, () => 0, 'fire');
+    const r = towerAnswer(t, s, run().id, right(t, s), NOW, () => 0); // rand 0: always under the chance
+    if (r.crit) crit = r;
+    towerAnswer(t, s, run().id, right(t, s), NOW, () => 0);
+  }
+  assert.ok(crit, 'fire on a golem (weak to 화) crits');
+  assert.deepEqual(crit.weakFound, {kind: 'golem', name: run().monster.name, element: '화'});
+  assert.deepEqual(t.weakFound, ['golem']);
+  assert.equal((publicTower(t, s, NOW) as any).run.weak, '화', 'shown once found');
+  towerAct(t, s, 'skill', NOW, () => 0, 'ice_arrow');
+  assert.equal(towerAnswer(t, s, run().id, right(t, s), NOW, () => 0).crit, undefined, '수 is not the golem’s weakness');
+});
+
+test('탑 5단계: 50 floors in zones of 10 with their monsters and bosses; boss treasures change with the job; floor 40 gives the job weapon', async () => {
+  const { TOWER_ZONES, towerMonster, towerGearFor, towerZone, TOWER_WEAKNESS } = await import('../src/lib/petCatalog.js');
+  assert.equal(PET_TOWER.floors, 50);
+  assert.deepEqual(TOWER_ZONES.map(z => [z.from, z.to, z.boss.name]), [[1, 10, '고대 수문장 골렘'], [11, 20, '수정 여왕 거미'], [21, 30, '스핑크스'], [31, 40, '서리 용'], [41, 50, '대마도사']]);
+  assert.equal(towerZone(25).name, '모래 신전');
+  assert.ok(['crystal_slime', 'vampire_bat', 'cave_spider', 'golem', 'obsidian_golem'].includes(towerMonster(12).kind));
+  assert.deepEqual([towerMonster(50).boss, towerMonster(50).name], [true, '대마도사']);
+  const b10 = towerMonster(10); assert.deepEqual([b10.hp, b10.atk], [418, 60], 'floor 10 stays about as it was');
+  for (const z of TOWER_ZONES) for (const m of [...z.monsters, z.boss]) assert.ok(TOWER_WEAKNESS[m.kind], `${m.name} has a weakness`);
+  assert.deepEqual([towerGearFor('crystal_helm', null)?.name, towerGearFor('crystal_helm', 'swordsman')?.name, towerGearFor('crystal_helm', 'wizard')?.mp], ['수정 투구', '수정 기사 투구', 10]);
+  // The floor-40 chest: the weapon for the pet's job (none yet: a 강화석).
+  const { s, t } = ready(80); currentPet(s).job = 'wizard';
+  const tp = towerPet(t, 1); tp.floor = 40; startTowerRun(t, s, pool, NOW, seeded());
+  tp.run!.monster.hp = 1; towerAct(t, s, 'attack', NOW, seeded());
+  const won: any = towerAnswer(t, s, tp.run!.id, right(t, s), NOW, seeded());
+  assert.deepEqual(won.chest.gear.sort(), ['frost_staff', 'snow_boots']);
+  assert.ok(publicTower(t, s, NOW).stats.mp > towerStats(80, [], {}).mp, '마법사 boots add 마력');
+});
+
+
+test('탑 5단계 도감: a monster is written down when first met (floor) and counted when beaten; shared by the pets; the shadow under one name', () => {
+  const {s, t} = ready(30);
+  startTowerRun(t, s, pool, NOW, seeded());
+  const run = () => towerPet(t, currentPet(s).slot).run!, kind = run().monster.kind;
+  assert.deepEqual(t.codex![kind], {name: run().monster.name, boss: false, first: 1, wins: 0, at: NOW});
+  run().monster.hp = 1; towerAct(t, s, 'attack', NOW, seeded());
+  assert.equal(towerAnswer(t, s, run().id, right(t, s), NOW, seeded()).won, true);
+  assert.equal(t.codex![kind].wins, 1);
+  openTowerDoor(t, s, 'u1', pool, NOW + 1, seeded(), 0, undefined, undefined); // floor 2: maybe a new monster, the old entry stays
+  assert.deepEqual([t.codex![kind].first, t.codex![kind].wins], [1, 1]);
+  towerPet(t, currentPet(s).slot).run = null; towerPet(t, currentPet(s).slot).event = null;
+  openTowerDoor(t, s, 'u1', pool, NOW + 2, seeded(), 0, ['mirror', 'mirror', 'mirror']);
+  assert.equal(t.codex!.shadow.name, '그림자');
+  t.weakFound = ['sphinx'];
+  const codex: any[] = (publicTower(t, s, NOW) as any).codex;
+  assert.equal(codex[0].kind, kind, 'in the order met');
+  assert.deepEqual(codex.at(-1), {kind: 'sphinx', name: null, hidden: true, boss: true, first: null, wins: null, weak: '수'}, 'a weakness found before the 도감 still shows (a boss not beaten: ???)');
+  // a boss met but not beaten stays ??? (도감 and battle); beaten, its name shows
+  const tp = towerPet(t, currentPet(s).slot); tp.run = null; tp.event = null; tp.floor = 10;
+  startTowerRun(t, s, pool, NOW + 3, seeded());
+  const view: any = publicTower(t, s, NOW);
+  assert.deepEqual([view.run.monster.name, view.codex.find((x: any) => x.kind === 'gatekeeper').name, view.codex.find((x: any) => x.kind === 'gatekeeper').hidden], ['???', null, true]);
+  tp.best = 10;
+  assert.equal((publicTower(t, s, NOW) as any).codex.find((x: any) => x.kind === 'gatekeeper').name, '고대 수문장 골렘');
+});
+
+test('탑 5단계 명예의 전당: boss floors keep the first clear and the fewest attacks (all academies); nicknames read fresh, no uids; teachers not counted', async () => {
+  const {hallUpdate} = await import('../api/_lib/petTowerHall.js');
+  const e = (uid: string, attacks: number) => ({uid, attacks, at: NOW, pet: {} as any});
+  const a = hallUpdate(null, e('a', 9))!;
+  assert.deepEqual([a.first, a.fewest, a.records.first!.uid], [true, true, 'a']);
+  assert.equal(hallUpdate(a.records, e('b', 9)), null, 'a tie keeps the earlier record');
+  const b = hallUpdate(a.records, e('b', 7))!;
+  assert.deepEqual([b.first, b.fewest, b.records.first!.uid, b.records.fewest!.uid], [false, true, 'a', 'b']);
+
+  const f = registrationFirestore();
+  const beatBoss = async (uid: string, attacks: number) => {
+    const {s, t} = ready(60); s.background = 'forest_cabin'; currentPet(s).name = `펫${uid}`;
+    const tp = towerPet(t, 1); tp.floor = 10; tp.best = 9;
+    startTowerRun(t, s, pool, NOW, seeded());
+    tp.run!.monster.hp = 1; towerAct(t, s, 'attack', NOW, seeded()); tp.run!.attacks = attacks;
+    f.rows.set(`petStates/${uid}`, s); f.rows.set(`petTowers/${uid}`, t);
+    const answer = tp.run!.q!.answer;
+    let out: any; const res: any = {setHeader() {}, end(v: string) { out = JSON.parse(v); }, statusCode: 0};
+    await handlePet({method: 'POST', headers: {authorization: 'Bearer t'}, body: {action: 'tower-answer', runId: tp.run!.id, choice: answer}} as any, res, {verify: async () => ({uid}), db: () => f.db, generate: async () => '{}', now: () => NOW} as any);
+    return out;
+  };
+  f.rows.set('users/kid', {}); f.rows.set('users/kid2', {}); f.rows.set('users/teach', {role: 'teacher'});
+  f.rows.set('petGuild/kid', {nickname: '별빛 해달', warned: false});
+  const first = await beatBoss('kid', 9);
+  assert.deepEqual([first.result.won, first.result.hall], [true, {first: true, fewest: true}]);
+  assert.deepEqual((await beatBoss('teach', 1)).result.hall, {first: false, fewest: true}, 'a teacher holds it in the hall with teachers');
+  assert.deepEqual((await beatBoss('kid2', 6)).result.hall, {first: false, fewest: true});
+  const saved = f.rows.get('petTowerHall/f10');
+  assert.deepEqual([saved.first.uid, saved.fewest.uid, saved.first.pet.background, saved.first.pet.gear[0].id], ['kid', 'kid2', 'forest_cabin', 'apprentice_club']);
+  const hallFor = async (uid: string, teachers = false) => { let out: any; const res: any = {setHeader() {}, end(v: string) { out = JSON.parse(v); }, statusCode: 0};
+    await handlePet({method: 'POST', headers: {authorization: 'Bearer t'}, body: {action: 'tower-hall', teachers}} as any, res, {verify: async () => ({uid}), db: () => f.db, generate: async () => '{}', now: () => NOW} as any); return out.hall; };
+  const hall = await hallFor('kid2', true), f10 = hall.floors.find((x: any) => x.floor === 10);
+  assert.deepEqual([hall.teacherView, hall.withTeachers], [false, false], 'a student never gets the teachers’ records');
+  assert.deepEqual([hall.floors.map((x: any) => x.floor), f10.boss, f10.first.nickname, f10.first.me, f10.fewest.nickname, f10.fewest.me, f10.fewest.attacks], [[10, 20, 30, 40, 50], '고대 수문장 골렘', '별빛 해달', false, '이름 없는 모험가', true, 7], 'six attacks before + the winning one');
+  assert.ok(!JSON.stringify(hall).includes('"uid"'), 'no uids in the hall');
+  assert.equal(hall.floors[1].first, null);
+  assert.deepEqual(hall.floors.map((x: any) => x.boss), ['고대 수문장 골렘', null, null, null, null], 'a boss stays ??? until beaten');
+  f.rows.set('users/new', {});
+  assert.equal((await hallFor('new')).floors[0].boss, null, 'not beaten yet: the floor-10 boss is ??? too');
+  f.rows.set('petGuild/kid2', {guildName: '구름빵', aliases: {1: '초록'}, aliasWarned: {}});
+  assert.equal((await hallFor('kid2')).floors[0].fewest.nickname, '구름빵 · 초록', '원정대 이름 · 모험가 별칭 of the pet that won');
+  const plain = await hallFor('teach'), withT = await hallFor('teach', true);
+  assert.deepEqual([plain.teacherView, plain.withTeachers, plain.floors[0].fewest.attacks], [true, false, 7]);
+  assert.deepEqual([withT.withTeachers, withT.floors[0].first.nickname, withT.floors[0].fewest.nickname, withT.floors[0].fewest.teacher, withT.floors[0].fewest.attacks], [true, '별빛 해달', '선생님', true, 2]);
 });

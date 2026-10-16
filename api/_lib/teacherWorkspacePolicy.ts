@@ -1,3 +1,4 @@
+import {lessonFeedbackText,percentage as sharedPercentage} from '../../src/lib/lessonReportText.js';
 import { z } from 'zod';
 export const subjects = ['영어', '수학', '국어', '과학', '한국사'] as const;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -27,7 +28,7 @@ export const lessonDraftSchema = z.object({
     // 자습을 나눠 할 때: the pieces after the first (up to 3 pieces in all).
     selfStudyMore: z.array(z.object({ start: z.string().max(5), end: z.string().max(5) }).strict()).max(2).default([]),
     selfStudyRound: z.number().nonnegative().nullable().default(null),
-    attendanceNote: z.string().max(5000).default(''), specialNote: z.string().max(5000).default(''), examScope:z.string().max(5000).default(''),
+    attendanceNote: z.string().max(5000).default(''), specialNote: z.string().max(5000).default(''), examScope:z.string().max(5000).default(''), teacherNote:z.string().max(5000).default(''),
 }).transform(d=>({...d,...orderedStudyPieces(d),selfStudy:d.selfStudy==='미확인'&&!d.selfStudyStart&&!d.selfStudyEnd&&!d.selfStudyRound&&!d.selfStudyMore.length?'없음':d.selfStudy,correct:d.wrong!=null&&d.total!=null?d.total-d.wrong:d.correct,examCorrect:d.examWrong!=null&&d.examTotal!=null?d.examTotal-d.examWrong:d.examCorrect})).superRefine((d, ctx) => {
     if (d.classSession === '있음' && d.end <= d.start)
         ctx.addIssue({ code: 'custom', message: '종료 시간은 시작 시간 뒤여야 합니다.' });
@@ -54,8 +55,8 @@ export function canTeach(actor: {
         subject: string;
     }[];
 }, studentKey: string, subject: string) { return actor.admin || (actor.principal ? actor.teachingScopes || [] : actor.scopes).some(s => s.studentKey === studentKey && s.subject === subject); }
-export function percentage(correct: number | null, total: number | null) { return correct === null || total === null || total <= 0 ? null : Math.round(correct / total * 10000) / 100; }
-export function lessonFeedback(d: z.infer<typeof lessonDraftSchema>) { return [d.content, d.note, d.assignment ? `과제: ${d.assignment}` : ''].filter(Boolean).join('\n\n'); }
+export function percentage(correct: number | null, total: number | null) { return sharedPercentage(correct, total); }
+export function lessonFeedback(d: z.infer<typeof lessonDraftSchema>) { return lessonFeedbackText(d); }
 export function continuation(previous: any) { return { examScope:previous.examScope||'', content: previous.content || '', assignment: previous.assignment || '', note: '', nextPlan: previous.nextPlan || '', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', correct: null, total: null, wrong:null,examWrong:null,examCorrect: null, examTotal: null, round: null, selfStudy: '없음', selfStudyRound: null, selfStudyStart: '', selfStudyEnd: '', attendanceNote: '', specialNote: '' }; }
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 /** Self-study block attached to a regular lesson (same weekday). No students = everyone in the slot. */

@@ -11,5 +11,5 @@ export const NAV_ITEMS=[
  {id:'workbook',label:'워크북',mobileLabel:'워크북',icon:FileText,group:2,mobilePrimary:false,mobileOrder:99},
  {id:'settings',label:'관리자 설정',mobileLabel:'관리자 설정',icon:Settings,group:2,mobilePrimary:false,mobileOrder:99},
 ] as const;
-export function visibleWorkspaceNav(admin=false,principal=false){return NAV_ITEMS.filter(item=>item.id==='workbook'?admin:item.id!=='settings'||admin||principal);}
+export function visibleWorkspaceNav(admin=false,principal=false){return NAV_ITEMS.filter(item=>item.id!=='settings'||admin||principal);} // 워크북: every teacher (AI 해석 has a monthly limit)
 export function adjacentWorkspaceTab(items:readonly {id:string}[],current:string,key:string){const index=Math.max(0,items.findIndex(item=>item.id===current));return key==='Home'?items[0]?.id:key==='End'?items.at(-1)?.id:key==='ArrowRight'?items[(index+1)%items.length]?.id:key==='ArrowLeft'?items[(index+items.length-1)%items.length]?.id:undefined;}

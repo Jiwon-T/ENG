@@ -3,13 +3,14 @@ import { ChevronLeft } from 'lucide-react';
 import { PetCharacter } from './PetCharacters';
 import { askConfirm } from '../teacher/ConfirmDialog';
 import { PET_PARTY, petStage, wornAccessories } from '../../lib/petCatalog';
+import AdventureNames, { type NamesView } from './AdventureNames';
 
 // 모험가 길드: the board of team notes (fixed phrases only), my team this week, and the team ranking. Students only see
-// nicknames and pets here — never real names, even from the same academy.
+// 원정대 이름·모험가 별칭 and pets here — never real names, even from the same academy.
 interface Look { character: string; name: string; level: number; clothing: string | null; accessories?: string[]; accessory?: string | null }
 interface MemberView { index: number; rank: number; nickname: string; pet: Look; count: number; status: string; me: boolean; idleDays: number; votes: number; votedByMe: boolean; needVotes: number; canVote: boolean }
 interface PartyView { id: string; endDay: string; name: string; boss: string; size: number; phrases: string[]; hp: number; hpMax: number; progress: number; members: MemberView[] }
-interface GuildView { nickname: string; shown: string; warned: boolean; joinedThisWeek: boolean; lastResult: { week: string; party: string; progress: number; reward: number; counted: boolean } | null }
+interface GuildView { shown: string; names: NamesView; joinedThisWeek: boolean; lastResult: { week: string; party: string; progress: number; reward: number; counted: boolean } | null }
 type Send = (action: string, payload?: Record<string, unknown>) => Promise<any>;
 
 const boss = (id: string) => PET_PARTY.bosses.find(b => b.id === id) || PET_PARTY.bosses[0];
@@ -25,7 +26,7 @@ export default function GuildHall({ send, onClose }: { send: Send; onClose: () =
   const [rows, setRows] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-  const [nick, setNick] = useState('');
+  const [namesOpen, setNamesOpen] = useState(false), [namesSkipped, setNamesSkipped] = useState(false);
   const [making, setMaking] = useState(false);
   const [form, setForm] = useState({ nameA: PET_PARTY.nameA[0] as string, nameB: PET_PARTY.nameB[0] as string, boss: 'forest', size: 4, phrases: [PET_PARTY.phrases[0]] as string[] });
 
@@ -37,7 +38,7 @@ export default function GuildHall({ send, onClose }: { send: Send; onClose: () =
   useEffect(() => { if (tab === 'rank') void loadRank().catch(() => undefined); if (tab === 'board') void loadBoard().catch(() => undefined); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!guild) return <div className="fixed inset-0 z-[80] bg-white" aria-busy="true">{notice && <p className="p-6 text-center text-sm text-slate-500">{notice}</p>}</div>;
-  const needNick = !guild.nickname || guild.warned;
+  const needNick = !guild.names.ready;
 
   return (
     <div role="dialog" aria-modal="true" aria-label="모험가 길드" className="fixed inset-0 z-[80] overflow-y-auto bg-white">
@@ -45,7 +46,7 @@ export default function GuildHall({ send, onClose }: { send: Send; onClose: () =
         <header className="flex items-center justify-between">
           <button type="button" onClick={onClose} className="flex items-center gap-0.5 text-sm font-bold text-[#8b2f40]"><ChevronLeft size={18} aria-hidden="true" />뒤로</button>
           <h1 className="text-base font-black text-[#5e1e2a]">모험가 길드</h1>
-          <span className="max-w-[90px] truncate text-xs font-bold text-[#8b2f40]">{guild.shown}</span>
+          <button type="button" onClick={() => setNamesOpen(true)} className="max-w-[120px] truncate text-xs font-bold text-[#8b2f40] underline decoration-dotted underline-offset-2">{guild.shown || '이름 정하기'}</button>
         </header>
         {guild.lastResult && <p className="mt-3 rounded-2xl bg-[#fef2f3] px-4 py-2 text-xs text-[#5e1e2a]">지난 주 <b className="font-bold">{guild.lastResult.party}</b> {guild.lastResult.progress}% · {guild.lastResult.reward > 0 ? <b className="font-bold">+{guild.lastResult.reward}P 받았어요</b> : guild.lastResult.counted ? '30%를 넘지 못해 보상이 없어요' : '10문제를 채우지 못해 보상이 없어요'}</p>}
         <div role="tablist" aria-label="길드 메뉴" className="mt-3 grid grid-cols-3 gap-1 rounded-2xl bg-[#f8f1f2] p-1">
@@ -63,6 +64,7 @@ export default function GuildHall({ send, onClose }: { send: Send; onClose: () =
                 <button type="button" disabled={busy || guild.joinedThisWeek || needNick} onClick={() => void run(async () => { apply(await send('party-join', { partyId: n.id })); setTab('team'); })} className="ml-auto rounded-lg bg-[#e0587a] px-3 py-1 text-xs font-bold text-white disabled:opacity-40">참여</button></div>
             </div>; }) : <p className="py-6 text-center text-xs text-[#7a6a70]">아직 모집글이 없어요. 먼저 올려 보세요!</p>}
           </div>
+          {needNick && <button type="button" onClick={() => setNamesOpen(true)} className="mt-3 w-full rounded-2xl border border-dashed border-[#e0587a] py-2 text-xs font-bold text-[#8b2f40]">원정대 이름과 이 펫의 모험가 별칭을 정하면 팀에 들어갈 수 있어요 · 정하기</button>}
           {!guild.joinedThisWeek && !making && <button type="button" disabled={needNick} onClick={() => setMaking(true)} className="mt-3 w-full rounded-2xl bg-[#e0587a] py-3 text-sm font-bold text-white disabled:opacity-40">모집글 올리기</button>}
           {guild.joinedThisWeek && <p className="mt-3 text-center text-[11px] text-slate-400">이번 주는 이미 팀이 있어요 · 한 주에 한 팀이에요</p>}
           {!guild.joinedThisWeek && <p className="mt-2 text-center text-[11px] text-slate-400">한 주에 한 팀 · 월요일에 새로 시작해요</p>}
@@ -111,16 +113,7 @@ export default function GuildHall({ send, onClose }: { send: Send; onClose: () =
         </div>
       </div>}
 
-      {needNick && <div className="fixed inset-0 z-[86] flex items-center justify-center bg-slate-900/40 p-4">
-        <form role="dialog" aria-modal="true" aria-label="길드 별칭" onSubmit={e => { e.preventDefault(); void run(async () => apply(await send('guild-nickname', { nickname: nick }))); }} className="w-full max-w-xs rounded-3xl bg-white p-5 text-center">
-          <h2 className="text-base font-black text-[#5e1e2a]">{guild.warned ? '별칭을 바꿔 주세요' : '길드에서 쓸 별칭'}</h2>
-          <p className="mt-1 text-xs text-slate-500">{guild.warned ? '관리자가 별칭을 바꿔 달라고 했어요. 예전 별칭은 다시 쓸 수 없어요.' : '다른 친구들에게는 실명 대신 별칭과 펫만 보여요.'}</p>
-          <input value={nick} onChange={e => setNick(e.target.value)} maxLength={PET_PARTY.nickname.max} placeholder="2~10자 (연락처는 안 돼요)" aria-label="별칭" className="mt-3 w-full rounded-xl border border-[#f3d5da] px-3 py-2 text-sm outline-none focus:border-[#e0587a]" />
-          {notice && <p role="alert" className="mt-2 text-xs font-bold text-[#b04a5a]">{notice}</p>}
-          <button type="submit" disabled={busy || nick.trim().length < PET_PARTY.nickname.min} className="mt-3 w-full rounded-2xl bg-[#e0587a] py-2.5 text-sm font-bold text-white disabled:opacity-50">정하기</button>
-          <button type="button" onClick={onClose} className="mt-2 text-xs text-slate-400">나중에 할게요</button>
-        </form>
-      </div>}
+      {(namesOpen || (needNick && !namesSkipped)) && <AdventureNames names={guild.names} send={send} onSaved={r => apply(r)} onClose={() => { setNamesOpen(false); setNamesSkipped(true); }} />}
     </div>
   );
 }
