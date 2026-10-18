@@ -129,6 +129,8 @@ body:has(.teacher-workspace) nav.no-print.sticky {background:var(--workspace-sur
 .schedule-danger-menu {position:relative;}
 .schedule-danger-menu>summary {display:grid;place-items:center;min-height:44px;min-width:44px;list-style:none;cursor:pointer;border:1px solid var(--workspace-neutral-border);border-radius:12px;}
 .schedule-danger-menu>summary::-webkit-details-marker {display:none;}
+/* a workspace rule turns summaries into flex rows: keep the … centered in its square either way */
+.teacher-workspace .schedule-danger-menu>summary {justify-content:center;align-items:center;}
 .schedule-danger-menu>div {position:absolute;bottom:100%;right:0;min-width:160px;padding:8px;background:var(--workspace-surface);border:1px solid var(--workspace-neutral-border);border-radius:12px;box-shadow:var(--workspace-shadow-large);}
 .teacher-workspace .schedule-danger-action {color:var(--workspace-danger-fg);background:var(--workspace-danger-bg);}
 .schedule-editor-notice {font-size:12px;color:var(--workspace-muted);padding:4px 8px;}

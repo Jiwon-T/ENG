@@ -105,3 +105,15 @@ test('word feed: no star below half right (so a normal stage is not cleared by g
   run.results = run.results.map((r: any, i: number) => ({...r, correct: i < 5}));
   assert.equal(runSummary(run).stars, 1);
 });
+
+test('word feed source: wrong answers are looked up until six still in the book are found, past ones that are gone', async () => {
+  const {loadFeedSource} = await import('../api/_lib/petWordFeed.js');
+  const f = registrationFirestore();
+  f.rows.set('wordbooks/b1', {category: 'word', type: 'standard'});
+  for (let i = 0; i < 20; i++) f.rows.set(`wordbooks/b1/words/w${String(i).padStart(2, '0')}`, {word: `word${i}`, meaning: `뜻${i}`});
+  // 8 gone words first, then 10 that exist
+  const incorrectAnswers = [...Array.from({length: 8}, (_, i) => ({word: `gone${i}`})), ...Array.from({length: 10}, (_, i) => ({word: `word${i}`}))];
+  f.rows.set('studySessions/s1', {uid: 'kid', wordbookId: 'b1', createdAt: NOW, incorrectAnswers});
+  const source = await loadFeedSource(f.db, 'kid', () => 0.5);
+  assert.deepEqual(source.wrongs.map(w => w.word), ['word0', 'word1', 'word2', 'word3', 'word4', 'word5']);
+});

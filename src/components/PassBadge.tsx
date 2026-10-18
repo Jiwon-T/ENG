@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Medal } from 'lucide-react';
 import { AI_PLANS } from '../lib/aiPlans';
-import { PET_ASSIGNMENT_REWARD, PET_ATTENDANCE_REWARD, PET_COUPON, PET_DAILY_STUDY_POINTS, PET_STUDY_RATES } from '../lib/petCatalog';
+import { PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_COUPON, PET_DAILY_STUDY_POINTS, PET_STUDY_RATES } from '../lib/petCatalog';
 import type { PetSummary } from '../lib/petService';
 
 /** 펫 패스 / 프리미엄 hanging under the name button (inside it, which is `relative`), so the name stays readable and a
@@ -17,7 +17,7 @@ export function PassBadge({ pass }: { pass?: PetSummary['pass'] }) {
 const won = (n: number) => n.toLocaleString('ko-KR');
 const WAYS: [string, string][] = [
   ['수업 출석', `+${PET_ATTENDANCE_REWARD.points}P`],
-  ['과제 완료', `+${PET_ASSIGNMENT_REWARD.points}P`],
+  ['숙제 (선생님 평가 중 이상)', `+${PET_HOMEWORK_REWARD['중'].points}~${PET_HOMEWORK_REWARD['최상'].points}P`],
   ['단어 시험 정답 1개', `+${PET_STUDY_RATES['vocab-test'].points}P`],
   ['오답 복습 1개', `+${PET_STUDY_RATES['review-confirm'].points}P`],
   ['단어장 퀴즈·짝 맞추기 1개', `+${PET_STUDY_RATES['wordbook-quiz'].points}P`],
@@ -27,11 +27,12 @@ const WAYS: [string, string][] = [
 
 /** The home screen's point chip: tap it for how points are earned and a way to the pet. The panel opens under the
  *  nearest positioned parent (Home: the chip and menu group), right-aligned so it stays on a phone screen. */
-/** The best 모험가 place beside the points (1·2·3위 in gold, silver and bronze); it opens the 순위. */
+/** The best 모험가 place beside the points (1·2·3위 in gold, silver and bronze; –위 when there is none yet, to make one
+ *  curious); it opens the 순위. */
 const PLACE = [{ bg: '#fac775', fg: '#412402', bd: '#ef9f27' }, { bg: '#e2e8f0', fg: '#334155', bd: '#b4b2a9' }, { bg: '#f5c4b3', fg: '#4a1b0c', bd: '#d85a30' }];
-export function RankChip({ rank, onOpen }: { rank: number; onOpen: () => void }) {
-  const c = PLACE[rank - 1] || { bg: '#ffffff', fg: '#633806', bd: '#fac775' };
-  return <button type="button" onClick={onOpen} aria-label={`모험가 순위 ${rank}위, 순위표 보기`} style={{ background: c.bg, color: c.fg, borderColor: c.bd }} className="flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-bold"><Medal size={12} aria-hidden="true" />{rank}위</button>;
+export function RankChip({ rank, onOpen }: { rank: number | null; onOpen: () => void }) {
+  const c = rank ? PLACE[rank - 1] || { bg: '#ffffff', fg: '#633806', bd: '#fac775' } : { bg: '#ffffff', fg: '#94a3b8', bd: '#e2e8f0' };
+  return <button type="button" onClick={onOpen} aria-label={rank ? `모험가 순위 ${rank}위, 순위표 보기` : '아직 모험가 순위 없음, 순위표 보기'} style={{ background: c.bg, color: c.fg, borderColor: c.bd }} className="flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-bold"><Medal size={12} aria-hidden="true" />{rank ?? '–'}위</button>;
 }
 export function PetPointsChip({ points, onPet, coupon }: { points: number; onPet: () => void; coupon?: PetSummary['coupon'] }) {
   const [open, setOpen] = useState(false);

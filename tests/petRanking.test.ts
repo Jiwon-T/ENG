@@ -39,10 +39,13 @@ test('순위: 모험가 by tower floor → stars → level; 원정대 by summed 
   assert.equal((await call('c', {action: 'rank-profile', at: r.at - 1, id: r.rows[1].id}, f)).error, 'RANK_STALE');
   const teacherRow = tv.rows[0];
   assert.equal((await call('c', {action: 'rank-profile', at: tv.at, id: teacherRow.id}, f)).error, 'RANK_STALE', 'a teacher pet is not opened by a student');
-  // the home chip: my best 모험가 place (a teacher gets none)
-  const summary = async (uid: string) => { let out: any; const res: any = {setHeader() {}, end(v: string) { out = JSON.parse(v); }, statusCode: 0};
-    await handlePet({method: 'GET', url: '/api/student/pet?summary=1', headers: {authorization: 'Bearer t'}} as any, res, {verify: async () => ({uid}), db: () => f.db, generate: async () => '{}', now: () => NOW} as any); return out; };
-  assert.deepEqual([(await summary('a')).rank, (await summary('c')).rank, (await summary('t')).rank], [2, 3, null]);
+  // the home chip: my best 모험가 place (a teacher: in the ranking with the teachers; no pet yet: null = –위)
+  const summary = async (uid: string, db = f.db) => { let out: any; const res: any = {setHeader() {}, end(v: string) { out = JSON.parse(v); }, statusCode: 0};
+    await handlePet({method: 'GET', url: '/api/student/pet?summary=1', headers: {authorization: 'Bearer t'}} as any, res, {verify: async () => ({uid}), db: () => db, generate: async () => '{}', now: () => NOW} as any); return out; };
+  const [sa, sc, st, sn] = [await summary('a'), await summary('c'), await summary('t'), await summary('nobody')];
+  assert.deepEqual([sa.rank, sc.rank, st.rank, st.rankTeacher, sa.rankTeacher, sn.rank], [2, 3, 1, true, undefined, null]);
+  const noRanking: any = {...f.db, collection: (name: string) => { if (name === 'petRankings') throw Error('RANKING_READ'); return f.db.collection(name); }};
+  assert.equal((await summary('nobody2', noRanking)).rank, null, 'no pet: –위 without reading the ranking');
   // only a pet on the rows this viewer was shown opens: a's second pet is not a 원정대 row
   assert.equal((await call('c', {action: 'rank-profile', at: g.at, id: r.rows[3].id, kind: 'guild'}, f)).error, 'RANK_STALE');
   assert.equal((await call('c', {action: 'rank-profile', at: g.at, id: g.rows[0].id, kind: 'guild'}, f)).profile.label, '용감한 검객');

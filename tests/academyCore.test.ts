@@ -5,6 +5,7 @@ import {templateFirestore} from './helpers/templateFirestore.js';
 import {hashStudentKey,hashPin} from '../api/_lib/security.js';
 import {readDirectoryStudents,directoryRowKey,directorySourceKey,DIRECTORY_ROWS,DIRECTORY_STATE,DIRECTORY_HISTORY} from '../api/_lib/academyDirectorySource.js';
 import {CORE_AUTHORITY,readCoreScopes,saveCoreGrant,restoreCoreProfile} from '../api/_lib/academyCore.js';
+import {forgetTeacherActors} from '../api/_lib/teacherActorMemory.js';
 import {registrationAssignmentOptions} from '../api/_lib/teacherRegistrationAssignments.js';
 import {lookupStudentIdentity} from '../api/_lib/studentIdentity.js';
 import {readStudentProfile,saveStudentProfile,studentProfileSchema,profileFromPage,profileProperties} from '../api/_lib/teacherStudentProfile.js';
@@ -82,7 +83,11 @@ test('actual workspace actor uses signed account checks and Firestore scopes wit
  globalThis.fetch=(async()=>{calls++;throw Error('NOTION_ACCESS_BLOCKED');}) as any;
  try{const req:any={headers:{authorization:'Bearer mock-signed-token'}},initialize:any=()=>({db:f.db,auth:{verifyIdToken:async(_token:string,revoked:boolean)=>{assert.equal(revoked,true);return {uid:'teacher'};}}});
   const actor=await teacherActor(req,initialize);assert.equal(actor.coreMode,true);assert.deepEqual(actor.scopes,[{studentKey:sid,subject:'영어'}]);assert.equal(calls,0);
-  f.rows.set('academyStudentMemberships/'+sid,{academyId:'main',disabled:true});assert.deepEqual((await teacherActor(req,initialize)).scopes,[]);assert.equal(calls,0);
+  f.rows.set('academyStudentMemberships/'+sid,{academyId:'main',disabled:true});assert.deepEqual((await teacherActor(req,initialize)).scopes,[{studentKey:sid,subject:'영어'}],'remembered for up to a minute');
+  forgetTeacherActors();assert.deepEqual((await teacherActor(req,initialize)).scopes,[]);assert.equal(calls,0);forgetTeacherActors();
+  // a read (GET) checks the signature only; writes ask whether the account was revoked
+  let revokedAsked:boolean|null=null;const readInit:any=()=>({db:f.db,auth:{verifyIdToken:async(_t:string,revoked:boolean)=>{revokedAsked=revoked;return {uid:'teacher',exp:Date.now()/1000+3600};}}});
+  await teacherActor({method:'GET',headers:{authorization:'Bearer read-token'}} as any,readInit);assert.equal(revokedAsked,false);forgetTeacherActors();
  }finally{globalThis.fetch=original;admin===undefined?delete process.env.ADMIN_UID:process.env.ADMIN_UID=admin;}
 });
 test('selective restore keeps account/report identity, advances app version, and replays without rotating PIN twice',async()=>{

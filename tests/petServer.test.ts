@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
 import {
-  addXP, awardStudy, buyItem, claimStudyRewards, currentPet, equipItem, importLocalPet, initialPetState, pendingStudyRewards, petSummary, publicPetState, rollDay,
+  addXP, awardStudy, buyItem, claimStudyRewards, currentPet, equipItem, homeworkGrades, importLocalPet, initialPetState, pendingStudyRewards, petSummary, publicPetState, rollDay,
 } from '../api/_lib/pet.js';
 import {handlePet} from '../api/_lib/student/pet.js';
 import {PET_DAILY_STUDY_POINTS, PET_MAX_LEVEL, xpNeeded} from '../src/lib/petCatalog.js';
@@ -88,21 +88,38 @@ test('pet: the one-time device import keeps only sane, owned things', () => {
   assert.deepEqual(pet.learnedPhrases[0].evolvedVersions, {'10': 'hello'});
 });
 
-test('pet: 공부 보상 — attended lessons and completed assignments of the last 30 days, each once', () => {
+test('pet: 공부 보상 — attended lessons, and 숙제 by the next lesson 숙제 평가 (중 and above), last 30 days, each once', () => {
   const s = initialPetState(NOW);
   const reports = [
-    {id: 'a', date: '2026-10-13', attendance: '출석', assignmentCompleted: true},
-    {id: 'b', date: '2026-10-10', attendance: '지각', assignmentCompleted: false},
-    {id: 'c', date: '2026-10-09', attendance: '결석', assignmentCompleted: false},
-    {id: 'd', date: '2026-08-01', attendance: '출석', assignmentCompleted: true}, // too old
-    {id: 'e', date: '2026-12-01', attendance: '출석', assignmentCompleted: false}, // future
+    {id: 'a', date: '2026-10-13', attendance: '출석', homeworkGrade: '최상', gradedAt: '2026-10-14'},
+    {id: 'b', date: '2026-10-10', attendance: '지각', homeworkGrade: '중하', gradedAt: '2026-10-13'}, // 중하: no points
+    {id: 'c', date: '2026-10-09', attendance: '결석', homeworkGrade: '미제출', gradedAt: '2026-10-10'},
+    {id: 'd', date: '2026-08-01', attendance: '출석', homeworkGrade: '상', gradedAt: '2026-08-03'}, // too old
+    {id: 'e', date: '2026-12-01', attendance: '출석'}, // future
+    {id: 'f', date: '2026-10-08', attendance: '출석', homeworkGrade: '중', gradedAt: '2026-10-09'},
   ];
   const pending = pendingStudyRewards(s, reports, NOW);
-  assert.deepEqual(pending, [{id: 'a', kind: 'attendance'}, {id: 'a', kind: 'assignment'}, {id: 'b', kind: 'attendance'}]);
+  assert.deepEqual(pending, [{id: 'a', kind: 'attendance'}, {id: 'a', kind: 'assignment', grade: '최상'}, {id: 'b', kind: 'attendance'}, {id: 'f', kind: 'attendance'}, {id: 'f', kind: 'assignment', grade: '중'}]);
   const got = claimStudyRewards(s, pending);
-  assert.deepEqual([got.points, got.xp, got.count], [80, 130, 3]);
+  assert.deepEqual([got.points, got.xp, got.count], [30 * 3 + 40 + 10, 50 * 3 + 60 + 15, 5]);
   assert.equal(s.today.studyPoints, 0, 'outside the daily study cap');
   assert.deepEqual(pendingStudyRewards(s, reports, NOW), [], 'never twice');
+});
+
+test('pet: 숙제 평가 comes from the next lesson of the same subject that has it decided (미확인 waits)', () => {
+  const row = (id: string, date: string, homework: string, hasAssignment = true, subject = '영어') => ({id, date, subject, homework, hasAssignment});
+  const grades = homeworkGrades([
+    row('m1', '2026-10-06T14:00:00+09:00', '미확인'),
+    row('x1', '2026-10-07T14:00:00+09:00', '없는 날', true, '수학'), // another subject: not for 영어
+    row('m2', '2026-10-08T14:00:00+09:00', '상'),
+    row('m3', '2026-10-10T14:00:00+09:00', '미확인'), // the teacher hasn't checked m2's 숙제 here yet
+    row('m4', '2026-10-13T14:00:00+09:00', '미제출', false),
+  ]);
+  assert.deepEqual(grades.get('m1'), {grade: '상', gradedAt: '2026-10-08T14:00:00+09:00'});
+  assert.deepEqual(grades.get('m2'), {grade: '미제출', gradedAt: '2026-10-13T14:00:00+09:00'}, '미확인 in between is skipped');
+  assert.deepEqual(grades.get('m3'), {grade: '미제출', gradedAt: '2026-10-13T14:00:00+09:00'});
+  assert.equal(grades.has('m4'), false, 'no 숙제 given, or nothing after it yet');
+  assert.equal(grades.has('x1'), false);
 });
 
 const call = async (method: string, body: any, deps: any, token = 'kid') => {
@@ -269,17 +286,15 @@ test('pet AI: the reply goes to the pet it was asked of, even if the main pet ch
   assert.equal(f.rows.get('aiMonthly/kid_2026-10').petTalkBySlot[first.slot], 1);
 });
 
-test('pet AI limits: other AI use keeps the pet counts; a failed reply gives the talk back but still counts toward the 60', async () => {
-  const {takeAiQuota} = await import('../api/_lib/aiModel.js');
+test('pet AI limits: a failed reply gives the talk back', async () => {
   const f = registrationFirestore();
   const fill = () => { const st = f.rows.get('petStates/kid') || initialPetState(NOW); currentPet(st).energy = 100; f.rows.set('petStates/kid', st); };
   const ok: any = {verify: async () => ({uid: 'kid'}), db: () => f.db, generate: async () => '{"response":"응!","remembered":"안녕"}', now: () => NOW};
   for (let i = 0; i < 3; i++) { fill(); assert.equal((await call('POST', {action: 'teach', text: `말${i}`}, ok)).out.ok, true); }
-  assert.equal(await takeAiQuota(f.db, 'kid', NOW), true, 'another AI feature');
   const broken: any = {...ok, generate: async () => { throw Error('503 overloaded'); }};
   fill(); assert.equal((await call('POST', {action: 'chat', text: '안녕'}, broken)).out.error, 'AI_BUSY');
   const usage = f.rows.get('aiUsage/kid:2026-10-14'), month = f.rows.get('aiMonthly/kid_2026-10');
-  assert.deepEqual([usage.pet.talk, usage.count, month.petTalk], [3, 5, 3], 'the talk given back; the attempt still counts toward 60');
+  assert.deepEqual([usage.pet.talk, month.petTalk], [3, 3], 'the talk given back');
 });
 
 test('AI passes: the admin turns a pass on until a day or off; others are refused; the month list shows the plan', async () => {
@@ -331,4 +346,34 @@ test('AI usage page: admin only, newest day first, empty days left out', async (
   await assert.rejects(() => readAiUsage(f.db, {admin: false, principal: true, academyId: 'main'}), /FORBIDDEN/);
   const {days} = await readAiUsage(f.db, {admin: true, academyId: 'main'}, 5, NOW);
   assert.deepEqual(days.map((d: any) => [d.day, d.pet.calls, d.analyzer.calls, d.workbook.calls, d.generator.calls]), [['2026-10-13', 3, 1, 0, 2], ['2026-10-12', 0, 0, 0, 1]], 'a day with only 변형문제 생성기 is kept');
+});
+
+test('펫 패스: 영어 회화 모드 only with a pass (answers in English); 상황 혼잣말 fits the day and counts 10 a day free, 30 with a pass', async () => {
+  const {museRequest, chatRequest} = await import('../api/_lib/pet.js');
+  const {AI_PLANS} = await import('../src/lib/aiPlans.js');
+  const f = registrationFirestore(), s = initialPetState(NOW); f.rows.set('petStates/kid', s);
+  let asked: any = null;
+  const deps: any = {verify: async () => ({uid: 'kid'}), db: () => f.db, generate: async (r: any) => { asked = r; return '{"response":"Oh, you mean: I went to school!","monologue":"오늘도 힘내자!"}'; }, now: () => NOW};
+  const locked = await call('POST', {action: 'english-talk', on: true}, deps);
+  assert.deepEqual([locked.status, locked.out.error], [403, 'PET_PASS_ONLY']);
+  f.rows.set('aiPasses/kid', {plan: 'pet', until: '2026-10-31'});
+  assert.equal((await call('POST', {action: 'english-talk', on: true}, deps)).out.state.englishTalk, true);
+  const st = f.rows.get('petStates/kid'); currentPet(st).energy = 100; f.rows.set('petStates/kid', st);
+  await call('POST', {action: 'chat', text: 'I go to school yesterday'}, deps);
+  assert.match(asked.config.systemInstruction, /ONLY in short, easy English/);
+  // the pass ended: the mode stays saved but the pet talks Korean again
+  f.rows.set('aiPasses/kid', {plan: 'pet', until: '2026-10-01'});
+  const st2 = f.rows.get('petStates/kid'); currentPet(st2).energy = 100; f.rows.set('petStates/kid', st2);
+  await call('POST', {action: 'chat', text: '안녕'}, deps);
+  assert.doesNotMatch(asked.config.systemInstruction, /ONLY in short, easy English/);
+  // 상황 혼잣말: the day's study goes in; 10 a day on the free plan
+  const pet = currentPet(s), fresh = {...s, today: {...s.today, studyPoints: 0}};
+  assert.match((museRequest(fresh as any, pet, 20) as any).contents[0].parts[0].text, /아직 공부를 안 했어/);
+  assert.match((museRequest({...s, today: {...s.today, studyPoints: 300}} as any, pet, 9) as any).contents[0].parts[0].text, /다 채웠어/);
+  assert.match((chatRequest(pet, 'hi', [], true) as any).config.systemInstruction, /English/);
+  let said = 0;
+  for (let i = 0; i < AI_PLANS.free.petMonologue + 2; i++) if ((await call('POST', {action: 'muse'}, deps)).out.ok) said++;
+  assert.equal(said, AI_PLANS.free.petMonologue);
+  f.rows.set('aiPasses/kid', {plan: 'premium', until: '2026-10-31'});
+  for (let i = 0; i < 5; i++) assert.equal((await call('POST', {action: 'muse'}, deps)).out.ok, true, 'a pass: 30 a day');
 });

@@ -28,7 +28,6 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
   const [tower, setTower] = useState<TowerInfo | null>(null), [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const [message, setMessage] = useState(''), [feedback, setFeedback] = useState<{ q: TowerQ; picked: number; answer: number } | null>(null);
   const [ending, setEnding] = useState<any>(null), [fleeAsk, setFleeAsk] = useState(false), [loot, setLoot] = useState<any>(null), [entered, setEntered] = useState(false);
-  const [left, setLeft] = useState<number | null>(null);
   const [skillsOpen, setSkillsOpen] = useState(false), [fx, setFx] = useState<Fx | null>(null);
   // The last battle picture stays up while the final answer's feedback shows (the server has already ended the battle).
   const [frozen, setFrozen] = useState<TowerInfo['run']>(null);
@@ -44,12 +43,13 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
   const run = tower?.run || (feedback ? frozen : null), q = feedback ? feedback.q : run?.q || null;
   // In battle the pet wears its outfit and holds its tower weapon (instead of a shop item in that hand).
   const battleLook = tower?.equip.weapon ? [...wornAccessories(pet).filter(id => accessorySlot(id) !== 'hand'), tower.equip.weapon] : wornAccessories(pet);
-  // The monster's turn has a time limit: answer before it runs out (the server checks the time too).
+  // The monster's turn has a time limit: answer before it runs out (the server checks the time too). One timer for the
+  // answer; the bar drains with a CSS animation, so the battle isn't redrawn ten times a second.
+  const defendMs = run?.q?.kind === 'defend' && run.q.msLeft !== null && !feedback ? run.q.msLeft : null;
   useEffect(() => {
-    if (!run?.q || run.q.kind !== 'defend' || run.q.msLeft === null || feedback) { setLeft(null); return; }
-    const end = Date.now() + run.q.msLeft; setLeft(run.q.msLeft);
-    const id = window.setInterval(() => { const ms = Math.max(0, end - Date.now()); setLeft(ms); if (ms === 0) { window.clearInterval(id); void answer(-1); } }, 100);
-    return () => window.clearInterval(id);
+    if (defendMs === null) return;
+    const id = window.setTimeout(() => void answer(-1), defendMs);
+    return () => window.clearTimeout(id);
   }, [run?.id, run?.q?.prompt, run?.q?.kind, feedback]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const answer = async (choice: number) => {
@@ -136,7 +136,7 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
               {message || (q ? (q.kind === 'attack' ? <>이 뜻의 영어 단어는? <b className="font-black">“{q.prompt}”</b></> : <>{run.monster.name}의 공격! 막으려면 뜻을 골라요 <b className="font-black">{q.prompt}</b></>) : '무엇을 할까요?')}
             </p>
             {q ? <>
-              {q.kind === 'defend' && left !== null && !feedback && <div className="h-1.5 overflow-hidden rounded-full bg-[#fcebeb]" aria-label={`남은 시간 ${Math.ceil(left / 1000)}초`}><div className="h-full rounded-full bg-[#e24b4a]" style={{ width: `${(left / (PET_TOWER.defendSeconds * 1000)) * 100}%` }} /></div>}
+              {q.kind === 'defend' && defendMs !== null && <div key={`${run.id}:${q.prompt}`} className="h-1.5 overflow-hidden rounded-full bg-[#fcebeb]" aria-label={`남은 시간 ${Math.ceil(defendMs / 1000)}초`}><div className="h-full rounded-full bg-[#e24b4a]" style={{ width: `${(defendMs / (PET_TOWER.defendSeconds * 1000)) * 100}%`, animation: `tw-drain ${defendMs}ms linear forwards` }} /></div>}
               <div className="grid grid-cols-2 gap-2">{q.choices.map((c, i) => { const fb = feedback, isAnswer = fb && i === fb.answer, isWrong = fb && i === fb.picked && fb.picked !== fb.answer;
                 return <button key={i} type="button" disabled={busy || Boolean(fb)} onClick={() => void answer(i)} className={`min-h-[44px] rounded-xl border px-2 py-2 text-sm font-bold transition-colors ${isAnswer ? 'border-[#639922] bg-[#eaf3de] text-[#27500a]' : isWrong ? 'border-[#e24b4a] bg-[#fcebeb] text-[#791f1f]' : 'border-[#d6d2ee] bg-white text-[#26215c] hover:bg-[#f5f4fd]'}`}>{c}</button>; })}</div>
             </> : fleeAsk ? <div className="flex items-center gap-2 rounded-xl bg-[#fcebeb] px-3 py-2 text-xs text-[#791f1f]"><span className="flex-1">도망치면 기운을 모두 써서 탈진해요. 이 층은 다음에 다시 도전할 수 있어요.</span><button type="button" onClick={() => setFleeAsk(false)} className="rounded-lg border border-[#f7c1c1] bg-white px-2.5 py-1 font-bold">취소</button><button type="button" disabled={busy} onClick={() => void act('flee')} className="rounded-lg bg-[#e24b4a] px-2.5 py-1 font-bold text-white">도망</button></div>

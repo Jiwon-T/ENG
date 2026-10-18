@@ -8,7 +8,20 @@ interface TeacherAuth {
 const quotaPauses=new WeakMap<TeacherAuth,{user:object;until:number;data:any;message:string}>();
 
 // All teacher screens wait for Firebase restoration and retry an expired token once.
-export async function teacherAuthenticatedRequest<T>(auth: TeacherAuth, endpoint: string, init: RequestInit = {},expectedUid?:string) {
+// The same read asked again within 5 seconds (e.g. today's lessons started together with the first screen, then asked
+// by the panel) shares one request. Any write clears the shared reads; a forced read (force=1) always asks.
+const SHARED_READ_MS=5000;
+const sharedReads=new Map<string,{at:number;value:Promise<any>}>();
+export function teacherAuthenticatedRequest<T>(auth: TeacherAuth, endpoint: string, init: RequestInit = {},expectedUid?:string): ReturnType<typeof requestNow<T>> {
+  if(init.method&&init.method!=='GET'){sharedReads.clear();return requestNow<T>(auth,endpoint,init,expectedUid);}
+  if(/[?&]force=1(&|$)/.test(endpoint))return requestNow<T>(auth,endpoint,init,expectedUid);
+  const key=(auth.currentUser?.uid||'')+' '+(expectedUid||'')+' '+endpoint,hit=sharedReads.get(key);
+  if(hit&&Date.now()-hit.at<SHARED_READ_MS)return hit.value;
+  const value=requestNow<T>(auth,endpoint,init,expectedUid);sharedReads.set(key,{at:Date.now(),value});
+  const drop=()=>{if(sharedReads.get(key)?.value===value)sharedReads.delete(key);};value.then(r=>{if(!r.ok)drop();},drop);
+  return value;
+}
+async function requestNow<T>(auth: TeacherAuth, endpoint: string, init: RequestInit = {},expectedUid?:string) {
   const initial=auth.currentUser;
   await auth.authStateReady();
   const user = auth.currentUser;

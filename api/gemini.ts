@@ -4,10 +4,12 @@ import { getFirebaseAdmin } from './_lib/firebaseAdmin.js';
 import { verifyFirebaseSession } from './_lib/firebaseSession.js';
 import { WORKBOOK_AI_MESSAGES, translateWorkbook } from './_lib/teacherWorkbook.js';
 import { handlePet } from './_lib/student/pet.js';
-import { AI_DAILY_LIMIT, AI_MODEL, aiErrorCode, generateAi, generateAiStream, planOf, refundMonthlyQuota, takeAiQuota, takeMonthlyQuota, type AiFeature } from './_lib/aiModel.js';
+import { AI_MODEL, AI_TOO_FAST_MESSAGE, aiErrorCode, generateAi, generateAiStream, planOf, refundMonthlyQuota, takeAiBurst, takeMonthlyQuota, type AiFeature } from './_lib/aiModel.js';
 import { AI_PLANS, PASS_NOTE } from '../src/lib/aiPlans.js';
+import { listQuestionSets, makeQuestionSet, readQuestionSet } from './_lib/questionSets.js';
+import { myAssignedSets, openAttempt, saveAttempt, submitAttempt } from './_lib/questionAttempts.js';
 import { PASSAGE_MESSAGES, askPassagePart, editPassagePart, listPassages, openPassage, passageActor, passageWordsPart, readPassage, setPassageInfo } from './_lib/passage.js';
-export { AI_DAILY_LIMIT, AI_MODEL, generateAi, takeAiQuota };
+export { AI_MODEL, generateAi };
 
 // Gemini proxy: signed-in accounts only, a daily limit per account (the admin is not limited), and the model and
 // output length fixed here rather than chosen by the browser. Only plain generation settings are passed through.
@@ -34,6 +36,11 @@ export function cleanAiRequest(body: any) {
     return {contents: turns, config};
 }
 
+/** The short-time guard's answer: 429 with Retry-After (no automatic retry on the client; the message says to wait). */
+function tooFast(res: ServerResponse, retryAfter: number, okField = false) {
+    res.setHeader('Retry-After', String(retryAfter));
+    return sendJson(res, 429, {...(okField ? {ok: false} : {}), error: 'AI_TOO_FAST', message: AI_TOO_FAST_MESSAGE, retryAfter});
+}
 type Deps = {verify: (token: string) => Promise<{uid: string}>; db: () => any; generate: (request: any, feature?: AiFeature) => Promise<string>; stream?: (request: any, feature: AiFeature, onThought: (text: string) => void) => Promise<string>; adminUid?: string};
 const defaultDeps = (): Deps => ({
     verify: token => { const {auth} = getFirebaseAdmin(); return verifyFirebaseSession(auth, token) as any; },
@@ -44,8 +51,8 @@ const defaultDeps = (): Deps => ({
 });
 
 /** The month's calls are used up: what to say (the free plan points to the 프리미엄 패스). */
-const monthlyMessage = async (db: any, uid: string, feature: 'analyzer' | 'workbook') => {
-    const plan = await planOf(db, uid).catch(() => 'free' as const), name = feature === 'analyzer' ? '지문 분석' : '워크북 AI 해석';
+const monthlyMessage = async (db: any, uid: string, feature: 'analyzer' | 'workbook' | 'generator') => {
+    const plan = await planOf(db, uid).catch(() => 'free' as const), name = feature === 'analyzer' ? '지문 분석' : feature === 'generator' ? '변형 문제 만들기' : '워크북 AI 해석';
     return plan === 'premium' ? `이번 달 ${name} ${AI_PLANS.premium[feature]}번을 다 썼어요. 다음 달에 또 써 주세요.` : `이번 달 ${name} ${AI_PLANS[plan][feature]}번을 다 썼어요. ${PASS_NOTE.premium}`;
 };
 /**
@@ -66,7 +73,7 @@ export async function handleGemini(req: IncomingMessage, res: ServerResponse, de
     if (!request) return sendJson(res, 400, {error: 'INVALID_REQUEST'});
     let left: number | null = null;
     try {
-        if (!admin && !await takeAiQuota(deps.db(), uid)) return sendJson(res, 429, {error: 'AI_DAILY_LIMIT', message: '오늘 쓸 수 있는 AI 횟수를 다 썼어요. 내일 다시 해 주세요.'});
+        if (!admin) { const burst = await takeAiBurst(deps.db(), uid); if (!burst.ok) return tooFast(res, burst.retryAfter ?? 60); }
         if (!admin) { left = await takeMonthlyQuota(deps.db(), uid, 'analyzer'); if (left < 0) return sendJson(res, 429, {error: 'AI_MONTHLY_LIMIT', message: await monthlyMessage(deps.db(), uid, 'analyzer')}); }
     } catch { return sendJson(res, 500, {error: 'AI_FAILED'}); }
     const failed = async (error: any) => {
@@ -101,6 +108,7 @@ export async function handleWorkbookAi(req: IncomingMessage, res: ServerResponse
         if (!admin) {
             const [user, access] = await Promise.all([deps.db().collection('users').doc(uid).get(), deps.db().collection('teacherWorkspaceAccess').doc(uid).get()]);
             if (!['teacher', 'principal'].includes(user.data()?.role) || !access.exists || access.data()?.disabled) return sendJson(res, 403, {ok: false, error: 'FORBIDDEN', message: WORKBOOK_AI_MESSAGES.FORBIDDEN});
+            const burst = await takeAiBurst(deps.db(), uid); if (!burst.ok) return tooFast(res, burst.retryAfter ?? 60, true);
             left = await takeMonthlyQuota(deps.db(), uid, 'workbook');
             if (left < 0) return sendJson(res, 429, {ok: false, error: 'AI_MONTHLY_LIMIT', message: await monthlyMessage(deps.db(), uid, 'workbook')});
         }
@@ -134,13 +142,23 @@ export async function handlePassage(req: IncomingMessage, res: ServerResponse, d
             : action === 'ai' ? await askPassagePart(db, actor, body, request => deps.generate(request, 'analyzer'), now)
             : action === 'edit' ? await editPassagePart(db, actor, body, now)
             : action === 'info' ? await setPassageInfo(db, actor, body, now)
+            // 변형 문제 만들기 (counted monthly; AI-helped types also take a daily AI use) and my saved sets.
+            : action === 'make-questions' ? await makeQuestionSet(db, actor, body, now, Math.random, request => deps.generate(request, 'generator'))
+            : action === 'question-sets' ? await listQuestionSets(db, actor)
+            : action === 'question-set' ? await readQuestionSet(db, actor, body?.id)
+            // 변형 문제 풀기: open (draft + visit), save the answers so far, 채점 (once).
+            : action === 'attempt-open' ? await openAttempt(db, actor, body, now)
+            : action === 'attempt-save' ? await saveAttempt(db, actor, body, now)
+            : action === 'attempt-submit' ? await submitAttempt(db, actor, body, now)
+            : action === 'assigned-list' ? await myAssignedSets(db, actor)
             : null;
         if (!out) return sendJson(res, 400, {ok: false, error: 'BAD_REQUEST', message: PASSAGE_MESSAGES.BAD_REQUEST});
         return sendJson(res, 200, {ok: true, ...out});
     } catch (error: any) {
         const code = String(error?.message || '');
-        if (code === 'AI_MONTHLY_LIMIT') return sendJson(res, 429, {ok: false, error: code, message: await monthlyMessage(db, uid, error.feature === 'workbook' ? 'workbook' : 'analyzer')});
-        if (PASSAGE_MESSAGES[code]) return sendJson(res, code === 'FORBIDDEN' ? 403 : code === 'PASSAGE_NOT_FOUND' ? 404 : code === 'AI_DAILY_LIMIT' ? 429 : code === 'AI_BUSY' ? 503 : code.startsWith('AI_') || code === 'PASSAGE_AI_MISMATCH' ? 502 : 400, {ok: false, error: code, message: PASSAGE_MESSAGES[code]});
+        if (code === 'AI_MONTHLY_LIMIT') return sendJson(res, 429, {ok: false, error: code, message: await monthlyMessage(db, uid, error.feature === 'workbook' ? 'workbook' : error.feature === 'generator' ? 'generator' : 'analyzer')});
+        if (code === 'AI_TOO_FAST') return tooFast(res, Number(error.retryAfter) || 60, true);
+        if (PASSAGE_MESSAGES[code]) return sendJson(res, code === 'FORBIDDEN' ? 403 : code === 'PASSAGE_NOT_FOUND' ? 404 : code === 'AI_BUSY' ? 503 : code.startsWith('AI_') || code === 'PASSAGE_AI_MISMATCH' ? 502 : 400, {ok: false, error: code, message: PASSAGE_MESSAGES[code]});
         console.warn('PASSAGE_FAILED', {code: 'unknown'}); // never the text
         return sendJson(res, 500, {ok: false, error: 'SERVER_ERROR', message: '잠시 후 다시 해 주세요.'});
     }

@@ -36,6 +36,7 @@ import { shuffleArray } from './wordbookUtils';
 import { SortableWordbookCard, SortableWordCard } from './WordbookSortableCards';
 import {askConfirm} from './ConfirmDialog';
 import SentenceImportDialog from './SentenceImportDialog';
+import { sentenceUnits, unitLabel } from '../../lib/sentenceImport';
 
 export default function WordbookManager({ category = 'word' }: { category?: SetCategory }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
@@ -288,6 +289,9 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
     const ord = word.order ?? (index ?? 0);
     return Math.floor(ord / unitSize) + 1;
   };
+
+  // 문장 세트 pasted with UNIT lines: those Days are shown as "UNIT 01" (title on hover).
+  const units = React.useMemo(() => selectedWordbook?.type === 'sentence' ? sentenceUnits(words) : new Map<number, { title: string; chapter: string }>(), [words, selectedWordbook]);
 
   const currentDays = React.useMemo(() => {
     if (words.length === 0) return [1];
@@ -800,7 +804,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
     }
   };
 
-  const parseWordListText = (rawText: string): { title?: string; words: { word: string; meaning: string; example?: string }[] } => {
+  const parseWordListText = (rawText: string): { title?: string; words: { word: string; meaning: string; example?: string; day?: number }[] } => {
     let title = '';
     let remainingText = rawText.trim();
     
@@ -811,11 +815,20 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
     }
 
     const lines = remainingText.split(/\r?\n/);
-    const words: { word: string; meaning: string; example?: string }[] = [];
+    const words: { word: string; meaning: string; example?: string; day?: number }[] = [];
+    // A line that is only "DAY 01" (or "[Day 1]") starts that DAY; the words below it get that day.
+    let currentDay: number | undefined;
+    const push = (item: { word: string; meaning: string; example?: string }) => words.push(currentDay ? { ...item, day: currentDay } : item);
 
     for (let rawLine of lines) {
       let line = rawLine.trim();
       if (!line) continue;
+
+      const dayHeader = line.match(/^\[?\s*day\s*(\d{1,3})\s*\]?$/i);
+      if (dayHeader && Number(dayHeader[1]) > 0) {
+        currentDay = Number(dayHeader[1]);
+        continue;
+      }
 
       // Unquote if line is quoted
       if (line.startsWith('"') && line.endsWith('"') && line.length > 2) {
@@ -831,12 +844,12 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
             const part3 = tabParts[2];
             // If part3 has Korean or starts with part-of-speech prefix, merge with meaning
             if (/[가-힣]/.test(part3) || /^(n|v|vt|vi|a|adj|adv|prep|conj|pron|int)\./i.test(part3)) {
-              words.push({ word, meaning: tabParts.slice(1).join(' ') });
+              push({ word, meaning: tabParts.slice(1).join(' ') });
             } else {
-              words.push({ word, meaning: tabParts[1], example: tabParts.slice(2).join(' ') });
+              push({ word, meaning: tabParts[1], example: tabParts.slice(2).join(' ') });
             }
           } else {
-            words.push({ word, meaning: tabParts[1] });
+            push({ word, meaning: tabParts[1] });
           }
           continue;
         }
@@ -849,12 +862,12 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
         if (multiSpaceParts.length >= 3) {
           const part3 = multiSpaceParts[2];
           if (/[가-힣]/.test(part3) || /^(n|v|vt|vi|a|adj|adv|prep|conj|pron|int)\./i.test(part3)) {
-            words.push({ word, meaning: multiSpaceParts.slice(1).join(' ') });
+            push({ word, meaning: multiSpaceParts.slice(1).join(' ') });
           } else {
-            words.push({ word, meaning: multiSpaceParts[1], example: multiSpaceParts.slice(2).join(' ') });
+            push({ word, meaning: multiSpaceParts[1], example: multiSpaceParts.slice(2).join(' ') });
           }
         } else {
-          words.push({ word, meaning: multiSpaceParts[1] });
+          push({ word, meaning: multiSpaceParts[1] });
         }
         continue;
       }
@@ -865,7 +878,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
         const word = line.substring(0, posMatch).trim();
         const meaning = line.substring(posMatch).trim();
         if (word && meaning) {
-          words.push({ word, meaning });
+          push({ word, meaning });
           continue;
         }
       }
@@ -875,7 +888,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
         const word = line.substring(0, hangulMatch).trim();
         const meaning = line.substring(hangulMatch).trim();
         if (word && meaning) {
-          words.push({ word, meaning });
+          push({ word, meaning });
           continue;
         }
       }
@@ -886,7 +899,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
         const word = line.substring(0, firstSpaceIndex).trim();
         const meaning = line.substring(firstSpaceIndex + 1).trim();
         if (word && meaning) {
-          words.push({ word, meaning });
+          push({ word, meaning });
           continue;
         }
       }
@@ -928,17 +941,21 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
         return;
       }
 
-      const batch = writeBatch(db);
-      wordsToProcess.forEach((item, index) => {
-        const newWordRef = doc(collection(db, `wordbooks/${targetWbId}/words`));
-        batch.set(newWordRef, {
-          ...item,
-          order: index,
-          createdAt: Timestamp.now()
+      // Adding to the open wordbook continues after its last word, so the new words don't share order numbers with the old ones.
+      const startOrder = !title && targetWbId === selectedWordbook?.id && words.length ? Math.max(...words.map(w => w.order ?? -1)) + 1 : 0;
+      // A Firestore batch holds at most 500 writes; a whole book (800+ words) goes in several.
+      for (let from = 0; from < wordsToProcess.length; from += 400) {
+        const batch = writeBatch(db);
+        wordsToProcess.slice(from, from + 400).forEach((item, index) => {
+          const newWordRef = doc(collection(db, `wordbooks/${targetWbId}/words`));
+          batch.set(newWordRef, {
+            ...item,
+            order: startOrder + from + index,
+            createdAt: Timestamp.now()
+          });
         });
-      });
-
-      await batch.commit();
+        await batch.commit();
+      }
       setIsBulkAddOpen(false);
       setBulkText('');
       if (title) {
@@ -1854,6 +1871,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
                     return (
                       <button disabled={wordsLoading || Boolean(wordLoadError)}
                         key={d}
+                        title={units.has(d) ? [units.get(d)!.chapter, unitLabel(d, units.get(d))].filter(Boolean).join(' › ') : undefined}
                         onClick={() => setActiveDayFilter(d)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
                           activeDayFilter === d
@@ -1861,7 +1879,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
                             : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
                         }`}
                       >
-                        {selectedWordbook.type === 'sentence-order' ? `지문 ${d} (${count}문장)` : `DAY ${d} (${count})`}
+                        {selectedWordbook.type === 'sentence-order' ? `지문 ${d} (${count}문장)` : units.has(d) ? `${unitLabel(d, units.get(d), true)} (${count})` : `DAY ${d} (${count})`}
                       </button>
                     );
                   })}
@@ -2185,7 +2203,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
       {isSentenceImportOpen && selectedWordbook && <SentenceImportDialog wordbookId={selectedWordbook.id} words={words}
         defaultDay={typeof activeDayFilter === 'number' ? activeDayFilter : (words.length > 0 ? Math.max(...currentDays, 0) + 1 : 1)}
         onClose={() => setIsSentenceImportOpen(false)}
-        onSaved={(count, day) => { setIsSentenceImportOpen(false); alert(`Day ${day}에 ${count}개 문장을 등록했어요.`); }} />}
+        onSaved={(count, where) => { setIsSentenceImportOpen(false); alert(`${where}에 ${count}개 문장을 등록했어요.`); }} />}
       {isPassageModalOpen && selectedWordbook && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="teacher-modal-shell max-w-2xl w-full bg-white rounded-[2.5rem] p-8 md:p-10 shadow-2xl max-h-[90vh] flex flex-col">
@@ -2658,6 +2676,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
             <div className="mb-4 p-4 bg-blue-50 rounded-2xl border border-blue-100 text-xs font-bold text-blue-600 leading-relaxed">
               형식: 단어 [탭] 뜻<br/>
               또는: 단어 [공백2개이상] 뜻<br/>
+              DAY 나누기: "DAY 01"처럼 한 줄에 쓰면 그 아래 단어가 DAY 1이 됩니다.<br/>
               팁: 뜻을 큰따옴표(")로 감싸면 줄바꿈이 포함된 여러 줄의 뜻을 입력할 수 있습니다.
             </div>
             <textarea

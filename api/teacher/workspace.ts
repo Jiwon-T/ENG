@@ -131,6 +131,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(action==='student-enrollment'){failureStage='student-enrollment-read';return sendJson(res,200,{ok:true,record:await readStudentEnrollment(db,actor,params.get('studentKey'))});}
             if(action==='student-pet'){failureStage='pet-party';const {readStudentPet}=await import('../_lib/teacherPetParty.js');return sendJson(res,200,{ok:true,...await readStudentPet(db,actor,params.get('studentKey'))});}
             if(action==='student-party'){failureStage='pet-party';const {readStudentParty}=await import('../_lib/teacherPetParty.js');return sendJson(res,200,{ok:true,...await readStudentParty(db,actor,params.get('studentKey'))});}
+            if(action==='question-attempts'){failureStage='question-attempts';const {loadStudentQuestionAttempts}=await import('../_lib/teacherQuestionAttempts.js');return sendJson(res,200,{ok:true,...await loadStudentQuestionAttempts(db,actor,params.get('studentKey'))});}
             if(action==='workbook-history'){failureStage='workbook';const {readWorkbookHistory}=await import('../_lib/teacherWorkbook.js');return sendJson(res,200,{ok:true,...await readWorkbookHistory(db,actor,params.get('key'))});}
             if(action==='pet-expedition-settings'){failureStage='pet-expedition';const {readExpeditionSettings}=await import('../_lib/petSentences.js');return sendJson(res,200,{ok:true,...await readExpeditionSettings(db,actor)});}
             if(action==='pet-tower-settings'){failureStage='pet-tower';const {readTowerSettings}=await import('../_lib/petTower.js');return sendJson(res,200,{ok:true,...await readTowerSettings(db,actor)});}
@@ -227,16 +228,16 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             }
             if(action==='schedule-records') {
                 const range=scheduleRange({day:params.get('day'),from:params.get('from'),to:params.get('to')});
-                const mappingsPromise=readStudentDirectoryMappings(db);
-                const [local,remote,reflected,mappings]=await Promise.all([
+                const day=params.get('day');if(day&&!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new Error('INVALID_INPUT');
+                const mappingsPromise=readStudentDirectoryMappings(db); // links are never cached (see cachedEnrollmentDocs)
+                // 오늘 수업 progress needs every own lesson of that day, not just the first page of saved lessons (read together).
+                const [local,remote,reflected,mappings,hiddenTodayLessons,dayLessons]=await Promise.all([
                     readManagedScheduleRange(db,actor,range),
                     Promise.resolve([] as any[]),
                     mappingsPromise.then(m=>readReflectedRange(db,actor,m,range)),mappingsPromise,
+                    day?readTodayVisibility(db,actor.uid,day):Promise.resolve([]),day?readDayLessons(db,actor,day):Promise.resolve(undefined),
                 ]);
                 const records=local.docs.map(d=>({id:d.id,...d.data()}));
-                const day=params.get('day');if(day&&!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new Error('INVALID_INPUT');
-                // 오늘 수업 progress needs every own lesson of that day, not just the first page of saved lessons.
-                const [hiddenTodayLessons,dayLessons]=day?await Promise.all([readTodayVisibility(db,actor.uid,day),readDayLessons(db,actor,day)]):[[],undefined];
                 return sendJson(res,200,{ok:true,hiddenTodayLessons,...(dayLessons?{dayLessons}:{}),schedules:mergeNotionRows(records,remote).filter((r:any)=>!r.archived&&(!day||r.data?.date===day)),reflectedSchedules:teacherReflectedSchedules(reflected.map(d=>d.data()),mappings,actor).filter((r:any)=>!day||r.date===day)});
             }
             if(action==='managed-record') {
@@ -410,6 +411,11 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         if(body.action==='remove-app-user'){failureStage='app-user-remove';const {removeAppUser}=await import('../_lib/appUsers.js');const {action,...input}=body;const result=await removeAppUser(db,actor,input,getFirebaseAdmin().auth);teacherReadCache.clear();return sendJson(res,200,{ok:true,...result});}
         if(body.action==='create-link-code'){failureStage='student-link-code';const {createLinkCode}=await import('../_lib/studentLinkCodes.js');const {action,...input}=body;return sendJson(res,200,{ok:true,...await createLinkCode(db,actor,input)});}
         if(body.action==='removed-user-signin'){failureStage='app-user-remove';const {setRemovedSignIn}=await import('../_lib/appUsers.js');const {action,...input}=body;return sendJson(res,200,{ok:true,...await setRemovedSignIn(db,actor,input,getFirebaseAdmin().auth)});}
+        // 변형 문제 내주기: who can be chosen, give a set, my given sets, cancel (their own messages, not the workspace list).
+        if(typeof body.action==='string'&&body.action.startsWith('qset-')){failureStage='question-assign';const m=await import('../_lib/questionAssignments.js');
+            try{const out=body.action==='qset-targets'?await m.questionTargets(db,actor):body.action==='qset-assign'?await m.assignQuestionSet(db,actor,body):body.action==='qset-assignments'?await m.myQuestionAssignments(db,actor):body.action==='qset-cancel'?await m.cancelQuestionAssignment(db,actor,body.id):null;
+                if(!out)return sendJson(res,400,{ok:false,error:'INVALID_INPUT'});return sendJson(res,200,{ok:true,...out});}
+            catch(error:any){const code=error?.name==='ZodError'?'INVALID_INPUT':String(error?.message||'');if(m.ASSIGN_MESSAGES[code]||code==='INVALID_INPUT')return sendJson(res,code==='FORBIDDEN'?403:400,{ok:false,error:code,message:m.ASSIGN_MESSAGES[code]||'잘못된 요청이에요.'});throw error;}}
         if(body.action==='save-online-evaluation'){failureStage='online-evaluation';const {saveOnlineEvaluation}=await import('../_lib/teacherOnlineLearning.js');const {action,...input}=body;return sendJson(res,200,{ok:true,...await saveOnlineEvaluation(db,actor,input)});}
         if(body.action==='workbook-save'){failureStage='workbook';const {saveWorkbookVersion}=await import('../_lib/teacherWorkbook.js');const {action,...input}=body;return sendJson(res,200,{ok:true,...await saveWorkbookVersion(db,actor,input)});}
         if(body.action==='save-pet-expedition-settings'){failureStage='pet-expedition';const {saveExpeditionSettings}=await import('../_lib/petSentences.js');return sendJson(res,200,{ok:true,...await saveExpeditionSettings(db,actor,body)});}

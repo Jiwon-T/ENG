@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
-import {PET_GUILD, PET_PARTIES, inactiveDays, memberNames, normalizeGuild, progressOf, shownGuild, shownNickname, updateMemberNames, warnName, weekOf, type GuildProfile, type Party} from './petParty.js';
+import {PET_GUILD, PET_PARTIES, inactiveDays, memberNames, partyName, normalizeGuild, progressOf, shownGuild, shownNickname, updateMemberNames, warnName, weekOf, type GuildProfile, type Party} from './petParty.js';
 import {PET_STATES, currentPet, publicPetState, rollDay, type ServerPetState} from './pet.js';
 import {PET_EXPEDITIONS, initialExpedition, publicExpedition} from './petExpedition.js';
 
@@ -37,7 +37,7 @@ export async function readStudentParty(db: any, actor: any, id: unknown, now = D
     const name = await nameInAcademy(db, m.uid, actor.academyId);
     return {name, ourAcademy: Boolean(name), nickname: memberNames(m).nickname, pet: m.pet, count: m.count, status: m.status, idleDays: inactiveDays(m, now), isStudent: m.uid === uid};
   }));
-  return {party: {name: party.name, boss: party.boss, size: party.size, progress: progressOf(party), hp: party.hp, hpMax: party.hpMax, week: party.week, members}, nickname: own};
+  return {party: {name: partyName(party.name), boss: party.boss, size: party.size, progress: progressOf(party), hp: party.hp, hpMax: party.hpMax, week: party.week, members}, nickname: own};
 }
 
 /** Admin: every student's 원정대 이름 and each pet's 모험가 별칭 with the account name, newest first. */

@@ -45,8 +45,9 @@ function Room({ p, onClose }: { p: Profile; onClose: () => void }) {
   </div>;
 }
 
-export default function PetRanking({ send, onClose }: { send: Send; onClose: () => void }) {
-  const [kind, setKind] = useState<'pet' | 'guild'>('pet'), [teachers, setTeachers] = useState(false);
+/** `withTeachers`: open on the ranking with the teachers (a teacher's home chip shows their place there). */
+export default function PetRanking({ send, onClose, withTeachers = false }: { send: Send; onClose: () => void; withTeachers?: boolean }) {
+  const [kind, setKind] = useState<'pet' | 'guild'>('pet'), [teachers, setTeachers] = useState(withTeachers);
   const [ranking, setRanking] = useState<Ranking | null>(null), [notice, setNotice] = useState(''), [profile, setProfile] = useState<Profile | null>(null), [names, setNames] = useState<NamesView | null>(null);
   const load = () => { setNotice(''); send('rank-board', { kind, teachers }).then(r => setRanking(r.ranking)).catch(e => setNotice(e?.message || '순위를 불러오지 못했어요.')); };
   useEffect(load, [kind, teachers]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -70,6 +71,7 @@ export default function PetRanking({ send, onClose }: { send: Send; onClose: () 
           : !ranking.rows.length ? <p className="py-8 text-center text-sm text-slate-500">아직 순위에 오른 모험가가 없어요</p>
           : <>{ranking.rows.map(r => <Row key={`${r.rank}-${r.id}`} r={r} onOpen={() => void open(r)} />)}
             {ranking.mine.length > 0 && <><p className="py-1 text-center text-xs text-slate-300" aria-hidden="true">⋯</p>{ranking.mine.map(r => <Row key={`m${r.id}`} r={r} onOpen={() => void open(r)} />)}</>}
+            {kind === 'pet' && ![...ranking.rows, ...ranking.mine].some(r => r.me) && <p className="mx-auto mt-2 w-fit rounded-full bg-[#fef2f3] px-3 py-1 text-[11px] font-bold text-[#8b2f40]">펫을 키우고 탑에 오르면 순위에 올라요</p>}
             <p className="pt-2 text-center text-[10px] text-slate-400">모두 {ranking.total}{kind === 'pet' ? '마리' : '팀'} · 줄을 누르면 그 펫의 방을 볼 수 있어요</p></>}
       </div>
     </section>

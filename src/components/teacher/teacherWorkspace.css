@@ -646,6 +646,7 @@
 .teacher-workspace .lesson-scores-panel .lesson-test {padding:6px 8px;position:relative;}
 .teacher-workspace .lesson-test-clear {position:absolute;top:-13px;right:8px;display:grid;place-items:center;width:24px;height:24px;min-height:24px;padding:0;border:0;border-radius:999px;background:var(--workspace-surface,#fff);color:var(--workspace-muted);cursor:pointer;}.teacher-workspace .lesson-test-clear:hover:not(:disabled) {background:#fff1f2;color:#be123c;}/* The icon stays small; the touch area is 44x44 like the other lesson-form controls. */.teacher-workspace .lesson-test-clear::before {content:'';position:absolute;inset:-10px;}.teacher-workspace .lesson-test-clear:disabled {opacity:.35;cursor:default;}.teacher-workspace .lesson-test-clear:focus-visible {outline:2px solid var(--workspace-focus);outline-offset:1px;}
 .teacher-workspace .lesson-scores-panel .lesson-test legend {font-size:11px;}
+.teacher-workspace .lesson-test-mode {position:absolute;top:-12px;right:36px;min-width:30px;height:22px;min-height:22px;padding:0 7px;border:1px solid var(--workspace-line,#e2e8f0);border-radius:999px;background:var(--workspace-surface,#fff);color:var(--workspace-muted);font-size:11px;font-weight:700;cursor:pointer;}.teacher-workspace .lesson-test-mode:hover {color:var(--workspace-brand-fg);border-color:currentColor;}
 .teacher-workspace .lesson-scores-panel .lesson-test-inline {grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:6px;align-items:center;}
 .teacher-workspace .lesson-scores-panel .lesson-test-inline label {display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:10px;}
 .teacher-workspace .lesson-scores-panel .lesson-test-inline input {width:52px;min-width:0;margin-top:0;font-size:var(--workspace-font-xs);padding:4px;}
@@ -1106,3 +1107,7 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 .lesson-preview-label{margin:0 0 4px;font-size:11px;font-weight:800;color:#64748b}
 .lesson-preview-text{margin:0;font-size:13px;line-height:1.6;white-space:pre-wrap}
 .lesson-preview-foot{margin:10px 0 0;font-size:11px;color:#94a3b8;text-align:center}
+.lesson-preview-tabs{display:flex;gap:4px;margin-top:10px;padding:3px;border-radius:12px;background:#f1f5f9}
+.lesson-preview-tabs>button{flex:1;padding:5px 8px;border:0;border-radius:9px;background:none;color:#64748b;font-size:12px;font-weight:700;cursor:pointer}
+.lesson-preview-tabs>button[aria-selected=true]{background:#fff;color:#8b2f40;box-shadow:0 1px 4px #0f172a14}
+.lesson-preview-grid.is-four{grid-template-columns:repeat(4,minmax(0,1fr))}

@@ -1,9 +1,9 @@
-import { showSentence } from '../../lib/sentenceImport';
+import { sentenceUnits, showSentence, unitLabel } from '../../lib/sentenceImport';
 import { pickSentences, speechRecognitionClass, type GameSentence } from '../../lib/sentenceGame';
 import SentenceGame, { QuietPrompt, type SentenceMode } from '../sentence/SentenceGame';
 import ExamMaterialCatalog from '../exam/ExamMaterialCatalog';
 import { maskName } from '../../lib/maskName';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import VocabularyTest from './VocabularyTest';
 import { BookOpen, CheckCircle2, Circle, ChevronRight, Sparkles, Trophy, Volume2, RotateCcw, ChevronLeft, Gamepad2, Timer, X, Info, GraduationCap, AlertCircle } from 'lucide-react';
@@ -33,6 +33,9 @@ interface Word {
   meaning: string;
   day?: number;
   passageTitle?: string;
+  /** 문장 세트 pasted with UNIT / CHAPTER lines: the UNIT title and its CHAPTER ("CHAPTER 01 · …"). */
+  unitTitle?: string;
+  chapter?: string;
   past?: string;
   pastParticiple?: string;
   comparative?: string;
@@ -364,6 +367,18 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
       .filter(w => Number(w.day ?? 1) === currentChunk + 1)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }
+
+  // 문장 세트 with UNIT lines: those Days read "UNIT 01 · 주어+동사" and are picked from a list grouped by CHAPTER.
+  const units = useMemo(() => selectedWordbook?.type === 'sentence' ? sentenceUnits(words) : new Map<number, { title: string; chapter: string }>(), [words, selectedWordbook]);
+  const chapters = useMemo(() => {
+    const list: { chapter: string; days: number[] }[] = [];
+    [...units.keys()].sort((a, b) => a - b).forEach(d => {
+      const chapter = units.get(d)!.chapter;
+      if (list.length && list[list.length - 1].chapter === chapter) list[list.length - 1].days.push(d); else list.push({ chapter, days: [d] });
+    });
+    return list;
+  }, [units]);
+  const chunkLabel = (i: number, short = false) => selectedWordbook?.type === 'sentence-order' ? `지문 ${i + 1}` : isGrammar ? `${i + 1}세트` : units.has(i + 1) ? unitLabel(i + 1, units.get(i + 1), short) : `Day ${i + 1}`;
 
   useEffect(() => {
     if (words.length > 0 && currentChunk >= Math.max(1, totalChunks)) setCurrentChunk(Math.max(0, totalChunks - 1));
@@ -1631,7 +1646,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                         className="w-20 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none"
                       >
                         {Array.from({ length: totalChunks }).map((_, i) => (
-                          <option key={i} value={i + 1}>{selectedWordbook?.type === 'sentence-order' ? `지문 ${i + 1}` : isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}</option>
+                          <option key={i} value={i + 1}>{chunkLabel(i, true)}</option>
                         ))}
                       </select>
                     </div>
@@ -1644,7 +1659,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                         className="w-20 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-sm font-bold outline-none"
                       >
                         {Array.from({ length: totalChunks }).map((_, i) => (
-                          <option key={i} value={i + 1}>{selectedWordbook?.type === 'sentence-order' ? `지문 ${i + 1}` : isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}</option>
+                          <option key={i} value={i + 1}>{chunkLabel(i, true)}</option>
                         ))}
                       </select>
                     </div>
@@ -1689,7 +1704,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                   </div>
                   <div>
                     <h2 className="text-xl font-black text-slate-900">{selectedWordbook?.title}</h2>
-                    <p className="text-xs font-bold text-slate-400">{isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`} 집중 학습 모드</p>
+                    <p className="text-xs font-bold text-slate-400">{units.has(currentChunk + 1) ? chunkLabel(currentChunk) : isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`} 집중 학습 모드</p>
                   </div>
                 </div>
                 <button
@@ -2811,7 +2826,15 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
               </div>
               
               {wordsPartial && <p className="text-[11px] text-slate-400" role="status">나머지 범위를 불러오는 중…</p>}
-              <div className="flex items-center gap-1.5 md:gap-2 overflow-x-auto pb-2 max-w-full no-scrollbar">
+              {chapters.length > 0 ? (
+                <select aria-label="UNIT 고르기" value={currentChunk + 1} onChange={e => { setCurrentChunk(Number(e.target.value) - 1); setCurrentCardIndex(0); }}
+                  className="max-w-full rounded-lg border border-pastel-pink-200 bg-pastel-pink-50 px-2 py-1.5 text-xs md:text-sm font-bold text-pastel-pink-600 outline-none focus:ring-2 focus:ring-pastel-pink-200">
+                  {!units.has(currentChunk + 1) && <option value={currentChunk + 1}>{chunkLabel(currentChunk)}</option>}
+                  {chapters.map(c => c.chapter
+                    ? <optgroup key={c.chapter + c.days[0]} label={c.chapter}>{c.days.map(d => <option key={d} value={d}>{chunkLabel(d - 1)}</option>)}</optgroup>
+                    : c.days.map(d => <option key={d} value={d}>{chunkLabel(d - 1)}</option>))}
+                </select>
+              ) : <div className="flex items-center gap-1.5 md:gap-2 overflow-x-auto pb-2 max-w-full no-scrollbar">
                 {Array.from({ length: totalChunks }).map((_, i) => (
                   <button
                     key={i}
@@ -2825,10 +2848,10 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                         : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
                     }`}
                   >
-                    {selectedWordbook?.type === 'sentence-order' ? `지문 ${i + 1}` : isGrammar ? `${i + 1}세트` : `Day ${i + 1}`}
+                    {chunkLabel(i)}
                   </button>
                 ))}
-              </div>
+              </div>}
             </div>
 
             <div className={`bg-white ${isMobile ? 'p-5 rounded-2xl' : 'p-10 rounded-[3rem]'} border border-slate-100 shadow-xl shadow-pastel-pink-200/20`}>
@@ -2861,7 +2884,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                       currentChunk === 3 ? 'become형 동사 (변화)' :
                       currentChunk === 4 ? 'remain형 동사 (상태)' :
                       'dream 동사 (전치사 불가)'
-                    ) : (isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`)}
+                    ) : chunkLabel(currentChunk)}
                   </h2>
                   <p className="text-xs md:text-sm font-bold text-slate-400 flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-pastel-pink-400 animate-pulse" />
@@ -2890,7 +2913,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                       '6세트: dream 동사 (뒤에 전치사 불가/3형식 타동사)'
                     ) : selectedWordbook?.type === 'conversion-grammar' ? (
                       '4형식 동사의 3형식 전치사 전환 규칙을 학습합니다.'
-                    ) : `${isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`}의 단어들을 학습합니다.`}
+                    ) : units.has(currentChunk + 1) ? [units.get(currentChunk + 1)!.chapter, `${displayedWords.length}문장`].filter(Boolean).join(' · ') : `${isGrammar ? `${currentChunk + 1}세트` : `Day ${currentChunk + 1}`}의 단어들을 학습합니다.`}
                   </p>
                 </div>
               </div>

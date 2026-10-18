@@ -218,13 +218,14 @@
 .schedule-status-portal .schedule-status{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700}
 .teacher-workspace .rv-chips .lr-excel{flex:none;margin-left:4px;min-height:36px}
 /* 학습 세트: wide tabs instead of chips */
-.teacher-workspace .set-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:4px;margin:0 0 16px;border-radius:18px;background:#f1f5f9}
+.teacher-workspace .set-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:4px;margin:0 0 16px;border-radius:18px;background:#f1f5f9}
 .teacher-workspace .set-tab{display:grid;gap:2px;justify-items:center;min-height:58px;padding:8px 10px;border:0;border-radius:14px;background:none;color:#64748b;cursor:pointer;font:inherit}
 .teacher-workspace .set-tab strong{font-size:15px;font-weight:800}
 .teacher-workspace .set-tab small{font-size:12px;color:#94a3b8}
 .teacher-workspace .set-tab:hover{background:#ffffffaa}
 .teacher-workspace .set-tab[aria-selected=true]{background:#fff;color:var(--workspace-brand-fg);box-shadow:0 1px 6px #0f172a14}
 .teacher-workspace .set-tab[aria-selected=true] small{color:#94a3b8}
+@media(max-width:640px){.teacher-workspace .set-tab{min-height:44px;padding:8px 4px}.teacher-workspace .set-tab small{display:none}}
 .teacher-workspace .gs-row.app-user-row{grid-template-columns:minmax(0,1fr) auto auto;padding:8px 12px;border:1px solid #eef2f6;border-radius:14px}
 .teacher-workspace .app-user-row .gs-row-who{flex-direction:column;align-items:flex-start;gap:0}
 .teacher-workspace .app-user-rename-open{margin-left:6px;min-height:32px;font-size:12px;font-weight:600}
@@ -975,6 +976,7 @@
 .teacher-workspace .lesson-action-bar .lesson-action-more-menu>button:hover:not(:disabled){filter:none;background:#f8fafc}
 .teacher-workspace .lesson-action-bar .lesson-action-more-menu>.lesson-delete-button{color:#b91c1c}
 .teacher-workspace .lesson-action-bar .lesson-action-more-menu>button:disabled{opacity:.45}
+@media(min-width:641px){.teacher-workspace .lesson-action-bar .lesson-action-more:has(.lesson-more-always){display:block}.teacher-workspace .lesson-action-bar .lesson-action-more-menu>:not(.lesson-more-always){display:none}.teacher-workspace .lesson-action-more>summary{width:40px;height:40px}.teacher-workspace .lesson-action-more-menu{bottom:auto;top:calc(100% + 6px)}}
 @media(max-width:640px){
  .teacher-workspace .lesson-action-bar.is-title-status .lesson-action-refresh{display:none}
  .teacher-workspace .lesson-action-bar.is-title-status .lesson-action-state{grid-column:1/-1}

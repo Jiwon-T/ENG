@@ -11,6 +11,7 @@ import StatusBadge from './StatusBadge';
 import {testPercentage,sessionMatches,filteredActivities,wrongRowExpanded} from '../../lib/teacherReportPresentation';
 import {askDiscard} from './ConfirmDialog';
 import {useLeaveProtection} from '../../lib/leaveProtection';
+import TeacherQuestionAttempts from './TeacherQuestionAttempts';
 const filters=[['all','전체'],['test','단어 테스트'],['quiz','퀴즈'],['flashcard','플래시카드'],['grammar','문법'],['exam','시험 대비']];
 const modes:Record<string,string>={quiz:'객관식 퀴즈',flashcard:'플래시카드',match:'매치 게임',conjugation:'3단 변화',test:'단어 테스트'};
 const date=(v:string|null,options:any={month:'long',day:'numeric',weekday:'short'})=>v?new Date(v).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',...options}):'날짜 미상';
@@ -60,6 +61,7 @@ export default function TeacherOnlineLearning({data,page,onPrevious,onNext,loadi
  {open&&s.incorrectCount>0&&<div id={`wrong-${s.id}`} className="report-wrong-grid">{(s.incorrectAnswers||[]).map((a:any,i:number)=><div key={i}><strong>{a.word}</strong> <span>{a.meaning}</span>{a.quizSentence&&<p>{a.quizSentence}</p>}<p><span className="report-answer status-danger">선택한 답: {a.userChoice||'미선택'}</span> → <span className="report-answer status-success">정답: {a.correctAnswer}</span></p><small>{a.isReviewed?'복습 확인됨':'복습 미확인'}</small></div>)}{s.incorrectCount>(s.incorrectAnswers?.length||0)&&<p>오답이 많아 앞 {s.incorrectAnswers?.length||0}개를 표시합니다.</p>}</div>}
  </SessionRow></div>;})}
  <div className="review-pagination"><button type="button" disabled={loading||page===0} onClick={onPrevious}>이전</button><span>{page+1}페이지</span><button type="button" disabled={loading||!data.nextCursor} onClick={onNext}>다음</button></div>
+ {studentKey&&<TeacherQuestionAttempts studentKey={studentKey}/>}
  {Array.isArray(data.assignments)&&<section className="report-online-assignments"><h4>과제 · 최근 10개</h4>{(data.assignments||[]).map((a:any)=><article key={a.id} className="report-assignment"><p>{date(a.createdAt)} <StatusBadge kind={a.isDone?'done':'saved'} text={a.isDone?'완료':'미완료'}/></p><p>{a.content}</p></article>)}{!data.assignments.length&&<p className="report-caption">남긴 과제가 없습니다.</p>}</section>}
  {data.evaluation&&studentKey&&<OnlineEvaluation key={studentKey+':'+(data.evaluation.updatedAt||'')} studentKey={studentKey} initial={data.evaluation} onDirty={onEvaluationDirty}/>}
  </div>;

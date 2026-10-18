@@ -119,9 +119,14 @@ export const PET_STUDY_RATES = {
 } as const;
 export type PetStudySource = keyof typeof PET_STUDY_RATES;
 export const PET_DAILY_STUDY_POINTS = 300;
-/** Real lessons: each 출석 and each 과제 완료 from the lesson reports, once per lesson, from the last 30 days on. */
+/** Real lessons, once per lesson, from the last 30 days on: each 출석, and each 숙제 by the 숙제 평가 the teacher writes in
+ *  the next lesson's 일지 (중하 and below, 미제출: nothing). The student's own 완료 check is a to-do mark and gives nothing. */
 export const PET_ATTENDANCE_REWARD = { points: 30, xp: 50 };
-export const PET_ASSIGNMENT_REWARD = { points: 20, xp: 30 };
+export const PET_HOMEWORK_REWARD: Record<string, { points: number; xp: number }> = {
+  '최상': { points: 40, xp: 60 }, '상': { points: 30, xp: 45 }, '중상': { points: 20, xp: 30 }, '중': { points: 10, xp: 15 },
+};
+/** "최상 40 · 상 30 · 중상 20 · 중 10P" for the screens that explain the rewards. */
+export const PET_HOMEWORK_REWARD_TEXT = Object.entries(PET_HOMEWORK_REWARD).map(([grade, r]) => `${grade} ${r.points}`).join(' · ') + 'P';
 export const PET_REWARD_WINDOW_DAYS = 30;
 /** What the pet says on its own. Babies use a few easy words, never baby-talk sounds or emoji. */
 export const PET_IDLE_LINES: { upTo: number; lines: string[] }[] = [
@@ -235,7 +240,7 @@ export const PET_PARTY = {
   hpPerMember: 100, poolPerMember: 150, partialFrom: 0.3, participateMin: 10, weeklyCap: 500, inactiveDays: 3,
   nickname: { min: 2, max: 10 },
 } as const;
-export const PET_WORD_FEED = { questions: 10, minQuestions: 5, choices: 3, wrongAnswers: 3, retryAfter: 3, books: 3, sessionScan: 200, wordWindow: 120, energy: 10 };
+export const PET_WORD_FEED = { questions: 10, minQuestions: 5, choices: 3, wrongAnswers: 3, retryAfter: 3, books: 3, sessionScan: 80, wordWindow: 120, energy: 10 };
 
 /**
  * 채움의 탑: a turn-based climb, one floor per battle. Attacking: pick an action, then answer the word (right = hit).

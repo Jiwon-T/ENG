@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Download, Sparkles } from 'lucide-react';
+import { Download, Sparkles, FileQuestion } from 'lucide-react';
 import { grammarTags } from '../../lib/passageTools';
 import { isStaffView, passageCall, roleName, shortDate, type Passage, type PassagePartName } from '../../lib/passageApi';
 import PassageEditor from './PassageEditor';
@@ -19,7 +19,8 @@ const TAG_COLOR: Record<string, string> = { clause: 'bg-violet-50 text-violet-80
  * at once, explanations and the 서술형 sentence by button), ③ 단어 (from the academy word sets), ④ 주제·요약.
  * `extra` adds the teacher tools (지문 정보, 고치기, 기록) under the header.
  */
-export default function PassageResult({ passage, onChange, reused, extra }: { passage: Passage; onChange: (p: Passage) => void; reused?: boolean; extra?: ReactNode }) {
+/** `onMakeQuestions`: the 변형 문제 만들기 button for this passage. */
+export default function PassageResult({ passage, onChange, reused, extra, onMakeQuestions }: { passage: Passage; onChange: (p: Passage) => void; reused?: boolean; extra?: ReactNode; onMakeQuestions?: () => void }) {
   const staff = isStaffView(passage);
   const [editing, setEditing] = useState<PassagePartName | null>(null);
   const [tab, setTab] = useState<Tab>('reading');
@@ -64,6 +65,7 @@ export default function PassageResult({ passage, onChange, reused, extra }: { pa
       </div>
       <span className="flex items-center gap-1.5">
         {reused && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">저장된 분석을 불러왔어요</span>}
+        {onMakeQuestions && <button type="button" onClick={onMakeQuestions} className="inline-flex items-center gap-1 rounded-lg bg-[#d26272] px-2.5 py-1.5 text-xs font-bold text-white hover:bg-[#c25566]"><FileQuestion size={13} aria-hidden="true" />변형 문제 만들기</button>}
         <button type="button" disabled={!!busy} onClick={() => void download()} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"><Download size={13} aria-hidden="true" />{busy === 'docx' ? '만드는 중…' : 'Word 저장'}</button>
       </span>
     </div>

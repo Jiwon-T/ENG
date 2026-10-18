@@ -10,7 +10,7 @@ export default function StudentPartyCard({studentKey,request}:{studentKey:string
  if(!party)return null;
  const boss=PET_PARTY.bosses.find(b=>b.id===party.boss);
  return <div className="mt-2 rounded-xl border border-[#f3e6e8] bg-white px-3 py-2 text-xs">
-  <div className="flex items-center justify-between"><b className="font-bold text-[#5e1e2a]">이번 주 원정대 파티</b><span className="text-[#8b2f40]">{party.name} · {boss?.icon} {Math.round(party.progress*100)}%</span></div>
+  <div className="flex items-center justify-between"><b className="font-bold text-[#5e1e2a]">이번 주 파티</b><span className="text-[#8b2f40]">{party.name} · {boss?.icon} {Math.round(party.progress*100)}%</span></div>
   <ul className="mt-1">{party.members.map((m:any,i:number)=><li key={i} className="flex items-center gap-2 border-b border-[#f6eef0] py-1 last:border-0">
    <span className="inline-flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-[#fdecef]"><PetCharacter character={m.pet.character} stage={petStage(m.pet.level)} accessory={wornAccessories(m.pet)} portrait size={22}/></span>
    <span className="min-w-0 flex-1 truncate">{m.ourAcademy?<><b className="font-bold">{m.name}</b> <span className="text-slate-400">({m.nickname} · 우리 학원)</span></>:<><b className="font-bold">{m.nickname}</b> <span className="text-slate-400">다른 학원</span></>}

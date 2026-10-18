@@ -50,3 +50,5 @@
 .tw-toast{animation:tw-toast 2.4s ease-out forwards}
 @keyframes tw-toast{0%{opacity:0;transform:translate(-50%,-6px)}12%,80%{opacity:1;transform:translate(-50%,0)}100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){.tw-pop,.tw-spark,.tw-swoosh,.tw-crit,.tw-lunge,.tw-shield,.tw-hurt,.tw-toast{animation-duration:.01s}}
+/* 탑 방어 시간: the bar drains on its own (no re-render per tick). */
+@keyframes tw-drain { to { width: 0; } }

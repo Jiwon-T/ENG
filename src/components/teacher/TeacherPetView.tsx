@@ -53,7 +53,7 @@ export default function TeacherPetView({ studentKey, name, request, onClose }: {
           <section aria-label="오늘의 포인트" className="rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
             <div className="flex items-center justify-between"><b className="text-sm font-black">오늘의 포인트</b><span className="text-xs text-slate-500">{won(view.today.studyPoints)} / {won(view.today.studyCap)}P</span></div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f6e3e6]"><div className="h-full rounded-full bg-[#f5a3a8]" style={{ width: `${Math.min(100, (view.today.studyPoints / Math.max(1, view.today.studyCap)) * 100)}%` }} /></div>
-            <p className="mt-1.5 text-[11px] text-slate-400">받은 공부 보상 · 출석 {view.rewards.attendance}번 · 과제 완료 {view.rewards.assignment}번</p>
+            <p className="mt-1.5 text-[11px] text-slate-400">받은 공부 보상 · 출석 {view.rewards.attendance}번 · 숙제 {view.rewards.assignment}번</p>
           </section>
           <section aria-label="원정대" className="flex items-center gap-3 rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
             <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#eef6ea] text-lg" aria-hidden="true">🗺️</span>

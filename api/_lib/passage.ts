@@ -3,8 +3,9 @@
 // kept once made: 직독직해 (counts as 워크북 AI 해석), 문법·구조 + 서술형 문장, 주제·요지·요약 (each counts as 지문 분석).
 // Teachers and the admin see who analysed and who changed what, may fix any part, and choose what students see
 // (public). Students see the passages they analysed and the public ones, never names. All access is through here.
+import crypto from 'node:crypto';
 import { FieldPath } from 'firebase-admin/firestore';
-import { aiErrorCode, refundMonthlyQuota, takeAiQuota, takeMonthlyQuota, type AiMonthlyFeature } from './aiModel.js';
+import { AI_TOO_FAST_MESSAGE, aiErrorCode, guardAiBurst, refundMonthlyQuota, takeMonthlyQuota, type AiMonthlyFeature } from './aiModel.js';
 import { COMMON_WORDS, PASSAGE_LIMITS, chunkHints, passageId, passageTokens, wordForms } from '../../src/lib/passageTools.js';
 import { splitPassage } from '../../src/lib/workbook.js';
 
@@ -16,10 +17,18 @@ export const PASSAGE_MESSAGES: Record<string, string> = {
   PASSAGE_TOO_LONG: `지문은 ${PASSAGE_LIMITS.textChars.toLocaleString('ko-KR')}자, ${PASSAGE_LIMITS.sentences}문장까지 넣을 수 있어요.`,
   PASSAGE_EMPTY: '영어 지문을 넣어 주세요.',
   PASSAGE_NOT_FOUND: '지문을 찾지 못했어요.',
+  QUESTIONS_NO_TYPE: '만들 문제 유형을 골라 주세요.',
+  QUESTIONS_NOT_SOLVABLE: '이 세트는 화면에서 풀 수 있는 문제가 없어요.',
+  ASSIGNMENT_CANCELLED: '선생님이 내주기를 취소한 문제예요.',
+  ATTEMPT_NOT_OPEN: '문제를 다시 열어 주세요.',
+  ATTEMPT_SUBMITTED: '이미 채점한 문제예요. 결과를 확인해 주세요.',
+  ATTEMPT_STALE: '문제가 바뀌었어요. 다시 열어 주세요.',
+  ATTEMPT_INCOMPLETE: '모든 문제의 답을 골라 주세요.',
+  QUESTIONS_TOO_MANY: '문제 유형은 한 번에 3개까지 고를 수 있어요.',
   FORBIDDEN: '이 지문은 볼 수 없어요.',
   BAD_REQUEST: '잘못된 요청이에요.',
   PASSAGE_EDIT_MISMATCH: '영어 덩어리를 차례로 이으면 원래 문장과 같아야 해요. 문장 수도 그대로여야 해요.',
-  AI_DAILY_LIMIT: '오늘 쓸 수 있는 AI 횟수를 다 썼어요. 내일 다시 해 주세요.',
+  AI_TOO_FAST: AI_TOO_FAST_MESSAGE,
   PASSAGE_AI_MISMATCH: 'AI 답이 문장과 맞지 않았어요. 다시 해 주세요(횟수는 돌려드렸어요).',
   AI_BUSY: '현재 AI 서비스 이용자가 많습니다. 잠시 후 다시 시도해주세요.',
   AI_FAILED: 'AI 분석에 실패했어요. 잠시 후 다시 해 주세요(횟수는 돌려드렸어요).',
@@ -46,6 +55,8 @@ function view(d: any, a: PassageActor) {
   const base = { id: d.id, text: d.text, sentences: d.sentences, hints: d.sentences.map(chunkHints), title: d.title || '', examInfo: d.examInfo || '', public: Boolean(d.public), parts, updatedAt: d.updatedAt };
   return a.staff ? { ...base, createdBy: d.createdBy, history: d.history || [] } : base;
 }
+/** Who may open a stored passage: staff, a public one, or one this student analysed. */
+export async function canSeePassage(db: any, a: PassageActor, d: any) { return canSee(db, a, d); }
 async function canSee(db: any, a: PassageActor, d: any) {
   if (a.staff || d.public) return true;
   return (await db.collection(PASSAGE_VIEWS).doc(`${a.uid}_${d.id}`).get()).exists;
@@ -176,7 +187,7 @@ export async function askPassagePart(db: any, a: PassageActor, input: any, gener
   const quota = PART_QUOTA[part];
   let left: number | null = null;
   if (!a.admin) {
-    if (!(await takeAiQuota(db, a.uid, now))) throw Error('AI_DAILY_LIMIT');
+    await guardAiBurst(db, a.uid, now);
     left = await takeMonthlyQuota(db, a.uid, quota, now);
     if (left < 0) { const e: any = Error('AI_MONTHLY_LIMIT'); e.feature = quota; throw e; }
   }
@@ -202,24 +213,53 @@ export async function askPassagePart(db: any, a: PassageActor, input: any, gener
 
 /* ------------------------------------------------------------------ words (학원 단어 세트) */
 
-let wordIndex: { at: number; map: Promise<Map<string, string>> } | null = null;
+/** The academy's words → meanings, with `version` (a hash of the content) so stored passage words know when they're old. */
+export type WordIndex = Map<string, string> & { version?: string };
+let wordIndex: { at: number; map: Promise<WordIndex> } | null = null;
 /** Every word with a meaning in the academy's word sets (단어장·시험기간, plain word sets), cached for 10 minutes per
  *  server instance; calls that arrive together share one load. Words are worked out once per passage and stored. */
 export function loadWordIndex(db: any, now = Date.now()) {
   if (wordIndex && now - wordIndex.at < 600_000) return wordIndex.map;
-  const map = readWordIndex(db);
+  const map = readWordIndex(db, now);
   wordIndex = { at: now, map };
   map.catch(() => { if (wordIndex?.map === map) wordIndex = null; });
   return map;
 }
-async function readWordIndex(db: any) {
-  const books = await db.collection('wordbooks').get(), map = new Map<string, string>();
+/** The word index is also kept in Firestore (passageWordIndex: `meta` + chunks of words), so a new server instance reads
+ *  a few documents instead of every word of every set. It is rebuilt when a set is added or removed, when a set's word
+ *  count changes (counted, not read: 1 read per 1,000 words), or once a day (meanings edited in place). */
+export const WORD_INDEX = 'passageWordIndex', WORD_INDEX_MAX_AGE = 24 * 3_600_000, WORD_INDEX_CHUNK_BYTES = 600_000;
+async function readWordIndex(db: any, now: number): Promise<WordIndex> {
+  const books = await db.collection('wordbooks').get();
   const plain = books.docs.filter((b: any) => { const x = b.data() || {}; return ['word', 'exam', undefined].includes(x.category) && (!x.type || x.type === 'standard'); });
+  const counts: number[] = await Promise.all(plain.map((b: any) => db.collection(`wordbooks/${b.id}/words`).count().get().then((c: any) => Number(c.data().count) || 0)));
+  const sig = plain.map((b: any, i: number) => `${b.id}:${counts[i]}`).join('|'), metaRef = db.collection(WORD_INDEX).doc('meta'), meta = (await metaRef.get()).data();
+  if (meta?.sig === sig && now - Number(meta.builtAt || 0) < WORD_INDEX_MAX_AGE) {
+    const parts = await Promise.all(Array.from({ length: Number(meta.chunks) || 0 }, (_, i) => db.collection(WORD_INDEX).doc(`c${i}`).get()));
+    if (parts.every((d: any) => d.exists)) {
+      const map: WordIndex = new Map<string, string>();
+      for (const d of parts) { const { words = [], meanings = [] } = d.data(); words.forEach((w: string, i: number) => map.set(w, meanings[i])); }
+      map.version = String(meta.version || '');
+      return map;
+    }
+  }
+  const map: WordIndex = new Map<string, string>();
   const lists = await Promise.all(plain.map((b: any) => db.collection(`wordbooks/${b.id}/words`).get()));
   for (const list of lists) for (const w of list.docs) {
     const x = w.data() || {}, word = String(x.word || '').trim().toLowerCase(), meaning = String(x.meaning || '').trim();
     if (word && meaning && word.length <= 60 && !map.has(word)) map.set(word, meaning.slice(0, 120));
   }
+  map.version = crypto.createHash('sha1').update(JSON.stringify([...map])).digest('hex').slice(0, 16);
+  // Saved for the next instance (a failure only means the next one reads the words again).
+  try {
+    // Chunks by size (UTF-8 bytes, well under Firestore's 1 MiB per document), not by count: long Korean meanings fit too.
+    const entries = [...map], groups: [string, string][][] = [[]]; let bytes = 0;
+    for (const e of entries) { const size = Buffer.byteLength(e[0]) + Buffer.byteLength(e[1]) + 16; if (bytes + size > WORD_INDEX_CHUNK_BYTES && groups.at(-1)!.length) { groups.push([]); bytes = 0; } groups.at(-1)!.push(e); bytes += size; }
+    await db.runTransaction(async (tx: any) => {
+      groups.forEach((part, i) => tx.set(db.collection(WORD_INDEX).doc(`c${i}`), { words: part.map(e => e[0]), meanings: part.map(e => e[1]) }));
+      tx.set(metaRef, { sig, builtAt: now, chunks: groups.length, words: entries.length, version: map.version });
+    });
+  } catch { console.warn('PASSAGE_WORD_INDEX_SAVE_FAILED'); }
   return map;
 }
 export const resetWordIndex = () => { wordIndex = null; };
@@ -239,18 +279,20 @@ export function passageWords(text: string, index: Map<string, string>) {
   }
   return { known: known.slice(0, 120), unknown: unknown.slice(0, 60) };
 }
-/** Words are worked out once per passage and stored (no AI, nothing counted). */
+/** Words are worked out per passage and stored (no AI, nothing counted); worked out again when the academy's word sets
+ *  changed since (the index version), so an edited meaning reaches passages analysed before. */
 export async function passageWordsPart(db: any, a: PassageActor, id: string, now = Date.now()) {
   const ref = db.collection(PASSAGES).doc(String(id || '').slice(0, 64)), snap = await ref.get();
   if (!snap.exists) throw Error('PASSAGE_NOT_FOUND');
   const d = { ...snap.data(), id: snap.id };
   if (!(await canSee(db, a, d))) throw Error('FORBIDDEN');
-  if (d.parts?.words) return { passage: view(d, a) };
-  const words = passageWords(d.text, await loadWordIndex(db, now));
+  const index = await loadWordIndex(db, now);
+  if (d.parts?.words && d.parts.words.version === index.version) return { passage: view(d, a) };
+  const words = passageWords(d.text, index);
   const next = await db.runTransaction(async (tx: any) => {
     const fresh = (await tx.get(ref)).data();
-    if (fresh.parts?.words) return { ...fresh, id: d.id };
-    const merged = { ...fresh, parts: { ...(fresh.parts || {}), words: { ...words, at: now } } };
+    if (fresh.parts?.words && fresh.parts.words.version === index.version) return { ...fresh, id: d.id };
+    const merged = { ...fresh, parts: { ...(fresh.parts || {}), words: { ...words, at: now, version: index.version } } };
     tx.set(ref, merged);
     return { ...merged, id: d.id };
   });

@@ -34,7 +34,8 @@ export default function GuildHall({ send, onClose }: { send: Send; onClose: () =
   const run = async (fn: () => Promise<any>) => { setBusy(true); setNotice(''); try { return await fn(); } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); return null; } finally { setBusy(false); } };
   const loadBoard = () => send('guild-board').then(r => setNotes(r.notes || []));
   const loadRank = () => send('guild-ranking').then(r => setRows(r.rows || []));
-  useEffect(() => { void run(async () => { const r = apply(await send('guild-state')); if (r.party) setTab('team'); await loadBoard(); }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The board loads with the tab effect below (in parallel with the state), not a second time here.
+  useEffect(() => { void run(async () => { const r = apply(await send('guild-state')); if (r.party) setTab('team'); }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (tab === 'rank') void loadRank().catch(() => undefined); if (tab === 'board') void loadBoard().catch(() => undefined); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!guild) return <div className="fixed inset-0 z-[80] bg-white" aria-busy="true">{notice && <p className="p-6 text-center text-sm text-slate-500">{notice}</p>}</div>;
@@ -101,7 +102,7 @@ export default function GuildHall({ send, onClose }: { send: Send; onClose: () =
           <p className="mt-3 text-xs font-bold text-[#8b2f40]">팀 이름</p>
           <div className="mt-1 flex flex-wrap gap-1.5">{PET_PARTY.nameA.map(a => <Chip key={a} on={form.nameA === a} onClick={() => setForm(f => ({ ...f, nameA: a }))}>{a}</Chip>)}</div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">{PET_PARTY.nameB.map(b => <Chip key={b} on={form.nameB === b} onClick={() => setForm(f => ({ ...f, nameB: b }))}>{b}</Chip>)}</div>
-          <p className="mt-1 text-xs text-slate-500">→ {form.nameA} {form.nameB} 원정대</p>
+          <p className="mt-1 text-xs text-slate-500">→ {form.nameA} {form.nameB} 파티</p>
           <p className="mt-3 text-xs font-bold text-[#8b2f40]">목표</p>
           <div className="mt-1 flex flex-wrap gap-1.5">{PET_PARTY.bosses.map(b => <Chip key={b.id} on={form.boss === b.id} onClick={() => setForm(f => ({ ...f, boss: b.id }))}>{b.icon} {b.name}</Chip>)}</div>
           <p className="mt-3 text-xs font-bold text-[#8b2f40]">한마디 (최대 2개)</p>

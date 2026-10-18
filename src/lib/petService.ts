@@ -12,6 +12,7 @@ export interface PetState {
   today: { studyPoints: number; studyCap: number; energyItemsLeft: number; revivesLeft?: number }; stage: PetStage;
   /** 금메달 by month ('2026-10') and where they sit in each room (% of the room, by background). */
   medals?: string[]; decor?: Record<string, MedalSpot[]>;
+  /** 영어 회화 모드 (works while a 펫 패스·프리미엄 is in force) */ englishTalk?: boolean;
 }
 export interface MedalSpot { id: string; x: number; y: number }
 /** 이달의 장학 쿠폰 on the pet screen (`eligible`: 영어 이지원T's student). */
@@ -19,12 +20,12 @@ export interface CouponView { eligible: boolean; month: string; label: string; e
 /** Talks (말 가르치기·대화하기) left this month: free = for this pet (`perPet`), a 펫 패스 = all pets together. */
 export interface AiTalkView { plan: 'free' | 'pet' | 'premium'; limit: number; left: number; perPet: boolean }
 /** Points and the AI pass for the home screen and the top bar (GET ?summary=1, two reads). */
-export interface PetSummary { hasPet: boolean; points: number; pass: { plan: 'pet' | 'premium'; until: string } | null; /** 장학 쿠폰 students only */ coupon?: { earned: number; goal: number; requested: boolean } | null; /** best 모험가 place (students with a pet) */ rank?: number | null }
+export interface PetSummary { hasPet: boolean; points: number; pass: { plan: 'pet' | 'premium'; until: string } | null; /** 장학 쿠폰 students only */ coupon?: { earned: number; goal: number; requested: boolean } | null; /** best 모험가 place; null = no place yet (–위); left out when it couldn't be read */ rank?: number | null; /** the place is in the ranking with the teachers */ rankTeacher?: boolean }
 export interface PetResponse { state: PetState; result?: any; pendingRewards?: number; saved?: boolean; run?: any; expedition?: any; coupon?: CouponView; aiTalk?: AiTalkView | null }
 
 const LEGACY_KEY = (uid: string) => `pet_system_data_${uid}`;
 /** The AI actions go to /api/gemini (it runs where Gemini is served); everything else to /api/student/pet. */
-const AI_ACTIONS = new Set(['teach', 'chat', 'evolve']);
+const AI_ACTIONS = new Set(['teach', 'chat', 'evolve', 'muse']);
 async function call(method: 'GET' | 'POST', body?: unknown, path = '/api/student/pet'): Promise<PetResponse> {
   const token = await auth.currentUser?.getIdToken();
   if (!token) throw Error('로그인이 필요해요.');
@@ -50,7 +51,7 @@ export const PetService = {
       return { ...moved, pendingRewards: first.pendingRewards, run: games.run, expedition: games.expedition };
     } catch { return first; }
   },
-  async summary(): Promise<PetSummary> { const r: any = await call('GET', undefined, '/api/student/pet?summary=1'); return { hasPet: Boolean(r.hasPet), points: Number(r.points || 0), pass: r.pass || null, coupon: r.coupon || null }; },
+  async summary(): Promise<PetSummary> { const r: any = await call('GET', undefined, '/api/student/pet?summary=1'); return { hasPet: Boolean(r.hasPet), points: Number(r.points || 0), pass: r.pass || null, coupon: r.coupon || null, ...('rank' in r ? { rank: r.rank ?? null, rankTeacher: Boolean(r.rankTeacher) } : {}) }; },
   act(action: string, payload: Record<string, unknown> = {}) { return call('POST', { action, ...payload }, AI_ACTIONS.has(action) ? '/api/gemini?task=pet' : '/api/student/pet'); },
   /** 공부 포인트 (server applies the rate and the daily cap). Never blocks the study screen: failures are ignored. */
   award(source: PetStudySource, count: number): Promise<PetResponse | null> {

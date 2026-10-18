@@ -4,6 +4,7 @@ import type { IncomingMessage } from 'http';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
 import { subjects } from './teacherWorkspacePolicy.js';
 import {coreActive,readCoreScopes} from './academyCore.js';
+import {actorGeneration,rememberActor,rememberedActor} from './teacherActorMemory.js';
 export async function teacherActor(req: IncomingMessage, initialize = getFirebaseAdmin) {
     let workspaceStage='firebase-initialize';
     try{
@@ -16,7 +17,8 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     const stageTimes:Record<string,number>={};let stageAt=performance.now();const stage=(name:string)=>{const now=performance.now();stageTimes[name]=now-stageAt;stageAt=now;};
     // Use the same signed-token verification as existing app endpoints.
     // Access approval and disabling are checked server-side on every request.
-    try { uid = (await verifyFirebaseSession(auth,header.slice(7).trim())).uid; }
+    // Reads (GET) skip the account lookup at Google; writes check disabled/revoked accounts every time.
+    try { uid = (await verifyFirebaseSession(auth,header.slice(7).trim(),undefined,req.method!=='GET')).uid; }
     catch (e: any) {
         const code = String(e?.code || '');
         console.warn('TEACHER_AUTH_CHECK_FAILED',{code:/^(auth|app)\/[a-z-]+$/.test(code)?code:e?.message==='AUTH_SERVER_CONFIG_ERROR'?'AUTH_SERVER_CONFIG_ERROR':'unknown'});
@@ -26,6 +28,9 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
         throw new Error('UNAUTHORIZED');
     }
     stage('token');
+    // The permission check remembered for up to a minute (teacherActorMemory).
+    const known=rememberedActor(uid,db),startedAt=actorGeneration();
+    if(known){stage('actor-memory');return {...known,stageTimes} as never;} // the same shape as the one built below (typed by it)
     workspaceStage='workspace-account';
     if (!process.env.ADMIN_UID) throw new Error('CONFIG_ERROR');
     const admin = uid === process.env.ADMIN_UID;
@@ -62,7 +67,9 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
         scopes = members.docs.filter(d => !d.data().disabled).flatMap(d => subjects.map(subject => ({studentKey: d.id, subject})));
     }
     stage('scopes');
-    return { uid, admin, principal, academyId, scopes, teachingScopes, coreMode, db, stageTimes, workspaceProfile:profile, readAccessKey:JSON.stringify([profile?.notionTeacherPageId,profile?.notionSources,profile?.workspaceRole,profile?.assignmentRevision,coreMode]) };
+    const actor={ uid, admin, principal, academyId, scopes, teachingScopes, coreMode, db, workspaceProfile:profile, readAccessKey:JSON.stringify([profile?.notionTeacherPageId,profile?.notionSources,profile?.workspaceRole,profile?.assignmentRevision,coreMode]) };
+    rememberActor(uid,db,actor,startedAt);
+    return {...actor,stageTimes};
     }catch(error:any){const failure=error instanceof Error?error:new Error('WORKSPACE_ERROR');Object.assign(failure,{workspaceStage});throw failure;}
 }
 

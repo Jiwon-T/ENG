@@ -12,21 +12,24 @@ import DateStepper from '../src/components/teacher/DateStepper';
 import {readFileSync} from 'node:fs';
 import LessonActionBar from '../src/components/teacher/LessonActionBar';
 test('one navigation list retains principal/admin visibility and the requested mobile order',()=>{
- assert.equal(new Set(NAV_ITEMS.map(item=>item.id)).size,9);
+ assert.equal(new Set(NAV_ITEMS.map(item=>item.id)).size,8);
  assert.equal(visibleWorkspaceNav().some(item=>item.id==='settings'),false);
- assert.equal(visibleWorkspaceNav(true).length,9);assert.equal(visibleWorkspaceNav(false,true).length,9);
- // 워크북: the admin only (principals and teachers never see it).
- assert.deepEqual([visibleWorkspaceNav(true).some(i=>i.id==='workbook'),visibleWorkspaceNav(false,true).some(i=>i.id==='workbook'),visibleWorkspaceNav().some(i=>i.id==='workbook')],[true,true,true]); // 워크북: every teacher
+ assert.equal(visibleWorkspaceNav(true).length,8);assert.equal(visibleWorkspaceNav(false,true).length,8);
+ // 워크북 is on home, not a 선생님방 tab, for everyone.
+ for(const items of [visibleWorkspaceNav(true),visibleWorkspaceNav(false,true),visibleWorkspaceNav()])assert.ok(!items.map(i=>i.id as string).includes('workbook'));
  assert.deepEqual(NAV_ITEMS.filter(item=>item.mobilePrimary).sort((a,b)=>a.mobileOrder-b.mobileOrder).map(item=>item.id),['lesson','schedule','students','academy']);
  const secondary=renderToStaticMarkup(<WorkspaceMobileNavigation tab="lesson" onTab={()=>{}} hidden={false}/>);
  assert.ok(secondary.includes('모바일 선생님방 메뉴'));assert.ok(!secondary.includes('관리자 설정'));
 });
 test('desktop tabs expose selected state, one keyboard stop and cyclic arrow/home/end navigation',()=>{
  const items=visibleWorkspaceNav();
- assert.equal(adjacentWorkspaceTab(items,'lesson','ArrowRight'),'academy');assert.equal(adjacentWorkspaceTab(items,'lesson','ArrowLeft'),'workbook');
- assert.equal(adjacentWorkspaceTab(items,'word','Home'),'lesson');assert.equal(adjacentWorkspaceTab(items,'lesson','End'),'workbook');assert.equal(adjacentWorkspaceTab(items,'lesson','Enter'),undefined);
+ assert.equal(adjacentWorkspaceTab(items,'lesson','ArrowRight'),'academy');assert.equal(adjacentWorkspaceTab(items,'lesson','ArrowLeft'),'word');
+ assert.equal(adjacentWorkspaceTab(items,'word','Home'),'lesson');assert.equal(adjacentWorkspaceTab(items,'lesson','End'),'word');assert.equal(adjacentWorkspaceTab(items,'lesson','Enter'),undefined);
  const html=renderToStaticMarkup(<WorkspaceNavigation tab="lesson" onTab={()=>{}} date="2026-10-07" history={<p>작업</p>}/>);
- assert.ok(html.includes('role="tablist"'));assert.equal((html.match(/aria-selected="true"/g)||[]).length,1);assert.equal((html.match(/tabindex="0"/g)||[]).length,1);assert.ok(!html.includes('관리자 설정'));
+ assert.ok(html.includes('role="tablist"'));assert.equal((html.match(/aria-selected="true"/g)||[]).length,1);assert.equal((html.match(/tabindex="0"/g)||[]).length,1);assert.ok(!html.includes('관리자 설정'));assert.ok(!html.includes('>워크북<'));
+ // Opened from home's 워크북 (no tab of its own): nothing selected, the first tab is the keyboard stop.
+ const book=renderToStaticMarkup(<WorkspaceNavigation tab="workbook" onTab={()=>{}} date="2026-10-07" history={<p>작업</p>}/>);
+ assert.equal((book.match(/aria-selected="true"/g)||[]).length,0);assert.equal((book.match(/tabindex="0"/g)||[]).length,1);
 });
 test('every status badge has a semantic color class, text, dot and icon',()=>{
  for(const [kind,text,tone] of [['done','반영 완료','success'],['saved','저장됨','pending'],['unwritten','미작성','neutral'],['failed','반영 실패','danger'],['editing','작성 중','neutral']] as const){

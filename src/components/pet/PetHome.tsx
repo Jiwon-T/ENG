@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, Heart, Pencil, Check, X, Gift, Plus } from 'lucide-react';
@@ -7,20 +7,23 @@ import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 import { PetService, type AiTalkView, CouponView, type MedalSpot, type PetState } from '../../lib/petService';
 import {
-  PET_ACTIONS, PET_ASSIGNMENT_REWARD, PET_ATTENDANCE_REWARD, PET_CHARACTERS, PET_FRIEND_LEVEL, PET_ITEMS, PET_MAX_LEVEL, PET_MAX_PETS, PET_STUDY_RATES, petStageLabel,
+  PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD_TEXT, PET_CHARACTERS, PET_FRIEND_LEVEL, PET_ITEMS, PET_MAX_LEVEL, PET_MAX_PETS, PET_STUDY_RATES, petStageLabel,
   cleanPetSpeech, petEmojiLimit, petIdleLine, petItem, petStage, xpNeeded, PET_EXPEDITION, PET_WORD_FEED, type PetItem,
 } from '../../lib/petCatalog';
 import { AI_PLANS, PASS_NOTE } from '../../lib/aiPlans';
 import { ACCESSORY_SLOTS, PET_JOB2, PET_JOBS, PET_PARTY, petJobLabel, PET_TOWER, accessorySlot, wornAccessories } from '../../lib/petCatalog';
 import { PetCharacter } from './PetCharacters';
-import WordFeed, { type FeedRunView } from './WordFeed';
-import ExpeditionMap, { type ExpeditionView } from './ExpeditionMap';
+import type { FeedRunView } from './WordFeed';
+import type { ExpeditionView } from './ExpeditionMap';
 import { SCENE, STARS, SceneArt } from './PetScenes';
-import GuildHall from './GuildHall';
-import PetRanking from './PetRanking';
 import { MonsterCan } from './MonsterCan';
-import TowerView from './TowerView';
 import { CouponGauge, CouponShop, MedalBox, MedalLayer } from './PetCoupon';
+// The full-screen games load when opened (the pet room shows first).
+const WordFeed = lazy(() => import('./WordFeed'));
+const ExpeditionMap = lazy(() => import('./ExpeditionMap'));
+const GuildHall = lazy(() => import('./GuildHall'));
+const PetRanking = lazy(() => import('./PetRanking'));
+const TowerView = lazy(() => import('./TowerView'));
 
 // 나만의 펫: white page, rose accents (the 선생님방 palette). Everything that changes the pet is decided by the server.
 type Tab = 'home' | 'snacks' | 'closet' | 'talk' | 'shop';
@@ -78,7 +81,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   const say = (message: string) => { setToast(message); window.clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToast(''), 2800); };
   const load = useCallback(async () => {
     if (!user) return;
-    try { const r = await PetService.load(user.uid); setState(r.state); setPending(r.pendingRewards || 0); if (r.coupon) setCoupon(r.coupon); if (r.aiTalk) { const now = r.state.pets.find(p => p.slot === r.state.currentPetSlot); if (now) setAiTalk({ ...r.aiTalk, slot: now.slot }); } if ('run' in r) setFeedRun(r.run || null); if (r.expedition) setExpedition(r.expedition);
+    try { const r = await PetService.load(user.uid); loadedAt.current = Date.now(); setState(r.state); setPending(r.pendingRewards || 0); if (r.coupon) setCoupon(r.coupon); if (r.aiTalk) { const now = r.state.pets.find(p => p.slot === r.state.currentPetSlot); if (now) setAiTalk({ ...r.aiTalk, slot: now.slot }); } if ('run' in r) setFeedRun(r.run || null); if (r.expedition) setExpedition(r.expedition);
       // The summary didn't come with the pet (an older server, a hiccup): ask for it on its own, once per visit to this
       // screen (not again on every return to the tab); the map loads its own state anyway.
       else if (!expeditionAsked.current) { expeditionAsked.current = true; void PetService.act('expedition-state').then((x: any) => { if (x.expedition) setExpedition(x.expedition); if ('run' in x) setFeedRun(x.run || null); }).catch(() => undefined); }
@@ -88,7 +91,9 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   useEffect(() => { void load(); }, [load]);
   // A game left unfinished (here or on another device) comes with the load above and shows as 이어 하기.
   // A new day (energy refill) or rewards that arrived while away: refresh when the screen comes back.
-  useEffect(() => { const back = () => { if (document.visibilityState === 'visible') void load(); }; document.addEventListener('visibilitychange', back); return () => document.removeEventListener('visibilitychange', back); }, [load]);
+  // Only when it has been a few minutes (or the Seoul day changed), not on every switch back to the app.
+  const loadedAt = useRef(0);
+  useEffect(() => { const back = () => { if (document.visibilityState !== 'visible') return; const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date()); if (Date.now() - loadedAt.current > 180_000 || day !== state?.day) void load(); }; document.addEventListener('visibilitychange', back); return () => document.removeEventListener('visibilitychange', back); }, [load, state?.day]);
 
   const pet = state?.pets.find(p => p.slot === state.currentPetSlot);
   useEffect(() => { if (pet && !speech) setSpeech(idleLine(pet.level, Date.now())); }, [pet?.level]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -113,14 +118,23 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
     finally { setBusy(false); }
   };
 
-  // Idle lines: sometimes a phrase the pet learned (grown to its level; asked once per phrase per visit).
+  // Idle lines: sometimes a phrase the pet learned (grown to its level; asked once per phrase per visit), otherwise now
+  // and then a line that fits the day (상황 혼잣말: its stage, the day's study, its energy; 10 a day, 30 with a pass).
+  const museOff = useRef(false), ticks = useRef(0);
   useEffect(() => {
-    if (!pet || !pet.learnedPhrases.length) return;
+    if (!pet) return;
     const timer = window.setInterval(async () => {
-      if (busy) return;
-      const phrase = pet.learnedPhrases[Math.floor(Math.random() * pet.learnedPhrases.length)], key = String(Math.floor(pet.level / 10) * 10);
-      let line = phrase.evolvedVersions[key];
-      if (!line && !evolved.current.has(phrase.original)) { evolved.current.add(phrase.original); const r = await PetService.act('evolve', { text: phrase.original }).catch(() => null); if (r) { setState(r.state); line = r.result?.reply; } }
+      if (busy || document.visibilityState !== 'visible') return;
+      ticks.current += 1;
+      // Every third tick is a 상황 혼잣말 (one AI call); the others a learned phrase (free when its line for this level
+      // exists, one call the first time). The two never run on the same tick.
+      let line: string | undefined;
+      if (!museOff.current && ticks.current % 3 === 0) { const r: any = await PetService.act('muse').catch(() => { museOff.current = true; return null; }); line = r?.result?.reply; }
+      else if (pet.learnedPhrases.length) {
+        const phrase = pet.learnedPhrases[Math.floor(Math.random() * pet.learnedPhrases.length)], key = String(Math.floor(pet.level / 10) * 10);
+        line = phrase.evolvedVersions[key];
+        if (!line && !evolved.current.has(phrase.original)) { evolved.current.add(phrase.original); const r = await PetService.act('evolve', { text: phrase.original }).catch(() => null); if (r) { setState(r.state); line = r.result?.reply; } }
+      }
       if (line) { setSpeech(line); window.setTimeout(() => setSpeech(idleLine(pet.level, Date.now())), 6000); }
     }, 40000);
     return () => window.clearInterval(timer);
@@ -239,7 +253,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
           <section aria-label="오늘의 포인트" className="rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
             <div className="flex items-center justify-between"><b className="text-sm font-black text-[#5e1e2a]">오늘의 포인트</b><span className="text-xs text-slate-500">{won(state.today.studyPoints)} / {won(state.today.studyCap)}P</span></div>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f6e3e6]"><div className="h-full rounded-full bg-[#f5a3a8]" style={{ width: `${Math.min(100, (state.today.studyPoints / Math.max(1, state.today.studyCap)) * 100)}%` }} /></div>
-            {pending > 0 ? <div className="mt-3 flex items-center gap-2 rounded-xl bg-[#fef2f3] px-3 py-2"><Gift size={16} className="flex-none text-[#d26272]" aria-hidden="true" /><span className="flex-1 text-xs text-[#5e1e2a]"><b className="font-bold">공부 보상 {pending}개 도착</b><span className="block text-slate-500">출석 +{PET_ATTENDANCE_REWARD.points}P · 과제 완료 +{PET_ASSIGNMENT_REWARD.points}P</span></span><button type="button" disabled={busy} onClick={() => void claim()} className="rounded-lg bg-[#d26272] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60">받기</button></div>
+            {pending > 0 ? <div className="mt-3 flex items-center gap-2 rounded-xl bg-[#fef2f3] px-3 py-2"><Gift size={16} className="flex-none text-[#d26272]" aria-hidden="true" /><span className="flex-1 text-xs text-[#5e1e2a]"><b className="font-bold">공부 보상 {pending}개 도착</b><span className="block text-slate-500">출석 +{PET_ATTENDANCE_REWARD.points}P · 숙제 평가 {PET_HOMEWORK_REWARD_TEXT}</span></span><button type="button" disabled={busy} onClick={() => void claim()} className="rounded-lg bg-[#d26272] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60">받기</button></div>
               : <p className="mt-1.5 text-[11px] text-slate-400">공부로 받는 하루 포인트예요 · 받는 법은 맨 아래에 있어요</p>}
           </section>
           {coupon?.eligible && <CouponGauge coupon={coupon} onShop={() => { setTab('shop'); setShopGroup('coupon'); setTrial(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
@@ -265,7 +279,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
             <ul className="mt-2 space-y-2 text-xs text-slate-600">
               {([
                 ['📚', '공부', `단어 테스트 1문제 ${PET_STUDY_RATES['vocab-test'].points}P · 단어장 퀴즈 ${PET_STUDY_RATES['wordbook-quiz'].points}P · 오답 복습 ${PET_STUDY_RATES['review-confirm'].points}P (하루 최대 ${won(state.today.studyCap)}P)`],
-                ['🏫', '수업', `출석 +${PET_ATTENDANCE_REWARD.points}P · 과제 완료 +${PET_ASSIGNMENT_REWARD.points}P (하루 한도와 별도)`],
+                ['🏫', '수업', `출석 +${PET_ATTENDANCE_REWARD.points}P · 숙제는 다음 수업 선생님 평가로 ${PET_HOMEWORK_REWARD_TEXT} (하루 한도와 별도)`],
                 ['🗺️', '원정대', `스테이지 첫 클리어 +${PET_EXPEDITION.bonus.clear}P · ★2·★3 처음 +${PET_EXPEDITION.bonus.star2}P씩 · 파티 원정대 보상은 한 주 최대 ${PET_PARTY.weeklyCap}P`],
                 ['⚡', '기운', '매일 다시 가득 차요 · 기운 간식은 하루 두 번까지 · 다 쓰면 탈진: 몬스터로 깨워요 (하루 한 번)'],
               ] as const).map(([icon, title, text]) => <li key={title} className="flex gap-2"><span aria-hidden="true">{icon}</span><span><b className="font-bold text-[#5e1e2a]">{title}</b> <span className="text-slate-500">{text}</span></span></li>)}
@@ -297,11 +311,15 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
           {tab === 'talk' && <div className="rounded-2xl border border-[#f3e6e8] bg-white p-3">
             <div className="mb-3 flex gap-1 rounded-xl bg-[#f8f1f2] p-1">{(['teach', 'chat'] as const).map(m => <button key={m} type="button" aria-pressed={talkMode === m} onClick={() => setTalkMode(m)} className={`flex-1 rounded-lg py-1.5 text-xs font-bold ${talkMode === m ? 'bg-white text-[#8b2f40] shadow-sm' : 'text-slate-500'}`}>{m === 'teach' ? `말 가르치기 · 기운 ${PET_ACTIONS.teach.energy}` : `대화하기 · 기운 ${PET_ACTIONS.chat.energy}`}</button>)}</div>
             {talkMode === 'chat' && <div className="mb-2 max-h-56 space-y-1.5 overflow-y-auto">{chat.length ? chat.map((m, i) => <p key={i} className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-xs ${m.role === 'user' ? 'ml-auto bg-[#fef2f3] text-[#5e1e2a]' : 'bg-[#f8fafc] text-slate-700'}`}>{m.role === 'model' ? cleanPetSpeech(m.text, petEmojiLimit(pet.level)) : m.text}</p>) : <p className="text-center text-xs text-slate-400">{pet.name}에게 말을 걸어 보세요.</p>}</div>}
+            {talkMode === 'chat' && <div className="mb-2 flex items-center justify-between gap-2 rounded-xl bg-[#f7f6fd] px-3 py-1.5 text-xs">
+              <span className="text-[#3c3489]"><b>영어 회화 모드</b> <span className="text-slate-500">펫이 영어로만 말하고 틀린 표현을 고쳐 줘요{aiTalk?.plan === 'free' ? ' · 패스 전용' : ''}</span></span>
+              <button type="button" role="switch" aria-checked={Boolean(state.englishTalk)} aria-label="영어 회화 모드" disabled={busy} onClick={async () => { try { const r = await PetService.act('english-talk', { on: !state.englishTalk }); setState(r.state); setChat([]); } catch (e: any) { say(e?.message || '잠시 후 다시 해 주세요.'); } }} className={`relative h-5 w-9 flex-none rounded-full transition-colors ${state.englishTalk ? 'bg-[#534ab7]' : 'bg-slate-300'}`}><span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${state.englishTalk ? 'left-[18px]' : 'left-0.5'}`} /></button>
+            </div>}
             {talkMode === 'teach' && <p className="mb-2 text-xs text-slate-500">가르친 말은 펫이 기억했다가 가끔 혼잣말로 해요. 레벨이 오르면 더 똑똑하게 말해요.</p>}
             {(() => { const t = aiTalk && (!aiTalk.perPet || aiTalk.slot === pet.slot) ? aiTalk : null; if (!t) return null;
               return <p className="mb-2 text-[11px] text-slate-400">{t.perPet ? `이번 달 이 펫과 남은 이야기 ${t.left}번 (월 ${t.limit}번)` : `이번 달 남은 이야기 ${t.left}번 (${AI_PLANS[t.plan].label} 월 ${t.limit}번)`} · 말 가르치기와 대화하기를 합쳐서 세요.{t.plan === 'free' && t.left <= 30 && <span className="mt-0.5 block">{PASS_NOTE.pet}</span>}</p>; })()}
             <form onSubmit={talkMode === 'teach' ? teach : talk} className="flex gap-2">
-              <input value={text} maxLength={talkMode === 'teach' ? 100 : 200} onChange={e => setText(e.target.value)} placeholder={talkMode === 'teach' ? '예: 오늘도 화이팅!' : '오늘 뭐 했어?'} aria-label={talkMode === 'teach' ? '가르칠 말' : '펫에게 할 말'} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-[#eaa0a9] focus:bg-white" />
+              <input value={text} maxLength={talkMode === 'teach' ? 100 : 200} onChange={e => setText(e.target.value)} placeholder={talkMode === 'teach' ? '예: 오늘도 화이팅!' : state.englishTalk ? 'Say something in English!' : '오늘 뭐 했어?'} aria-label={talkMode === 'teach' ? '가르칠 말' : '펫에게 할 말'} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-[#eaa0a9] focus:bg-white" />
               <button type="submit" disabled={busy || !text.trim()} className="rounded-xl bg-[#d26272] px-4 text-sm font-bold text-white disabled:opacity-50">{talkMode === 'teach' ? '가르치기' : '보내기'}</button>
             </form>
           </div>}
@@ -326,11 +344,13 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
         </div>
       </motion.div>}</AnimatePresence>
 
-      {mapOpen && <ExpeditionMap state={state} send={feedSend} onClose={() => setMapOpen(false)} onGuild={() => { setMapOpen(false); setGuildOpen(true); }} />}
+      <Suspense fallback={null}>
+      {mapOpen && <ExpeditionMap state={state} send={feedSend} initial={{ expedition, run: feedRun }} onClose={() => setMapOpen(false)} onGuild={() => { setMapOpen(false); setGuildOpen(true); }} />}
       {towerOpen && <TowerView state={state} onState={setState} onClose={() => setTowerOpen(false)} />}
       {guildOpen && <GuildHall send={feedSend} onClose={() => setGuildOpen(false)} />}
       {rankOpen && <PetRanking send={feedSend} onClose={() => setRankOpen(false)} />}
       {feedOpen && feedRun && <WordFeed run={feedRun} state={state} send={feedSend} onClose={() => setFeedOpen(false)} />}
+      </Suspense>
 
       <AnimatePresence>{celebrate && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4">
         <div role="dialog" aria-modal="true" aria-labelledby="pet-max-title" className="w-full max-w-xs rounded-3xl bg-white p-5 text-center">

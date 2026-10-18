@@ -6,3 +6,7 @@ export function testInputPatch(value:any,correct:string,total:string,wrong:strin
  const count=key===total?number:value[total]??null;
  return {[wrong]:mistakes,[total]:count,[correct]:mistakes==null||count==null?null:count-mistakes};
 }
+/** A score typed as a percentage (85): kept as 85 right out of 100 questions; empty clears the three numbers. */
+export function percentInputPatch(correct:string,total:string,wrong:string,score:number|null) {
+ return score==null?{[wrong]:null,[total]:null,[correct]:null}:{[wrong]:100-score,[total]:100,[correct]:score};
+}

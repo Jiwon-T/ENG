@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSentences, showSentence, stripNumber } from '../src/lib/sentenceImport.ts';
+import { parseSentences, sentenceUnits, showSentence, stripNumber, unitLabel } from '../src/lib/sentenceImport.ts';
 
 test('문장 세트 paste: leading numbers of every kind are taken off, numbers inside a sentence stay', () => {
   for (const line of ['001. I run.', '1. I run.', '2 I run.', '3) I run.', '(3) I run.', '① I run.', '❶ I run.', '➊ I run.', '⑴ I run.', '⒈ I run.', '⓵ I run.'])
@@ -28,4 +28,17 @@ test('문장 세트 paste: a Korean line with no sentence waiting for it is list
   assert.deepEqual(rows, [{english: 'I run.', korean: '나는 달린다.'}]);
   assert.deepEqual(skipped, ['나 혼자 있는 해석', '또 다른 해석']);
   assert.equal(showSentence('I want / to be / a doctor.'), 'I want to be a doctor.');
+});
+
+test('문장 세트 paste: CHAPTER and UNIT lines give each sentence its UNIT (as the Day), title and CHAPTER', () => {
+  const {rows} = parseSentences('CHAPTER 01 문장의 기본 구조\nUNIT 01 주어+동사\n001. The rain stopped.\t비가 그쳤다.\nUNIT 02  be p.p.\n002. Unit 3 is closed.\t3반은 닫혔다.\nUnit 4 opens today.\t4반은 오늘 연다.');
+  assert.deepEqual(rows, [
+    {english: 'The rain stopped.', korean: '비가 그쳤다.', unit: 1, unitTitle: '주어+동사', chapter: 'CHAPTER 01 · 문장의 기본 구조'},
+    {english: 'Unit 3 is closed.', korean: '3반은 닫혔다.', unit: 2, unitTitle: 'be p.p.', chapter: 'CHAPTER 01 · 문장의 기본 구조'},
+    {english: 'Unit 4 opens today.', korean: '4반은 오늘 연다.', unit: 2, unitTitle: 'be p.p.', chapter: 'CHAPTER 01 · 문장의 기본 구조'},
+  ]);
+  const units = sentenceUnits([{day: 1, unitTitle: '주어+동사', chapter: 'CHAPTER 01'}, {day: 2}]);
+  assert.equal(unitLabel(1, units.get(1)), 'UNIT 01 · 주어+동사');
+  assert.equal(unitLabel(1, units.get(1), true), 'UNIT 01');
+  assert.equal(unitLabel(2, units.get(2)), 'Day 2', 'a Day without a UNIT line stays a Day');
 });

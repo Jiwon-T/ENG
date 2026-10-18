@@ -89,8 +89,12 @@ test('shortcuts: Ctrl/⌘+S saves, Ctrl/⌘+Enter publishes; the grid asks befor
  const css=fs.readFileSync(new URL('../src/components/teacher/teacherWorkspace.css',import.meta.url),'utf8');
  assert.match(css,/\.teacher-workspace\.workspace-mobile \.lesson-kbd\{display:none\}/);assert.match(css,/@media \(pointer:coarse\)\{\.teacher-workspace \.lesson-kbd\{display:none\}\}/,'no shortcut keys on phones');
  const grid=fs.readFileSync(new URL('../src/components/teacher/TeacherLessonGrid.tsx',import.meta.url),'utf8');
- assert.match(grid,/gridPublish\.current=editorOpen&&active\?\(\)=>\{const row=rows\[activeStudent\];if\(!row\|\|row\.pending\|\|row\.loading\|\|isRecordBusy\(row\.id\)\|\|!gridCanSubmit\(row\)\)return;void askConfirm\(\{title:'리포트에 반영할까요\?'/);
- assert.match(grid,/\.then\(ok=>\{if\(ok\)void submitRows\('publish',\[row\.id\]\);\}\);\}:null;/);
+ // Ctrl/⌘+Enter and the 반영 button both ask first (the question shows the 학부모·학생 preview), then publish that one row.
+ assert.match(grid,/gridPublish\.current=editorOpen&&active\?\(\)=>\{const row=rows\[activeStudent\];if\(!row\|\|row\.pending\|\|row\.loading\|\|isRecordBusy\(row\.id\)\|\|!gridCanSubmit\(row\)\)return;void publishRow\(row\);\}:null;/);
+ assert.match(grid,/const publishRow=\(row:any\)=>confirmLessonPublish\(row\.data,[^\n]*\.then\(ok=>\{if\(ok\)void submitRows\('publish',\[row\.id\]\);\}\);/);
+ assert.match(grid,/disabled=\{!gridCanSubmit\(row\)\} onClick=\{\(\) => void publishRow\(row\)\}>/);
+ const confirm=fs.readFileSync(new URL('../src/components/teacher/lessonPublishConfirm.tsx',import.meta.url),'utf8');
+ assert.match(confirm,/title:'리포트에 반영할까요\?'[^\n]*content:preview/);
  const ws=fs.readFileSync(new URL('../src/components/teacher/TeacherWorkspace.tsx',import.meta.url),'utf8');
  // A held key repeats keydown: both save and publish run once; the browser's own Ctrl+S is still blocked.
  for(const [src,save,publish] of [[ws,'saveShortcut.current?.()','publishShortcut.current?.()'],[grid,'gridSave.current()','gridPublish.current?.()']] as const){

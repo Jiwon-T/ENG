@@ -101,6 +101,7 @@ const Login = lazy(loadLogin);
 const Home = lazy(() => import('./components/Home'));
 const AnalysisView = lazy(() => import('./components/AnalysisView'));
 const PassageAnalyzer = lazy(() => import('./components/passage/PassageAnalyzer'));
+const QuestionGenerator = lazy(() => import('./components/generator/QuestionGenerator'));
 const TeacherRoom = lazy(() => import('./components/teacher/TeacherRoom'));
 const WordbookView = lazy(() => import('./components/student/WordbookView'));
 const LearningReport = lazy(() => import('./components/student/LearningReport'));
@@ -666,136 +667,10 @@ export default function App() {
               {/* 지문 분석기 (Beta): app-first analysis, AI parts by button, shared stored analyses (components/passage). */}
               <Suspense fallback={<p className="py-10 text-center text-sm text-slate-400">불러오는 중…</p>}><PassageAnalyzer /></Suspense>
             </motion.div>
-          ) : currentView === 'generator' && (profile?.email === 'lizzieshere1@gmail.com') ? (
-            <motion.div
-              key="generator"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="pt-12"
-            >
-              <header className="pb-8 text-center max-w-4xl mx-auto px-6 flex flex-col items-center">
-                <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-4 tracking-tight">
-                  문제 <span className="text-amber-500">생성기</span>
-                </h1>
-                <p className="text-slate-500 max-w-lg mx-auto font-medium">
-                  영어 지문을 붙여넣으면 변형 문제를 만들어드려요.
-                </p>
-              </header>
-
-              <main className="max-w-4xl mx-auto px-6">
-                <AnimatePresence mode="wait">
-                  {!result ? (
-                    <motion.div
-                      key="input-gen"
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      className="bg-white p-8 rounded-3xl shadow-xl shadow-amber-200/50 border border-amber-50"
-                    >
-                      <div className="mb-6">
-                        <label className="block text-sm font-bold text-slate-700 mb-2 ml-1">
-                          영어 지문 입력
-                        </label>
-                        <textarea
-                          value={text}
-                          onChange={(e) => setText(e.target.value)}
-                          placeholder="문제를 생성하고 싶은 영어 지문을 여기에 붙여넣으세요..."
-                          className="w-full h-64 p-6 bg-amber-50/30 border-2 border-amber-100 rounded-2xl focus:ring-4 focus:ring-amber-100 focus:border-amber-300 transition-all resize-none text-lg leading-relaxed outline-none"
-                        />
-                      </div>
-
-                      <div className="mb-6 p-6 bg-white border-2 border-amber-100 rounded-2xl space-y-4">
-                        <div className="text-xs font-black text-amber-400 uppercase tracking-widest mb-2">생성할 문제 유형 선택 (최대 4개)</div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {[
-                            { id: 'blank' as QuestionType, label: '빈칸 추론' },
-                            { id: 'grammar' as QuestionType, label: '어법 수정' },
-                            { id: 'summary' as QuestionType, label: '요약문 완성' },
-                            { id: 'gist' as QuestionType, label: '요지 파악' },
-                            { id: 'ordering' as QuestionType, label: '순서 배열' },
-                            { id: 'insertion' as QuestionType, label: '문장 삽입' },
-                            { id: 'claim' as QuestionType, label: '필자의 주장' },
-                            { id: 'topic' as QuestionType, label: '주제 파악' },
-                            { id: 'title' as QuestionType, label: '제목 추론' },
-                            { id: 'consistency' as QuestionType, label: '내용 일치/불일치' },
-                            { id: 'irrelevant' as QuestionType, label: '무관한 문장' },
-                            { id: 'workbook' as QuestionType, label: '빈칸 워크북' },
-                          ].map((type) => (
-                            <label key={type.id} className="flex items-center gap-2 cursor-pointer group">
-                              <input
-                                type="checkbox"
-                                checked={selectedQuestionTypes.includes(type.id)}
-                                disabled={!selectedQuestionTypes.includes(type.id) && selectedQuestionTypes.length >= MAX_QUESTION_TYPES}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedQuestionTypes([...selectedQuestionTypes, type.id]);
-                                  } else {
-                                    setSelectedQuestionTypes(selectedQuestionTypes.filter(t => t !== type.id));
-                                  }
-                                }}
-                                className="w-4 h-4 accent-amber-500 rounded"
-                              />
-                              <span className="text-sm font-medium text-slate-600 group-hover:text-amber-500 transition-colors">
-                                {type.label}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      {error && (
-                        <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-100">
-                          {error}
-                        </div>
-                      )}
-
-                      <button
-                        onClick={() => {
-                          if (selectedQuestionTypes.length > MAX_QUESTION_TYPES) {
-                            alert(`문제 유형은 한 번에 ${MAX_QUESTION_TYPES}개까지 만들 수 있어요. (꼼꼼하게 만들기 위해서예요)`);
-                            return;
-                          }
-                          handleAnalyze(true, true);
-                        }}
-                        disabled={loading || !text.trim() || selectedQuestionTypes.length === 0}
-                        className="w-full py-5 bg-amber-500 text-white rounded-2xl font-black text-xl shadow-lg shadow-amber-200 hover:bg-amber-600 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="animate-spin" size={24} />
-                            AI가 문제 생성 중...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={24} />
-                            문제 생성하기
-                            <ArrowRight size={24} />
-                          </>
-                        )}
-                      </button>
-                      {loading && <AiThinking thoughts={thoughts} tone="amber" />}
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="result-gen"
-                      initial={{ opacity: 0, scale: 1.05 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="space-y-6"
-                    >
-                      <div className="flex justify-between items-center no-print">
-                        <button
-                          onClick={reset}
-                          className="text-slate-400 hover:text-amber-500 font-bold text-sm transition-colors flex items-center gap-1"
-                        >
-                          ← 처음으로 돌아가기
-                        </button>
-                      </div>
-                      <AnalysisView result={result} isMobile={isMobile} questionsOnly={true} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </main>
+          ) : currentView === 'generator' && user ? (
+            <motion.div key="generator" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              {/* 변형 문제 만들기 (Beta): app-made types first, counted monthly (components/generator). */}
+              <Suspense fallback={<p className="py-10 text-center text-sm text-slate-400">불러오는 중…</p>}><QuestionGenerator /></Suspense>
             </motion.div>
           ) : currentView === 'teacher-room' ? (
             <motion.div

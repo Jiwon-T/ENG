@@ -27,7 +27,8 @@ test('party: weeks start on Monday in Seoul; nicknames are free text without con
 
 test('party: create and join (one team a week, names first, no joining a full team); students only see 원정대 이름·별칭 and pets', () => {
   const a = guild('별사탕'), p = createParty(a, 'ua', look, input, MON, 'p1');
-  assert.deepEqual([p.name, p.hpMax, a.parties['2026-10-12']], ['반짝 별빛 원정대', 400, 'p1']);
+  assert.deepEqual([p.name, p.hpMax, a.parties['2026-10-12']], ['반짝 별빛 파티', 400, 'p1']);
+  assert.equal(publicParty({...p, name: '반짝 별빛 원정대'}, 'ua', MON).name, '반짝 별빛 파티', 'a team made before shows as 파티 too');
   assert.throws(() => createParty(a, 'ua', look, input, MON, 'p2'), /PARTY_ONE_A_WEEK/);
   assert.throws(() => createParty(guild('곰돌'), 'ub', look, {...input, nameA: '나쁜'}, MON, 'p3'), /PARTY_BAD_INPUT/, 'only the fixed name words');
   assert.throws(() => joinParty(p, initialGuild(MON), 'ux', look, MON), /PARTY_NEED_NICK/);
@@ -92,7 +93,7 @@ test('party API: nickname, create, join; a right answer in a game adds to the te
   assert.equal((await call('ub', {action: 'guild-alias', slot: 2, name: '곰돌'}, deps)).out.error, 'PARTY_BAD_INPUT', 'only a chosen pet');
   await call('ub', {action: 'guild-alias', slot: 1, name: '곰돌'}, deps);
   const made = await call('ua', {action: 'party-create', ...input, size: 2}, deps);
-  assert.equal(made.out.party.name, '반짝 별빛 원정대');
+  assert.equal(made.out.party.name, '반짝 별빛 파티');
   const board = await call('ub', {action: 'guild-board'}, deps);
   assert.equal(board.out.notes.length, 1); assert.ok(!JSON.stringify(board.out).includes('ua'));
   const joined = await call('ub', {action: 'party-join', partyId: board.out.notes[0].id}, deps);
@@ -117,7 +118,7 @@ test('party API: nickname, create, join; a right answer in a game adds to the te
   const next = await call('ua', {action: 'guild-state'}, deps);
   assert.deepEqual([next.out.party, next.out.guild.lastResult.progress, next.out.guild.lastResult.reward], [null, 5, 0]);
   assert.equal(f.rows.get(`petParties/${made.out.party.id}`).settled, true);
-  assert.equal(f.rows.get('petGuild/ub').lastResult.party, '반짝 별빛 원정대', 'every member gets the result note');
+  assert.equal(f.rows.get('petGuild/ub').lastResult.party, '반짝 별빛 파티', 'every member gets the result note');
 });
 
 test('party for teachers: the whole team of their own student, our academy by name and others by nickname only; others are refused', async () => {
@@ -196,4 +197,17 @@ test('names: a party member saved before names (no pet slot) loses the old nickn
   assert.deepEqual(f.rows.get(`petNames/guild_${encodeURIComponent('반짝별')}`).owners, [], 'the old name is free again');
   assert.equal((await call('ub', {action: 'guild-name', name: '반짝별'}, deps)).out.ok, true, 'no question for a name nobody uses now');
   assert.equal((await call('ub', {action: 'guild-alias', slot: 1, name: '반짝별'}, deps)).out.ok, true, '원정대 이름 and 별칭 are checked apart');
+});
+
+test('party settling: an older unsettled week is still paid even when a newer result exists; settled parties are not checked again', async () => {
+  const f = registrationFirestore(), st = initialPetState(MON); st.pets[0].chosen = true; f.rows.set('petStates/ua', st);
+  const old = createParty(guild('별사탕'), 'ua', look, {...input, size: 2}, MON, 'pOld');
+  const newer = createParty(guild('별사탕'), 'ua', look, {...input, size: 2}, MON + 7 * DAY, 'pNew'); newer.week = '2026-10-19'; newer.settled = true;
+  f.rows.set('petParties/pOld', old); f.rows.set('petParties/pNew', newer);
+  f.rows.set('petGuild/ua', {...guild('별사탕'), parties: {'2026-10-12': 'pOld', '2026-10-19': 'pNew'}, lastResult: {week: '2026-10-19', party: '반짝 별빛 파티', progress: 0, reward: 0, counted: false}});
+  const deps: any = {db: () => f.db, generate: async () => '{}', now: () => MON + 14 * DAY};
+  await call('ua', {action: 'guild-state'}, deps);
+  assert.equal(f.rows.get('petParties/pOld').settled, true, 'the older week is settled, not skipped');
+  assert.deepEqual(f.rows.get('petGuild/ua').settledParties.sort(), ['pNew', 'pOld']);
+  assert.equal(f.rows.get('petGuild/ua').lastResult.week, '2026-10-19', 'the newer result note stays');
 });

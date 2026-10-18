@@ -1,24 +1,40 @@
-// The model call and the daily AI count, shared by api/gemini and the pet handler it serves.
-import { GoogleGenAI } from '@google/genai';
+// The model call, the monthly counts and the short-time guard, shared by api/gemini and the pet handler it serves.
+import type { GoogleGenAI } from '@google/genai';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
-import { AI_PLANS, PET_EVOLVE_DAILY, PET_TALK_DAILY_GUARD, activePlan, type AiPass, type AiPlan } from '../../src/lib/aiPlans.js';
+import { AI_PLANS, PET_TALK_DAILY_GUARD, activePlan, type AiPass, type AiPlan } from '../../src/lib/aiPlans.js';
 
 export const AI_MODEL = 'gemini-3-flash-preview';
-export const AI_DAILY_LIMIT = 60;
 const seoulDay = (at = Date.now()) => new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Seoul'}).format(new Date(at));
 const seoulMonth = (now = Date.now()) => seoulDay(now).slice(0, 7);
 
-/** Count one call for today (Seoul); false when the account has used up today's calls. */
-export async function takeAiQuota(db: any, uid: string, now = Date.now(), limit = AI_DAILY_LIMIT) {
-    const ref = db.collection('aiUsage').doc(`${uid}:${seoulDay(now)}`);
+/**
+ * The short-time guard (not a count people see; the monthly counts per feature are): at most 20 AI requests in 10
+ * minutes for one account, shared by 지문 분석, 분석, 워크북 해석 and 변형 문제 (the pet has its own guards; the admin
+ * none). Checked and counted in one transaction, after the login, permission and input checks and before the monthly
+ * count. A request that fails later still counts: it limits attempts, not use.
+ */
+export const AI_BURST = {windowMs: 10 * 60_000, limit: 20};
+export const AI_TOO_FAST_MESSAGE = '요청이 너무 빨라요. 잠깐 뒤에 다시 해 주세요.';
+export async function takeAiBurst(db: any, uid: string, now = Date.now()): Promise<{ok: boolean; retryAfter?: number}> {
+    const ref = db.collection('aiBurst').doc(uid);
+    // A transaction given up under contention (many tabs at once: ABORTED) is 'try again shortly' too, before the monthly
+    // count so nothing is counted. Any other failure (Firestore down …) goes on as a server error.
     return db.runTransaction(async (tx: any) => {
-        const used = Number((await tx.get(ref)).data()?.count || 0);
-        if (used >= limit) return false;
-        // merge: the pet's own counts (pet.teach …) in the same document stay as they are.
-        tx.set(ref, {uid, day: seoulDay(now), count: used + 1, updatedAt: now}, {merge: true});
-        return true;
+        const d = (await tx.get(ref)).data(), start = Number(d?.windowStart || 0), count = Number(d?.count || 0);
+        if (!d || now - start >= AI_BURST.windowMs || now < start) { tx.set(ref, {uid, windowStart: now, count: 1, updatedAt: now}); return {ok: true}; }
+        if (count >= AI_BURST.limit) return {ok: false, retryAfter: Math.max(1, Math.ceil((start + AI_BURST.windowMs - now) / 1000))};
+        tx.set(ref, {uid, windowStart: start, count: count + 1, updatedAt: now});
+        return {ok: true};
+    }).catch((error: any) => {
+        if (error?.code === 10 || error?.code === 'aborted' || /ABORTED|contention/i.test(String(error?.message || ''))) { console.warn('AI_BURST_BUSY'); return {ok: false, retryAfter: 5}; }
+        console.warn('AI_BURST_FAILED'); throw error;
     });
+}
+/** The guard as an error for the handlers that throw (code AI_TOO_FAST, with the seconds to wait). */
+export async function guardAiBurst(db: any, uid: string, now = Date.now()) {
+    const r = await takeAiBurst(db, uid, now);
+    if (!r.ok) { const e: any = Error('AI_TOO_FAST'); e.retryAfter = r.retryAfter ?? 60; throw e; }
 }
 
 /** The person's plan today (a pass the admin turned on, through its last day). */
@@ -29,7 +45,7 @@ export async function planOf(db: any, uid: string, now = Date.now()): Promise<Ai
 export type PetTalkKind = 'talk' | 'evolve';
 /**
  * One pet AI call. 말 가르치기 and 대화하기 ('talk') count a month: free = 150 for each pet, a pass = 600 for all pets; at
- * most 50 a day on any plan. 혼잣말 ('evolve', automatic) counts 10 a day. All of them count toward the 60 AI calls a day.
+ * most 50 a day on any plan. 혼잣말 ('evolve', automatic) counts a day: 10 free, 30 with a pass.
  */
 export async function takePetTalkQuota(db: any, uid: string, slot: number, kind: PetTalkKind, now = Date.now()): Promise<{ok: true; left: number | null; plan: AiPlan} | {ok: false; code: string; plan: AiPlan}> {
     const plan = await planOf(db, uid, now), rules = AI_PLANS[plan];
@@ -37,21 +53,20 @@ export async function takePetTalkQuota(db: any, uid: string, slot: number, kind:
     return db.runTransaction(async (tx: any) => {
         const day = (await tx.get(dayRef)).data() || {}, month = (await tx.get(monthRef)).data() || {};
         const pet = day.pet || {}, bySlot = month.petTalkBySlot || {}, mine = Number(bySlot[slot] || 0), total = Number(month.petTalk || 0);
-        if (Number(day.count || 0) >= AI_DAILY_LIMIT) return {ok: false, code: 'AI_DAILY_LIMIT', plan};
         if (kind === 'evolve') {
-            if (Number(pet.evolve || 0) >= PET_EVOLVE_DAILY) return {ok: false, code: 'PET_AI_EVOLVE_LIMIT', plan};
-            tx.set(dayRef, {uid, day: seoulDay(now), count: Number(day.count || 0) + 1, pet: {...pet, evolve: Number(pet.evolve || 0) + 1}, updatedAt: now}, {merge: true});
+            if (Number(pet.evolve || 0) >= rules.petMonologue) return {ok: false, code: 'PET_AI_EVOLVE_LIMIT', plan};
+            tx.set(dayRef, {uid, day: seoulDay(now), pet: {...pet, evolve: Number(pet.evolve || 0) + 1}, updatedAt: now}, {merge: true});
             return {ok: true, left: null, plan};
         }
         if (Number(pet.talk || 0) >= PET_TALK_DAILY_GUARD) return {ok: false, code: 'PET_TALK_DAILY', plan};
         const limit = rules.petTalkPerPet ?? rules.petTalk ?? 0, used = rules.petTalkPerPet ? mine : total;
         if (used >= limit) return {ok: false, code: 'PET_TALK_LIMIT', plan};
-        tx.set(dayRef, {uid, day: seoulDay(now), count: Number(day.count || 0) + 1, pet: {...pet, talk: Number(pet.talk || 0) + 1}, updatedAt: now}, {merge: true});
+        tx.set(dayRef, {uid, day: seoulDay(now), pet: {...pet, talk: Number(pet.talk || 0) + 1}, updatedAt: now}, {merge: true});
         tx.set(monthRef, {uid, month: seoulMonth(now), petTalk: total + 1, petTalkBySlot: {...bySlot, [slot]: mine + 1}, updatedAt: now}, {merge: true});
         return {ok: true, left: limit - used - 1, plan};
     });
 }
-/** No answer came back (AI error, empty reply): the talk is given back (the 60 AI calls a day stay counted by attempt). */
+/** No answer came back (AI error, empty reply): the talk is given back. */
 export async function refundPetTalkQuota(db: any, uid: string, slot: number, kind: PetTalkKind, now = Date.now()) {
     const dayRef = db.collection('aiUsage').doc(`${uid}:${seoulDay(now)}`), monthRef = db.collection('aiMonthly').doc(`${uid}_${seoulMonth(now)}`);
     return db.runTransaction(async (tx: any) => {
@@ -85,7 +100,9 @@ export function aiErrorCode(error: any, fallback = 'AI_FAILED') {
  * defaults to global (where preview models are served). Without the service account, a Gemini API key is used instead.
  */
 let vertex: GoogleGenAI | null = null;
-function aiClient() {
+/** The AI library is loaded on the first call only, so the pet and other endpoints that just read quotas start faster. */
+async function aiClient() {
+    const { GoogleGenAI } = await import('@google/genai');
     const project = process.env.FIREBASE_PROJECT_ID, clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
     let privateKey = process.env.FIREBASE_PRIVATE_KEY;
     if (project && clientEmail && privateKey) {
@@ -111,7 +128,7 @@ function recordUsage(feature: AiFeature, usage: any, now = Date.now()) {
 
 /** One model call (the pet talk and the workbook use it too). */
 export async function generateAi(request: any, feature: AiFeature = 'analyzer') {
-    const response = await aiClient().models.generateContent({model: AI_MODEL, ...request});
+    const response = await (await aiClient()).models.generateContent({model: AI_MODEL, ...request});
     await recordUsage(feature, response.usageMetadata);
     return response.text || '';
 }
@@ -129,7 +146,7 @@ export async function readAiUsage(db: any, actor: any, days = 31, now = Date.now
 
 /** Monthly calls per person (Korea month) on the free plan: 지문 분석기 for every signed-in user, 워크북 해석 for teachers.
  *  A pass raises them (src/lib/aiPlans.ts). The admin has no limit and can reset anyone's month (관리자 설정 › AI 사용량). */
-export const AI_MONTHLY_LIMITS = {analyzer: AI_PLANS.free.analyzer, workbook: AI_PLANS.free.workbook} as const;
+export const AI_MONTHLY_LIMITS = {analyzer: AI_PLANS.free.analyzer, workbook: AI_PLANS.free.workbook, generator: AI_PLANS.free.generator} as const;
 export type AiMonthlyFeature = keyof typeof AI_MONTHLY_LIMITS;
 /** Count one call this month: the calls left after it, or -1 when the month's calls are used up. */
 export async function takeMonthlyQuota(db: any, uid: string, feature: AiMonthlyFeature, now = Date.now()) {
@@ -144,7 +161,8 @@ export async function takeMonthlyQuota(db: any, uid: string, feature: AiMonthlyF
 /** No answer came back: the call is given back. */
 export async function refundMonthlyQuota(db: any, uid: string, feature: AiMonthlyFeature, now = Date.now()) {
     const ref = db.collection('aiMonthly').doc(`${uid}_${seoulMonth(now)}`);
-    return db.runTransaction(async (tx: any) => { const data = (await tx.get(ref)).data(); if (!data) return; tx.set(ref, {[feature]: Math.max(0, Number(data[feature] || 0) - 1), updatedAt: now}, {merge: true}); });
+    try { return await db.runTransaction(async (tx: any) => { const data = (await tx.get(ref)).data(); if (!data) return; tx.set(ref, {[feature]: Math.max(0, Number(data[feature] || 0) - 1), updatedAt: now}, {merge: true}); }); }
+    catch (error) { console.warn('AI_REFUND_FAILED', {feature}); throw error; } // recorded (the feature only); callers go on
 }
 /** 관리자 설정 › AI 사용량: this month's calls by person (name and role from users), most used first. */
 export async function readAiMonthly(db: any, actor: any, now = Date.now()) {
@@ -153,15 +171,15 @@ export async function readAiMonthly(db: any, actor: any, now = Date.now()) {
     const rows = await Promise.all(snap.docs.map(async (d: any) => {
         const x = d.data(), [user, pass] = await Promise.all([db.collection('users').doc(x.uid).get(), db.collection('aiPasses').doc(x.uid).get()]).then(r => r.map((s: any) => s.data() || {}));
         const plan = activePlan(pass, seoulDay(now));
-        return {uid: x.uid, name: String(user.alias || user.name || '이름 없음').slice(0, 40), role: String(user.role || ''), plan, analyzer: Number(x.analyzer || 0), workbook: Number(x.workbook || 0), petTalk: Number(x.petTalk || 0)};
+        return {uid: x.uid, name: String(user.alias || user.name || '이름 없음').slice(0, 40), role: String(user.role || ''), plan, analyzer: Number(x.analyzer || 0), workbook: Number(x.workbook || 0), generator: Number(x.generator || 0), petTalk: Number(x.petTalk || 0)};
     }));
-    return {month, plans: AI_PLANS, rows: rows.filter(r => r.analyzer + r.workbook + r.petTalk > 0).sort((a, b) => (b.analyzer + b.workbook + b.petTalk) - (a.analyzer + a.workbook + a.petTalk))};
+    return {month, plans: AI_PLANS, rows: rows.filter(r => r.analyzer + r.workbook + r.generator + r.petTalk > 0).sort((a, b) => (b.analyzer + b.workbook + b.generator + b.petTalk) - (a.analyzer + a.workbook + a.generator + a.petTalk))};
 }
 /** The admin resets a person's month (both features). */
 export async function resetAiMonthly(db: any, actor: any, input: any, now = Date.now()) {
     if (!actor?.admin || actor.academyId !== 'main') throw Error('FORBIDDEN');
     const uid = String(input?.uid || ''); if (!/^[A-Za-z0-9]{1,128}$/.test(uid)) throw Error('BAD_REQUEST');
-    await db.collection('aiMonthly').doc(`${uid}_${seoulMonth(now)}`).set({uid, month: seoulMonth(now), analyzer: 0, workbook: 0, petTalk: 0, petTalkBySlot: {}, resetAt: now, updatedAt: now}, {merge: true});
+    await db.collection('aiMonthly').doc(`${uid}_${seoulMonth(now)}`).set({uid, month: seoulMonth(now), analyzer: 0, workbook: 0, generator: 0, petTalk: 0, petTalkBySlot: {}, resetAt: now, updatedAt: now}, {merge: true});
     return {uid, reset: true};
 }
 
@@ -171,7 +189,7 @@ export async function resetAiMonthly(db: any, actor: any, input: any, now = Date
  */
 export async function generateAiStream(request: any, feature: AiFeature, onThought: (text: string) => void) {
     const config = {...(request.config || {}), thinkingConfig: {...(request.config?.thinkingConfig || {}), includeThoughts: true}};
-    const stream = await aiClient().models.generateContentStream({model: AI_MODEL, ...request, config});
+    const stream = await (await aiClient()).models.generateContentStream({model: AI_MODEL, ...request, config});
     let text = '', usage: any = null;
     for await (const chunk of stream) {
         for (const part of chunk.candidates?.[0]?.content?.parts || []) {

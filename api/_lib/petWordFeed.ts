@@ -212,13 +212,16 @@ const isStandardWordBook = (b: any) => Boolean(b) && (b.category || 'word') === 
  */
 export async function loadFeedSource(db: any, uid: string, rand: () => number = Math.random): Promise<FeedSource> {
   const sessions = (await db.collection('studySessions').where('uid', '==', uid).orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(PET_WORD_FEED.sessionScan).get()).docs.map((d: any) => d.data());
+  // The books studied most recently, newest first; their documents are read together, 10 at a time, until three plain
+  // word books are found.
   const bookDocs = new Map<string, any>(), recent: string[] = [];
-  for (const s of sessions.sort((a: any, b: any) => ms(b.createdAt) - ms(a.createdAt))) {
-    const id = typeof s.wordbookId === 'string' ? s.wordbookId : '';
-    if (!id || recent.includes(id)) continue;
-    if (!bookDocs.has(id)) bookDocs.set(id, (await db.collection('wordbooks').doc(id).get()).data() || null);
-    if (isStandardWordBook(bookDocs.get(id))) recent.push(id);
-    if (recent.length === PET_WORD_FEED.books) break;
+  const order = [...new Set(sessions.sort((a: any, b: any) => ms(b.createdAt) - ms(a.createdAt)).map((s: any) => typeof s.wordbookId === 'string' ? s.wordbookId : '').filter(Boolean))] as string[];
+  const fetched = new Map<string, any>();
+  for (let i = 0; i < order.length && recent.length < PET_WORD_FEED.books; i += 10) {
+    const ids = order.slice(i, i + 10), docs = await Promise.all(ids.map(id => db.collection('wordbooks').doc(id).get()));
+    ids.forEach((id, k) => fetched.set(id, docs[k].data() || null));
+    // Only the books up to the third plain one count (as when they were read one by one), wrong answers included.
+    for (const id of ids) { if (recent.length >= PET_WORD_FEED.books) break; bookDocs.set(id, fetched.get(id)); if (isStandardWordBook(fetched.get(id))) recent.push(id); }
   }
   const toWord = (bookId: string, d: any): FeedWord | null => { const x = d.data(); return typeof x?.word === 'string' && typeof x?.meaning === 'string' && x.word.trim() && x.meaning.trim() ? {wordbookId: bookId, wordId: d.id, word: x.word, meaning: x.meaning} : null; };
   const books = await Promise.all(recent.map(async id => {
@@ -230,19 +233,26 @@ export async function loadFeedSource(db: any, uid: string, rand: () => number = 
     return {id, words: list};
   }));
   // Wrong answers: standard books only (elsewhere "meaning" is a verb form or a label), matched to the word as it is now.
-  const wrongs: FeedWord[] = [], tried = new Set<string>();
+  // Candidates in order (newest session first). They're looked up a few at a time, together, until six that still exist
+  // are found (as when they were looked up one by one); later candidates are only read when needed.
+  const candidates: {wordbookId: string; word: string}[] = [], tried = new Set<string>(), want = PET_WORD_FEED.wrongAnswers * 2;
   for (const s of sessions) {
     if (!isStandardWordBook(bookDocs.get(s.wordbookId)) || !Array.isArray(s.incorrectAnswers)) continue;
     for (const x of s.incorrectAnswers) {
-      if (wrongs.length >= PET_WORD_FEED.wrongAnswers * 2 || x?.isReviewed || x?.quizSentence || typeof x?.word !== 'string') continue;
+      if (x?.isReviewed || x?.quizSentence || typeof x?.word !== 'string') continue;
       const k = wordKey({wordbookId: s.wordbookId, word: x.word}); if (tried.has(k)) continue; tried.add(k);
-      const hit = (await db.collection('wordbooks').doc(s.wordbookId).collection('words').where('word', '==', x.word).limit(1).get()).docs[0];
-      const w = hit && toWord(s.wordbookId, hit); if (!w) continue;
-      wrongs.push(w);
-      const book = books.find(b => b.id === w.wordbookId);
-      if (book) { if (!book.words.some(b => b.word === w.word)) book.words.push(w); }
-      else books.push({id: w.wordbookId, words: [w, ...(await db.collection('wordbooks').doc(w.wordbookId).collection('words').limit(PET_WORD_FEED.wordWindow).get()).docs.map((d: any) => toWord(w.wordbookId, d)).filter(Boolean)]});
+      candidates.push({wordbookId: s.wordbookId, word: x.word});
     }
   }
+  const wrongs: FeedWord[] = [];
+  for (let i = 0; i < candidates.length && wrongs.length < want; i += want) {
+    const batch = candidates.slice(i, i + want);
+    const hits = await Promise.all(batch.map(c => db.collection('wordbooks').doc(c.wordbookId).collection('words').where('word', '==', c.word).limit(1).get().then((r: any) => r.docs[0] ? toWord(c.wordbookId, r.docs[0]) : null)));
+    for (const w of hits) if (w && wrongs.length < want) wrongs.push(w);
+  }
+  const others = [...new Set(wrongs.map(w => w.wordbookId).filter(id => !books.some(b => b.id === id)))];
+  const otherWords = await Promise.all(others.map(id => db.collection('wordbooks').doc(id).collection('words').limit(PET_WORD_FEED.wordWindow).get()));
+  others.forEach((id, k) => books.push({id, words: otherWords[k].docs.map((d: any) => toWord(id, d)).filter(Boolean)}));
+  for (const w of wrongs) { const book = books.find(b => b.id === w.wordbookId)!; if (!book.words.some(b => b.word === w.word)) book.words.push(w); }
   return {books, wrongs};
 }

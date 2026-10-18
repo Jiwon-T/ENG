@@ -103,6 +103,30 @@ test('지문 분석기 ③ 단어: meanings from the academy word sets (forms an
   const out: any = await passageWordsPart(f.db, kid, passage.id, NOW);
   assert.deepEqual(out.passage.parts.words.known.map((k: any) => [k.word, k.meaning]), [['practice', '연습']]);
   assert.ok(out.passage.parts.words.unknown.includes('talent'));
+  // the index is saved: a new server instance reads it (a few docs), not every word again
+  const { loadWordIndex } = await import('../api/_lib/passage.ts');
+  assert.deepEqual([f.rows.get('passageWordIndex/meta').chunks, f.rows.get('passageWordIndex/c0').words], [1, ['practice']]);
+  f.rows.set('wordbooks/b1/words/w1', { word: 'Practice', meaning: '바뀐 뜻 (같은 개수)' });
+  resetWordIndex();
+  assert.equal((await loadWordIndex(f.db, NOW + 1000)).get('practice'), '연습', 'same sets and counts: the saved index');
+  f.rows.set('wordbooks/b1/words/w2', { word: 'talent', meaning: '재능' });
+  resetWordIndex();
+  assert.equal((await loadWordIndex(f.db, NOW + 2000)).get('talent'), '재능', 'a set grew: rebuilt');
+  f.rows.set('wordbooks/b1/words/w1', { word: 'Practice', meaning: '하루 뒤' });
+  resetWordIndex();
+  assert.equal((await loadWordIndex(f.db, NOW + 2000 + 25 * 3_600_000)).get('practice'), '하루 뒤', 'once a day: rebuilt (meanings edited in place)');
+  // a passage analysed before gets its words again once the sets changed (the index version)
+  const again: any = await passageWordsPart(f.db, kid, passage.id, NOW + 2000 + 25 * 3_600_000);
+  assert.equal(again.passage.parts.words.known.find((k: any) => k.word === 'practice').meaning, '하루 뒤');
+  // chunks by size: long Korean meanings never make a document too big
+  const g = setup();
+  g.rows.set('wordbooks/big', { category: 'word', type: 'standard' });
+  for (let i = 0; i < 2500; i++) g.rows.set(`wordbooks/big/words/w${i}`, { word: `word${i}`, meaning: '아주 긴 한국어 뜻'.repeat(12) });
+  resetWordIndex();
+  await loadWordIndex(g.db, NOW);
+  const meta = g.rows.get('passageWordIndex/meta');
+  assert.ok(meta.chunks >= 2 && meta.words === 2500, 'split by bytes');
+  for (let i = 0; i < meta.chunks; i++) { const doc = g.rows.get(`passageWordIndex/c${i}`); assert.ok(Buffer.byteLength(JSON.stringify(doc)) < 700_000); }
 });
 
 test('지문 분석기 route (/api/gemini?task=passage): login, actions, the monthly limit message', async () => {

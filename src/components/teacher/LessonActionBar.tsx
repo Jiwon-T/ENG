@@ -2,7 +2,8 @@ import {useEffect,useState,type ReactNode} from 'react';
 import {MoreHorizontal} from 'lucide-react';
 import StatusBadge,{statusKind} from './StatusBadge';
 /** `statusInTitle`: the save state is shown next to the editor title, so the bar keeps only a failure, the reason and `hint`.
- *  `more`: items for the ⋯ menu, shown on phones in place of the refresh and delete buttons (one row: 저장 / 반영 / ⋯). */
+ *  `more`: items for the ⋯ menu, shown on phones in place of the refresh and delete buttons (one row: 저장 / 반영 / ⋯). On a
+ *  PC the menu shows only items marked `lesson-more-always` (미리보기), and only when there is one. */
 export default function LessonActionBar({status,reason,children,refresh,savedAt,failureReason,onRetry,retryDisabled=false,statusInTitle=false,hint,more,extra}:{status:{text:string;tone:string};reason?:string;children:ReactNode;refresh?:ReactNode;savedAt?:number;failureReason?:string;onRetry?:()=>void;retryDisabled?:boolean;statusInTitle?:boolean;hint?:ReactNode;more?:ReactNode;extra?:ReactNode}){
  const [savedFlash,setSavedFlash]=useState(false);
  useEffect(()=>{const remaining=savedAt?3000-(Date.now()-savedAt):0;setSavedFlash(remaining>0);if(remaining<=0)return;const timer=setTimeout(()=>setSavedFlash(false),remaining);return()=>clearTimeout(timer);},[savedAt]);

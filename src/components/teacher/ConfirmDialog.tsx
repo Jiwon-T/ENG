@@ -1,22 +1,24 @@
-import {useEffect,useRef} from 'react';
+import {useEffect,useRef,type ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Send,FilePen,Trash2,AlertTriangle,Link2,Unlink,CheckCircle2,UserCog,RotateCcw} from 'lucide-react';
 
 const ICONS={send:Send,edit:FilePen,trash:Trash2,alert:AlertTriangle,link:Link2,unlink:Unlink,check:CheckCircle2,user:UserCog,restore:RotateCcw};
-/** `tone:'danger'`: red confirm button, and 취소 is focused so Enter never deletes by accident. */
-type Options={title:string;message?:string;details?:string[];confirmText?:string;cancelText?:string;altText?:string;icon?:keyof typeof ICONS;tone?:'danger'|'leave'};
+/** `tone:'danger'`: red confirm button, and 취소 is focused so Enter never deletes by accident. `content`: more under the
+ *  message (the 반영 확인 창 shows the report preview there); the dialog gets wider. */
+type Options={title:string;message?:string;details?:string[];content?:ReactNode;confirmText?:string;cancelText?:string;altText?:string;icon?:keyof typeof ICONS;tone?:'danger'|'leave'};
 type Choice='ok'|'alt'|'cancel';
 
 function ConfirmView({options,onDone}:{options:Options;onDone:(choice:Choice)=>void}){
  const ref=useRef<HTMLDialogElement>(null),ok=useRef<HTMLButtonElement>(null),cancel=useRef<HTMLButtonElement>(null),danger=options.tone==='danger',leave=options.tone==='leave';
  const Icon=ICONS[options.icon||(danger?'alert':leave?'edit':'check')];
  useEffect(()=>{const d=ref.current;if(d&&!d.open){try{d.showModal();}catch{d.setAttribute('open','');}}(danger||leave?cancel:ok).current?.focus();},[]);
- return <dialog ref={ref} className={`confirm-modal${danger?' is-danger':''}${leave?' is-leave':''}`} aria-labelledby="confirm-modal-title" onCancel={e=>{e.preventDefault();onDone('cancel');}} onClick={e=>{if(e.target===ref.current)onDone('cancel');}}>
+ return <dialog ref={ref} className={`confirm-modal${danger?' is-danger':''}${leave?' is-leave':''}${options.content?' has-content':''}`} aria-labelledby="confirm-modal-title" onCancel={e=>{e.preventDefault();onDone('cancel');}} onClick={e=>{if(e.target===ref.current)onDone('cancel');}}>
   <div className="confirm-modal-body">
    <span className="confirm-modal-icon" aria-hidden="true"><Icon size={20}/></span>
    <h2 id="confirm-modal-title">{options.title}</h2>
    {options.message&&<p>{options.message}</p>}
    {options.details?.length?<ul>{options.details.map((d,i)=><li key={i}>{d}</li>)}</ul>:null}
+   {options.content?<div className="confirm-modal-content">{options.content}</div>:null}
   </div>
   <div className={`confirm-modal-actions${options.altText?' has-alt':''}`}><button type="button" ref={cancel} className="confirm-modal-cancel" onClick={()=>onDone('cancel')}>{options.cancelText||'취소'}</button>{options.altText&&<button type="button" className="confirm-modal-cancel confirm-modal-alt" onClick={()=>onDone('alt')}>{options.altText}</button>}<button type="button" ref={ok} className="confirm-modal-ok" onClick={()=>onDone('ok')}>{options.confirmText||'확인'}</button></div>
  </dialog>;

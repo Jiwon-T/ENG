@@ -31,15 +31,17 @@ const SPOTS = [[17, 91], [52, 69], [74, 45], [48, 24], [70, 8]];
 const PATH = 'M40 275 C 100 265, 60 215, 120 205 S 205 175, 170 135 S 80 105, 110 70 S 190 40, 160 22';
 const BONUS_LABEL: Record<string, string> = { clear: '처음 통과 보너스', star2: '★★ 처음 달성', star3: '★★★ 처음 달성' };
 
-export default function ExpeditionMap({ state, send, onClose, onGuild }: { state: PetState; send: Send; onClose: () => void; onGuild?: () => void }) {
-  const [exp, setExp] = useState<ExpeditionView | null>(null);
-  const [run, setRun] = useState<FeedRunView | null>(null);
-  const [chapterId, setChapterId] = useState<string | null>(null);
+/** `initial`: what the pet screen already has, so the map opens at once and refreshes quietly. */
+export default function ExpeditionMap({ state, send, onClose, onGuild, initial }: { state: PetState; send: Send; onClose: () => void; onGuild?: () => void; initial?: { expedition: ExpeditionView | null; run: FeedRunView | null } }) {
+  const [exp, setExp] = useState<ExpeditionView | null>(initial?.expedition || null);
+  const [run, setRun] = useState<FeedRunView | null>(initial?.run || null);
+  const [chapterId, setChapterId] = useState<string | null>(initial?.expedition ? initial.expedition.current.split('-')[0] : null);
   const [selected, setSelected] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [jobLater, setJobLater] = useState(false);
+  const [quietFor, setQuietFor] = useState<{ id: string; restart: boolean } | null>(null); // before the early return (hook order)
   const pet = state.pets.find(p => p.slot === state.currentPetSlot)!;
   const chooseJob = async (job: PetJob) => { setBusy(true); setNotice(''); try { const r = await send('choose-job', { job }); if (r.expedition) setExp(r.expedition); } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); } finally { setBusy(false); } };
   const chooseJob2 = async (job2: PetJob2) => { setBusy(true); setNotice(''); try { const r = await send('choose-job2', { job2 }); if (r.expedition) setExp(r.expedition); } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); } finally { setBusy(false); } };
@@ -57,7 +59,6 @@ export default function ExpeditionMap({ state, send, onClose, onGuild }: { state
   const chapterStars = chapter.stages.reduce((a, s) => a + s.stars, 0), left = chapter.stages.filter(s => !s.cleared).length;
 
   // A new game on a sound stage (듣고 고르기, 👑) asks about a quiet place first, every time; resuming doesn't.
-  const [quietFor, setQuietFor] = useState<{ id: string; restart: boolean } | null>(null);
   const start = async (id: string, restart = false, quiet?: boolean) => {
     if (quiet === undefined && stageHasSound(id) && !(resumable === id && !restart)) { setQuietFor({ id, restart }); return; }
     setQuietFor(null); setBusy(true); setNotice('');

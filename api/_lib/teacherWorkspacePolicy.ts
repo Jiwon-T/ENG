@@ -22,6 +22,8 @@ export const lessonDraftSchema = z.object({
     correct: z.number().nonnegative().nullable(), total: z.number().positive().nullable(),
     examCorrect: z.number().nonnegative().nullable().default(null), examTotal: z.number().positive().nullable().default(null),
     wrong:z.number().nonnegative().nullable().optional(), examWrong:z.number().nonnegative().nullable().optional(),
+    // The score was typed as a percentage (kept as correct out of 100): no real 문항·오답 count to show.
+    scorePercent:z.boolean().default(false), examScorePercent:z.boolean().default(false),
     round: z.number().nonnegative().nullable(),
     selfStudy: z.enum(['미확인', '없음', '있음']).default('없음'),
     selfStudyStart: z.string().default(''), selfStudyEnd: z.string().default(''),
@@ -29,7 +31,7 @@ export const lessonDraftSchema = z.object({
     selfStudyMore: z.array(z.object({ start: z.string().max(5), end: z.string().max(5) }).strict()).max(2).default([]),
     selfStudyRound: z.number().nonnegative().nullable().default(null),
     attendanceNote: z.string().max(5000).default(''), specialNote: z.string().max(5000).default(''), examScope:z.string().max(5000).default(''), teacherNote:z.string().max(5000).default(''),
-}).transform(d=>({...d,...orderedStudyPieces(d),selfStudy:d.selfStudy==='미확인'&&!d.selfStudyStart&&!d.selfStudyEnd&&!d.selfStudyRound&&!d.selfStudyMore.length?'없음':d.selfStudy,correct:d.wrong!=null&&d.total!=null?d.total-d.wrong:d.correct,examCorrect:d.examWrong!=null&&d.examTotal!=null?d.examTotal-d.examWrong:d.examCorrect})).superRefine((d, ctx) => {
+}).transform(d=>({...d,...orderedStudyPieces(d),selfStudy:d.selfStudy==='미확인'&&!d.selfStudyStart&&!d.selfStudyEnd&&!d.selfStudyRound&&!d.selfStudyMore.length?'없음':d.selfStudy,correct:d.wrong!=null&&d.total!=null?d.total-d.wrong:d.correct,examCorrect:d.examWrong!=null&&d.examTotal!=null?d.examTotal-d.examWrong:d.examCorrect,scorePercent:d.scorePercent&&d.total===100,examScorePercent:d.examScorePercent&&d.examTotal===100})).superRefine((d, ctx) => {
     if (d.classSession === '있음' && d.end <= d.start)
         ctx.addIssue({ code: 'custom', message: '종료 시간은 시작 시간 뒤여야 합니다.' });
     if(d.wrong!=null&&d.total==null||d.examWrong!=null&&d.examTotal==null)ctx.addIssue({code:'custom',message:'오답 수와 문항 수를 함께 입력해 주세요.'});

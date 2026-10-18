@@ -53,6 +53,9 @@ export async function buildRankings(db: any, now: number): Promise<RankSnapshot>
  *  meanwhile get the last snapshot instead of reading everything again. */
 export async function rankingSnapshot(db: any, now: number, maxAge = RANKING_TTL): Promise<RankSnapshot> {
   const ref = db.collection(PET_RANKINGS).doc('current');
+  // A fresh snapshot is a plain read; the transaction (the rebuild lock) only when it is old or missing.
+  const plain = await ref.get(), seen = plain.exists ? plain.data() as RankSnapshot : null;
+  if (seen && Array.isArray(seen.pets) && now - seen.builtAt < maxAge) return seen;
   const {cur, build} = await db.runTransaction(async (tx: any) => {
     const snap = await tx.get(ref), cur = snap.exists ? snap.data() as RankSnapshot : null, usable = Boolean(cur && Array.isArray(cur.pets));
     if (usable && now - cur!.builtAt < maxAge) return {cur, build: false};
@@ -94,22 +97,25 @@ const options = async (db: any, viewer: string, kindInput: unknown, withTeachers
 /** What a student sees. `id` = the snapshot index of the pet (for 원정대: the student's best pet) used to open its room;
  *  it changes when the snapshot is rebuilt (`at`). */
 export async function readRankings(db: any, viewer: string, kindInput: unknown, withTeachersInput: unknown, now: number) {
-  const {kind, teacherView, withTeachers} = await options(db, viewer, kindInput, withTeachersInput), snap = await rankingSnapshot(db, now);
+  const [{kind, teacherView, withTeachers}, snap] = await Promise.all([options(db, viewer, kindInput, withTeachersInput), rankingSnapshot(db, now)]);
   return {at: snap.builtAt, kind, teacherView, withTeachers, ...rankRows(snap, viewer, kind, withTeachers)};
 }
 
-/** The home chip: the viewer's best place among the 모험가 (students only: a teacher or a student without a pet gets null).
- *  It uses the snapshot as it is (up to 6 hours old) so the home screen never waits for a rebuild. */
-export async function myPetRank(db: any, uid: string, now: number) {
-  const snap = await rankingSnapshot(db, now, RANKING_STALE_OK), pets = snap.pets.map((p, index) => ({p, index})).filter(x => !x.p.teacher);
-  if (!pets.some(x => x.p.uid === uid)) return null;
-  return Math.min(...placed(pets.map(({p, index}) => ({key: [p.best, p.stars, p.level], index, uid: p.uid}))).filter(r => r.uid === uid).map(r => r.rank));
+/** The home chip: the viewer's best place among the 모험가 — a student among the students, a teacher in the ranking with
+ *  the teachers (선생님 포함); null when they have no pet on it yet (the chip shows –위). It uses the snapshot as it is
+ *  (up to 6 hours old) so the home screen never waits for a rebuild. */
+export async function myPetRank(db: any, uid: string, now: number, hasPet = true): Promise<{rank: number | null; teacher: boolean}> {
+  if (!hasPet) return {rank: null, teacher: (await climber(db, uid)).teacher}; // –위 without reading (or rebuilding) the ranking
+  const [{teacher}, snap] = await Promise.all([climber(db, uid), rankingSnapshot(db, now, RANKING_STALE_OK)]);
+  const pets = snap.pets.map((p, index) => ({p, index})).filter(x => teacher || !x.p.teacher);
+  if (!pets.some(x => x.p.uid === uid)) return {rank: null, teacher};
+  return {rank: Math.min(...placed(pets.map(({p, index}) => ({key: [p.best, p.stars, p.level], index, uid: p.uid}))).filter(r => r.uid === uid).map(r => r.rank)), teacher};
 }
 
 /** One pet's room from the ranking, to look at: outfit, room background and the 금메달 placed there. Only a pet on the
  *  rows this viewer was shown (the same ranking: `kind`, `teachers`) can be opened. */
 export async function readRankProfile(db: any, viewer: string, atInput: unknown, idInput: unknown, kindInput: unknown, withTeachersInput: unknown, now: number) {
-  const {kind, withTeachers} = await options(db, viewer, kindInput, withTeachersInput), snap = await rankingSnapshot(db, now), id = Math.floor(Number(idInput)), p = snap.pets[id];
+  const [{kind, withTeachers}, snap] = await Promise.all([options(db, viewer, kindInput, withTeachersInput), rankingSnapshot(db, now)]), id = Math.floor(Number(idInput)), p = snap.pets[id];
   if (Number(atInput) !== snap.builtAt || !p) throw Error('RANK_STALE');
   const shown = rankRows(snap, viewer, kind, withTeachers);
   if (![...shown.rows, ...shown.mine].some(r => r.id === id)) throw Error('RANK_STALE');

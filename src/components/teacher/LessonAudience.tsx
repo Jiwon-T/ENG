@@ -21,6 +21,7 @@ export function TeacherOnlyFields({value,onChange}:{value:{examScope?:string;tea
   </div>
  </div>;
 }
+/** An item of the ⋯ menu (shown on PCs too, unlike 새로고침·삭제 which have their own buttons there). */
 export function LessonPreviewButton({onClick,disabled}:{onClick:()=>void;disabled?:boolean}){
- return <button type="button" className="small-button lesson-preview-button" disabled={disabled} onClick={onClick}><Eye size={14} aria-hidden="true"/>미리보기</button>;
+ return <button type="button" className="lesson-more-item lesson-more-always" disabled={disabled} onClick={onClick}><Eye size={15} aria-hidden="true"/>미리보기</button>;
 }

@@ -15,6 +15,7 @@ export interface GuildProfile {
   version: 1; /** before 원정대 이름·별칭: one nickname per student (moved to the main pet's 별칭 on first use) */ nickname: string; warned: boolean; banned: string[];
   parties: Record<string, string>; lastResult?: PartyResult | null; updatedAt: number;
   guildName?: string; guildWarned?: boolean; aliases?: Record<string, string>; aliasWarned?: Record<string, boolean>;
+  /** parties of past weeks known to be settled (not checked again) */ settledParties?: string[];
   /** normalized names, for the 'someone already uses this name' check */ guildKey?: string; aliasKeys?: string[]; /** the old nickname was moved: ask the student to look at it */ movedNickname?: boolean;
 }
 export interface PartyResult { week: string; party: string; progress: number; reward: number; counted: boolean }
@@ -78,6 +79,8 @@ export const shownAliases = (g: GuildProfile | undefined | null) => Object.fromE
 export const adventurerLabel = (guild: string, alias: string) => [guild, alias].filter(Boolean).join(' · ');
 
 export const petLook = (s: ServerPetState): PetLook => { const p = currentPet(s); return {character: p.character, name: p.name, level: p.level, clothing: p.clothing ?? null, accessories: wornAccessories(p), slot: p.slot}; };
+/** A weekly team is a '파티' (원정대 is the student's own name now); teams made before still say '원정대'. */
+export const partyName = (name: string) => name.replace(/ 원정대$/, ' 파티');
 export const activeMembers = (p: Party) => p.members.filter(m => m.status === 'active');
 /** A team needs the 원정대 이름 and the playing pet's 별칭, neither under a warning. */
 const ready = (g: GuildProfile, slot = 1) => { if (!g.guildName || !g.aliases?.[slot]) throw Error('PARTY_NEED_NICK'); if (g.guildWarned || g.aliasWarned?.[slot]) throw Error('PARTY_NICK_WARNED'); };
@@ -91,7 +94,7 @@ export function createParty(g: GuildProfile, uid: string, look: PetLook, input: 
   if (!(PET_PARTY.nameA as readonly string[]).includes(a) || !(PET_PARTY.nameB as readonly string[]).includes(b) || !PET_PARTY.bosses.some(x => x.id === boss)
     || !(PET_PARTY.sizes as readonly number[]).includes(size) || phrases.length < 1 || phrases.length > 2 || phrases.some(p => !(PET_PARTY.phrases as readonly string[]).includes(p))) throw Error('PARTY_BAD_INPUT');
   g.parties[week] = id;
-  return {id, week, name: `${a} ${b} 원정대`, boss, size, phrases, createdAt: now, hp: 0, hpMax: size * PET_PARTY.hpPerMember, votes: {}, settled: false,
+  return {id, week, name: `${a} ${b} 파티`, boss, size, phrases, createdAt: now, hp: 0, hpMax: size * PET_PARTY.hpPerMember, votes: {}, settled: false,
     members: [member(g, uid, look, now)]};
 }
 export function joinParty(p: Party, g: GuildProfile, uid: string, look: PetLook, now: number) {
@@ -152,12 +155,12 @@ export const updateMemberNames = (p: Party, uid: string, g: GuildProfile, slot?:
 export function publicParty(p: Party, viewer: string, now: number) {
   const ranked = [...p.members.keys()].sort((a, b) => p.members[b].count - p.members[a].count);
   const me = p.members.find(m => m.uid === viewer), eligible = activeMembers(p).length - 1;
-  return {id: p.id, week: p.week, endDay: weekEndDay(p.week), name: p.name, boss: p.boss, size: p.size, phrases: p.phrases, hp: p.hp, hpMax: p.hpMax, progress: progressOf(p), settled: p.settled,
+  return {id: p.id, week: p.week, endDay: weekEndDay(p.week), name: partyName(p.name), boss: p.boss, size: p.size, phrases: p.phrases, hp: p.hp, hpMax: p.hpMax, progress: progressOf(p), settled: p.settled,
     members: ranked.map((i, r) => { const m = p.members[i]; return {index: i, rank: r + 1, ...memberNames(m), pet: m.pet, count: m.count, status: m.status, me: m.uid === viewer, idleDays: inactiveDays(m, now),
       votes: (p.votes[m.uid] || []).length, votedByMe: Boolean(me && (p.votes[m.uid] || []).includes(viewer)), needVotes: Math.max(1, Math.ceil(eligible / 2)),
       canVote: Boolean(me?.status === 'active' && m.status === 'active' && m.uid !== viewer && (eligible > 1 || inactiveDays(m, now) >= PET_PARTY.inactiveDays))}; }),
     reward: p.results?.[viewer] ?? null};
 }
 /** A note on the guild board: pets only. */
-export const boardCard = (p: Party) => ({id: p.id, name: p.name, boss: p.boss, phrases: p.phrases, size: p.size, filled: activeMembers(p).length, pets: activeMembers(p).map(m => m.pet)});
-export const rankingRow = (p: Party, viewer: string) => ({name: p.name, boss: p.boss, progress: progressOf(p), pets: activeMembers(p).map(m => m.pet), mine: p.members.some(m => m.uid === viewer)});
+export const boardCard = (p: Party) => ({id: p.id, name: partyName(p.name), boss: p.boss, phrases: p.phrases, size: p.size, filled: activeMembers(p).length, pets: activeMembers(p).map(m => m.pet)});
+export const rankingRow = (p: Party, viewer: string) => ({name: partyName(p.name), boss: p.boss, progress: progressOf(p), pets: activeMembers(p).map(m => m.pet), mine: p.members.some(m => m.uid === viewer)});

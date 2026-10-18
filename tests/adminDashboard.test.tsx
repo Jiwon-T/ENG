@@ -23,3 +23,16 @@ test('principals see the academy tools but not the admin-only account and templa
  for(const label of ['선생님','수강료 계산','선생님 정산','관리 기록'])assert.ok(html.includes(`<strong>${label}`),label);
  for(const label of ['앱 사용자','문자 템플릿'])assert.equal(html.includes(`<strong>${label}`),false,label);
 });
+
+test('탑 단어장 and 원정대 문장 세트 share one menu item and one screen; the old 원정대 문장 세트 choice opens it',()=>{
+ const html=render({...base,admin:true,principal:false});
+ assert.ok(html.includes('<strong>탑·원정대 세트'));assert.ok(html.includes('<small>채움의 탑과 원정대 학습 범위</small>'));
+ for(const label of ['탑 단어장','원정대 문장 세트'])assert.equal(html.includes(`<strong>${label}`),false,label);
+ const saved=(globalThis as any).localStorage;
+ (globalThis as any).localStorage={getItem:()=>'sentences',setItem(){}};
+ try{
+  const open=render({...base,admin:true,principal:false});
+  assert.ok(/aria-current="page"[^>]*>.*?<strong>탑·원정대 세트/.test(open));
+  assert.ok(open.includes('<h2>탑 단어장</h2>')&&open.includes('<h2>원정대 문장 세트</h2>'),'both settings on the screen');
+ }finally{(globalThis as any).localStorage=saved;}
+});

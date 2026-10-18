@@ -2,6 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {workspaceInflightRead} from '../api/_lib/workspaceInflightRead.js';
 import {workspaceError} from '../api/_lib/teacherWorkspaceError.js';
 import {teacherActor} from '../api/_lib/teacherWorkspaceAuth.js';
+import {forgetTeacherActors} from '../api/_lib/teacherActorMemory.js';
 import {teacherAuthenticatedRequest} from '../src/lib/teacherAuthenticatedRequest.js';
 import {teacherReadCache} from '../api/_lib/teacherReadCache.js';
 test('concurrent permission reads are shared but completed values and failures are never cached',async()=>{
@@ -17,7 +18,7 @@ test('simultaneous teacher room requests share account documents and later disab
  const initialize:any=()=>({db,auth:{verifyIdToken:async()=>({uid:'teacher'})}}),req:any={headers:{authorization:'Bearer token'}};
  // Account pair and the cutover checkpoint are shared and read in one round trip;
  // never a persisted permission cache. Disabled profiles stop first.
- try{await Promise.all([teacherActor(req,initialize),teacherActor(req,initialize),teacherActor(req,initialize)]);assert.equal(reads,3,'shared: account pair (2) + switch check (1), read together; the profile just read is reused, never re-read per request');disabled=true;await assert.rejects(teacherActor(req,initialize),/TEACHER_NOT_CONFIGURED/);assert.equal(reads,6,'a disabled profile stops before any scope reads (account pair + switch only)');}finally{if(before===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=before;}
+ try{await Promise.all([teacherActor(req,initialize),teacherActor(req,initialize),teacherActor(req,initialize)]);assert.equal(reads,3,'shared: account pair (2) + switch check (1), read together; the profile just read is reused, never re-read per request');await teacherActor(req,initialize);assert.equal(reads,3,'remembered for a minute: no reads');disabled=true;forgetTeacherActors();await assert.rejects(teacherActor(req,initialize),/TEACHER_NOT_CONFIGURED/);assert.equal(reads,6,'forgotten (an access change here): a disabled profile stops before any scope reads (account pair + switch only)');forgetTeacherActors();}finally{if(before===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=before;}
 });
 test('Firestore resource exhausted has explicit 429 guidance without leaking raw details',()=>{
  for(const code of [8,'resource-exhausted','firestore/resource-exhausted']){const result=workspaceError(Object.assign(Error('private raw details'),{code}),'workspace-account');assert.equal(result.status,429);assert.equal(result.body.error,'FIRESTORE_RESOURCE_EXHAUSTED');assert.match(result.body.message,/사용량/);assert.ok(!JSON.stringify(result).includes('private raw details'));}
@@ -28,4 +29,11 @@ test('known quota rejection pauses further requests, never retries writes and st
  Date.now=()=>now;globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify(calls===1?{ok:false,error:'FIRESTORE_RESOURCE_EXHAUSTED',message:'한도 확인',diagnosticId:'safe-id'}:{ok:true}),{status:calls===1?429:200,headers:{'Content-Type':'application/json'}});};
  const auth:any={authStateReady:async()=>{},currentUser:{getIdToken:async()=>'test-token'}};
  try{assert.equal((await teacherAuthenticatedRequest(auth,'/api/teacher/workspace')).status,429);assert.equal((await teacherAuthenticatedRequest(auth,'/api/teacher/workspace',{method:'POST'})).status,429);assert.equal(calls,1);auth.currentUser={getIdToken:async()=>'other-test-token'};assert.equal((await teacherAuthenticatedRequest(auth,'/api/teacher/workspace')).status,200);assert.equal(calls,2);now+=31000;assert.equal((await teacherAuthenticatedRequest(auth,'/api/teacher/workspace')).status,200);}finally{globalThis.fetch=original;Date.now=clock;}
+});
+test('a permission check that started before an access change never saves the old access',async()=>{
+ const before=process.env.ADMIN_UID;process.env.ADMIN_UID='admin';let reads=0,release:()=>void=()=>{};const gate=new Promise<void>(r=>{release=r;});
+ const db:any={collection:(name:string)=>({doc:()=>({get:async()=>{reads++;if(name==='users')await gate;return {data:()=>name==='academyCoreAuthority'?{active:true}:name==='users'?{role:'teacher'}:{academyId:'main',scopes:[]}};}})})};
+ const initialize:any=()=>({db,auth:{verifyIdToken:async()=>({uid:'teacher-race'})}}),req:any={headers:{authorization:'Bearer race-token'}};
+ try{const pending=teacherActor(req,initialize);await new Promise(r=>setTimeout(r,5));forgetTeacherActors();release();await pending;const after=reads;await teacherActor(req,initialize);assert.ok(reads>after,'not remembered: read again');}
+ finally{forgetTeacherActors();if(before===undefined)delete process.env.ADMIN_UID;else process.env.ADMIN_UID=before;}
 });

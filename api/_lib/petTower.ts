@@ -376,7 +376,17 @@ export function towerCodex(t: TowerState) {
 
 // ---- words: the hard wordbook the admin set for the student's school level ----
 /** Who is climbing: a teacher (or the admin) plays with the 고등 books; a student by the school in their name. */
-export async function climber(db: any, uid: string) {
+/** Who is climbing, remembered per server instance for a minute (like the teacher room's permission check), so a role
+ *  or grade change shows within a minute. */
+const climbers = new WeakMap<object, Map<string, {value: Promise<{teacher: boolean; name: string}>; until: number}>>();
+export function climber(db: any, uid: string) {
+  let byUid = climbers.get(db); if (!byUid) { byUid = new Map(); climbers.set(db, byUid); }
+  const hit = byUid.get(uid); if (hit && hit.until > Date.now()) return hit.value;
+  if (byUid.size >= 2000) byUid.delete(byUid.keys().next().value!);
+  const value = readClimber(db, uid); byUid.set(uid, {value, until: Date.now() + 60_000}); value.catch(() => byUid!.delete(uid));
+  return value;
+}
+async function readClimber(db: any, uid: string) {
   const user = (await db.collection('users').doc(uid).get()).data() || {};
   if (uid === process.env.ADMIN_UID || ['teacher', 'principal', 'admin'].includes(user.role)) return {teacher: true, name: ''};
   const key = user.notionStudentKey;
@@ -400,16 +410,21 @@ export async function towerBookFor(db: any, uid: string) {
 /** A window of each book's words from a random place (not the whole books, to keep reads small). */
 export async function loadTowerPool(db: any, uid: string, rand: () => number = Math.random) {
   const pick = await towerBookFor(db, uid), size = Math.ceil(PET_TOWER.poolSize / pick.books.length), list: PoolWord[] = [];
-  for (const book of pick.books) {
+  // The books' word windows are read together (each from its own random point), then kept in book order.
+  const starts = pick.books.map(() => randomDocId(rand));
+  const windows = await Promise.all(pick.books.map(async (book, i) => {
     const words = db.collection(`wordbooks/${book.id}/words`);
-    const first = await words.orderBy(FieldPath.documentId()).startAt(randomDocId(rand)).limit(size).get();
+    const first = await words.orderBy(FieldPath.documentId()).startAt(starts[i]).limit(size).get();
     const rest = first.size < size ? await words.orderBy(FieldPath.documentId()).limit(size - first.size).get() : {docs: []};
+    return [...first.docs, ...rest.docs];
+  }));
+  pick.books.forEach((book, i) => {
     const seen = new Set<string>();
-    for (const d of [...first.docs, ...rest.docs]) {
+    for (const d of windows[i]) {
       if (seen.has(d.id)) continue; seen.add(d.id); const x = d.data();
       if (typeof x?.word === 'string' && typeof x?.meaning === 'string' && x.word.trim() && x.meaning.trim()) list.push({w: x.word.trim().slice(0, 60), m: x.meaning.trim().slice(0, 80), b: book.id});
     }
-  }
+  });
   if (list.length < 8) throw Error('TOWER_NOT_READY');
   return {words: list, ...pick};
 }

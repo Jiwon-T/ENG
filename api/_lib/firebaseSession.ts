@@ -1,6 +1,7 @@
 import firebaseConfig from '../../firebase-applet-config.json' with {type:'json'};
 import type {Auth,DecodedIdToken} from 'firebase-admin/auth';
 import {createHash} from 'node:crypto';
+import {forgetTeacherActors} from './teacherActorMemory.js';
 
 const authFailure=(code:string)=>Object.assign(new Error(code),{code});
 export function accountLookupPermissionFailure(error:any){
@@ -53,18 +54,26 @@ async function checkFirebaseSession(auth:Pick<Auth,'verifyIdToken'>,token:string
 // still read on every request by the callers.
 const SESSION_MEMORY_MS=60_000,SESSION_MEMORY_MAX=500;
 const pendingSessions=new WeakMap<object,Map<string,Promise<DecodedIdToken>>>();
-const recentSessions=new Map<string,{auth:object;decoded:DecodedIdToken;until:number}>();
+/** `checked`: the disabled/revoked account check was done (reads may also use a signature-only check). */
+const recentSessions=new Map<string,{auth:object;decoded:DecodedIdToken;until:number;checked:boolean}>();
 const tokenKey=(token:string)=>createHash('sha256').update(token).digest('hex');
 // Bumped by every forget: a check that started before it may not refill the memory, and requests after it never join
 // a check started before it (the account is unknown until the token is decoded, so this applies to all accounts).
 let forgetGeneration=0;
 /** Forget remembered checks for this account (it was removed or its sign-in was blocked). */
-export function forgetFirebaseSessions(uid:string){forgetGeneration++;for(const [key,row] of recentSessions)if(row.decoded.uid===uid)recentSessions.delete(key);}
-export function verifyFirebaseSession(auth:Pick<Auth,'verifyIdToken'>,token:string,lookup=lookupFirebaseSession){
+export function forgetFirebaseSessions(uid:string){forgetGeneration++;forgetTeacherActors(uid);for(const [key,row] of recentSessions)if(row.decoded.uid===uid)recentSessions.delete(key);}
+/** `checkRevoked: false` (reads, approved 2026-10-17): the signature, expiry, issuer and audience only, no account lookup at
+ *  Google; disabled or removed accounts are still refused by the callers' own account reads. Writes always check. */
+export function verifyFirebaseSession(auth:Pick<Auth,'verifyIdToken'>,token:string,lookup=lookupFirebaseSession,checkRevoked=true){
  if(lookup!==lookupFirebaseSession)return checkFirebaseSession(auth,token,lookup);
  const key=tokenKey(token),now=Date.now(),known=recentSessions.get(key);
- if(known&&known.auth===auth&&known.until>now)return Promise.resolve(known.decoded);
- if(known)recentSessions.delete(key);
+ if(known&&known.auth===auth&&known.until>now&&(known.checked||!checkRevoked))return Promise.resolve(known.decoded);
+ if(known&&(known.auth!==auth||known.until<=now))recentSessions.delete(key);
+ if(!checkRevoked)return auth.verifyIdToken(token,false).then(decoded=>{
+  const expires=Number(decoded?.exp)*1000,until=Math.min(Date.now()+SESSION_MEMORY_MS,expires);
+  if(Number.isFinite(until)&&until>Date.now()&&!recentSessions.has(key)){if(recentSessions.size>=SESSION_MEMORY_MAX)recentSessions.delete(recentSessions.keys().next().value!);recentSessions.set(key,{auth,decoded,until,checked:false});}
+  return decoded;
+ });
  const generation=forgetGeneration,pendingKey=generation+':'+token;
  let pending=pendingSessions.get(auth);if(!pending){pending=new Map();pendingSessions.set(auth,pending);}
  const existing=pending.get(pendingKey);if(existing)return existing;
@@ -75,7 +84,7 @@ export function verifyFirebaseSession(auth:Pick<Auth,'verifyIdToken'>,token:stri
   const expires=Number(decoded?.exp)*1000;if(!Number.isFinite(expires))return;
   const until=Math.min(Date.now()+SESSION_MEMORY_MS,expires);if(until<=Date.now())return;
   if(recentSessions.size>=SESSION_MEMORY_MAX)recentSessions.delete(recentSessions.keys().next().value!);
-  recentSessions.set(key,{auth,decoded,until});
+  recentSessions.set(key,{auth,decoded,until,checked:true});
  },()=>{});
  return request;
 }

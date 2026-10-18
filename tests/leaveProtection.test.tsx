@@ -35,9 +35,9 @@ test('phones: one row 저장 / 반영 / ⋯, with 새로고침 and 일지 삭제
  const bar=fs.readFileSync(new URL('../src/components/teacher/LessonActionBar.tsx',import.meta.url),'utf8');
  assert.match(bar,/<details className="lesson-action-more"><summary aria-label="더보기"/);
  const ws=fs.readFileSync(new URL('../src/components/teacher/TeacherWorkspace.tsx',import.meta.url),'utf8');
- assert.match(ws,/more=\{<><button type="button" className="lesson-more-item"[^]*?새로고침<\/button><LessonDeleteButton/);
+ assert.match(ws,/more=\{<><LessonPreviewButton [^]*?<button type="button" className="lesson-more-item"[^]*?새로고침<\/button><LessonDeleteButton/);
  const grid=fs.readFileSync(new URL('../src/components/teacher/TeacherLessonGrid.tsx',import.meta.url),'utf8');
- assert.match(grid,/more=\{<button type="button" className="lesson-more-item" onClick=\{checkStatus\}>/);assert.match(grid,/aria-label="반영 상태 확인" title="반영 상태 확인" onClick=\{checkStatus\}/);
+ assert.match(grid,/more=\{<><LessonPreviewButton onClick=\{\(\)=>setPreviewRow\(row\.id\)\}\/><button type="button" className="lesson-more-item" onClick=\{checkStatus\}>/);assert.match(grid,/aria-label="반영 상태 확인" title="반영 상태 확인" onClick=\{checkStatus\}/);
 });
 test('여러 학생: typed 공통 입력 not yet applied also protects the tab close; the hint is just the shortcut',()=>{
  const grid=fs.readFileSync(new URL('../src/components/teacher/TeacherLessonGrid.tsx',import.meta.url),'utf8');

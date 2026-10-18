@@ -6,10 +6,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { BarChart3, TrendingUp, BookOpen, CheckCircle2, Clock, Calendar, ClipboardList, ChevronLeft, ChevronRight, Gamepad2, XCircle, Play, RotateCcw, X, Trophy, ArrowRight, Trash2, Check, Sparkles, CalendarDays } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType, markIncorrectAnswerReviewed } from '../../lib/firebase';
 import { PetService } from '../../lib/petService';
+import { PET_HOMEWORK_REWARD_TEXT } from '../../lib/petCatalog';
 import { collection, query, where, onSnapshot, doc, getDoc, orderBy, limit, updateDoc, getDocs } from 'firebase/firestore';
 import { visibleStudentSchedules } from '../../lib/studentReportLists';
 import { safeFetchJson } from '../../lib/safeFetchJson';
 import { askConfirm } from '../teacher/ConfirmDialog';
+import { AssignedQuestionList } from '../generator/AssignedQuestions';
 import type { StudentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 
 function activityDate(value: any) {
@@ -580,6 +582,8 @@ export default function LearningReport() {
           과제
           {combinedAssignments.length > 0 && <span className="ml-auto text-xs font-normal text-slate-400">{combinedAssignments.length}개</span>}
         </h3>
+        {/* The check is the student's own to-do mark; 숙제 points come from the teacher's 숙제 평가 in the next lesson. */}
+        {combinedAssignments.length > 0 && <p className="-mt-1.5 mb-2.5 text-[11px] text-slate-400">완료 체크는 내 할 일 표시예요 · 포인트는 다음 수업에서 선생님 숙제 평가로 받아요 ({PET_HOMEWORK_REWARD_TEXT})</p>}
         
         <div className="space-y-2">
           {paginatedAssignments.map((item) => (
@@ -590,6 +594,7 @@ export default function LearningReport() {
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                     {parseDisplayDate(item.createdAt) && formatDateWithDay(parseDisplayDate(item.createdAt) as Date)}
                   </span>
+                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10.5px] font-bold text-blue-700">수업 숙제</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {item.isNew && (
@@ -608,8 +613,11 @@ export default function LearningReport() {
             </div>
           ))}
 
+          {/* 변형 문제 a teacher gave (after the 수업 숙제; solved on screen) */}
+          <AssignedQuestionList />
+
           {combinedAssignments.length === 0 && (
-            <p className="text-sm text-slate-400">{reportLoad === 'ready' ? '등록된 과제가 없습니다.' : reportLoad === 'failed' ? '과제를 불러오지 못했습니다.' : '과제를 불러오는 중…'}</p>
+            <p className="text-sm text-slate-400">{reportLoad === 'ready' ? '등록된 수업 숙제가 없습니다.' : reportLoad === 'failed' ? '과제를 불러오지 못했습니다.' : '과제를 불러오는 중…'}</p>
           )}
 
           {totalAssignmentPages > 1 && (

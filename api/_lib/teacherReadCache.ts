@@ -1,3 +1,4 @@
+import {forgetTeacherActors} from './teacherActorMemory.js';
 // Private process-local snapshots. Authentication and current access checks run
 // before lookup; scopes are part of every key. Never shared through HTTP caches.
 export function createReadCache(ttl = 60_000, capacity = 80) {
@@ -37,4 +38,5 @@ export function invalidateTeacherMutation(action:string) {
     if(action==='save-academic'){teacherReadCache.invalidate('academic-local');return;}
     if(action==='save-schedule'){return;}
     teacherReadCache.clear();
+    forgetTeacherActors(); // access, roles or student assignments may have changed
 }

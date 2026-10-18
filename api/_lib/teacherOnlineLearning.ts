@@ -12,7 +12,7 @@ const number=(v:any)=>typeof v==='number'&&Number.isFinite(v)?v:null;
 function date(v:any){const ms=v?.toMillis?.()??(typeof v?.seconds==='number'?v.seconds*1000+Math.floor((v.nanoseconds||0)/1e6):Date.parse(v));return Number.isFinite(ms)?new Date(ms).toISOString():null;}
 const empty=(reason:string,linked=false)=>({linked,studentLinked:linked,parentUrl:null,subjectOptions:['영어'],reports:[],schedules:[],academic:{records:[],subjects:[],academyScores:[]},online:{reason,evaluation:undefined as undefined|{text:string;updatedAt:string|null},sessions:[],assignments:[],progress:null,nextCursor:null}});
 /** The student's own app account for this student record, after the same two-way link checks the report uses. */
-async function linkedStudentAccount(db:any,key:string,deps:{readStudentMapping:typeof readStudentMapping}):Promise<{uid:string;user:any;mapping:any}|{reason:string}>{
+export async function linkedStudentAccount(db:any,key:string,deps:{readStudentMapping:typeof readStudentMapping}):Promise<{uid:string;user:any;mapping:any}|{reason:string}>{
  const mapping=await deps.readStudentMapping(db,key);if(!mapping?.firebaseUid)return {reason:'account-not-linked'};
  const user=(await db.collection('users').doc(mapping.firebaseUid).get()).data();if(!user||user.role!=='student'||user.disabled||!user.notionStudentKey)return {reason:'account-not-linked'};
  let backlink:string;try{backlink=uuid(user.notionStudentKey);}catch{const alias=await deps.readStudentMapping(db,user.notionStudentKey);if(!alias||alias.firebaseUid!==mapping.firebaseUid||alias.internalStudentId!==mapping.internalStudentId)return {reason:'account-link-mismatch'};backlink=uuid(alias.notionStudentPageId);}

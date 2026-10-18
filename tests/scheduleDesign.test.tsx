@@ -14,7 +14,7 @@ test('only sync exceptions use state badges; calendar/class states are neutral e
 });
 test('event card completion is icon-only, failures are badges, native button opens by keyboard; no Notion link; status can be changed on the card',()=>{
  const card=(patch:any={})=>renderToStaticMarkup(<ScheduleEventCard time="14:00–15:20" title="모의 수업" subtitle="학생 외 2명 · 영어" syncStatus="published" onOpen={()=>{}} {...patch}/>);
- const html=card({notionUrl:'https://www.notion.so/example'});assert.ok(html.includes('title="반영 완료"'));assert.ok(!html.includes('workspace-status-badge'));assert.ok(html.includes('type="button"'));assert.ok(!html.includes('<a '),'no Notion link');assert.ok(!/notion/i.test(html.replace(/class="[^"]*"/g,'')),'no Notion wording');
+ const html=card({notionUrl:'https://www.notion.so/example'});assert.ok(!html.includes('반영 완료'),'a reflected card shows no badge');assert.ok(!html.includes('workspace-status-badge'));assert.ok(html.includes('type="button"'));assert.ok(!html.includes('<a '),'no Notion link');assert.ok(!/notion/i.test(html.replace(/class="[^"]*"/g,'')),'no Notion wording');
  const pick=card({scheduleStatus:'예정',onStatus:()=>{}});assert.ok(pick.includes('aria-haspopup="menu"'));assert.ok(pick.includes('진행 상태 예정 바꾸기'));assert.ok(!card({scheduleStatus:'예정'}).includes('aria-haspopup'));
  assert.ok(card({syncStatus:'failed'}).includes('status-danger'));assert.ok(card({scheduleStatus:'취소'}).includes('is-cancelled'));assert.ok(card({syncStatus:'draft'}).includes('초안'));
 });

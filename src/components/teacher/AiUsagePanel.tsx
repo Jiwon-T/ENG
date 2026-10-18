@@ -8,7 +8,7 @@ import {askConfirm} from './ConfirmDialog';
 const PRICE={input:0.5,output:3,krw:1400};
 type Use={calls:number;input:number;output:number;thoughts:number};
 type Day={day:string;pet:Use;workbook:Use;analyzer:Use;generator:Use};
-type Person={uid:string;name:string;role:string;plan:AiPlan;analyzer:number;workbook:number;petTalk:number};
+type Person={uid:string;name:string;role:string;plan:AiPlan;analyzer:number;workbook:number;generator?:number;petTalk:number};
 type Pass={uid:string;name:string;role:string;plan:AiPlan;until:string;active:boolean};
 type AppUser={uid:string;name:string;email:string;role:string};
 const ROLE:Record<string,string>={student:'학생',teacher:'선생님',principal:'원장',admin:'관리자'};
@@ -67,10 +67,11 @@ export default function AiUsagePanel({busy,request,act,autoLoad=false}:{busy:boo
   {people&&<div className="mt-5">
    <b className="text-sm">사람별 이번 달 사용량</b>
    <p className="mt-0.5 text-xs text-slate-500">기본 한도: 지문 분석 {AI_PLANS.free.analyzer}번 · 워크북 AI 해석 {AI_PLANS.free.workbook}번 · 펫 대화 펫마다 {AI_PLANS.free.petTalkPerPet}번 (관리자는 한도 없음). 다 쓴 사람은 '다시 쓰게 하기'로 이번 달 횟수를 0으로 되돌려요.</p>
-   {people.rows.length?<ul className="mt-2 text-sm">{people.rows.map(p=>{const lim=AI_PLANS[p.plan]||AI_PLANS.free,full=p.analyzer>=lim.analyzer||p.workbook>=lim.workbook||(lim.petTalk!==null&&p.petTalk>=lim.petTalk);return <li key={p.uid} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-slate-100 py-2">
+   {people.rows.length?<ul className="mt-2 text-sm">{people.rows.map(p=>{const lim=AI_PLANS[p.plan]||AI_PLANS.free,full=p.analyzer>=lim.analyzer||p.workbook>=lim.workbook||(p.generator||0)>=lim.generator||(lim.petTalk!==null&&p.petTalk>=lim.petTalk);return <li key={p.uid} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-slate-100 py-2">
     <span className="min-w-0 flex-1"><b className="font-bold">{p.name}</b> <span className="text-xs text-slate-400">{ROLE[p.role]||''}{p.plan!=='free'?` · ${lim.label}`:''}</span></span>
     <span className={`text-xs ${p.analyzer>=lim.analyzer?'font-bold text-red-600':'text-slate-500'}`}>분석 {p.analyzer}/{lim.analyzer}</span>
     <span className={`text-xs ${p.workbook>=lim.workbook?'font-bold text-red-600':'text-slate-500'}`}>워크북 {p.workbook}/{lim.workbook}</span>
+    <span className={`text-xs ${(p.generator||0)>=lim.generator?'font-bold text-red-600':'text-slate-500'}`}>변형 {p.generator||0}/{lim.generator}</span>
     <span className={`text-xs ${lim.petTalk!==null&&p.petTalk>=lim.petTalk?'font-bold text-red-600':'text-slate-500'}`}>펫 {p.petTalk}{lim.petTalk!==null?`/${lim.petTalk}`:''}</span>
     <button type="button" className="small-button" disabled={busy} onClick={()=>void reset(p)}>{full?'다시 쓰게 하기':'0으로'}</button>
    </li>;})}</ul>:<p className="mt-2 text-xs text-slate-400">이번 달에 AI를 쓴 사람이 아직 없어요.</p>}
