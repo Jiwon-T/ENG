@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registrationFirestore } from './helpers/registrationFirestore.ts';
-import { CIRCLED, ORDER_OPTIONS, buildAiQuestion, checkQuestion, choiceQuestion, grammarQuestion, insertQuestion, makeAppQuestions, orderQuestion, reviewApproved, reviewCandidates } from '../src/lib/questionMaker.ts';
+import { CIRCLED, ORDER_OPTIONS, buildAiQuestion, grammarHighlights, checkQuestion, choiceQuestion, grammarQuestion, insertQuestion, makeAppQuestions, orderQuestion, reviewApproved, reviewCandidates } from '../src/lib/questionMaker.ts';
 import { splitPassage } from '../src/lib/workbook.ts';
 import { openPassage, passageActor, resetWordIndex } from '../api/_lib/passage.ts';
 import { listQuestionSets, makeQuestionSet, readQuestionSet } from '../api/_lib/questionSets.ts';
@@ -225,4 +225,20 @@ test('변형 문제 어법 review API: same AI call; only approved places are us
   assert.equal(asked.length, before, 'nothing to review: no AI call');
   await makeQuestionSet(f.db, kid, { text: 'The movie was boring. We left.', types: ['choice', 'grammar'] }, NOW, seeded(), ai);
   assert.equal(asked.length, before, 'too short for the 어법 types: no AI call (no daily use)');
+});
+
+test('지문 분석 › 어법 출제 포인트: sure forms with the wrong one and why; context places with only how to decide; per sentence', () => {
+  const s = splitPassage('Many people believe that talent is something we are born with. The movie was boring, so the children felt bored. The company changed its policy.');
+  const h = grammarHighlights(s);
+  assert.equal(h.length, 3);
+  assert.deepEqual(h[0].map(p => [p.kind, p.word, p.wrong ?? '']), [['check', 'that', ''], ['sure', 'is', 'are'], ['sure', 'are', 'is']]);
+  assert.ok(h[0][1].why && !h[0][0].wrong, 'a context place never says which is right');
+  assert.deepEqual(h[1].filter(p => p.kind === 'check').map(p => p.word), ['boring', 'bored']);
+  assert.match(h[1].find(p => p.word === 'bored')!.why, /boring.*bored/);
+  assert.deepEqual(h[2].map(p => [p.kind, p.word]), [['check', 'its']]);
+  const words = s[0].split(' ');
+  assert.equal(words[h[0][1].at], 'is', 'at = the word’s place in the sentence');
+  const starts = grammarHighlights(splitPassage('That book is mine. What happened? We know, that is true.'));
+  assert.deepEqual(starts.flat().filter(p => /^(that|what)$/i.test(p.word)), [], 'a sentence-start That/What or one after a comma is not a that/what place');
+  assert.match(h[0][0].why, /접속사·관계사로 쓰였다면/);
 });

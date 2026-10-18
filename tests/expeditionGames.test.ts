@@ -79,8 +79,8 @@ test('원정대 games: quiet places and no microphone swap the sound questions; 
   assert.equal(runSummary(g.run).stars, 3);
 });
 
-test('원정대 문장 세트 by grade: 초등·unknown → 중1, teachers → 고3; admin only; only 문장 세트 can be chosen', async () => {
-  assert.deepEqual(['김하늘(고덕중2)', '박서준(중앙초5)', '이름만', '최다은(비전고1)'].map(n => sentenceGradeFor(n)), ['중2', '중1', '중1', '고1']);
+test('원정대 문장 세트 by grade: 초등 → 초등, unknown → 중1, teachers → 고3; admin only; only 문장 세트 can be chosen', async () => {
+  assert.deepEqual(['김하늘(고덕중2)', '박서준(중앙초5)', '이름만', '최다은(비전고1)'].map(n => sentenceGradeFor(n)), ['중2', '초등', '중1', '고1']);
   assert.equal(sentenceGradeFor('', true), '고3');
   const f = registrationFirestore(), admin = { admin: true, academyId: 'main', uid: 'admin' };
   f.rows.set('wordbooks/s1', { title: '중2 핵심 문장', category: 'sentence', type: 'sentence' });
@@ -90,5 +90,8 @@ test('원정대 문장 세트 by grade: 초등·unknown → 중1, teachers → �
   assert.deepEqual(view.sets.map((x: any) => x.id), ['s1']);
   await assert.rejects(() => saveExpeditionSettings(f.db, admin, { sentences: { 중2: 'w1' } }), /BAD_REQUEST/);
   const saved = await saveExpeditionSettings(f.db, admin, { sentences: { 중2: 's1', 고3: 's1' } });
-  assert.deepEqual([saved.sentences['중2'], saved.sentences['중1']], ['s1', '']);
+  assert.deepEqual([saved.sentences['중2'], saved.sentences['중1'], saved.sentences['초등']], ['s1', '', '']);
+  assert.equal((await saveExpeditionSettings(f.db, admin, { sentences: { 초등: 's1' } })).sentences['초등'], 's1', '초등 can be set');
+  const older = await saveExpeditionSettings(f.db, admin, { sentences: { 중1: '', 중2: 's1', 중3: '', 고1: '', 고2: '', 고3: '' } });
+  assert.equal(older.sentences['초등'], 's1', 'an older screen leaving out 초등 keeps it');
 });

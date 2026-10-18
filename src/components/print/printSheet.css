@@ -1,0 +1,20 @@
+/* 출력 공통 틀: only the prepared pages print; each page is an A4 sheet with its own header and footer. */
+.print-root { display: none; }
+@media print {
+  body.print-sheets > *:not(.print-root) { display: none !important; }
+  body.print-sheets .print-root { display: block; }
+  body.print-sheets { background: #fff !important; }
+}
+.print-page {
+  box-sizing: border-box; width: 210mm; min-height: 297mm; padding: 12mm 14mm 10mm; display: flex; flex-direction: column;
+  break-after: page; page-break-after: always; color: #1f1a24; background: #fff; font-size: 10.5pt; line-height: 1.6;
+}
+.print-root-landscape .print-page { width: 297mm; min-height: 210mm; }
+.print-page:last-child { break-after: auto; page-break-after: auto; }
+.print-page-head { display: flex; align-items: center; justify-content: space-between; gap: 8mm; padding-bottom: 2mm; margin-bottom: 4mm; border-bottom: 0.6pt solid #e8a5b4; font-size: 8.5pt; }
+.print-brand { display: inline-flex; align-items: center; gap: 1.5mm; font-weight: 700; color: #8b2f40; white-space: nowrap; }
+.print-title { color: #5e5a5c; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.print-page-body { flex: 1; }
+.print-page-foot { display: flex; justify-content: space-between; margin-top: 4mm; padding-top: 1.5mm; border-top: 0.4pt solid #ddd3d6; font-size: 8pt; color: #9a8a8f; }
+.print-columns { column-count: 2; column-gap: 7mm; column-rule: 0.4pt solid #d9d2d4; font-size: 9.5pt; line-height: 1.5; }
+.print-columns > * { break-inside: avoid; }

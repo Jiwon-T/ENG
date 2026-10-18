@@ -1,0 +1,28 @@
+/* 지문 분석지 (printed): the sizes analysisSheet.ts measures with (SHEET_TYPE and the row heights, in mm). */
+.as-top { display: flex; align-items: flex-end; gap: 4mm; padding-bottom: 1.5mm; margin-bottom: 2.5mm; border-bottom: 1.2pt solid #72243e; }
+.as-title { font-size: 13pt; font-weight: 700; color: #2c2c2a; line-height: 1.3; }
+.as-sub { font-size: 7.5pt; color: #5f5e5a; }
+.as-name { margin-left: auto; font-size: 8pt; color: #5f5e5a; white-space: nowrap; }
+.as-grid { display: grid; gap: 7mm; }
+.as-grid-panel { grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr); }
+.as-grid-two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.as-line { padding: 0.6mm 0 1.2mm; border-bottom: 0.4pt dashed #d3d1c7; break-inside: avoid; }
+.as-row { display: flex; flex-wrap: nowrap; align-items: flex-start; }
+.as-num { flex: none; width: 4.5mm; font-size: 9pt; line-height: 4.2mm; font-weight: 700; color: #993556; }
+.as-chunk { display: inline-flex; flex-direction: column; white-space: nowrap; }
+.as-en { font-size: 9pt; line-height: 4.2mm; }
+.as-ko { font-size: 7.5pt; line-height: 3.5mm; color: #72243e; }
+.as-slash { color: #d4537e; margin: 0 1mm; font-size: 9pt; line-height: 4.2mm; }
+.as-flow { font-size: 9pt; line-height: 4.6mm; padding-left: 4.5mm; text-indent: -4.5mm; }
+.as-link { background: #fbeaf0; color: #72243e; border-radius: 1px; }
+.as-note { font-size: 7.5pt; line-height: 3.4mm; color: #5f5e5a; padding-left: 4.5mm; }
+.as-full { font-size: 7.5pt; line-height: 3.6mm; color: #72243e; padding-left: 4.5mm; }
+.as-write { height: 8.5mm; border-bottom: 0.5pt solid #b4b2a9; margin-left: 4.5mm; }
+.as-essay { margin-left: 1.5mm; padding: 0 1.2mm; border-radius: 2mm; background: #72243e; color: #fff; font-size: 6.5pt; font-weight: 700; vertical-align: 0.4mm; }
+.as-box { border: 0.5pt solid #b4b2a9; border-radius: 1mm; padding: 1.2mm 2mm; margin-bottom: 2mm; font-size: 8pt; line-height: 3.6mm; break-inside: avoid; }
+.as-box b { display: block; color: #72243e; font-size: 7.5pt; }
+.as-role { display: inline-block; margin: 0 1.5mm 0.6mm 0; }
+.as-role i { font-style: normal; padding: 0 1.2mm; border-radius: 2mm; background: #fbeaf0; color: #72243e; font-size: 7pt; margin-right: 0.8mm; }
+.as-role.key i { background: #72243e; color: #fff; }
+.as-words { column-count: 2; column-gap: 3mm; }
+.as-line.as-practice { border-bottom: none; }

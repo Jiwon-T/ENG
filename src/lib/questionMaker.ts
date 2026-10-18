@@ -167,6 +167,30 @@ for (const [ing, ed] of [
 ]) { FEELING[ing] = ed; FEELING[ed] = ing; }
 const feelingPair = (low: string) => FEELING[low] || '';
 /** `sentence`: its sentence with every review place shown as `[r1: X / Y]` (random order), never the original word. */
+/** 지문 분석 › 어법 출제 포인트: for each sentence, the places 어법 questions are made from. `sure`: a form the 어법 rules
+ *  always get right (with the wrong form and why); `check`: a place to look at in context (that/what, 감정 분사,
+ *  where/which, its/their), with only the general way to decide (it never says which is right). `at`: the word's place
+ *  in the sentence's tokens (tokenize). */
+export interface GrammarHighlight { at: number; word: string; wrong?: string; why: string; kind: 'sure' | 'check' }
+export function grammarHighlights(sentences: string[]): GrammarHighlight[][] {
+  const perSentence = sentences.map(tokenize), tokens = perSentence.flat(), sure = new Map(grammarSlots(tokens).filter(s => s.wrong).map(s => [s.at, s]));
+  let offset = 0;
+  return perSentence.map(words => {
+    const out: GrammarHighlight[] = [];
+    words.forEach((t, k) => {
+      const i = offset + k, { core } = splitToken(t), low = core.toLowerCase(), prev = k > 0 ? splitToken(words[k - 1]).core : '';
+      const s = sure.get(i);
+      if (s) { out.push({ at: k, word: core, wrong: s.wrong, why: s.why || '', kind: 'sure' }); return; }
+      // that/what inside a sentence after a word (not 'That book …', 'What happened?' at the start, nor after a comma)
+      if ((low === 'that' || low === 'what') && k > 0 && !/[,.;:!?]$/.test(words[k - 1])) out.push({ at: k, word: core, why: '접속사·관계사로 쓰였다면, 뒤 문장이 빠진 것 없이 완전하면 that, 주어나 목적어가 빠져 있고 앞에 선행사가 없으면 what이 와요 (지시어 that·의문사 what이면 해당 없어요).', kind: 'check' });
+      else if (feelingPair(low)) { const ing = low.endsWith('ing') ? low : feelingPair(low), ed = low.endsWith('ing') ? feelingPair(low) : low; out.push({ at: k, word: core, why: `감정을 일으키는 쪽이면 ${ing}, 감정을 느끼는 쪽이면 ${ed}가 와요.`, kind: 'check' }); }
+      else if ((low === 'where' || low === 'which') && /^[a-z]+$/.test(prev) && !NOT_ANTECEDENT.test(prev)) out.push({ at: k, word: core, why: '뒤 문장이 완전하면 관계부사 where, 주어나 목적어가 빠져 있으면 관계대명사 which가 와요.', kind: 'check' });
+      else if (low === 'its' || low === 'their') out.push({ at: k, word: core, why: '가리키는 명사가 단수면 its, 복수면 their가 와요.', kind: 'check' });
+    });
+    offset += words.length;
+    return out;
+  });
+}
 export interface ReviewSlot extends Slot { id: string; sentence: string; shown: string }
 /** The places whose AI pick is the original word (a pick of the other word, both or none: not used). */
 export function reviewApproved(candidates: ReviewSlot[], picks: unknown): Slot[] {

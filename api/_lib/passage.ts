@@ -1,6 +1,8 @@
 // 지문 분석기 (server): one stored analysis per passage (passages/{id}), shared by everyone who analyses the same text.
 // The app's own parts (sentences, pauses, grammar marks, words) cost nothing; the AI parts are asked for by button and
 // kept once made: 직독직해 (counts as 워크북 AI 해석), 문법·구조 + 서술형 문장, 주제·요지·요약 (each counts as 지문 분석).
+// 구조 지도 (each sentence's role and the key sentence) comes with a new 주제·요약 at no extra cost, or alone for an older
+// one (counts as 지문 분석); it is kept in its own field (parts.structure), so it never touches the summary or its edits.
 // Teachers and the admin see who analysed and who changed what, may fix any part, and choose what students see
 // (public). Students see the passages they analysed and the public ones, never names. All access is through here.
 import crypto from 'node:crypto';
@@ -8,11 +10,12 @@ import { FieldPath } from 'firebase-admin/firestore';
 import { AI_TOO_FAST_MESSAGE, aiErrorCode, guardAiBurst, refundMonthlyQuota, takeMonthlyQuota, type AiMonthlyFeature } from './aiModel.js';
 import { COMMON_WORDS, PASSAGE_LIMITS, chunkHints, passageId, passageTokens, wordForms } from '../../src/lib/passageTools.js';
 import { splitPassage } from '../../src/lib/workbook.js';
+import { STRUCTURE_ROLES, cleanStructure } from '../../src/lib/passageLevel.js';
 
 export const PASSAGES = 'passages', PASSAGE_VIEWS = 'passageViews';
-export type PassagePart = 'reading' | 'grammar' | 'summary';
-const PART_LABEL: Record<PassagePart | 'words' | 'meta', string> = { reading: '직독직해', grammar: '문법·구조', summary: '주제·요약', words: '단어', meta: '지문 정보' };
-const PART_QUOTA: Record<PassagePart, AiMonthlyFeature> = { reading: 'workbook', grammar: 'analyzer', summary: 'analyzer' };
+export type PassagePart = 'reading' | 'grammar' | 'summary' | 'structure';
+const PART_LABEL: Record<PassagePart | 'words' | 'meta', string> = { reading: '직독직해', grammar: '문법·구조', summary: '주제·요약', structure: '구조 지도', words: '단어', meta: '지문 정보' };
+const PART_QUOTA: Record<PassagePart, AiMonthlyFeature> = { reading: 'workbook', grammar: 'analyzer', summary: 'analyzer', structure: 'analyzer' };
 export const PASSAGE_MESSAGES: Record<string, string> = {
   PASSAGE_TOO_LONG: `지문은 ${PASSAGE_LIMITS.textChars.toLocaleString('ko-KR')}자, ${PASSAGE_LIMITS.sentences}문장까지 넣을 수 있어요.`,
   PASSAGE_EMPTY: '영어 지문을 넣어 주세요.',
@@ -24,6 +27,10 @@ export const PASSAGE_MESSAGES: Record<string, string> = {
   ATTEMPT_SUBMITTED: '이미 채점한 문제예요. 결과를 확인해 주세요.',
   ATTEMPT_STALE: '문제가 바뀌었어요. 다시 열어 주세요.',
   ATTEMPT_INCOMPLETE: '모든 문제의 답을 골라 주세요.',
+  QUESTIONS_BUNDLE_PICK: '합본으로 묶을 세트를 2~10개 골라 주세요.',
+  QUESTIONS_BUNDLE_TOO_BIG: '합본에는 60문제까지 넣을 수 있어요. 세트를 줄여 주세요.',
+  QUESTIONS_BUNDLE_NO_MORE: '합본에서 더 만들 지문을 골라 주세요.',
+  QUESTIONS_SET_FULL: '한 세트에는 30문제까지 넣을 수 있어요. 새로 만들어 주세요.',
   QUESTIONS_TOO_MANY: '문제 유형은 한 번에 3개까지 고를 수 있어요.',
   FORBIDDEN: '이 지문은 볼 수 없어요.',
   BAD_REQUEST: '잘못된 요청이에요.',
@@ -136,14 +143,29 @@ export function grammarRequest(sentences: string[]) {
     },
   };
 }
-export function summaryRequest(text: string) {
+const STRUCTURE_HELP = `문장마다 역할(roles, 문장 순서대로 같은 개수)을 다음 중 하나로 줘: ${STRUCTURE_ROLES.join(', ')}. 딱 맞는 역할이 없으면 빈 문자열("")로 둬. 같은 역할이 여러 문장에 와도 돼. key는 글의 핵심 문장의 번호(0부터 센 index) 하나야.`;
+const STRUCTURE_SCHEMA = { type: 'OBJECT', properties: { roles: { type: 'ARRAY', items: { type: 'STRING' } }, key: { type: 'INTEGER' } }, required: ['roles', 'key'] };
+/** `sentences` (when given) are numbered from 0 for the 구조 지도 that comes with the summary. */
+export function summaryRequest(text: string, sentences?: string[]) {
   return {
-    contents: [{ role: 'user', parts: [{ text }] }],
+    contents: [{ role: 'user', parts: [{ text: sentences ? JSON.stringify({ text, sentences: sentences.map((sentence, index) => ({ index, sentence })) }) : text }] }],
     config: {
-      systemInstruction: '너는 한국 고등학생에게 영어 독해를 가르치는 선생님이야. 지문의 제목(한국어 title, 영어 englishTitle), 주제(topic), 요지(mainIdea), 요약(summary, 3~4문장), 글의 전개 방식(logic, 짧게)을 줘. topic·mainIdea·summary는 한국어 ko와 영어 en을 모두 써.',
+      systemInstruction: '너는 한국 고등학생에게 영어 독해를 가르치는 선생님이야. 지문의 제목(한국어 title, 영어 englishTitle), 주제(topic), 요지(mainIdea), 요약(summary, 3~4문장), 글의 전개 방식(logic, 짧게)을 줘. topic·mainIdea·summary는 한국어 ko와 영어 en을 모두 써.' + (sentences ? ` 그리고 structure에 글의 구조를 줘. ${STRUCTURE_HELP}` : ''),
       responseMimeType: 'application/json',
-      responseSchema: { type: 'OBJECT', properties: { title: { type: 'STRING' }, englishTitle: { type: 'STRING' }, topic: { type: 'OBJECT', properties: { ko: { type: 'STRING' }, en: { type: 'STRING' } }, required: ['ko', 'en'] }, mainIdea: { type: 'OBJECT', properties: { ko: { type: 'STRING' }, en: { type: 'STRING' } }, required: ['ko', 'en'] }, summary: { type: 'OBJECT', properties: { ko: { type: 'STRING' }, en: { type: 'STRING' } }, required: ['ko', 'en'] }, logic: { type: 'STRING' } }, required: ['title', 'englishTitle', 'topic', 'mainIdea', 'summary', 'logic'] },
+      responseSchema: { type: 'OBJECT', properties: { title: { type: 'STRING' }, englishTitle: { type: 'STRING' }, topic: { type: 'OBJECT', properties: { ko: { type: 'STRING' }, en: { type: 'STRING' } }, required: ['ko', 'en'] }, mainIdea: { type: 'OBJECT', properties: { ko: { type: 'STRING' }, en: { type: 'STRING' } }, required: ['ko', 'en'] }, summary: { type: 'OBJECT', properties: { ko: { type: 'STRING' }, en: { type: 'STRING' } }, required: ['ko', 'en'] }, logic: { type: 'STRING' }, ...(sentences ? { structure: STRUCTURE_SCHEMA } : {}) }, required: ['title', 'englishTitle', 'topic', 'mainIdea', 'summary', 'logic'] },
       temperature: 0.3, maxOutputTokens: 8192, thinkingConfig: { thinkingLevel: 'LOW' },
+    },
+  };
+}
+
+/** 구조 지도 alone, for a passage whose 주제·요약 was made before it existed. */
+export function structureRequest(sentences: string[]) {
+  return {
+    contents: [{ role: 'user', parts: [{ text: JSON.stringify(sentences.map((sentence, index) => ({ index, sentence }))) }] }],
+    config: {
+      systemInstruction: `너는 한국 고등학생에게 영어 독해를 가르치는 선생님이야. 입력은 지문의 문장 배열(index는 0부터)이야. 글의 구조를 줘. ${STRUCTURE_HELP}`,
+      responseMimeType: 'application/json', responseSchema: STRUCTURE_SCHEMA,
+      temperature: 0.2, maxOutputTokens: 4096, thinkingConfig: { thinkingLevel: 'LOW' },
     },
   };
 }
@@ -151,6 +173,7 @@ export function summaryRequest(text: string) {
 const pair = (x: any) => ({ ko: clip(x?.ko, 1500), en: clip(x?.en, 1500) });
 /** Check and tidy an AI part (or a teacher's edit) against the passage. Throws PASSAGE_AI_MISMATCH / BAD_REQUEST. */
 export function cleanPart(part: PassagePart, data: any, sentences: string[], fail = 'PASSAGE_AI_MISMATCH') {
+  if (part === 'structure') { const map = cleanStructure(data, sentences.length); if (!map) throw Error(fail); return map; }
   if (part === 'reading') {
     const list = Array.isArray(data?.sentences) ? data.sentences : [];
     if (list.length !== sentences.length) throw Error(fail);
@@ -178,7 +201,7 @@ export function cleanPart(part: PassagePart, data: any, sentences: string[], fai
  */
 export async function askPassagePart(db: any, a: PassageActor, input: any, generate: (request: any) => Promise<string>, now = Date.now()) {
   const part = input?.part as PassagePart;
-  if (!['reading', 'grammar', 'summary'].includes(part)) throw Error('BAD_REQUEST');
+  if (!['reading', 'grammar', 'summary', 'structure'].includes(part)) throw Error('BAD_REQUEST');
   const ref = db.collection(PASSAGES).doc(String(input?.id || '').slice(0, 64)), snap = await ref.get();
   if (!snap.exists) throw Error('PASSAGE_NOT_FOUND');
   const d = { ...snap.data(), id: snap.id };
@@ -192,18 +215,20 @@ export async function askPassagePart(db: any, a: PassageActor, input: any, gener
     if (left < 0) { const e: any = Error('AI_MONTHLY_LIMIT'); e.feature = quota; throw e; }
   }
   const giveBack = () => a.admin ? undefined : refundMonthlyQuota(db, a.uid, quota, now).catch(() => undefined);
-  let data: any;
+  let data: any, structure: any = null;
   try {
-    const request = part === 'reading' ? readingRequest(d.sentences) : part === 'grammar' ? grammarRequest(d.sentences) : summaryRequest(d.text);
+    const request = part === 'reading' ? readingRequest(d.sentences) : part === 'grammar' ? grammarRequest(d.sentences) : part === 'structure' ? structureRequest(d.sentences) : summaryRequest(d.text, d.sentences);
     const text = await generate(request).catch((error: any) => { throw Error(aiErrorCode(error)); });
     let parsed: any; try { parsed = JSON.parse(text); } catch { throw Error('PASSAGE_AI_MISMATCH'); }
     data = cleanPart(part, parsed, d.sentences);
+    if (part === 'summary') structure = cleanStructure(parsed?.structure, d.sentences.length); // a bad map is left out; the summary still counts
   } catch (error: any) { await giveBack(); throw Error(PASSAGE_MESSAGES[error?.message] ? error.message : 'AI_FAILED'); }
   let saved: any;
   try { saved = await db.runTransaction(async (tx: any) => {
     const fresh = (await tx.get(ref)).data();
     if (fresh.parts?.[part]) return { ...fresh, id: d.id, raced: true };
-    const next = { ...fresh, parts: { ...(fresh.parts || {}), [part]: { ...data, by: who(a), at: now } }, updatedAt: now, history: withHistory(fresh.history, record(a, `${PART_LABEL[part]} 받음`, now)) };
+    const extra = structure && !fresh.parts?.structure ? { structure: { ...structure, by: who(a), at: now } } : {};
+    const next = { ...fresh, parts: { ...(fresh.parts || {}), [part]: { ...data, by: who(a), at: now }, ...extra }, updatedAt: now, history: withHistory(fresh.history, record(a, `${PART_LABEL[part]} 받음`, now)) };
     tx.set(ref, next);
     return { ...next, id: d.id };
   }); } catch (error) { await giveBack(); throw error; } // not saved: the count is given back

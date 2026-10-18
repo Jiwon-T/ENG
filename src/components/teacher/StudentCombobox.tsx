@@ -1,8 +1,8 @@
-import {useEffect,useId,useRef,useState} from 'react';
+import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
 import {ChevronDown,Search} from 'lucide-react';
 import {studentSearchResults} from '../../lib/koreanSearch';
-interface Props {students:readonly {studentKey:string;studentDisplayName:string}[];value:string;onChange:(key:string)=>void;disabled?:boolean;todayKeys?:readonly string[];filters?:{label:string;keys:readonly string[]}[]}
-export default function StudentCombobox({students,value,onChange,disabled=false,todayKeys=[],filters}:Props){
+interface Props {students:readonly {studentKey:string;studentDisplayName:string}[];value:string;onChange:(key:string)=>void;disabled?:boolean;todayKeys?:readonly string[];filters?:{label:string;keys:readonly string[]}[];/** Shown at the right end of the 학생 label row (out of the flow: the field keeps its height). */labelExtra?:ReactNode}
+export default function StudentCombobox({students,value,onChange,disabled=false,todayKeys=[],filters,labelExtra}:Props){
  const id=useId(),input=useRef<HTMLInputElement>(null),composing=useRef(false);
  const selected=students.find(student=>student.studentKey===value)?.studentDisplayName||'';
  const [query,setQuery]=useState(''),[open,setOpen]=useState(false),[active,setActive]=useState(0),[space,setSpace]=useState({height:280,above:false});
@@ -19,7 +19,7 @@ export default function StudentCombobox({students,value,onChange,disabled=false,
  useEffect(()=>{if(open)document.getElementById(`${id}-option-${index}`)?.scrollIntoView({block:'nearest'});},[open,index,id]);
  const choose=(key:string)=>{setOpen(false);setQuery('');onChange(key);};
  return <div className="student-combobox" data-placement={space.above?'above':'below'}>
-  <label htmlFor={`${id}-input`}>학생</label><div className="student-combobox-input"><Search size={15} aria-hidden="true"/><input ref={input} id={`${id}-input`} role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={`${id}-list`} aria-activedescendant={open&&results.length?`${id}-option-${index}`:undefined} autoComplete="off" disabled={disabled} placeholder="학생 이름·초성 검색" value={open?query:selected}
+  <label htmlFor={`${id}-input`}>학생</label>{labelExtra&&<span className="student-combobox-extra">{labelExtra}</span>}<div className="student-combobox-input"><Search size={15} aria-hidden="true"/><input ref={input} id={`${id}-input`} role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={`${id}-list`} aria-activedescendant={open&&results.length?`${id}-option-${index}`:undefined} autoComplete="off" disabled={disabled} placeholder="학생 이름·초성 검색" value={open?query:selected}
    onFocus={()=>{setQuery('');setActive(0);setOpen(true);}} onClick={()=>setOpen(true)} onBlur={()=>setOpen(false)}
    onChange={event=>{setQuery(event.target.value);setActive(0);setOpen(true);}} onCompositionStart={()=>{composing.current=true;}} onCompositionEnd={()=>{composing.current=false;}}
    onKeyDown={event=>{

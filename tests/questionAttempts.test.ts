@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registrationFirestore } from './helpers/registrationFirestore.ts';
 import { passageActor, resetWordIndex } from '../api/_lib/passage.ts';
-import { makeQuestionSet } from '../api/_lib/questionSets.ts';
+import { bundleQuestionSets, makeQuestionSet } from '../api/_lib/questionSets.ts';
 import { ATTEMPT_SESSION, attemptId, openAttempt, saveAttempt, submitAttempt, touchSessions } from '../api/_lib/questionAttempts.ts';
 
 const NOW = Date.parse('2026-10-18T10:00:00Z');
@@ -75,4 +75,50 @@ test('변형 문제 풀기: 채점 once by the server; all answers needed; resen
   assert.deepEqual([row.gradingVersion, row.questions.length, row.setVersion], [1, 3, set.createdAt], 'the questions graded are kept with the result');
   // a submitted set opens on its result
   assert.equal(((await openAttempt(f.db, kid, { setId: set.id }, NOW + 1e7)) as any).attempt.score.correct, 2);
+});
+
+test('더 만들기: new questions go after the set’s own (1–3 then 4–…), one 만들기 each; owner only; an unfinished try keeps its answers', async () => {
+  const { f, kid, kid2, set } = await setup();
+  await openAttempt(f.db, kid, { setId: set.id }, NOW);
+  await saveAttempt(f.db, kid, { setId: set.id, answers: { 0: 2 } }, NOW + 1000);
+  const more: any = await makeQuestionSet(f.db, kid, { appendTo: set.id, types: ['grammar'] }, NOW + 2000, seeded(5));
+  assert.equal(more.set.id, set.id, 'the same set');
+  assert.deepEqual([more.set.questions.length, more.added, more.set.questions.slice(0, 3).map((q: any) => q.type)], [4, 1, ['order', 'insert', 'choice']]);
+  assert.equal(more.set.questions[3].type, 'grammar');
+  assert.equal(f.rows.get('aiMonthly/kid_2026-10').generator, 2, 'each 만들기 counts');
+  await assert.rejects(makeQuestionSet(f.db, kid2, { appendTo: set.id, types: ['order'] }, NOW), /FORBIDDEN/);
+  const reopened: any = (await openAttempt(f.db, kid, { setId: set.id }, NOW + 3000)).attempt;
+  assert.deepEqual([reopened.questions.length, reopened.answers], [4, { 0: 2 }], 'the try moved to the grown set, answers kept');
+  // a full set takes no more
+  const row = f.rows.get(`questionSets/${set.id}`);
+  f.rows.set(`questionSets/${set.id}`, { ...row, questions: Array.from({ length: 30 }, () => row.questions[0]) });
+  await assert.rejects(makeQuestionSet(f.db, kid, { appendTo: set.id, types: ['order'] }, NOW), /QUESTIONS_SET_FULL/);
+});
+
+test('합본: picked sets saved as one new set (questions in order, nothing counted); originals kept; mine only; 더 만들기 from one of its passages', async () => {
+  const { f, kid, kid2, set } = await setup();
+  const second: any = (await makeQuestionSet(f.db, kid, { text: TEXT, types: ['grammar'] }, NOW + 10, seeded(7))).set;
+  const month = f.rows.get('aiMonthly/kid_2026-10').generator;
+  const b: any = (await bundleQuestionSets(f.db, kid, { ids: [set.id, second.id] }, NOW + 20)).set;
+  assert.deepEqual([b.kind, b.questions.length, b.questions.map((q: any) => q.type), b.sources.map((x: any) => x.count)], ['bundle', 4, ['order', 'insert', 'choice', 'grammar'], [3, 1]]);
+  assert.match(b.title, / 외 1세트$/);
+  assert.equal(f.rows.get('aiMonthly/kid_2026-10').generator, month, 'nothing counted');
+  assert.ok(f.rows.get(`questionSets/${set.id}`) && f.rows.get(`questionSets/${second.id}`), 'the originals stay');
+  await assert.rejects(bundleQuestionSets(f.db, kid2, { ids: [set.id, second.id] }, NOW), /FORBIDDEN/);
+  await assert.rejects(bundleQuestionSets(f.db, kid, { ids: [set.id] }, NOW), /QUESTIONS_BUNDLE_PICK/);
+  await assert.rejects(makeQuestionSet(f.db, kid, { appendTo: b.id, types: ['order'] }, NOW), /QUESTIONS_BUNDLE_NO_MORE/, 'a bundle needs the passage to add from');
+  const grown: any = await makeQuestionSet(f.db, kid, { appendTo: b.id, fromSet: second.id, types: ['order'] }, NOW + 25, seeded(9));
+  assert.deepEqual([grown.set.id, grown.added, grown.set.questions.length, grown.set.questions[4].type], [b.id, 1, 5, 'order'], '더 만들기 from one of its passages');
+  await assert.rejects(makeQuestionSet(f.db, kid, { appendTo: b.id, fromSet: 'not-in-it', types: ['order'] }, NOW), /QUESTIONS_BUNDLE_NO_MORE/);
+  // solved like any set
+  assert.equal(((await openAttempt(f.db, kid, { setId: b.id }, NOW + 30)) as any).attempt.questions.length, 5);
+});
+
+test('제출 중 더 만들기: a set grown between reading it and grading is not graded on the old count (open it again)', async () => {
+  const { f, kid, set } = await setup();
+  await openAttempt(f.db, kid, { setId: set.id }, NOW);
+  const row = f.rows.get(`questionSets/${set.id}`);
+  const racing: any = { ...f.db, runTransaction: (fn: any) => { f.rows.set(`questionSets/${set.id}`, { ...row, questions: [...row.questions, row.questions[0]], version: NOW + 1 }); return f.db.runTransaction(fn); } };
+  await assert.rejects(submitAttempt(racing, kid, { setId: set.id, answers: rightAnswers(set) }, NOW + 1000), /ATTEMPT_STALE/);
+  assert.equal(f.rows.get(`questionAttempts/${attemptId('kid', set.id)}`).status, 'draft');
 });

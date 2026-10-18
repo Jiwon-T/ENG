@@ -3,6 +3,7 @@ import { ArrowLeft, Search } from 'lucide-react';
 import { passageCall, roleName, shortDate, type Passage, type PassageRow } from '../../lib/passageApi';
 import PassageResult from './PassageResult';
 import QuestionGenerator from '../generator/QuestionGenerator';
+import type { QuestionType } from '../../lib/questionMaker';
 
 const PART_NAMES: Record<string, string> = { reading: '직독직해', grammar: '문법', summary: '요약' };
 
@@ -47,7 +48,7 @@ export default function PassageLibrary() {
   const [data, setData] = useState<{ rows?: PassageRow[]; more?: { at: number; id: string } | null; public?: PassageRow[]; mine?: PassageRow[] } | null>(null);
   const [open, setOpen] = useState<Passage | null>(null);
   const [query, setQuery] = useState(''), [onlyPublic, setOnlyPublic] = useState(false);
-  const [message, setMessage] = useState(''), [making, setMaking] = useState(false);
+  const [message, setMessage] = useState(''), [making, setMaking] = useState(false), [makeTypes, setMakeTypes] = useState<QuestionType[] | undefined>();
   const load = () => passageCall<any>('list').then(setData).catch(e => setMessage(e.message));
   // Teachers: 100 newest at a time; "더 보기" brings the next 100.
   const loadMore = () => data?.more && passageCall<any>('list', { after: data.more }).then(r => setData(d => ({ ...d, rows: [...(d?.rows || []), ...(r.rows || [])], more: r.more }))).catch(e => setMessage(e.message));
@@ -56,10 +57,10 @@ export default function PassageLibrary() {
   const rows = useMemo(() => { const q = query.trim().toLowerCase(); return (data?.rows || []).filter(r => (!onlyPublic || r.public) && (!q || `${r.title} ${r.examInfo} ${r.first}`.toLowerCase().includes(q))); }, [data, query, onlyPublic]);
   const show = (id: string) => passageCall<{ passage: Passage }>('read', { id }).then(r => setOpen(r.passage)).catch(e => setMessage(e.message));
 
-  if (open && making) return <QuestionGenerator initialPassage={{ id: open.id, title: open.title || '', first: open.sentences?.[0] }} onBack={() => setMaking(false)} />;
+  if (open && making) return <QuestionGenerator initialPassage={{ id: open.id, title: open.title || '', first: open.sentences?.[0] }} initialTypes={makeTypes} onBack={() => setMaking(false)} />;
   if (open) return <>
     <button type="button" onClick={() => { setOpen(null); void load(); }} className="mb-2 inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-700"><ArrowLeft size={14} aria-hidden="true" />보관함</button>
-    <PassageResult passage={open} onChange={setOpen} onMakeQuestions={() => setMaking(true)} extra={staff ? <StaffTools passage={open} onChange={setOpen} /> : undefined} />
+    <PassageResult passage={open} onChange={setOpen} onMakeQuestions={types => { setMakeTypes(types); setMaking(true); }} extra={staff ? <StaffTools passage={open} onChange={setOpen} /> : undefined} />
   </>;
   const item = (r: PassageRow, sub?: string) => <li key={r.id}><button type="button" onClick={() => void show(r.id)} className="w-full border-t border-slate-100 px-1 py-2.5 text-left hover:bg-[#fff7f8]">
     <span className="flex items-center justify-between gap-2"><b className={`truncate text-sm font-bold ${r.title || r.examInfo ? 'text-[#5e1e2a]' : 'text-slate-400'}`}>{[r.examInfo, r.title].filter(Boolean).join(' · ') || '제목 없음'}</b>

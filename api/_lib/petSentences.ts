@@ -15,6 +15,7 @@ const showSentence = (t: string) => t.replace(/\s*\/\s*/g, ' ').replace(/\s{2,}/
 export function sentenceGradeFor(displayName: string, teacher = false): SentenceGrade {
   if (teacher) return '고3';
   const g = gradeOf(displayName);
+  if (g?.startsWith('초')) return '초등';
   return g && (SENTENCE_GRADES as readonly string[]).includes(g) ? g as SentenceGrade : '중1';
 }
 const isSentenceSet = (b: any) => Boolean(b) && b.type === 'sentence';
@@ -22,7 +23,8 @@ const isSentenceSet = (b: any) => Boolean(b) && b.type === 'sentence';
 /** A window of the player's 문장 세트 (from a random place, to keep reads small); [] when none is set. */
 export async function loadSentencesFor(db: any, uid: string, rand: () => number = Math.random): Promise<FeedSentence[]> {
   const settings = (await db.collection(PET_EXPEDITION_SETTINGS).doc('main').get()).data()?.sentences || {}, who = await climber(db, uid);
-  const grade = sentenceGradeFor(who.name, who.teacher), id = String(settings[grade] || settings['고3'] || '');
+  // an empty grade uses 고3 (초등: 중1 first, then 고3)
+  const grade = sentenceGradeFor(who.name, who.teacher), id = String(settings[grade] || (grade === '초등' ? settings['중1'] : '') || settings['고3'] || '');
   if (!id || !isSentenceSet((await db.collection('wordbooks').doc(id).get()).data())) return [];
   const words = db.collection('wordbooks').doc(id).collection('words'), start = randomDocId(rand);
   const first = await words.orderBy(FieldPath.documentId()).startAt(start).limit(SENTENCE_WINDOW).get();
@@ -47,12 +49,21 @@ export async function readExpeditionSettings(db: any, actor: any) {
 }
 export async function saveExpeditionSettings(db: any, actor: any, input: any) {
   admin(actor);
-  const next: Record<string, string> = {};
+  // A grade left out of the request (an older screen still open) keeps what it had; read and written in one transaction
+  // so two screens saving at once never put back an older value.
+  const sent = input?.sentences || {}, chosen: Record<string, string> = {};
   for (const g of SENTENCE_GRADES) {
-    const id = String(input?.sentences?.[g] || '').trim();
+    if (!Object.hasOwn(sent, g)) continue;
+    const id = String(sent[g] || '').trim();
     if (id && !isSentenceSet((await db.collection('wordbooks').doc(id).get()).data())) throw Error('BAD_REQUEST');
-    next[g] = id;
+    chosen[g] = id;
   }
-  await db.collection(PET_EXPEDITION_SETTINGS).doc('main').set({sentences: next, updatedAt: Date.now(), updatedBy: actor.uid || 'admin'});
+  const ref = db.collection(PET_EXPEDITION_SETTINGS).doc('main');
+  const next = await db.runTransaction(async (tx: any) => {
+    const old = (await tx.get(ref)).data()?.sentences || {}, merged: Record<string, string> = {};
+    for (const g of SENTENCE_GRADES) merged[g] = Object.hasOwn(chosen, g) ? chosen[g] : typeof old[g] === 'string' ? old[g] : '';
+    tx.set(ref, {sentences: merged, updatedAt: Date.now(), updatedBy: actor.uid || 'admin'});
+    return merged;
+  });
   return {sentences: next};
 }

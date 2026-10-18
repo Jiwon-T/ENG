@@ -12,7 +12,7 @@ import {gradeOf} from '../../src/lib/schoolGrade.js';
 
 export const PET_TOWERS = 'petTowers';
 export const PET_TOWER_SETTINGS = 'petTowerSettings';
-/** A word in play; `b`: the wordbook it came from (the tower mixes up to two books). */
+/** A word in play; `b`: the wordbook it came from (the tower mixes up to three books). */
 interface PoolWord { w: string; m: string; b?: string }
 interface TowerPool { words: PoolWord[]; wordbookId: string; wordbookTitle: string; books?: {id: string; title: string}[] }
 interface TowerQuestion { kind: 'attack' | 'defend' | 'riddle' | 'trap'; word: string; meaning: string; choices: string[]; answer: number; issuedAt: number; deadline: number | null; book?: string }
@@ -395,14 +395,17 @@ async function readClimber(db: any, uid: string) {
   return {teacher: false, name: String(row?.kind === 'students' ? row.fields?.summaryOverride?.studentDisplayName || '' : '') || String((await readStudentMapping(db, key))?.studentDisplayName || '')};
 }
 /** 고등 students (and teachers) get the 고등 books; 중등, 초등 and anyone whose grade isn't known get the 중등 books. */
-export const towerLevelFor = (displayName: string, teacher = false) => teacher || gradeOf(displayName)?.startsWith('고') ? 'high' : 'middle';
+/** 고등 students and teachers: high; 초등 students: elementary (its books, or the 중등 ones while it has none); everyone
+ *  else (중등, grade unknown): middle. */
+export const towerLevelFor = (displayName: string, teacher = false) => { const g = teacher ? '' : gradeOf(displayName) || ''; return teacher || g.startsWith('고') ? 'high' : g.startsWith('초') ? 'elementary' : 'middle'; };
 /** A level's books in the settings (up to two; older settings kept one id as text). */
 const booksOf = (v: unknown): string[] => (Array.isArray(v) ? v : typeof v === 'string' ? [v] : []).filter((id): id is string => typeof id === 'string' && Boolean(id.trim())).slice(0, PET_TOWER_BOOKS);
-export const PET_TOWER_BOOKS = 2;
-/** The books for this player: the admin's setting for their level (both books are used). */
+export const PET_TOWER_BOOKS = 3;
+/** The books for this player: the admin's setting for their level (all of them are used, up to three). */
 export async function towerBookFor(db: any, uid: string) {
   const settings = (await db.collection(PET_TOWER_SETTINGS).doc('main').get()).data() || {}, who = await climber(db, uid);
-  const ids = booksOf(settings[towerLevelFor(who.name, who.teacher)]);
+  const level = towerLevelFor(who.name, who.teacher), own = booksOf(settings[level]);
+  const ids = own.length || level !== 'elementary' ? own : booksOf(settings.middle);
   const books = (await Promise.all(ids.map(async id => { const b = (await db.collection('wordbooks').doc(id).get()).data(); return b ? {id, title: String(b.title || '탑 단어장').slice(0, 60)} : null; }))).filter(Boolean) as {id: string; title: string}[];
   if (!books.length) throw Error('TOWER_NOT_READY');
   return {wordbookId: books[0].id, wordbookTitle: books.map(b => b.title).join(' · ').slice(0, 80), books};
@@ -443,7 +446,7 @@ export function towerWrongsSessions(uid: string, end: {runId: string; wrongs: To
 /** Kept for one-book callers. */
 export const towerWrongsSession = (uid: string, end: Parameters<typeof towerWrongsSessions>[1], now: number) => towerWrongsSessions(uid, end, now)[0] || null;
 
-// ---- 관리자 설정 › 탑 단어장 (중등용·고등용, up to two books each) ----
+// ---- 관리자 설정 › 탑 단어장 (초등용·중등용·고등용, up to three books each) ----
 function admin(actor: any) { if (!actor.admin || actor.academyId !== 'main') throw Error('FORBIDDEN'); }
 export async function readTowerSettings(db: any, actor: any) {
   admin(actor);
@@ -451,13 +454,22 @@ export async function readTowerSettings(db: any, actor: any) {
   const list = books.docs.map((d: any) => ({id: d.id, ...d.data()})).filter((b: any) => (b.category || 'word') === 'word' && (!b.type || b.type === 'standard'))
     .map((b: any) => ({id: b.id, title: String(b.title || '제목 없음')})).sort((a: any, b: any) => a.title.localeCompare(b.title, 'ko'));
   const s = settings.data() || {};
-  return {middle: booksOf(s.middle), high: booksOf(s.high), books: list};
+  return {elementary: booksOf(s.elementary), middle: booksOf(s.middle), high: booksOf(s.high), books: list};
 }
 export async function saveTowerSettings(db: any, actor: any, input: any) {
   admin(actor);
   const clean = async (v: unknown) => { const ids = [...new Set(booksOf(v).map(id => id.trim()))]; for (const id of ids) if (!(await db.collection('wordbooks').doc(id).get()).exists) throw Error('BAD_REQUEST'); return ids; };
-  const next = {middle: await clean(input?.middle), high: await clean(input?.high), updatedAt: Date.now(), updatedBy: actor.uid || 'admin'};
-  await db.collection(PET_TOWER_SETTINGS).doc('main').set(next);
-  return {middle: next.middle, high: next.high};
+  // A level left out of the request (an older screen still open) keeps what it had; read and written in one transaction
+  // so two screens saving at once never put back an older value.
+  const keys = ['elementary', 'middle', 'high'] as const, sent: Partial<Record<typeof keys[number], string[]>> = {};
+  for (const key of keys) if (input && Object.hasOwn(input, key)) sent[key] = await clean(input[key]);
+  const ref = db.collection(PET_TOWER_SETTINGS).doc('main');
+  const next = await db.runTransaction(async (tx: any) => {
+    const old = (await tx.get(ref)).data() || {};
+    const doc = {...Object.fromEntries(keys.map(k => [k, sent[k] ?? booksOf(old[k])])), updatedAt: Date.now(), updatedBy: actor.uid || 'admin'} as any;
+    tx.set(ref, doc);
+    return doc;
+  });
+  return {elementary: next.elementary, middle: next.middle, high: next.high};
 }
 export type {TowerGear};

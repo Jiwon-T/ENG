@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Timestamp} from 'firebase-admin/firestore';
-import {loadTeacherOnlineLearning,saveOnlineEvaluation} from '../api/_lib/teacherOnlineLearning.js';
+import {loadLessonDayStudy,loadTeacherOnlineLearning,saveOnlineEvaluation} from '../api/_lib/teacherOnlineLearning.js';
 import {handleWorkspace} from '../api/teacher/workspace.js';
 import {hashStudentKey} from '../api/_lib/security.js';
 const key='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
@@ -15,7 +15,7 @@ function fixture(n=23){
  const cmp=(a:any,b:any)=>a?.toMillis&&b?.toMillis?a.seconds-b.seconds||a.nanoseconds-b.nanoseconds:a===b?0:a<b?-1:1;
  const query=(name:string,filters:any[]=[],orders:any[]=[],cursor?:any[],max=Infinity):any=>({
   doc:(id:string)=>({get:async()=>{reads.push(name);hooks.onRead?.(name);return {data:()=>rows[name]?.[id],exists:Boolean(rows[name]?.[id])};},set:async(v:any)=>{(rows[name]=rows[name]||{})[id]=v;},collection:(sub:string)=>query(name+'/'+id+'/'+sub)}),where:(...f:any[])=>query(name,[...filters,f],orders,cursor,max),orderBy:(k:any,dir:string)=>query(name,filters,[...orders,[k,dir]],cursor,max),startAfter:(...v:any[])=>query(name,filters,orders,v,max),limit:(v:number)=>query(name,filters,orders,cursor,v),select:()=>query(name,filters,orders,cursor,max),
-  get:async()=>{reads.push(name);hooks.onRead?.(name,orders);let records=Object.entries(rows[name]||{}).filter(([,r]:any)=>filters.every(([k,op,v])=>op==='=='?r[k]===v:false));
+  get:async()=>{reads.push(name);hooks.onRead?.(name,orders);let records=Object.entries(rows[name]||{}).filter(([,r]:any)=>filters.every(([k,op,v])=>op==='=='?r[k]===v:op==='>='?cmp(r[k],v)>=0:op==='<'?cmp(r[k],v)<0:false));
    const compare=(a:any,b:any)=>{for(let i=0;i<orders.length;i++){const [k,dir]=orders[i],d=cmp(value(a[1],k,a[0]),value(b[1],k,b[0]));if(d)return dir==='desc'?-d:d;}return 0;};records.sort(compare);
    if(cursor)records=records.filter(([id,r])=>{for(let i=0;i<orders.length;i++){const [k,dir]=orders[i],d=cmp(value(r,k,id),cursor[i]);if(d)return dir==='desc'?d<0:d>0;}return false;});return {docs:records.slice(0,max).map(([id,r])=>({id,data:()=>r}))};},
   count:()=>({get:async()=>{const r=await query(name,filters).get();return {data:()=>({count:r.docs.length})};}}),
@@ -127,4 +127,27 @@ test('평가 저장 needs the version it was edited from, and the current role a
   const g=fixture(1),actor=principal(g);g.hooks.beforeTransaction=()=>change(g);
   await assert.rejects(saveOnlineEvaluation(g.db,actor,{studentKey:key,text:'x',expectedUpdatedAt:null},g.deps),/FORBIDDEN/);assert.equal(g.rows.evaluations,undefined);
  }
+});
+
+test('수업 일지 › 이날 앱 학습: only that Seoul day of the linked student, summary fields, newest first; any teacher of the student', async () => {
+ const f=fixture(0),at=(iso:string)=>Timestamp.fromMillis(Date.parse(iso));
+ f.rows.studySessions={
+  morning:{uid:'student',createdAt:at('2026-10-18T09:10:00+09:00'),wordbookTitle:'능률VOCA 어원편 중등',type:'quiz',category:'word',score:18,totalItems:20,duration:300,dayStart:3,dayEnd:3,incorrectAnswers:[{word:'predict'},{word:'prefer'}]},
+  test:{uid:'student',createdAt:at('2026-10-18T13:52:00+09:00'),wordbookTitle:'능률VOCA 어원편 중등',type:'test',category:'word',score:27,totalItems:30,duration:540,dayStart:3,dayEnd:4,incorrectAnswers:['a','b','c','d','e','f'].map(word=>({word,meaning:'뜻'}))},
+  lateNight:{uid:'student',createdAt:at('2026-10-18T23:59:00+09:00'),wordbookTitle:'밤',type:'quiz',category:'word',score:1,totalItems:1},
+  nextDay:{uid:'student',createdAt:at('2026-10-19T00:00:00+09:00'),wordbookTitle:'다음 날',type:'quiz',category:'word'},
+  dayBefore:{uid:'student',createdAt:at('2026-10-17T23:59:59+09:00'),wordbookTitle:'전날',type:'quiz',category:'word'},
+  math:{uid:'student',createdAt:at('2026-10-18T10:00:00+09:00'),wordbookTitle:'수학',type:'quiz',subject:'수학'},
+  foreign:{uid:'foreign',createdAt:at('2026-10-18T10:00:00+09:00'),wordbookTitle:'FOREIGN'},
+ };
+ const r=await loadLessonDayStudy(f.db,f.actor,key,'2026-10-18',f.deps);
+ assert.deepEqual(r.sessions.map((s:any)=>s.id),['lateNight','test','morning']);
+ const test=r.sessions[1] as any;
+ assert.deepEqual([test.score,test.totalItems,test.dayStart,test.dayEnd,test.incorrectCount,test.wrongWords],[27,30,3,4,6,['a','b','c','d','e']]);
+ assert.equal('incorrectAnswers' in test,false,'no answer details on the lesson screen');
+ assert.equal((await loadLessonDayStudy(f.db,{...f.actor,scopes:[{studentKey:key,subject:'수학'}]},key,'2026-10-18',f.deps)).sessions.length,3,'a 수학 teacher of this student sees them too');
+ assert.equal((await loadTeacherOnlineLearning(f.db,{...f.actor,scopes:[{studentKey:key,subject:'수학'}]},key,'',undefined,f.deps)).online.reason,'subject-not-available','the full online report stays 영어 only');
+ assert.deepEqual((await loadLessonDayStudy(f.db,{...f.actor,scopes:[]},key,'2026-10-18',f.deps)).sessions,[],'not this student: none, no error');
+ assert.deepEqual((await loadLessonDayStudy(f.db,f.actor,key,'2026-10-18',{readStudentMapping:async()=>null} as any)).sessions,[],'no linked account: none');
+ await assert.rejects(loadLessonDayStudy(f.db,f.actor,key,'10/18',f.deps));
 });

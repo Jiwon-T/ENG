@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Mic, Volume2, X } from 'lucide-react';
-import { orderIsRight, orderPieces, readingScore, shuffledOrder, speechRecognitionClass, type GameSentence } from '../../lib/sentenceGame';
+import { Mic, Square, Volume2, X } from 'lucide-react';
+import { orderIsRight, orderPieces, readingScore, shuffledOrder, type GameSentence } from '../../lib/sentenceGame';
+import { readingLine, useReadAloud } from '../../lib/useReadAloud';
 
 export type SentenceMode = 'order' | 'read';
 export interface SentenceMiss { word: string; meaning: string; userChoice: string; correctAnswer: string }
@@ -42,11 +43,10 @@ export default function SentenceGame({ items, mode, onFinish, onClose, earned, n
   const item = items[index];
   const pieces = useMemo(() => item ? orderPieces(item) : [], [item]);
   const [pool, setPool] = useState<number[]>([]), [placed, setPlaced] = useState<number[]>([]);
-  const [heard, setHeard] = useState(''), [listening, setListening] = useState(false), [micError, setMicError] = useState('');
-  const recRef = useRef<any>(null);
+  const [heard, setHeard] = useState('');
 
-  useEffect(() => { setPool(shuffledOrder(pieces)); setPlaced([]); setHeard(''); setTries(0); setState('play'); setMicError(''); }, [index, pieces]);
-  useEffect(() => () => { try { recRef.current?.abort(); } catch { /* gone */ } window.speechSynthesis?.cancel(); }, []);
+  useEffect(() => { setPool(shuffledOrder(pieces)); setPlaced([]); setHeard(''); setTries(0); setState('play'); }, [index, pieces]);
+  useEffect(() => () => { window.speechSynthesis?.cancel(); }, []);
 
   const next = (ok: boolean, answer: string) => {
     const nCorrect = correct + (ok ? 1 : 0), nMisses = ok ? misses : [...misses, { word: item.word, meaning: item.meaning, userChoice: answer || '(없음)', correctAnswer: item.word }];
@@ -59,26 +59,14 @@ export default function SentenceGame({ items, mode, onFinish, onClose, earned, n
     const t = tries + 1; setTries(t);
     if (t >= TRIES) setState('shown'); else { setPool(shuffledOrder(pieces)); setPlaced([]); }
   };
-  const listen = () => {
-    const Rec = speechRecognitionClass();
-    if (!Rec) { setMicError('이 기기에서는 음성 인식이 안 돼요.'); return; }
-    try { recRef.current?.abort(); } catch { /* none */ }
-    const rec = new Rec(); recRef.current = rec;
-    rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 3; rec.continuous = false;
-    rec.onresult = (e: any) => {
-      const alts = Array.from(e.results?.[0] || []).map((a: any) => String(a.transcript || ''));
-      const best = alts.sort((x, y) => readingScore(item.word, y).share - readingScore(item.word, x).share)[0] || '';
-      setHeard(best);
-      const r = readingScore(item.word, best);
-      if (r.pass) setState('right'); else { const t = tries + 1; setTries(t); if (t >= TRIES) setState('shown'); }
-    };
-    rec.onerror = (e: any) => setMicError(e?.error === 'not-allowed' || e?.error === 'service-not-allowed' ? '마이크를 쓸 수 없어요. 브라우저 설정에서 마이크를 허용해 주세요.' : e?.error === 'no-speech' ? '소리가 들리지 않았어요. 다시 해 볼까요?' : '잘 듣지 못했어요. 다시 해 볼까요?');
-    rec.onend = () => setListening(false);
-    setMicError(''); setListening(true);
-    try { rec.start(); } catch { setListening(false); setMicError('잠시 후 다시 눌러 주세요.'); }
-  };
+  // 낭독: the words heard show while reading; graded as soon as every word is heard, or on 다 읽었어요.
+  const read = useReadAloud(item?.word || '', h => {
+    setHeard(h);
+    if (readingScore(item.word, h).pass) setState('right'); else { const t = tries + 1; setTries(t); if (t >= TRIES) setState('shown'); }
+  });
 
-  const score = heard ? readingScore(item?.word || '', heard) : null;
+  const shown = read.listening ? read.live : heard, score = shown ? readingScore(item?.word || '', shown) : null, line = heard && !read.listening ? readingLine(item?.word || '', heard) : null;
+  const micError = read.error;
   const chip = 'rounded-lg border px-2.5 py-1.5 text-sm md:text-base';
   return <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 p-3" role="dialog" aria-modal="true" aria-label={mode === 'order' ? '단어 순서 배열' : '낭독'}>
     <div className="relative w-full max-w-lg rounded-2xl bg-white p-4 text-slate-700 shadow-xl md:p-5">
@@ -102,18 +90,21 @@ export default function SentenceGame({ items, mode, onFinish, onClose, earned, n
             <button type="button" disabled={pool.length > 0} onClick={check} className="mt-4 w-full rounded-xl bg-[#d26272] py-2.5 text-sm font-bold text-white disabled:opacity-40">확인</button>
             {tries > 0 && <p className="mt-1.5 text-center text-xs text-orange-600">아쉬워요! 다시 놓아 볼까요?</p>}</>}
         </> : <div className="text-center">
-          <p className="mt-3 text-base leading-relaxed md:text-lg">{score ? score.words.map((w, k) => <span key={k} className={score.hit[k] ? 'text-emerald-700' : 'text-orange-600 underline'}>{w} </span>) : item.word}</p>
+          <p className="mt-3 text-base leading-relaxed md:text-lg">{score ? score.words.map((w, k) => <span key={k} className={score.hit[k] ? 'text-emerald-700' : read.listening ? 'text-slate-400' : 'text-orange-600 underline'}>{w} </span>) : item.word}</p>
           <p className="mt-1 text-sm text-[#8b2f40]">{item.meaning}</p>
           {state === 'play' && <div className="mt-4 flex items-end justify-center gap-4">
             <button type="button" onClick={() => speak(item.word)} className="flex flex-col items-center gap-1 text-xs text-slate-500"><span className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200"><Volume2 size={18} aria-hidden="true" /></span>듣기</button>
-            <button type="button" onClick={listen} disabled={listening} className="flex flex-col items-center gap-1 text-xs font-bold text-[#8b2f40]"><span className={`flex h-14 w-14 items-center justify-center rounded-full bg-[#d26272] text-white ${listening ? 'animate-pulse' : ''}`}><Mic size={22} aria-hidden="true" /></span>{listening ? '듣는 중…' : '말하기'}</button>
+            {read.listening
+              ? <button type="button" onClick={read.finish} className="flex flex-col items-center gap-1 text-xs font-bold text-[#8b2f40]"><span className="flex h-14 w-14 animate-pulse items-center justify-center rounded-full bg-[#d26272] text-white"><Square size={18} aria-hidden="true" /></span>다 읽었어요</button>
+              : <button type="button" onClick={read.start} className="flex flex-col items-center gap-1 text-xs font-bold text-[#8b2f40]"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#d26272] text-white"><Mic size={22} aria-hidden="true" /></span>말하기</button>}
           </div>}
           {micError && <p className="mt-2 text-xs font-bold text-orange-600">{micError}</p>}
           {micError && onSwitchToOrder && <button type="button" onClick={onSwitchToOrder} className="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">단어 순서 배열로 바꾸기</button>}
-          {score && state === 'play' && <p className="mt-2 text-xs text-slate-500">{score.words.length}단어 중 {score.hit.filter(Boolean).length}단어 맞았어요. 80% 넘으면 통과예요.</p>}
+          {read.listening && <p className="mt-2 text-xs text-slate-400">읽는 중이에요 · 다 읽으면 바로 채점해요</p>}
+          {line && state === 'play' && <p className="mt-2 text-xs text-slate-500"><b className="text-slate-600">{line.label}</b> · {line.hit.filter(Boolean).length}/{line.words.length}단어<span className="block text-[11px] text-slate-400">{line.legend}</span></p>}
         </div>}
         {state === 'right' && <div className="mt-4 text-center">
-          <p className="text-sm font-bold text-emerald-700">{mode === 'read' && score ? `통과! ${'⭐'.repeat(score.stars)}` : '정답이에요!'}</p>
+          <p className="text-sm font-bold text-emerald-700">{mode === 'read' && line ? `통과! ${line.label}` : '정답이에요!'}</p>
           <button type="button" onClick={() => next(true, '')} className="mt-2 w-full rounded-xl bg-[#d26272] py-2.5 text-sm font-bold text-white">{index + 1 >= items.length ? '결과 보기' : '다음 문장'}</button>
         </div>}
         {state === 'shown' && <div className="mt-4 rounded-xl bg-slate-50 p-3 text-center">

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import type { ParentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 import { safeFetchJson } from '../../lib/safeFetchJson';
 import { sortParentSchedules } from '../../lib/studentReportLists';
+import { testLabel, testScoreTitle } from '../../lib/lessonReportText';
 import {
   formatReportDetailDate,
   formatReportListDate,
@@ -800,7 +801,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                               const attendanceDisplay = getDisplayStatus(rep.attendance);
                               const attitudeDisplay = rep.attitude ? getDisplayStatus(rep.attitude) : null;
 
-                              // 단어 점수 또는 내신 대비 점수 중 존재하는 점수 확인
+                              // 테스트 점수 또는 내신 대비 점수 중 존재하는 점수 확인
                               const hasVocab = isValidNumberScore(rep.vocabularyScore);
                               const hasExam = isValidNumberScore(rep.schoolExamScore);
 
@@ -853,7 +854,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                                       )}
                                       {hasVocab && (
                                         <span className="text-[11px] text-indigo-600 font-bold truncate">
-                                          단어 {rep.vocabularyScore}점
+                                          {testLabel(rep.testName)} {rep.vocabularyScore}점
                                         </span>
                                       )}
                                       {!hasVocab && hasExam && (
@@ -996,7 +997,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                         </div>
                       </div>
 
-                      {/* 성취 점수 (단어 점수, 내신 대비 점수) */}
+                      {/* 성취 점수 (테스트 점수, 내신 대비 점수) */}
                       {(isValidNumberScore(selectedReport.vocabularyScore) ||
                         isValidNumberScore(selectedReport.schoolExamScore)) && (
                         <div>
@@ -1006,7 +1007,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-center">
                             {isValidNumberScore(selectedReport.vocabularyScore) && (
                               <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
-                                <div className="text-[11px] font-bold text-slate-500 mb-1">단어 점수</div>
+                                <div className="text-[11px] font-bold text-slate-500 mb-1">{testScoreTitle(selectedReport.testName)}</div>
                                 <div className="text-base sm:text-lg font-black text-indigo-600">
                                   {selectedReport.vocabularyScore}점
                                 </div>
@@ -1121,7 +1122,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                                     {attitudeDisplay && attitudeDisplay !== '미확인' ? `태도: ${attitudeDisplay}` : ''}
                                   </span>
                                   {hasVocab && (
-                                    <span className="text-indigo-600 font-bold shrink-0">단어 {rep.vocabularyScore}점</span>
+                                    <span className="text-indigo-600 font-bold shrink-0">{testLabel(rep.testName)} {rep.vocabularyScore}점</span>
                                   )}
                                   {!hasVocab && hasExam && (
                                     <span className="text-indigo-600 font-bold shrink-0">내신 {rep.schoolExamScore}점</span>
@@ -1250,7 +1251,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                         <div className="grid grid-cols-2 gap-3 text-center">
                           {isValidNumberScore(selectedReport.vocabularyScore) && (
                             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
-                              <div className="text-[11px] font-bold text-slate-500 mb-1">단어 점수</div>
+                              <div className="text-[11px] font-bold text-slate-500 mb-1">{testScoreTitle(selectedReport.testName)}</div>
                               <div className="text-lg font-black text-indigo-600">
                                 {selectedReport.vocabularyScore}점
                               </div>

@@ -54,7 +54,8 @@ test('Word file: title, both parts with translations, answer key on a new page, 
   assert.ok(!/버전|v\d/i.test(text), 'no version in the file');
   assert.match(xml, /<w:r>(?:(?!<\/w:r>)[\s\S])*<w:b\/>(?:(?!<\/w:r>)[\s\S])*<w:t[^>]*>WORKBOOK<\/w:t>/, 'the title WORKBOOK is bold');
   for (const part of ['WORKBOOK', '10월 모의고사 · 18번', 'Part 1. 영문 빈칸 완성', 'Part 2. 단어 순서 배열', 'Answer Key', sentences[0].ko, sentences[1].text, '__________']) assert.ok(text.includes(part), part);
-  assert.match(xml, /<w:br w:type="page"\/>/, 'the key starts on a new page');
+  assert.equal((xml.match(/<w:sectPr/g) || []).length, 2, 'the key starts on a new page (its own section, same header and footer)');
+  assert.ok(xml.indexOf('Answer Key') > xml.indexOf('<w:sectPr'), 'after the first section');
   assert.equal(text.split('NASA\'s eco-friendly plan costs $20, doesn\'t it?').length - 1, 2, 'the full sentence appears in both answer parts only');
 });
 

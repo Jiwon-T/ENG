@@ -13,6 +13,7 @@ import { safeFetchJson } from '../../lib/safeFetchJson';
 import { askConfirm } from '../teacher/ConfirmDialog';
 import { AssignedQuestionList } from '../generator/AssignedQuestions';
 import type { StudentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
+import { testLabel } from '../../lib/lessonReportText';
 
 function activityDate(value: any) {
   const date = value?.toDate ? value.toDate() : value?.toMillis ? new Date(value.toMillis()) : new Date(value);
@@ -717,7 +718,7 @@ export default function LearningReport() {
                 </div>
                 <div className="mt-2 grid grid-cols-4 gap-1 text-center">
                   {([['출결', report.attendance || '미확인', 'text-slate-900'], ['숙제', report.homework || '미확인', 'text-slate-900'],
-                    ['단어', report.vocabularyScore !== null ? `${report.vocabularyScore}점` : '—', 'text-indigo-600'], ['내신', report.schoolExamScore !== null ? `${report.schoolExamScore}점` : '—', 'text-emerald-600']] as const).map(([label, value, color]) => (
+                    [testLabel(report.testName), report.vocabularyScore !== null ? `${report.vocabularyScore}점` : '—', 'text-indigo-600'], ['내신', report.schoolExamScore !== null ? `${report.schoolExamScore}점` : '—', 'text-emerald-600']] as const).map(([label, value, color]) => (
                     <div key={label} className="rounded-lg bg-slate-50 px-1 py-1.5">
                       <p className="text-[10.5px] text-slate-400">{label}</p>
                       <p className={`text-[13px] font-bold tabular-nums break-keep ${color}`}>{value}</p>

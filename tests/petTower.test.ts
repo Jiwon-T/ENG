@@ -13,8 +13,8 @@ const pool = {words, wordbookId: 'hard', wordbookTitle: '중등 어려운 단어
 const ready = (level = 30) => { const s = initialPetState(NOW), t = initialTower(NOW); currentPet(s).level = level; s.pets[0].chosen = true; openEntranceChest(t, s); return {s, t}; };
 const right = (t: any, s: any) => towerPet(t, currentPet(s).slot).run!.q!.answer;
 
-test('tower words: 고등 students get the 고등 book; 중등, 초등 and unknown grades get the 중등 book', () => {
-  assert.deepEqual([towerLevelFor('김하늘 (평촌고2)'), towerLevelFor('이바다 (평여중1)'), towerLevelFor('박구름 (중앙초5)'), towerLevelFor('최별')], ['high', 'middle', 'middle', 'middle']);
+test('tower words: 고등 students get the 고등 books, 초등 the 초등 ones, 중등 and unknown grades the 중등 ones', () => {
+  assert.deepEqual([towerLevelFor('김하늘 (평촌고2)'), towerLevelFor('이바다 (평여중1)'), towerLevelFor('박구름 (중앙초5)'), towerLevelFor('최별')], ['high', 'middle', 'elementary', 'middle']);
 });
 
 test('tower: the entrance chest first (견습 몽둥이 + potions); entering costs 기운; stats come from level and gear', () => {
@@ -211,14 +211,24 @@ test('tower: a resent door request gets the same answer (no second 기운 or rew
   assert.ok(hit.damage <= 2, `a Lv.30 pet barely scratches it (${hit.damage})`);
 });
 
-test('tower books: two books per level, words from both, missed words filed under their own book; teachers play the 고등 books', async () => {
+test('tower books: up to three books per level, words from all, missed words filed under their own book; teachers play the 고등 books', async () => {
   const f = registrationFirestore(), admin = {admin: true, academyId: 'main', uid: 'admin'};
-  for (const id of ['m1', 'm2', 'h1']) f.rows.set(`wordbooks/${id}`, {title: `책 ${id}`, category: 'word'});
-  await saveTowerSettings(f.db, admin, {middle: ['m1', 'm2', 'm3x'].slice(0, 2), high: 'h1'});
-  assert.deepEqual(await readTowerSettings(f.db, admin).then(r => [r.middle, r.high]), [['m1', 'm2'], ['h1']]);
+  for (const id of ['m1', 'm2', 'm3', 'm4', 'h1']) f.rows.set(`wordbooks/${id}`, {title: `책 ${id}`, category: 'word'});
+  await saveTowerSettings(f.db, admin, {middle: ['m1', 'm2', 'm3', 'm4'], high: 'h1'});
+  assert.deepEqual(await readTowerSettings(f.db, admin).then(r => [r.middle, r.high]), [['m1', 'm2', 'm3'], ['h1']], 'three at most');
+  f.rows.set('users/kid3', {role: 'student'});
+  assert.deepEqual((await towerBookFor(f.db, 'kid3')).books.map(b => b.id), ['m1', 'm2', 'm3'], 'all three are used');
+  await saveTowerSettings(f.db, admin, {middle: ['m1', 'm2'], high: 'h1'});
   f.rows.set('users/kid', {role: 'student'}); f.rows.set('users/teach', {role: 'teacher'});
   assert.deepEqual((await towerBookFor(f.db, 'kid')).books.map(b => b.id), ['m1', 'm2'], 'no grade known: 중등 books');
   assert.deepEqual((await towerBookFor(f.db, 'teach')).books.map(b => b.id), ['h1'], 'a teacher: 고등 books');
+  // 초등: its own books once set, the 중등 ones while it has none
+  f.rows.set('users/young', {role: 'student', name: '박구름 (중앙초5)'});
+  assert.deepEqual((await towerBookFor(f.db, 'young')).books.map(b => b.id), ['m1', 'm2'], '초등 with no books of its own: 중등 books');
+  await saveTowerSettings(f.db, admin, {elementary: ['h1'], middle: ['m1', 'm2'], high: 'h1'});
+  assert.deepEqual((await readTowerSettings(f.db, admin)).elementary, ['h1']);
+  await saveTowerSettings(f.db, admin, {middle: ['m1'], high: 'h1'});
+  assert.deepEqual((await readTowerSettings(f.db, admin)).elementary, ['h1'], 'an older screen leaving out 초등 keeps it');
   const {towerWrongsSessions} = await import('../api/_lib/petTower.js');
   const wrong = (w: string, b: string) => ({word: w, meaning: '뜻', userChoice: '', correctAnswer: '뜻', choices: [], quizSentence: '', wordbookId: b});
   const sessions = towerWrongsSessions('kid', {runId: 'r1', wrongs: [wrong('a', 'm1'), wrong('b', 'm2'), wrong('c', 'm1')], right: 2, asked: 5, wordbookId: 'm1', wordbookTitle: '책 m1 · 책 m2', startedAt: NOW, books: [{id: 'm1', title: '책 m1'}, {id: 'm2', title: '책 m2'}]}, NOW + 5000);

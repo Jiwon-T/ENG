@@ -1,6 +1,7 @@
 import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, HeightRule, SectionType, PageOrientation } from 'docx';
 import { saveAs } from 'file-saver';
 import { COMPLEMENT_QUIZ_DATA } from './grammarSets';
+import { buildMultipleChoiceItems } from './multipleChoiceItems';
 
 interface Word {
   word: string;
@@ -320,8 +321,8 @@ export const generateMultipleChoiceQuiz = async (
 ) => {
   const { includeAnswerKey, paperTitle = '객관식 퀴즈', studentName = '', wordbookType } = options;
 
-  // Collect all unique patterns/labels to use as distractors if not provided
-  const allPatterns = Array.from(new Set(words.map(w => w.pattern || w.meaning))).filter(p => !!p);
+  // Choices and answers are fixed here, once: the 시험지 and the 정답지 are built from the same items.
+  const items = buildMultipleChoiceItems(words, wordbookType, COMPLEMENT_QUIZ_DATA);
 
   const createDocument = (isAnswerKey: boolean) => {
     // Header Table
@@ -366,79 +367,12 @@ export const generateMultipleChoiceQuiz = async (
 
     const quizElements: any[] = [];
 
-    words.forEach((item, index) => {
-      let distractors: string[] = [];
-      let correctAnswer = "";
-      let questionPrefix = "";
-      let displayWord = item.word;
-
-      let choices: string[] = [];
-      let correctAnswersList: string[] = [];
-      let complementMeta: any = null;
-
-      if (wordbookType === 'complement-grammar') {
-        const compItem = COMPLEMENT_QUIZ_DATA.find(c => c.verb.toLowerCase() === (item.word || '').toLowerCase());
-        if (compItem) {
-          complementMeta = compItem;
-          choices = compItem.choices;
-          correctAnswersList = compItem.answers.map(a => compItem.choices[a - 1]);
-          questionPrefix = "목적격 보어로 가능한 형태를 모두 고르시오";
-        } else {
-          const baseOptions = ["O + 명사/형용사", "O + to V", "O + 동사원형", "O + V-ing"];
-          choices = baseOptions;
-          correctAnswersList = [baseOptions[0]];
-          questionPrefix = "목적격 보어로 가능한 형태를 모두 고르시오";
-        }
-      } else if (wordbookType === 'irregular') {
-        const isPast = (index % 2 === 0);
-        correctAnswer = isPast ? item.past : item.pastParticiple;
-        questionPrefix = isPast ? "과거형(Past)을 고르세요" : "과거분사(Participle)를 고르세요";
-        
-        if (item.distractors && item.distractors.length >= 3) {
-          distractors = [...item.distractors].slice(0, 3);
-        } else {
-          distractors = [item.base + 'ed', item.past + 'ed', item.base + 'en'].filter(d => d !== correctAnswer);
-          while (distractors.length < 3) distractors.push(item.base + 't');
-        }
-      } else if (wordbookType === 'conversion-grammar') {
-        const baseOptions = ["동사 O to + 간접목적어", "동사 O for + 간접목적어", "동사 O of + 간접목적어", "3형식 전환 불가"];
-        if (item.pattern === 'to') correctAnswer = baseOptions[0];
-        else if (item.pattern === 'for') correctAnswer = baseOptions[1];
-        else if (item.pattern === 'of') correctAnswer = baseOptions[2];
-        else if (item.pattern === 'impossible') correctAnswer = baseOptions[3];
-        distractors = baseOptions.filter(o => o !== correctAnswer);
-      } else if (wordbookType === 'to-ing-grammar') {
-        const baseOptions = ["둘 다 가능(의미도 같음)", "둘 다 가능(의미는 다름)", "to부정사만 목적어", "동명사(V-ing)만 목적어"];
-        if (item.pattern?.includes('의미도 같은')) correctAnswer = baseOptions[0];
-        else if (item.pattern?.includes('의미는 다른')) correctAnswer = baseOptions[1];
-        else if (item.pattern?.includes('to부정사만')) correctAnswer = baseOptions[2];
-        else if (item.pattern?.includes('동명사만')) correctAnswer = baseOptions[3];
-        distractors = baseOptions.filter(o => o !== correctAnswer);
-      } else if (wordbookType === 'relative-grammar') {
-        const dChoices = item.distractors || [];
-        correctAnswer = dChoices[0] || '';
-        distractors = dChoices.slice(1);
-      } else if (wordbookType === 'modal-grammar' || wordbookType === 'basic-modal-grammar' || wordbookType === 'verb-form-grammar' || wordbookType === 'grammar-cramming') {
-        correctAnswer = item.meaning;
-        distractors = (wordbookType === 'grammar-cramming') 
-          ? (item.quizChoices || []).filter((c: string) => c !== item.meaning)
-          : (item.distractors || []);
-        // Strip trailing parentheses content from question/sentence if needed
-        questionPrefix = (item.quizQuestion || item.question || "").replace(/\s*\([^)]+\)$/, "").trim();
-        displayWord = (item.quizSentence || item.word || "").replace(/\s*\([^)]+\)$/, "").trim();
-      } else {
-        correctAnswer = item.meaning;
-        distractors = allPatterns.filter(p => p !== correctAnswer).sort(() => 0.5 - Math.random()).slice(0, 3);
-      }
-
-      if (choices.length === 0) {
-        choices = [correctAnswer, ...distractors].sort(() => 0.5 - Math.random());
-      }
-
-      const isRelative = wordbookType === 'relative-grammar';
+    items.forEach(({ stem: displayWord, prompt: questionPrefix, choices, correct, explanation, complement: complementMeta }, index) => {
       const isConceptGrammar = ['conversion-grammar', 'to-ing-grammar', 'complement-grammar'].includes(wordbookType || '');
+      // One question stays in one column: every paragraph but its last keeps with the next.
+      const parts: any[] = [];
       
-      quizElements.push(new Paragraph({
+      parts.push({
         children: [
           new TextRun({ text: `${index + 1}. `, size: 22, bold: true }),
           new TextRun({ 
@@ -449,31 +383,21 @@ export const generateMultipleChoiceQuiz = async (
           questionPrefix ? new TextRun({ text: ` - ${questionPrefix}`, size: 18, color: "555555", italics: true }) : new TextRun({ text: "" }),
         ],
         spacing: { before: 300, after: 100 },
-        keepNext: true,
-      }));
+      });
 
-      if (isAnswerKey && (isRelative || ['modal-grammar', 'basic-modal-grammar', 'verb-form-grammar', 'grammar-cramming'].includes(wordbookType || '')) && (item.explanation || item.quizExplanation || (isRelative && item.meaning))) {
-        quizElements.push(new Paragraph({
+      if (isAnswerKey && explanation) {
+        parts.push({
           children: [
-            new TextRun({ text: `   💡 해설: ${item.quizExplanation || item.explanation || item.meaning}`, size: 18, italics: true, color: "666666" })
+            new TextRun({ text: `   💡 해설: ${explanation}`, size: 18, italics: true, color: "666666" })
           ],
           spacing: { before: 40, after: 40 }
-        }));
+        });
       }
 
       choices.forEach((choice, cIdx) => {
-        let isCorrect = false;
-        if (wordbookType === 'complement-grammar') {
-          isCorrect = correctAnswersList.includes(choice);
-        } else {
-          isCorrect = choice === correctAnswer || 
-            (wordbookType === 'relative-grammar' && (
-              (correctAnswer === 'how' && choice === 'the way') ||
-              (correctAnswer === 'the way' && choice === 'how')
-            ));
-        }
-        
-        quizElements.push(new Paragraph({
+        const isCorrect = correct.includes(choice);
+
+        parts.push({
           children: [
             new TextRun({ text: `   (${cIdx + 1}) `, size: 20 }),
             new TextRun({ 
@@ -484,11 +408,11 @@ export const generateMultipleChoiceQuiz = async (
             }),
           ],
           spacing: { before: 40, after: 40 },
-        }));
+        });
       });
 
       if (isAnswerKey && wordbookType === 'complement-grammar' && complementMeta) {
-        quizElements.push(new Paragraph({
+        parts.push({
           children: [
             new TextRun({ 
               text: `   💡 정답: ${complementMeta.answers.map((a: number) => `(${a})`).join(', ')} / 형태: ${complementMeta.complementForms} (${complementMeta.desc})`, 
@@ -505,8 +429,9 @@ export const generateMultipleChoiceQuiz = async (
             }) : new TextRun({ text: "" }),
           ],
           spacing: { before: 40, after: 60 }
-        }));
+        });
       }
+      parts.forEach((part, i) => quizElements.push(new Paragraph({ ...part, keepLines: true, keepNext: i < parts.length - 1 })));
     });
 
     return new Document({

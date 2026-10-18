@@ -22,7 +22,7 @@ export async function loadAcademicData(db: Firestore, studentId: string) {
     db.collection('examResults').where('internalStudentId', '==', studentId).get(),
     loadSubjectEnrollments(db, studentId),
     db.collection('lessonReports').where('internalStudentId', '==', studentId)
-      .select('notionPageId', 'subject', 'lessonDateStart', 'vocabularyScore', 'schoolExamScore').get(),
+      .select('notionPageId', 'subject', 'lessonDateStart', 'vocabularyScore', 'testName', 'schoolExamScore').get(),
   ]);
   // The first interrupted ZIP used examResults/studentAcademicProfiles. Preserve any
   // data imported from that version; a current source row overrides its legacy copy.
@@ -33,6 +33,6 @@ export async function loadAcademicData(db: Firestore, studentId: string) {
   });
   const records = [...legacyRecords, ...grades.docs.filter(d => !d.data().removed).map(d => academicDTO(d.id, d.data()))];
   const academyScores = lessons.docs.map(d => { const r = d.data(); return { recordId: publicId(d.id), subject: r.subject || '영어',
-    examDate: r.lessonDateStart, vocabularyScore: r.vocabularyScore ?? null, schoolExamScore: r.schoolExamScore ?? null }; });
+    examDate: r.lessonDateStart, vocabularyScore: r.vocabularyScore ?? null, testName: r.testName || '', schoolExamScore: r.schoolExamScore ?? null }; });
   return { records, subjects, academyScores };
 }

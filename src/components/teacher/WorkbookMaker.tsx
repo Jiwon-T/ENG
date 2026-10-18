@@ -6,6 +6,23 @@ import {
 } from '../../lib/workbook';
 import { readWorkbookFile } from '../../lib/workbookImport';
 import { AiWorking, workbookTranslate } from './workbookAi';
+import { FooterSetting } from '../print/PrintSheet';
+import SampleModal, { SampleButton } from '../SampleModal';
+import { sampleWorkbook } from '../../lib/samples';
+
+/** 샘플 보기: the 워크북 of the example passage, Part 1 빈칸 · Part 2 배열 · 정답, as in the 미리보기. */
+function WorkbookSample({ onClose }: { onClose: () => void }) {
+  const build = useMemo(sampleWorkbook, []), [view, setView] = useState<'part1' | 'part2' | 'key'>('part1');
+  return <SampleModal title="워크북 샘플" onClose={onClose}>
+    <span className="flex gap-1.5" role="tablist" aria-label="샘플 미리보기">{([['part1', 'Part 1 빈칸'], ['part2', 'Part 2 배열'], ['key', '정답']] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)} className={`rounded-full px-3 py-1 text-xs font-bold ${view === id ? 'bg-[#e0587a] text-white' : 'bg-[#f8f1f2] text-[#8b2f40]'}`}>{label}</button>)}</span>
+    <ol className="mt-3 space-y-3 rounded-2xl border border-[#f3e6e8] bg-white p-4">
+      {view === 'part1' && build.blanks.map((b, n) => <li key={b.id}><p className="text-sm leading-7 text-slate-800"><b className="mr-1 text-[#8b2f40]">{n + 1}.</b>{blankedText(b.tokens, b.blanks)}</p><p className="text-xs text-slate-500">해석 {b.ko}</p></li>)}
+      {view === 'part2' && build.arrange.map((a, n) => <li key={a.id}><p className="text-xs text-slate-500"><b className="mr-1 text-[#8b2f40]">{n + 1}.</b>{a.ko}</p><p className="mt-0.5 text-sm text-slate-800">{arrangeLine(a)}</p></li>)}
+      {view === 'key' && build.blanks.map((b, n) => <li key={b.id} className="text-sm text-slate-800"><b className="mr-1 text-[#8b2f40]">{n + 1}.</b>{b.text}<span className="block text-xs text-slate-500">{b.ko}</span></li>)}
+    </ol>
+    <p className="mt-2 text-[11px] text-slate-400">Word 파일에는 Part 1 · Part 2 · 정답이 이 순서로 들어가요. 빈칸은 만들 때마다 다르게 골라요.</p>
+  </SampleModal>;
+}
 
 // 워크북 만들기 (관리자): 1 지문 입력 → 2 문장·해석 확인 → 3 미리보기·Word. The sentence list keeps each sentence's
 // translation by id, so moving, splitting or merging never pairs a translation with the wrong sentence.
@@ -21,12 +38,9 @@ export default function WorkbookMaker({ request }: { request: Request }) {
   const [title, setTitle] = useState(''), [source, setSource] = useState(''), [mode, setMode] = useState<'passage' | 'excerpt'>('passage'), [text, setText] = useState('');
   const [sentences, setSentences] = useState<WorkbookSentence[]>([]);
   const [build, setBuild] = useState<WorkbookBuild | null>(null), [history, setHistory] = useState<WorkbookHistory>({ blanks: [], orders: [] });
-  // 바닥글: each teacher's own line (e.g. 채움학원 지원T), remembered on this device.
-  const [footer, setFooterState] = useState(() => { try { return localStorage.getItem(FOOTER_KEY) || ''; } catch { return ''; } });
-  const setFooter = (v: string) => { setFooterState(v); try { localStorage.setItem(FOOTER_KEY, v); } catch { /* optional */ } };
   // The build already downloaded (and remembered): downloading it again saves nothing new.
   const savedBuild = useRef<WorkbookBuild | null>(null);
-  const [view, setView] = useState<'part1' | 'part2' | 'key'>('part1');
+  const [view, setView] = useState<'part1' | 'part2' | 'key'>('part1'), [sample, setSample] = useState(false);
   const [busy, setBusy] = useState(''), [message, setMessage] = useState(''), [pasteOpen, setPasteOpen] = useState(false), [pasteText, setPasteText] = useState(''), [overwrite, setOverwrite] = useState(false);
   const caret = useRef<Record<string, number>>({});
   // AI translations can't be checked by code for pairing (same count, wrong order): the teacher confirms before the file.
@@ -89,7 +103,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
   const download = () => run('docx', async () => {
     if (!build) return; const problems = checkWorkbook(sentences, build); if (problems.length) throw Error(problems[0]);
     const { workbookDocx } = await import('../../lib/workbookDocx'), { saveAs } = await import('file-saver');
-    const blob = await workbookDocx(build, { title, subtitle: source, footer });
+    const blob = await workbookDocx(build, { title, subtitle: source });
     saveAs(blob, safeFileName(title, source));
     if (savedBuild.current === build) return setMessage('같은 워크북을 다시 내려받았어요. 다른 빈칸·배열이 필요하면 다시 섞기를 눌러 주세요.');
     // Remember these blanks and orders, so the next workbook from the same passage picks different ones.
@@ -102,7 +116,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
   const steps: [Step, string][] = [[1, '지문 입력'], [2, '문장·해석 확인'], [3, '미리보기·다운로드']];
   return <section className="space-y-3" aria-label="워크북 만들기">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <h2 className="text-lg font-black text-[#5e1e2a]">워크북 만들기</h2>
+      <span className="flex items-center gap-2"><h2 className="text-lg font-black text-[#5e1e2a]">워크북 만들기</h2><SampleButton onClick={() => setSample(true)} /></span>{sample && <WorkbookSample onClose={() => setSample(false)} />}
       <div className="flex gap-1.5" role="tablist" aria-label="단계">{steps.map(([n, label]) => <button key={n} type="button" role="tab" aria-selected={step === n} disabled={n === 2 ? !sentences.length : n === 3 ? !build : false} onClick={() => setStep(n)} className={`rounded-full px-3 py-1 text-xs font-bold disabled:opacity-40 ${step === n ? 'bg-[#e0587a] text-white' : 'bg-[#fef2f3] text-[#8b2f40]'}`}>{n} {label}</button>)}</div>
     </div>
     {message && <p role="status" className="rounded-xl bg-[#fdf6f7] px-3 py-2 text-sm text-[#8b2f40]">{message}</p>}
@@ -112,7 +126,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
         <label className="text-xs font-bold text-slate-500">워크북 제목<input value={title} maxLength={120} onChange={e => setTitle(e.target.value)} placeholder="예: 2026 고2 10월 모의고사" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800" /></label>
         <label className="text-xs font-bold text-slate-500">소제목 <span className="font-normal">(선택 · 교재·지문)</span><input value={source} maxLength={120} onChange={e => setSource(e.target.value)} placeholder="예: 18번 지문" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800" /></label>
       </div>
-      <label className="block text-xs font-bold text-slate-500">바닥글 <span className="font-normal">(선택 · 모든 쪽 아래에 들어가요, 이 기기에 기억)</span><input value={footer} maxLength={80} onChange={e => setFooter(e.target.value)} placeholder="예: 채움학원 지원T" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800" /></label>
+      <div className="flex items-center gap-2 text-xs text-slate-500"><FooterSetting /><span>모든 쪽 아래에 들어가요 · 이 기기에 기억</span></div>
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="자료 유형">{([['passage', '연속 지문'], ['excerpt', '발췌 문장 (한 줄에 한 문장)']] as const).map(([id, label]) => <button key={id} type="button" aria-pressed={mode === id} onClick={() => setMode(id)} className={`rounded-full px-3 py-1 text-xs font-bold ${mode === id ? 'bg-[#e0587a] text-white' : 'bg-[#f8f1f2] text-[#8b2f40]'}`}>{label}</button>)}</div>
       <textarea value={text} onChange={e => setText(e.target.value)} rows={10} aria-label="영어 지문 또는 문장" placeholder={mode === 'passage' ? '영어 지문을 붙여 넣으세요. 문장은 앱이 나눠요.' : '한 줄에 한 문장씩 넣으세요. 앞의 번호(1. 2) ①)는 빼고 처리해요.'} className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-sm leading-relaxed" />
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
@@ -173,7 +187,6 @@ export default function WorkbookMaker({ request }: { request: Request }) {
     </div>}
   </section>;
 }
-const FOOTER_KEY = 'workbook-footer';
 /** "1. 해석" / "1) 해석" pasted from a numbered list: the number is not part of the translation. */
 const stripKoNumber = (line: string) => line.replace(/^\s*(?:\(?\d{1,3}[).]|[①-⑳])\s*/, '').trim();
 

@@ -35,7 +35,7 @@ export function todayLessons(data:any,date:string,schedules:any[]=[],reflected:a
  const copies=reflected.filter(r=>r.date===date&&['예정','변경','완료'].includes(r.status)&&!sources.has((r.notionPageId||r.appScheduleId||'').replace(/-/g,''))).map(r=>({id:`reflected:${r.id}`,title:r.title||'예정 수업',kind:scheduleKindLabel(r.kind||'일정'),session:sessionOfKind(r.kind||''),subject:r.subject,date,start:r.start,end:r.end,students:visible(r.students,r.subject)} as TodayLesson));
  return [...regular,...events,...copies].filter(r=>r.students.length&&r.start&&r.end).sort((a,b)=>a.start.localeCompare(b.start)||a.title.localeCompare(b.title));
 }
-export const previousLessonAssessmentFields=['attendance','attitude','homework','test','correct','total','wrong','scorePercent','examCorrect','examTotal','examWrong','examScorePercent'] as const;
+export const previousLessonAssessmentFields=['attendance','attitude','homework','test','correct','total','wrong','scorePercent','testName','examCorrect','examTotal','examWrong','examScorePercent'] as const;
 export const previousLessonFields=['round','selfStudyRound','content','assignment','examScope',...previousLessonAssessmentFields] as const;
 export function applyPreviousLesson<T extends Record<string,any>>(current:T,seed:T,previous:any,touched:Iterable<string>=[]):T {
  if(current.studentKey!==seed.studentKey||current.subject!==seed.subject||current.date!==seed.date)return current;
@@ -44,7 +44,7 @@ export function applyPreviousLesson<T extends Record<string,any>>(current:T,seed
   if(Array.isArray(previous.sessionRecords)&&(field==='round'||field==='selfStudyRound'))continue;
   if(edited.has(field))continue;
   if(previousLessonAssessmentFields.includes(field as any)&&previous[field]===undefined)continue;
-  const scoreGroup=['correct','total','wrong','scorePercent'].includes(field)?['correct','total','wrong','scorePercent']:['examCorrect','examTotal','examWrong','examScorePercent'].includes(field)?['examCorrect','examTotal','examWrong','examScorePercent']:[];
+  const scoreGroup=['correct','total','wrong','scorePercent','testName'].includes(field)?['correct','total','wrong','scorePercent','testName']:['examCorrect','examTotal','examWrong','examScorePercent'].includes(field)?['examCorrect','examTotal','examWrong','examScorePercent']:[];
   if(scoreGroup.some(key=>edited.has(key)||!Object.is(current[key],seed[key])))continue;
   if(field==='round'&&current.classSession==='없음'||field==='selfStudyRound'&&current.selfStudy==='없음'&&(edited.has('selfStudy')||current.selfStudy!==seed.selfStudy))continue;
   if(Object.is(current[field],seed[field]))next[field]=previous[field]??(field==='content'||field==='assignment'||field==='examScope'?'':null);

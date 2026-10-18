@@ -156,7 +156,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     explanation: "count가 1형식으로 쓰일 때는 '중요하다'라는 의미를 가진다."
   },
   {
-    id: 1025, set: 1, verb: "count",
+    id: 1435, set: 1, verb: "count",
     sentence: "In the end, it is character that ___.",
     question: "빈칸에 알맞은 표현은?",
     choices: ["counts", "counts numbers", "is counted", "counting"],
@@ -685,7 +685,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     id: 1182, set: 4, verb: "come",
     sentence: "The knots ___ loose.",
     question: "빈칸에 알맞은 표현은?",
-    choices: ["came", "became loose", "came loosely", "showed"],
+    choices: ["came", "was come", "came loosely", "showed"],
     answer: 0,
     explanation: "come loose는 '풀리다'라는 의미로 come이 2형식 변화 동사로 쓰인 예이다."
   },
@@ -748,7 +748,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     explanation: "stay는 2형식으로 '(C한) 상태를 유지하다'의 의미. calm은 형용사 보어."
   },
   {
-    id: 1222, set: 5, verb: "stay",
+    id: 1436, set: 5, verb: "stay",
     sentence: "Prices are expected to ___ high.",
     question: "빈칸에 알맞은 표현은?",
     choices: ["stay", "stay highly", "are stayed", "remain high"],
@@ -764,7 +764,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     explanation: "stay는 2형식 상태 유지 동사로 보어로 형용사(healthy)를 취한다."
   },
   {
-    id: 1224, set: 5, verb: "stay",
+    id: 1437, set: 5, verb: "stay",
     sentence: "He ___ awake all night to finish the report.",
     question: "빈칸에 알맞은 표현은?",
     choices: ["stayed", "stayed awaking", "was stayed", "kept to awake"],
@@ -783,7 +783,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     id: 1132, set: 5, verb: "remain",
     sentence: "Everyone ___ silent during the announcement.",
     question: "빈칸에 알맞은 표현은?",
-    choices: ["remained", "remained silently", "is remained", "stayed silent"],
+    choices: ["remained", "remained silently", "is remained", "kept silently"],
     answer: 0,
     explanation: "remain은 상태 유지 동사로 뒤에 형용사 보어(silent)가 온다."
   },
@@ -876,7 +876,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     explanation: "lie는 2형식으로 '(계속해서) C이다'의 의미. open은 형용사 보어."
   },
   {
-    id: 1122, set: 5, verb: "lie",
+    id: 1438, set: 5, verb: "lie",
     sentence: "Snow ___ thick on the ground.",
     question: "빈칸에 알맞은 표현은?",
     choices: ["lay", "lied", "was lain", "laid"],
@@ -884,7 +884,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     explanation: "lie(눕다/놓여있다)의 과거형 lay가 2형식으로 쓰여 상태를 나타낸다."
   },
   {
-    id: 1123, set: 5, verb: "lie",
+    id: 1439, set: 5, verb: "lie",
     sentence: "The spare keys ___ hidden under the mat.",
     question: "빈칸에 알맞은 표현은?",
     choices: ["lay", "laid", "lied", "lain"],
@@ -892,7 +892,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     explanation: "lie + 형용사는 2형식으로 '~한 상태로 놓여있다'는 뜻이다. (과거형 lay)"
   },
   {
-    id: 1124, set: 5, verb: "lie",
+    id: 1440, set: 5, verb: "lie",
     sentence: "Don't let your artistic talents ___ idle.",
     question: "빈칸에 알맞은 표현은?",
     choices: ["lie", "lay", "lied", "lying"],
@@ -913,7 +913,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     id: 1352, set: 6, verb: "discuss",
     sentence: "They met to ___ their future.",
     question: "빈칸에 알맞은 표현은?",
-    choices: ["discuss", "discuss about", "argue about", "talk about"],
+    choices: ["discuss", "discuss about", "argue about", "discuss on"],
     answer: 0,
     explanation: "discuss는 대표적인 3형식 타동사로 전치사를 쓰지 않는다."
   },
@@ -921,7 +921,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     id: 1353, set: 6, verb: "discuss",
     sentence: "We should ___ how to improve our service.",
     question: "빈칸에 알맞은 표현은?",
-    choices: ["discuss", "discuss about", "talk about", "argue it"],
+    choices: ["discuss", "discuss about", "discuss on", "argue it"],
     answer: 0,
     explanation: "discuss는 타동사로 전치사 없이 목적어(명사절 등)를 바로 취한다."
   },
@@ -945,15 +945,15 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     id: 1382, set: 6, verb: "resemble",
     sentence: "She ___ a movie star.",
     question: "빈칸에 알맞은 표현은?",
-    choices: ["resembles", "resembles to", "looks like", "resembles with"],
+    choices: ["resembles", "resembles to", "is resembled", "resembles with"],
     answer: 0,
-    explanation: "resemble은 타동사이므로 전치사 without 또는 with을 사용하지 않는다."
+    explanation: "resemble은 타동사이므로 전치사 to나 with를 사용하지 않는다."
   },
   {
     id: 1383, set: 6, verb: "resemble",
     sentence: "Whom do you ___ more, your father or mother?",
     question: "빈칸에 알맞은 표현은?",
-    choices: ["resemble", "resemble to", "look like", "resemble with"],
+    choices: ["resemble", "resemble to", "resemble by", "resemble with"],
     answer: 0,
     explanation: "resemble은 타동사로 전치사 없이 목적어를 바로 취한다."
   },
@@ -1025,7 +1025,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     id: 1394, set: 6, verb: "enter",
     sentence: "New data should be ___ into the system.",
     question: "빈칸에 알맞은 표현은?",
-    choices: ["entered", "entered into", "put", "typed"],
+    choices: ["entered", "entered into", "entering", "enter"],
     answer: 0,
     explanation: "정보를 입력한다는 의미의 enter는 3형식 또는 타동사적 활용이 가능하다."
   },
@@ -1137,7 +1137,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     id: 1432, set: 6, verb: "mention",
     sentence: "Did he ___ the meeting time?",
     question: "빈칸에 알맞은 표현은?",
-    choices: ["mention", "mention about", "talk about", "say about"],
+    choices: ["mention", "mention about", "mention on", "say about"],
     answer: 0,
     explanation: "mention은 대표적인 3형식 타동사로 전치사를 쓰지 않는다."
   },
@@ -1145,7 +1145,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     id: 1433, set: 6, verb: "mention",
     sentence: "She forgot to ___ the price of the tickets.",
     question: "빈칸에 알맞은 표현은?",
-    choices: ["mention", "mention about", "talk about", "say it"],
+    choices: ["mention", "mention about", "mention on", "say it"],
     answer: 0,
     explanation: "mention은 타동사이므로 전치사 about을 쓰지 않는다."
   },
@@ -1158,7 +1158,7 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     explanation: "언급하다는 뜻의 mention은 3형식 타동사이다."
   },
   {
-    id: 142, set: 6, verb: "marry",
+    id: 1441, set: 6, verb: "marry",
     sentence: "She ___ him last year.",
     question: "빈칸에 알맞은 표현과 의미는?",
     choices: ["married", "married with him", "married to him", "was married him"],
@@ -1169,9 +1169,9 @@ export const VERB_FORM_QUIZ_POOL: VerbFormQuiz[] = [
     id: 1422, set: 6, verb: "marry",
     sentence: "He wants to ___ her.",
     question: "빈칸에 알맞은 표현은?",
-    choices: ["marry", "marry to", "marry with", "get married to"],
+    choices: ["marry", "marry to", "marry with", "marry for"],
     answer: 0,
-    explanation: "marry는 타동사이므로 목적어를 바로 취한다. get married to는 수동적 표현이다."
+    explanation: "marry는 타동사이므로 목적어를 바로 취한다. (= get married to)"
   },
   {
     id: 1423, set: 6, verb: "marry",

@@ -7,7 +7,7 @@ export default function AcademicPanel({ load, subject = '', variant = 'public' }
   const [data, setData] = useState<AcademicData | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [view, setView] = useState<ScoreView>('학원 단어');
+  const [view, setView] = useState<ScoreView>('학원 테스트');
   const viewLabel = view === '모의고사' ? '학력평가' : view;
   const [metric, setMetric] = useState<'score' | 'percentile'>('score');
   const [period, setPeriod] = useState<ScorePeriod>('all');

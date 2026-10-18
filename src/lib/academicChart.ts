@@ -1,13 +1,14 @@
 import type { AcademicData } from '../types/academic';
-export const SCORE_VIEWS = ['학원 단어', '학원 내신 대비', '학교 내신', '모의고사'] as const;
+export const SCORE_VIEWS = ['학원 테스트', '학원 내신 대비', '학교 내신', '모의고사'] as const;
 export type ScoreView = typeof SCORE_VIEWS[number];
 export function scoreRows(data: AcademicData, view: ScoreView) {
   if (view === '학교 내신' || view === '모의고사') return data.records.filter(r => (r.examType === '학력평가' ? '모의고사' : r.examType) === view).map(r => ({
     id: r.recordId, subject: r.subject, title: r.title, date: r.examDate, score: r.score,
     maxScore: r.maxScore, percentile: r.percentile, grade: r.grade, status: r.submissionStatus,
   }));
-  return data.academyScores.map(r => ({ id: r.recordId, subject: r.subject, title: view, date: r.examDate,
-    score: view === '학원 단어' ? r.vocabularyScore : r.schoolExamScore,
+  // 학원 테스트: each point carries the 테스트's name from the 일지 (단어, 모의고사 …) when it has one.
+  return data.academyScores.map(r => ({ id: r.recordId, subject: r.subject, title: view === '학원 테스트' && r.testName ? `${view} · ${r.testName}` : view, date: r.examDate,
+    score: view === '학원 테스트' ? r.vocabularyScore : r.schoolExamScore,
     maxScore: null, percentile: null, grade: '', status: '' })).filter(r => r.score !== null);
 }
 export function chartValue(row: ReturnType<typeof scoreRows>[number], metric: 'score' | 'percentile') {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Mic, Volume2 } from 'lucide-react';
-import { readingScore, speechRecognitionClass } from '../../lib/sentenceGame';
+import { Mic, Square, Volume2 } from 'lucide-react';
+import { readingScore } from '../../lib/sentenceGame';
+import { readingLine, useReadAloud } from '../../lib/useReadAloud';
 import './towerHall.css'; // tower-shake
 
 // 원정대 stage games other than the meaning cards: 철자 맞히기, 짝 맞추기, 문장 배열, 낭독, and the voice for 듣고 고르기.
@@ -76,34 +77,28 @@ export function OrderBoard({ pieces, meaning, triesLeft, busy, onDone }: { piece
   </div>;
 }
 
-/** 낭독: listen, then read aloud; 80% of the words heard passes. Three tries; a microphone that can't be used may skip. */
+/** 낭독: listen, then read aloud; 80% of the words heard passes. Three tries; a microphone that can't be used may skip.
+ *  The words heard show while reading; it grades as soon as every word is heard, or on 다 읽었어요. */
 export function ReadBoard({ text, meaning, busy, onDone }: { text: string; meaning: string; busy: boolean; onDone: (a: StageAnswer) => void }) {
-  const [heard, setHeard] = useState(''), [tries, setTries] = useState(0), [listening, setListening] = useState(false), [error, setError] = useState('');
-  const rec = useRef<any>(null);
-  useEffect(() => { setHeard(''); setTries(0); setError(''); return () => { try { rec.current?.abort(); } catch { /* gone */ } }; }, [text]);
-  const listen = () => {
-    const Rec = speechRecognitionClass(); if (!Rec) { setError('이 기기에서는 음성 인식이 안 돼요.'); return; }
-    try { rec.current?.abort(); } catch { /* none */ }
-    const r = new Rec(); rec.current = r; r.lang = 'en-US'; r.interimResults = false; r.maxAlternatives = 3;
-    r.onresult = (e: any) => {
-      const best = Array.from(e.results?.[0] || []).map((a: any) => String(a.transcript || '')).sort((x, y) => readingScore(text, y).share - readingScore(text, x).share)[0] || '';
-      setHeard(best);
-      if (readingScore(text, best).pass) onDone({ correct: true });
-      else { const t = tries + 1; setTries(t); if (t >= TRIES) onDone({ correct: false }); }
-    };
-    r.onerror = (e: any) => setError(e?.error === 'not-allowed' || e?.error === 'service-not-allowed' ? '마이크를 쓸 수 없어요. 브라우저 설정에서 마이크를 허용해 주세요.' : e?.error === 'no-speech' ? '소리가 들리지 않았어요. 다시 해 볼까요?' : '잘 듣지 못했어요. 다시 해 볼까요?');
-    r.onend = () => setListening(false);
-    setError(''); setListening(true); try { r.start(); } catch { setListening(false); }
-  };
-  const score = heard ? readingScore(text, heard) : null;
+  const [heard, setHeard] = useState(''), [tries, setTries] = useState(0);
+  const read = useReadAloud(text, h => {
+    setHeard(h);
+    if (readingScore(text, h).pass) onDone({ correct: true });
+    else { const t = tries + 1; setTries(t); if (t >= TRIES) onDone({ correct: false }); }
+  });
+  useEffect(() => { setHeard(''); setTries(0); }, [text]);
+  const shown = read.listening ? read.live : heard, score = shown ? readingScore(text, shown) : null, line = heard && !read.listening ? readingLine(text, heard) : null;
   return <div className="text-center">
-    <p className="text-base leading-relaxed" lang="en">{score ? score.words.map((w, k) => <span key={k} className={score.hit[k] ? 'text-emerald-700' : 'text-orange-600 underline'}>{w} </span>) : text}</p>
+    <p className="text-base leading-relaxed" lang="en">{score ? score.words.map((w, k) => <span key={k} className={score.hit[k] ? 'text-emerald-700' : read.listening ? 'text-slate-400' : 'text-orange-600 underline'}>{w} </span>) : text}</p>
     <p className="mt-1 text-sm text-[#8b2f40]">{meaning}</p>
     <div className="mt-3 flex items-end justify-center gap-4">
       <button type="button" onClick={() => speakWord(text)} className="flex flex-col items-center gap-1 text-xs text-slate-500"><span className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200"><Volume2 size={18} aria-hidden="true" /></span>듣기</button>
-      <button type="button" disabled={busy || listening} onClick={listen} className="flex flex-col items-center gap-1 text-xs font-bold text-[#8b2f40]"><span className={`flex h-14 w-14 items-center justify-center rounded-full bg-[#d26272] text-white ${listening ? 'animate-pulse' : ''}`}><Mic size={22} aria-hidden="true" /></span>{listening ? '듣는 중…' : '말하기'}</button>
+      {read.listening
+        ? <button type="button" onClick={read.finish} className="flex flex-col items-center gap-1 text-xs font-bold text-[#8b2f40]"><span className="flex h-14 w-14 animate-pulse items-center justify-center rounded-full bg-[#d26272] text-white"><Square size={18} aria-hidden="true" /></span>다 읽었어요</button>
+        : <button type="button" disabled={busy} onClick={read.start} className="flex flex-col items-center gap-1 text-xs font-bold text-[#8b2f40]"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#d26272] text-white"><Mic size={22} aria-hidden="true" /></span>말하기</button>}
     </div>
-    {score && <p className="mt-2 text-xs text-slate-500">{score.words.length}단어 중 {score.hit.filter(Boolean).length}단어 · 80% 넘으면 통과 · {TRIES - tries}번 더</p>}
-    {error && <><p className="mt-2 text-xs font-bold text-orange-600">{error}</p><button type="button" disabled={busy} onClick={() => onDone({ correct: false })} className="mt-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600">이 문장 넘기기</button></>}
+    {read.listening && <p className="mt-2 text-xs text-slate-400">읽는 중이에요 · 다 읽으면 바로 채점해요</p>}
+    {line && <p className="mt-2 text-xs text-slate-500"><b className="text-slate-600">{line.label}</b> · {TRIES - tries}번 더<span className="block text-[11px] text-slate-400">{line.legend}</span></p>}
+    {read.error && <><p className="mt-2 text-xs font-bold text-orange-600">{read.error}</p><button type="button" disabled={busy} onClick={() => onDone({ correct: false })} className="mt-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600">이 문장 넘기기</button></>}
   </div>;
 }

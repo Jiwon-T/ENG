@@ -21,3 +21,12 @@ test('낭독: heard words matched in order; 80% passes; stars by share', () => {
   assert.equal(readingScore("It's raining.", 'its raining').pass, true, 'apostrophes may be missing');
   assert.equal(readingScore('The key is consistent practice.', 'the key').pass, false);
 });
+
+test('낭독 result line: accuracy %, the stars it earns, and what they mean', async () => {
+  const { readingLine } = await import('../src/lib/useReadAloud.ts');
+  const t = 'Practice matters more than we think.';
+  assert.equal(readingLine(t, 'practice matters more than we think').label, '정확도 100% · ⭐⭐⭐');
+  assert.equal(readingLine(t, 'practice matters more than').label, '정확도 67% · 80% 넘으면 통과');
+  assert.equal(readingLine(t, 'practice matters more than we').label, '정확도 83% · ⭐');
+  assert.equal(readingLine(t, '').legend, '⭐ 80% · ⭐⭐ 90% · ⭐⭐⭐ 100%');
+});

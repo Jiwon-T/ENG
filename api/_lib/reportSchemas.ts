@@ -133,6 +133,8 @@ export interface StoredLessonReport {
   homework: string;
   test: string;
   vocabularyScore: number | null;
+  /** The 테스트 점수's name from the 일지 (단어, 모의고사 …); empty: just 테스트. */
+  testName?: string;
   schoolExamScore: number | null;
   feedback: string;
   derivedAssignment?: string | null;
@@ -201,6 +203,8 @@ export interface StudentLessonReportDTO {
   attendance: string;
   homework: string;
   vocabularyScore: number | null;
+  /** The 테스트 점수's name from the 일지 (단어, 모의고사 …); empty: just 테스트. */
+  testName?: string;
   schoolExamScore: number | null;
   assignmentContent: string | null;
   assignmentCompleted?: boolean;
@@ -222,6 +226,8 @@ export interface ParentLessonReportDTO {
   homework: string;
   test: string;
   vocabularyScore: number | null;
+  /** The 테스트 점수's name from the 일지 (단어, 모의고사 …); empty: just 테스트. */
+  testName?: string;
   schoolExamScore: number | null;
   feedback: string;
 }

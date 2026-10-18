@@ -5,10 +5,12 @@ export interface Person { uid: string; name: string; role: string }
 export interface ReadingPart { sentences: { chunks: { en: string; ko: string }[]; ko: string }[]; by?: Person; at?: number; editedBy?: Person; editedAt?: number }
 export interface GrammarPart { sentences: { structure: string; points: string[] }[]; essay: { index: number; reason: string }; by?: Person; at?: number; editedBy?: Person; editedAt?: number }
 export interface SummaryPart { title: string; englishTitle: string; topic: { ko: string; en: string }; mainIdea: { ko: string; en: string }; summary: { ko: string; en: string }; logic: string; by?: Person; at?: number; editedBy?: Person; editedAt?: number }
+/** 구조 지도: roles[i] for sentence i ('' = none), key = 0-based index of the key sentence. */
+export interface StructurePart { roles: string[]; key: number; by?: Person; at?: number }
 export interface WordsPart { known: { word: string; meaning: string; seen: string }[]; unknown: string[] }
 export interface Passage {
   id: string; text: string; sentences: string[]; hints: string[][]; title: string; examInfo: string; public: boolean; updatedAt: number;
-  parts: { reading?: ReadingPart; grammar?: GrammarPart; summary?: SummaryPart; words?: WordsPart };
+  parts: { reading?: ReadingPart; grammar?: GrammarPart; summary?: SummaryPart; words?: WordsPart; structure?: StructurePart };
   /** Teachers and the admin only. */
   createdBy?: Person & { at: number }; history?: (Person & { at: number; action: string })[];
 }

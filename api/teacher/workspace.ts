@@ -1,5 +1,5 @@
 import { startServerTiming } from '../_lib/serverTiming.js';
-import {loadTeacherOnlineLearning} from '../_lib/teacherOnlineLearning.js';
+import {loadLessonDayStudy,loadTeacherOnlineLearning} from '../_lib/teacherOnlineLearning.js';
 import {workspaceFailureDiagnostic} from '../_lib/workspaceFailureDiagnostic.js';
 import { loadTeacherReportReview, lessonReportPage } from '../_lib/teacherReportReview.js';
 import { academicAppActive } from '../_lib/academicAuthority.js';
@@ -255,6 +255,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const records=docs.filter(d=>d.exists&&canAccessOwned(actor,d.data()!.ownerUid,d.data()!.academyId)).map(d=>({id:d.id,...d.data()}));
                 if(force)await confirmLessonRecords(db,records);return sendJson(res,200,{ok:true,records});
             }
+            // 수업 일지 › 이날 앱 학습 (the chip next to 학생): one student's app sessions of the lesson day.
+            if(action==='lesson-day-study'){failureStage='lesson-day-study';return sendJson(res,200,{ok:true,...await loadLessonDayStudy(db,actor,params.get('studentKey'),params.get('date'))});}
             if (action === 'report-review') {
                 failureStage = 'report-review';
                 const url = new URL(req.url || '', 'http://localhost');

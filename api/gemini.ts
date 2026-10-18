@@ -6,7 +6,7 @@ import { WORKBOOK_AI_MESSAGES, translateWorkbook } from './_lib/teacherWorkbook.
 import { handlePet } from './_lib/student/pet.js';
 import { AI_MODEL, AI_TOO_FAST_MESSAGE, aiErrorCode, generateAi, generateAiStream, planOf, refundMonthlyQuota, takeAiBurst, takeMonthlyQuota, type AiFeature } from './_lib/aiModel.js';
 import { AI_PLANS, PASS_NOTE } from '../src/lib/aiPlans.js';
-import { listQuestionSets, makeQuestionSet, readQuestionSet } from './_lib/questionSets.js';
+import { bundleQuestionSets, listQuestionSets, makeQuestionSet, readQuestionSet } from './_lib/questionSets.js';
 import { myAssignedSets, openAttempt, saveAttempt, submitAttempt } from './_lib/questionAttempts.js';
 import { PASSAGE_MESSAGES, askPassagePart, editPassagePart, listPassages, openPassage, passageActor, passageWordsPart, readPassage, setPassageInfo } from './_lib/passage.js';
 export { AI_MODEL, generateAi };
@@ -146,6 +146,7 @@ export async function handlePassage(req: IncomingMessage, res: ServerResponse, d
             : action === 'make-questions' ? await makeQuestionSet(db, actor, body, now, Math.random, request => deps.generate(request, 'generator'))
             : action === 'question-sets' ? await listQuestionSets(db, actor)
             : action === 'question-set' ? await readQuestionSet(db, actor, body?.id)
+            : action === 'bundle-sets' ? await bundleQuestionSets(db, actor, body, now)
             // 변형 문제 풀기: open (draft + visit), save the answers so far, 채점 (once).
             : action === 'attempt-open' ? await openAttempt(db, actor, body, now)
             : action === 'attempt-save' ? await saveAttempt(db, actor, body, now)

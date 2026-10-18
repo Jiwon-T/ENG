@@ -1,5 +1,6 @@
 import { collection, addDoc, Timestamp, query, where, getDocs, doc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
+import { changedFields, matchBuiltIn } from './builtInSync';
 
 export interface ComparativeItem {
   base: string;
@@ -59,7 +60,7 @@ export const comparativeData: ComparativeItem[] = [
   { base: 'badly', comparative: 'worse', superlative: 'worst', meaning: '나쁘게, 서투르게' },
   { base: 'ill', comparative: 'worse', superlative: 'worst', meaning: '아픈, 나쁜' },
   { base: 'far', comparative: 'farther', superlative: 'farthest', meaning: '먼 (거리)' },
-  { base: 'far', comparative: 'further', superlative: 'furthest', meaning: '심화된 (정도/깊이)' },
+  { base: 'far', comparative: 'further', superlative: 'furthest', meaning: '(정도) 더 나아간, 추가의' },
   { base: 'good', comparative: 'better', superlative: 'best', meaning: '좋은' },
   { base: 'well', comparative: 'better', superlative: 'best', meaning: '잘, 건강한' },
   { base: 'little', comparative: 'less', superlative: 'least', meaning: '적은 (셀 수 없는 명사/양)' },
@@ -133,6 +134,19 @@ export async function seedComparativeGrammar() {
         await batch.commit();
       }
       console.log('Comparative grammar wordbook seeded successfully.');
+    } else {
+      // Already seeded: a fixed meaning or form is written to the word it was saved as (base + 비교급, since far and
+      // late come twice). Words a teacher added stay.
+      const docs = existingWordsSnap.docs.map(d => ({ id: d.id, data: d.data() }));
+      const matched = matchBuiltIn(comparativeData, docs, c => [`w:${c.base}|${c.comparative}`], data => [`w:${data.word ?? ''}|${data.comparative ?? ''}`]);
+      const batch = writeBatch(db);
+      let updates = 0;
+      comparativeData.forEach((item, i) => {
+        const id = matched.get(i);
+        const change = id && changedFields(docs.find(d => d.id === id)!.data, { meaning: item.meaning, superlative: item.superlative, pastParticiple: item.superlative });
+        if (id && change) { batch.set(doc(wordsRef, id), change, { merge: true }); updates++; }
+      });
+      if (updates) await batch.commit();
     }
   } catch (error) {
     console.error('Error seeding comparative grammar:', error);

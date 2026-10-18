@@ -3,5 +3,5 @@ export interface AcademicRecord {
   score: number | null; maxScore: number | null; percentile: number | null; grade: string; submissionStatus: string;
 }
 export interface SubjectEnrollment { subject: string; status: string; startAt: string | null; endAt: string | null; }
-export interface AcademyScore { recordId: string; subject: string; examDate: string; vocabularyScore: number | null; schoolExamScore: number | null; }
+export interface AcademyScore { recordId: string; subject: string; examDate: string; vocabularyScore: number | null; testName?: string; schoolExamScore: number | null; }
 export interface AcademicData { records: AcademicRecord[]; subjects: SubjectEnrollment[]; academyScores: AcademyScore[]; }

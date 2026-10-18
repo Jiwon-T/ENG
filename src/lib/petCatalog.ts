@@ -206,7 +206,7 @@ export function stageGame(stage?: string | null): StageGame {
 export const stageHasSound = (stage?: string | null) => ['listen', 'mix'].includes(stageGame(stage));
 export const stageWithSentences = (stage?: string | null) => { const g = stageGame(stage); return g === 'order' || (g === 'mix' && PET_EXPEDITION.chapters.findIndex(c => c.id === String(stage).split('-')[0]) >= SENTENCE_FROM_CHAPTER); };
 /** 원정대 문장 세트 by school grade (관리자 설정). 초등 and unknown grades use 중1; teachers 고3; an empty grade falls back to 고3. */
-export const SENTENCE_GRADES = ['중1', '중2', '중3', '고1', '고2', '고3'] as const;
+export const SENTENCE_GRADES = ['초등', '중1', '중2', '중3', '고1', '고2', '고3'] as const;
 export type SentenceGrade = typeof SENTENCE_GRADES[number];
 export const stageQuestions = (stage?: string | null) => (stage && PET_EXPEDITION.chapters.find(c => stage.startsWith(c.id + '-'))?.questions) || PET_WORD_FEED.questions;
 /** 1차 전직 (5장 설산 왕관, Lv.35): 펫마다 한 번. 직업 무기를 받고, 6장 밤하늘 왕관에서 더 좋은 무기(`nextWeapon`)를 받아요. */

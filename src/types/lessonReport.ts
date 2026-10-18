@@ -19,6 +19,7 @@ export const NotionReportWebhookSchema = z.object({
   homework: z.string().nullable().optional(),
   test: z.string().nullable().optional(),
   vocabularyScore: z.number().nullable().optional(),
+  testName: z.string().nullable().optional(),
   schoolExamScore: z.number().nullable().optional(),
   feedback: z.string().default(''),
   updatedAt: z.string().optional(),
@@ -45,6 +46,8 @@ export interface StoredLessonReport {
   homework: string;
   test: string;
   vocabularyScore: number | null;
+  /** The 테스트 점수's name from the 일지 (단어, 모의고사 …); empty: just 테스트. */
+  testName?: string;
   schoolExamScore: number | null;
   feedback: string;
   sourceUpdatedAt: string;
@@ -65,6 +68,8 @@ export interface StudentLessonReportDTO {
   attendance: string;
   homework: string;
   vocabularyScore: number | null;
+  /** The 테스트 점수's name from the 일지 (단어, 모의고사 …); empty: just 테스트. */
+  testName?: string;
   schoolExamScore: number | null;
   assignmentContent: string | null;
   assignmentCompleted?: boolean;
@@ -86,6 +91,8 @@ export interface ParentLessonReportDTO {
   homework: string;
   test: string;
   vocabularyScore: number | null;
+  /** The 테스트 점수's name from the 일지 (단어, 모의고사 …); empty: just 테스트. */
+  testName?: string;
   schoolExamScore: number | null;
   feedback: string;
 }

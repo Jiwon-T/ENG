@@ -1,7 +1,7 @@
 import {useEffect,useState} from 'react';
 import {X} from 'lucide-react';
 import {getAttendanceBadgeClass,getDisplayStatus,getStatusBadgeClass} from '../parent/ParentReportView';
-import {lessonFeedbackText,parentFeedbackText,percentage} from '../../lib/lessonReportText';
+import {lessonFeedbackText,parentFeedbackText,percentage,testLabel,testScoreTitle} from '../../lib/lessonReportText';
 import {studyTimeText} from '../../lib/sessionNumbers';
 import {extractAssignmentFromFeedback} from '../../../api/_lib/assignmentExtractor';
 
@@ -15,16 +15,16 @@ function ParentPreview({lesson:d}:{lesson:any}){
  return <div className="lesson-preview-body">
   <div className="lesson-preview-row"><span className={`lesson-preview-badge ${getAttendanceBadgeClass(d.attendance)}`}>{getDisplayStatus(d.attendance)}</span>{times.map(([k,v])=><span key={k} className="lesson-preview-time"><b>{k}</b>{v}</span>)}</div>
   <div className="lesson-preview-grid">{([['태도',d.attitude],['숙제',d.homework],['테스트',d.test]] as const).map(([k,v])=><div key={k} className="lesson-preview-tile"><span>{k}</span><b className={`lesson-preview-badge ${getStatusBadgeClass(v)}`}>{getDisplayStatus(v)}</b></div>)}</div>
-  {(word!==null||exam!==null)&&<div className="lesson-preview-grid">{word!==null&&<div className="lesson-preview-tile"><span>단어 점수</span><b>{word}점</b></div>}{exam!==null&&<div className="lesson-preview-tile"><span>내신 대비 점수</span><b>{exam}점</b></div>}</div>}
+  {(word!==null||exam!==null)&&<div className="lesson-preview-grid">{word!==null&&<div className="lesson-preview-tile"><span>{testScoreTitle(d.testName)}</span><b>{word}점</b></div>}{exam!==null&&<div className="lesson-preview-tile"><span>내신 대비 점수</span><b>{exam}점</b></div>}</div>}
   <div className="lesson-preview-feedback"><p className="lesson-preview-label">수업 내용 및 피드백</p><p className="lesson-preview-text">{feedback||'아직 입력한 내용이 없어요'}</p></div>
  </div>;
 }
 
-/** The card in the student's 학습 리포트 (출결·숙제·단어·내신) and the 과제 the student checks off. */
+/** The card in the student's 학습 리포트 (출결·숙제·테스트·내신) and the 과제 the student checks off. */
 function StudentPreview({lesson:d}:{lesson:any}){
  const word=percentage(d.correct,d.total),exam=percentage(d.examCorrect,d.examTotal),assignment=extractAssignmentFromFeedback(lessonFeedbackText(d));
  return <div className="lesson-preview-body">
-  <div className="lesson-preview-grid is-four">{([['출결',d.attendance||'미확인'],['숙제',d.homework||'미확인'],['단어',word!==null?`${word}점`:'—'],['내신',exam!==null?`${exam}점`:'—']] as const).map(([k,v])=><div key={k} className="lesson-preview-tile"><span>{k}</span><b>{v}</b></div>)}</div>
+  <div className="lesson-preview-grid is-four">{([['출결',d.attendance||'미확인'],['숙제',d.homework||'미확인'],[testLabel(d.testName),word!==null?`${word}점`:'—'],['내신',exam!==null?`${exam}점`:'—']] as const).map(([k,v])=><div key={k} className="lesson-preview-tile"><span>{k}</span><b>{v}</b></div>)}</div>
   <div className="lesson-preview-feedback"><p className="lesson-preview-label">과제 (학생이 완료 표시)</p><p className="lesson-preview-text">{assignment||'과제 없음'}</p></div>
  </div>;
 }

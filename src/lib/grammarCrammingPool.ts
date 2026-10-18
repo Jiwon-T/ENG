@@ -8,6 +8,8 @@ export interface GrammarQuizItem {
   choices: string[];
   answer: number;
   explanation: string;
+  /** Sentences this question had before a fix, so the saved copy is updated instead of a second one added. */
+  replaces?: string[];
 }
 
 export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
@@ -30,7 +32,8 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   },
   {
     id: 3, set: 1, category: "1형식",
-    sentence: "The project will ___ well in the end.",
+    sentence: "Honesty always ___ in the end.",
+    replaces: ["The project will ___ well in the end."],
     question: "빈칸에 알맞은 '이익이 되다'라는 의미의 1형식 동사는?",
     choices: ["pay", "spend", "cost", "lose"],
     answer: 0,
@@ -46,9 +49,10 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   },
   {
     id: 5, set: 1, category: "2형식",
-    sentence: "Good medicine ___ bitter.",
+    sentence: "Good medicine tastes ___.",
+    replaces: ["Good medicine ___ bitter."],
     question: "감각동사 뒤에 올바른 보어의 형태는?",
-    choices: ["tastes", "tastes bitterly", "is tasted", "tasting"],
+    choices: ["bitter", "bitterly", "bitterness", "to be bitter"],
     answer: 0,
     explanation: "교안 p.2: 2형식 감각동사 뒤에는 부사가 아닌 형용사 보어가 와야 합니다."
   },
@@ -103,14 +107,15 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   {
     id: 12, set: 1, category: "1형식",
     sentence: "The meeting ___ for three hours.",
-    question: "교안 p.1: 빈칸에 알맞은 '계속하다'라는 의미의 1형식 동사는?",
+    question: "교안 p.1: 빈칸에 알맞은 '계속되다(지속되다)'라는 의미의 1형식 동사는?",
     choices: ["lasted", "stayed", "stood", "remained"],
     answer: 0,
-    explanation: "교안 p.1: last는 1형식으로 쓰일 때 '계속하다'라는 뜻입니다."
+    explanation: "교안 p.1: last는 1형식으로 쓰일 때 '계속되다(지속되다)'라는 뜻입니다."
   },
   {
     id: 13, set: 1, category: "1형식",
-    sentence: "The committee ___ of ten members.",
+    sentence: "The committee ___ ten members.",
+    replaces: ["The committee ___ of ten members."],
     question: "교안 p.1: '~으로 구성되다'라는 의미로 1형식 동사와 함께 쓰이는 전치사는?",
     choices: ["consists at", "consists in", "consists of", "consists with"],
     answer: 2,
@@ -118,9 +123,10 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   },
   {
     id: 14, set: 1, category: "2형식",
-    sentence: "The flowers ___ sweet.",
+    sentence: "The flowers smell ___.",
+    replaces: ["The flowers ___ sweet."],
     question: "교안 p.2: 감각동사의 보어로 알맞은 형태는?",
-    choices: ["smell", "smells sweetly", "are smelled", "smelling"],
+    choices: ["sweet", "sweetly", "sweetness", "to be sweet"],
     answer: 0,
     explanation: "교안 p.2: 감각동사(smell) 뒤에는 부사가 아닌 형용사 보어가 와야 합니다."
   },
@@ -176,7 +182,8 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   },
   {
     id: 103, set: 2, category: "3형식",
-    sentence: "He ___ her mother in many ways.",
+    sentence: "He ___ his mother in many ways.",
+    replaces: ["He ___ her mother in many ways."],
     question: "교안 p.3: '~와 닮다'의 올바른 표현은?",
     choices: ["resembles with", "resembles to", "resembles", "is resembled"],
     answer: 2,
@@ -193,7 +200,7 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   {
     id: 105, set: 2, category: "4형식",
     sentence: "He gave the girl ___.",
-    question: "4형식 문장(S+V+I.O+D.O)의 올바른 해석 순서는?",
+    question: "4형식 문장(S+V+I.O+D.O)에서 빈칸에 알맞은 직접목적어(D.O)는?",
     choices: ["a doll", "to a doll", "for a doll", "with a doll"],
     answer: 0,
     explanation: "교안 p.4: 4형식은 '간목(~에게) 직목(~을)'의 순서로 명사를 나열합니다."
@@ -234,7 +241,7 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
     id: 110, set: 2, category: "3형식",
     sentence: "Don't ___ the building without a pass.",
     question: "교안 p.3: '~에 접근하다'의 올바른 표현은?",
-    choices: ["approach to", "approach", "arrive at", "get to"],
+    choices: ["approach to", "approach", "approach at", "approach on"],
     answer: 1,
     explanation: "교안 p.3: approach는 전치사(to)를 쓰지 않는 타동사입니다."
   },
@@ -242,7 +249,7 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
     id: 111, set: 2, category: "3형식",
     sentence: "Did he ___ the plan to you?",
     question: "교안 p.3: '~에 대해 언급하다'의 올바른 표현은?",
-    choices: ["mention", "mention about", "talk about", "speak about"],
+    choices: ["mention", "mention about", "mention on", "mention of"],
     answer: 0,
     explanation: "교안 p.3: mention은 전치사(about)를 쓰지 않는 타동사입니다."
   },
@@ -265,17 +272,17 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   {
     id: 114, set: 2, category: "4형식",
     sentence: "He inquired the time ___ the clerk.",
-    question: "교안 p.4: inquire를 3형식으로 전환할 때 알맞은 전치사는?",
+    question: "교안 p.4: 'inquire A of B(B에게 A를 묻다)' 구문에 알맞은 전치사는?",
     choices: ["to", "for", "at", "of"],
     answer: 3,
-    explanation: "교안 p.4: inquire, ask 등은 3형식 전환 시 전치사 of를 사용합니다."
+    explanation: "교안 p.4: inquire는 4형식으로 쓰지 않고 'inquire + 목적어 + of + 사람'으로 씁니다. (ask는 4형식 → 3형식 전환 시 of)"
   },
 
   // --- SET 3: 5형식 ---
   {
     id: 201, set: 3, category: "5형식",
     sentence: "The ecology made the lines ___ artificial.",
-    question: "교안 p.5: 사역동사가 포함된 5형식 문장에서 목적격 보어로 알맞은 행태는?",
+    question: "교안 p.5: 사역동사가 포함된 5형식 문장에서 목적격 보어로 알맞은 형태는?",
     choices: ["appear", "to appear", "appearing", "appeared"],
     answer: 0,
     explanation: "교안 p.5: 사역동사(make, have, let)는 목적격 보어로 동사원형을 취합니다."
@@ -385,9 +392,9 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
     explanation: "교안 p.6: hear는 지각동사로 목적격 보어에 동사원형(call)이 올 수 있습니다."
   },
   {
-    id: 215, set: 3, category: "5형식",
+    id: 215, set: 2, category: "4형식",
     sentence: "He ___ me a book as a gift.",
-    question: "교안 p.4: 4형식 목적어 어순(간목+직목)으로 알맞은 것은?",
+    question: "교안 p.4: 간접목적어(me)와 직접목적어(a book)가 바로 이어지는 4형식 문장의 동사로 알맞은 것은?",
     choices: ["gave", "is given", "was given", "gives to"],
     answer: 0,
     explanation: "교안 p.4: give 뒤에는 간접목적어(me)와 직접목적어(a book)가 바로 옵니다."
@@ -396,7 +403,7 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
     id: 216, set: 3, category: "5형식",
     sentence: "The technician got the machine ___ again.",
     question: "교안 p.6: 준사역동사 get의 목적어와 보어의 관계가 능동일 때 알맞은 형태는?",
-    choices: ["to work", "work", "working", "worked"],
+    choices: ["to work", "work", "works", "worked"],
     answer: 0,
     explanation: "교안 p.6: get은 목적격 보어로 to부정사를 취하며, '능동'의 의미를 가집니다."
   },
@@ -509,14 +516,15 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   {
     id: 313, set: 4, category: "to부정사 결과",
     sentence: "He woke up ___ himself famous.",
-    question: "부정어의 결과(자고 일어나서 ~임을 알게 되다)를 나타내는 알맞은 형태는?",
+    question: "to부정사의 결과(자고 일어나서 ~임을 알게 되다)를 나타내는 알맞은 형태는?",
     choices: ["to find", "finding", "found", "to have found"],
     answer: 0,
     explanation: "woke up to find, grew up to be 등은 to부정사의 부사적 용법 중 '결과'를 나타냅니다."
   },
   {
     id: 314, set: 4, category: "목적어",
-    sentence: "He tried ___ the door, but it was locked.",
+    sentence: "The room was hot, so he tried ___ the window.",
+    replaces: ["He tried ___ the door, but it was locked."],
     question: "'시험 삼아 ~해보다'라는 의미로 알맞은 것은?",
     choices: ["to open", "opening", "open", "be opened"],
     answer: 1,
@@ -554,7 +562,7 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
     question: "교안 p.10: '아팠기 때문에'를 뜻하는 알맞은 분사구문 형태는?",
     choices: ["Being", "Been", "To be", "Was"],
     answer: 0,
-    explanation: "교안 p.10: 이유의 의미를 담은 분사구문으로 Being은 생략 가능하기도 하지만 여기선 필수 성분입니다."
+    explanation: "교안 p.10: 이유의 의미를 담은 분사구문으로 형용사 앞의 Being은 생략할 수도 있습니다(Sick, he couldn't ...)."
   },
   {
     id: 403, set: 5, category: "분사구문",
@@ -622,8 +630,9 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   },
   {
     id: 411, set: 5, category: "분사구문",
-    sentence: "___ sick, he couldn't attend the meeting.",
-    question: "교안 p.10: '아팠기 때문에'라는 이유의 의미를 담은 분사구문은?",
+    sentence: "___ tired, she went to bed early.",
+    replaces: ["___ sick, he couldn't attend the meeting."],
+    question: "교안 p.10: '피곤했기 때문에'라는 이유의 의미를 담은 분사구문은?",
     choices: ["Being", "Been", "Was", "As"],
     answer: 0,
     explanation: "교안 p.10: 이유(~때문에)를 나타낼 때 Being을 사용하여 분사구문을 만듭니다."
@@ -654,7 +663,8 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   },
   {
     id: 415, set: 5, category: "분사구문",
-    sentence: "___ from the distance, the island looks small.",
+    sentence: "___ from a distance, the island looks small.",
+    replaces: ["___ from the distance, the island looks small."],
     question: "교안 p.12: '멀리서 보여질 때'의 의미로 Being이 생략된 수동 분사구문은?",
     choices: ["Seen", "Seeing", "To see", "Saw"],
     answer: 0,
@@ -662,7 +672,8 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   },
   {
     id: 416, set: 5, category: "분사구문",
-    sentence: "___ not what to do, I remained silent.",
+    sentence: "___ what to do, I remained silent.",
+    replaces: ["___ not what to do, I remained silent."],
     question: "교안 p.12: 분사구문 부정어(Not)의 올바른 위치는?",
     choices: ["Not knowing", "Knowing not", "No knowing", "To not know"],
     answer: 0,
@@ -688,7 +699,7 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
     id: 419, set: 5, category: "독립분사구문",
     sentence: "___ coming on, we started for home.",
     question: "교안 p.12: 주어가 다른 독립분사구문(Night coming on)에서 빈칸에 알맞은 주어는?",
-    choices: ["Night", "It", "There", "The night"],
+    choices: ["Night", "It", "There", "As"],
     answer: 0,
     explanation: "교안 p.12: '밤이 다가오자'라는 의미의 독립분사구문으로, 주어 Night를 써야 합니다."
   },
@@ -698,7 +709,7 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
     id: 501, set: 6, category: "시제",
     sentence: "If it ___ tomorrow, we will stay home.",
     question: "시간/조건의 부사절 법칙에 따라 알맞은 형태는?",
-    choices: ["rains", "will rain", "rained", "is raining"],
+    choices: ["rains", "will rain", "rained", "would rain"],
     answer: 0,
     explanation: "시간이나 조건의 부사절(if, when 등)에서는 현재시제가 미래를 대신합니다."
   },
@@ -736,9 +747,10 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   },
   {
     id: 506, set: 6, category: "도치",
-    sentence: "Never ___ I seen such a beautiful sunset.",
+    sentence: "Never ___ seen such a beautiful sunset.",
+    replaces: ["Never ___ I seen such a beautiful sunset."],
     question: "부정어(Never)가 문두에 올 때 일어나는 올바른 도치 형태는?",
-    choices: ["I have", "have I", "I had", "did I"],
+    choices: ["I have", "have I", "I did", "did I"],
     answer: 1,
     explanation: "Never, Little, Seldom 등 부정어가 문두에 오면 '조동사 + 주어' 순으로 도치됩니다."
   },
@@ -776,7 +788,8 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   },
   {
     id: 511, set: 6, category: "특수구문",
-    sentence: "Hardly ___ I started when it began to rain.",
+    sentence: "Hardly ___ started when it began to rain.",
+    replaces: ["Hardly ___ I started when it began to rain."],
     question: "'~하자마자 ...하다'의 의미를 가진 도치 구문에 알맞은 형태는?",
     choices: ["I had", "had I", "I did", "did I"],
     answer: 1,
@@ -794,7 +807,7 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
     id: 513, set: 6, category: "가정법",
     sentence: "If I ___ you, I wouldn't do that.",
     question: "현재 사실과 반대되는 가정법 과거 구문에 알맞은 동사는?",
-    choices: ["am", "was", "were", "been"],
+    choices: ["am", "is", "were", "been"],
     answer: 2,
     explanation: "가정법 과거에서 be동사는 주어에 상관없이 were를 쓰는 것이 원칙입니다."
   },
@@ -809,7 +822,7 @@ export const GRAMMAR_CRAMMING_POOL: GrammarQuizItem[] = [
   {
     id: 515, set: 6, category: "주요명제",
     sentence: "He suggested that she ___ a doctor.",
-    question: "제안(suggest)의 동사 뒤 coming that절에 알맞은 동사 형태는?",
+    question: "제안 동사(suggest) 뒤에 오는 that절에 알맞은 동사 형태는?",
     choices: ["see", "sees", "saw", "must see"],
     answer: 0,
     explanation: "제안, 주장, 권고, 요구 등의 동사 뒤의 that절에는 '(should) + 동사원형'을 씁니다."

@@ -99,7 +99,6 @@ class ErrorBoundary extends (Component as any) {
 // Lazy load heavy components
 const Login = lazy(loadLogin);
 const Home = lazy(() => import('./components/Home'));
-const AnalysisView = lazy(() => import('./components/AnalysisView'));
 const PassageAnalyzer = lazy(() => import('./components/passage/PassageAnalyzer'));
 const QuestionGenerator = lazy(() => import('./components/generator/QuestionGenerator'));
 const TeacherRoom = lazy(() => import('./components/teacher/TeacherRoom'));
@@ -136,7 +135,10 @@ const runTeacherSeeding = async () => {
       import('./lib/irregularVerbsData'),
       import('./lib/grammarSets'),
       import('./lib/comparativeData'),
-      import('./lib/grammarCrammingPool')
+      import('./lib/grammarCrammingPool'),
+      // Read by the seeds too (verbFormQuizPool for the 1·2·3형식 예문 the 인쇄 uses), so a change syncs again
+      import('./lib/verbFormQuizPool'),
+      import('./lib/builtInSync')
     ]);
     const [{ seedIrregularVerbs }, { seedObjectPatternGrammar, seedComplementGrammar, seedConversionGrammar, seedRelativeGrammar, seedModalGrammar, seedBasicModalGrammar, seedVerbFormGrammar, seedGrammarCramming }, { seedComparativeGrammar }] = modules;
     // The version covers every data module the seeds read and the seed functions themselves (titles and field mapping

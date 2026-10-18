@@ -1,6 +1,7 @@
 import { collection, addDoc, Timestamp, query, where, getDocs, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 import { GRAMMAR_CRAMMING_POOL } from './grammarCrammingPool';
+import { changedFields, matchBuiltIn } from './builtInSync';
 
 export interface GrammarWord {
   word: string;
@@ -32,7 +33,7 @@ export const objectPatternData: GrammarWord[] = [
   { word: 'avoid', meaning: '피하다', pattern: '동명사만 목적어로 오는 동사' },
   { word: 'finish', meaning: '끝내다', pattern: '동명사만 목적어로 오는 동사' },
   { word: 'keep', meaning: '계속하다', pattern: '동명사만 목적어로 오는 동사' },
-  { word: 'mind', meaning: '꺼려하다', pattern: '동명사만 목적어로 오는 동사' },
+  { word: 'mind', meaning: '꺼리다', pattern: '동명사만 목적어로 오는 동사' },
   { word: 'admit', meaning: '인정하다', pattern: '동명사만 목적어로 오는 동사' },
   { word: 'practice', meaning: '연습하다', pattern: '동명사만 목적어로 오는 동사' },
   { word: 'suggest', meaning: '제안하다', pattern: '동명사만 목적어로 오는 동사' },
@@ -105,27 +106,37 @@ export async function seedObjectPatternGrammar() {
 
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
-  
-  // Delete existing to force re-sync
-  const deleteBatch = writeBatch(db);
-  for (const d of existingWords.docs) {
-    deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
-  }
-  await deleteBatch.commit();
-  
-  // Add new
-  const addBatch = writeBatch(db);
-  for (let i = 0; i < objectPatternData.length; i++) {
-    const item = objectPatternData[i];
-    const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
-    addBatch.set(newDocRef, {
-      word: item.word,
-      meaning: item.meaning,
-      pattern: item.pattern,
-      order: i
+  const quizPool = (await import('./verbFormQuizPool')).VERB_FORM_QUIZ_POOL;
+
+  // Each verb keeps its word (so its id and progress stay) and its 예문 (the 인쇄 reads them): a changed meaning or
+  // choice is written there, a missing one is added. Deleting and rewriting every word left the old words' 예문
+  // behind where nothing reaches them.
+  const docs = existingWords.docs.map(d => ({ id: d.id, data: d.data() }));
+  const matched = matchBuiltIn(VERB_FORM_GRAMMAR_DATA, docs, item => [`w:${item.word}|${item.set}`], data => [`w:${data.word ?? ''}|${data.set ?? ''}`]);
+  const batch = writeBatch(db);
+  let writes = 0;
+  for (let i = 0; i < VERB_FORM_GRAMMAR_DATA.length; i++) {
+    const item = VERB_FORM_GRAMMAR_DATA[i];
+    const fields = { word: item.word, meaning: item.meaning, pattern: item.pattern, order: i, set: item.set };
+    const savedId = matched.get(i);
+    const id = savedId || doc(wordsRef).id;
+    const change = savedId ? changedFields(docs.find(d => d.id === savedId)!.data, fields) : fields;
+    if (change) { batch.set(doc(wordsRef, id), change, { merge: !!savedId }); writes++; }
+
+    // Its quiz questions from the pool as 예문 (match by verb AND set), the answer first
+    const examplesRef = collection(db, `wordbooks/${wordbookId}/words/${id}/examples`);
+    const saved = savedId ? (await getDocs(examplesRef)).docs.map(d => ({ id: d.id, data: d.data() })) : [];
+    const questions = quizPool.filter(q => q.verb === item.word && q.set === item.set);
+    const exMatched = matchBuiltIn(questions, saved, q => [`s:${q.sentence}`], data => [`s:${data.sentence ?? ''}`]);
+    questions.forEach((q, j) => {
+      const exFields = { sentence: q.sentence, explanation: q.explanation, type: 'A', choices: [q.choices[q.answer], ...q.choices.filter((_, idx) => idx !== q.answer)] };
+      const exId = exMatched.get(j);
+      const exChange = exId ? changedFields(saved.find(d => d.id === exId)!.data, exFields) : null;
+      if (exId && exChange) { batch.set(doc(examplesRef, exId), exChange, { merge: true }); writes++; }
+      else if (!exId) { batch.set(doc(examplesRef), { ...exFields, createdAt: Timestamp.now() }); writes++; }
     });
   }
-  await addBatch.commit();
+  if (writes) await batch.commit();
 }
 
 export interface ComplementQuizItem {
@@ -284,7 +295,7 @@ export const COMPLEMENT_QUIZ_DATA: ComplementQuizItem[] = [
     answers: [1, 2, 3],
     choices: ["O + 동사원형", "O + p.p. (과거분사)", "O + V-ing", "O + to V"],
     complementForms: "동사원형 / p.p. (과거분사) / V-ing",
-    desc: "사역: ~에게 -하게 하다 / -되고 있게 하다",
+    desc: "사역: ~에게 -하게 하다 / -되게 하다 / -하고 있게 하다",
     note: "사역동사 핵심 구조(동사원형) 및 진행(V-ing), 과거분사(p.p.) 반영"
   },
   // 19. let
@@ -480,7 +491,7 @@ export const CONVERSION_GRAMMAR_DATA = [
   { word: 'envy', meaning: '부러워하다', pattern: 'impossible' },
   { word: 'forgive', meaning: '용서하다', pattern: 'impossible' },
   { word: 'pardon', meaning: '용서하다', pattern: 'impossible' },
-  { word: 'spare', meaning: '할애하다', pattern: 'impossible' },
+  { word: 'spare', meaning: '(수고·고통을) 면하게 하다', pattern: 'impossible' },
   { word: 'take', meaning: '시간이 걸리게 하다', pattern: 'impossible' },
 ];
 
@@ -508,7 +519,7 @@ export const MODAL_GRAMMAR_DATA = [
   { word: 'must (강한 추측)', meaning: '~임이 틀림없다', pattern: 'must / should', set: 2, example: 'The interview must be long.' },
   { word: "can't (강한 추측 부정)", meaning: '~일 리가 없다 (must 강한 추측의 부정형)', pattern: 'must / should', set: 2, example: 'The interview can\'t be long.' },
   { word: 'should (충고·의무)', meaning: '~해야 한다 (= ought to)', pattern: 'must / should', set: 2, example: 'We should help other people.' },
-  { word: 'must vs should 구별', meaning: 'must = 강제성 있는 의무 / should = 약한 의무', pattern: 'must / should', set: 2, example: 'You must follow the traffic rules. / You should wear dark clothes at the funeral.' },
+  { word: 'must vs should 구별', meaning: 'must = 강제성 있는 의무 / should = 약한 의무', pattern: 'must / should', set: 2, example: 'You must follow the traffic rules. / You should wear dark clothes to a funeral.' },
 
   // 3세트 — should 생략 동사
   { word: 'suggest', meaning: '제안하다 (that절에 should + 동사원형, should 생략 가능)', pattern: 'should 생략', set: 3 },
@@ -523,8 +534,8 @@ export const MODAL_GRAMMAR_DATA = [
 
   // 4세트 — used to / would 구별
   { word: 'used to (과거의 습관)', meaning: '~하곤 했다', pattern: 'used to / would', set: 4, example: 'Helen used to go to church when she was young.' },
-  { word: 'used to (과거의 상태)', meaning: '~이었다 (상태 표현 가능)', pattern: 'used to / would', set: 4, example: 'There used to be a bridge here two years ago.' },
-  { word: "didn't use to", meaning: '~하지 않곤 했다', pattern: 'used to / would', set: 4, example: 'I didn\'t use to eat onions, but I like them now.' },
+  { word: 'used to (과거의 상태)', meaning: '~이었다 (상태 표현 가능)', pattern: 'used to / would', set: 4, example: 'There used to be a bridge here.' },
+  { word: "didn't use to", meaning: '(예전에는) ~하지 않았다', pattern: 'used to / would', set: 4, example: 'I didn\'t use to eat onions, but I like them now.' },
   { word: 'be used to + 동사원형', meaning: '~하는 데 사용되다 (수동태)', pattern: 'used to / would', set: 4, example: 'This knife is used to cut bread.' },
   { word: 'be used to + V-ing/명사', meaning: '~에 익숙하다', pattern: 'used to / would', set: 4, example: 'I am used to eating spicy food.' },
   { word: 'would (과거의 습관)', meaning: '~하곤 했다 (습관만 가능, 상태 불가)', pattern: 'used to / would', set: 4, example: 'We would go camping every summer when we were children.' },
@@ -541,7 +552,7 @@ export const MODAL_GRAMMAR_DATA = [
   { word: 'would like + 명사', meaning: '~을 원하다 / 부정형: wouldn\'t like', pattern: '관용 표현', set: 6, example: 'I would like a room with a balcony.' },
   { word: 'would like to + 동사원형', meaning: '~하고 싶다 / 부정형: wouldn\'t like to', pattern: '관용 표현', set: 6, example: 'I would like to play tennis.' },
   { word: 'would rather + 동사원형', meaning: '(차라리) ~하겠다 / 부정형: would rather not', pattern: '관용 표현', set: 6, example: 'I would rather visit Spain than France.' },
-  { word: 'may well + 동사원형', meaning: '(~하는 것도) 당연하다 / 부정형: may well not', pattern: '관용 표현', set: 6, example: 'They may well think so.' },
+  { word: 'may well + 동사원형', meaning: '(~하는 것도) 당연하다, 아마 ~일 것이다 / 부정형: may well not', pattern: '관용 표현', set: 6, example: 'They may well think so.' },
   { word: 'may as well + 동사원형', meaning: '~하는 편이 좋다 / 부정형: may as well not', pattern: '관용 표현', set: 6, example: 'You may as well try the new program.' },
   { word: 'had better + 동사원형', meaning: '~하는 것이 낫다 / 부정형: had better not', pattern: '관용 표현', set: 6, example: 'You had better save the money.' },
 ];
@@ -623,20 +634,20 @@ export const BASIC_MODAL_GRAMMAR_DATA = [
   // 1세트: 기본 조동사
   { word: 'can V', meaning: '(능력) 할 수 있다 / (허가) 해도 된다 / (요청) ~해주겠니?', pattern: 'can', set: 1, example: 'He can speak three languages.' },
   { word: 'could V', meaning: '(능력) 할 수 있었다 / (허가, 요청에서는 과거가 아니라 can보다 더 정중한 표현)', pattern: 'could', set: 1, example: 'Could you help me with this bag?' },
-  { word: 'be able to V', meaning: '(능력)할 수 있다', pattern: 'be able to', set: 1, example: 'She will be able to play the piano soon.' },
+  { word: 'be able to V', meaning: '(능력) 할 수 있다', pattern: 'be able to', set: 1, example: 'She will be able to play the piano soon.' },
   { word: 'may V', meaning: '(약한 추측) ~일지도 모른다 / (허가) ~해도 된다', pattern: 'may', set: 1, example: 'It may rain this afternoon.' },
   { word: 'would like A', meaning: '~을 원하다', pattern: 'would like', set: 1, example: 'I would like a cup of hot chocolate, please.' },
   { word: 'would like to V', meaning: '~하기를 원하다', pattern: 'would like to', set: 1, example: 'We would like to see the representative.' },
 
   // 2세트: 의무, 금지, 충고 및 부정
   { word: 'must V', meaning: '(의무) ~해야 한다 / (강한 추측) ~임에 틀림없다', pattern: 'must', set: 2, example: 'You must wear a helmet on a motorcycle.' },
-  { word: "can't V", meaning: '(능력/허가/요청의 부정) / (강한 추측) ~일리가 없다', pattern: "can't", set: 2, example: 'The story can\'t be true.' },
-  { word: 'must not V', meaning: '(강한 금지)~하면 안된다', pattern: 'must not', set: 2, example: 'We must not run in the hallway.' },
+  { word: "can't V", meaning: '(능력) 할 수 없다 / (허가) ~하면 안 된다 / (강한 추측) ~일 리가 없다', pattern: "can't", set: 2, example: 'The story can\'t be true.' },
+  { word: 'must not V', meaning: '(강한 금지) ~하면 안 된다', pattern: 'must not', set: 2, example: 'We must not run in the hallway.' },
   { word: 'have to V / has to V', meaning: '(의무) ~해야 한다', pattern: 'have to', set: 2, example: 'He has to finish his homework tonight.' },
   { word: 'had to V', meaning: '(의무) ~해야 했다', pattern: 'had to', set: 2, example: 'I had to stay at school until 6 p.m.' },
   { word: 'will have to V', meaning: '(의무) ~해야 할 것이다', pattern: 'will have to', set: 2, example: 'You will have to apologize to him.' },
   { word: "don't have to V", meaning: '(불필요) ~할 필요가 없다', pattern: "don't have to", set: 2, example: 'She doesn\'t have to buy a ticket.' },
-  { word: 'should V', meaning: '(충고,의무) 해야 한다', pattern: 'should', set: 2, example: 'We should protect our environment.' },
+  { word: 'should V', meaning: '(충고, 의무) 해야 한다', pattern: 'should', set: 2, example: 'We should protect our environment.' },
   { word: 'had better V', meaning: '(강한 충고) ~하는 것이 낫다', pattern: 'had better', set: 2, example: 'You had better take an umbrella today.' },
 ];
 
@@ -812,7 +823,7 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         sentence: "The city (___) I want to visit most during this summer vacation is Paris.",
         explanation: "선행사: The city (장소 명사) / 뒤 절: visit의 목적어가 빠진 불완전한 절 / 정답 이유: 목적격 관계대명사 which (where와 혼동 주의)",
         type: "A",
-        choices: ["which", "where", "when", "that"]
+        choices: ["which", "where", "when", "why"]
       },
       {
         sentence: "The rumors (___) were spreading quickly around the school turned out to be false.",
@@ -851,8 +862,9 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         choices: ["관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
       },
       {
-        sentence: "This is the only way [that] I can solve this complicated math problem.",
-        explanation: "선행사: the only way / 뒤 절: solve의 목적어 빠짐 / 정답 이유: 관계대명사 that (the way how는 불가하므로 that/in which 사용)",
+        sentence: "This is the only way [that] I know.",
+        replaces: ["This is the only way [that] I can solve this complicated math problem."],
+        explanation: "선행사: the only way / 뒤 절: know의 목적어 빠짐 (불완전한 절) / 정답 이유: 목적격 관계대명사 that",
         type: "B",
         choices: ["관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
       },
@@ -1023,7 +1035,7 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         sentence: "Could you please explain to me (___) you fixed the broken computer by yourself?",
         explanation: "선행사: 없음 / 뒤 절: 완전한 절 / 정답 이유: 방법을 나타내는 관계부사 how (the way와 함께 쓸 수 없음)",
         type: "A",
-        choices: ["how", "where", "which", "the way how"]
+        choices: ["how", "what", "which", "the way how"]
       },
       {
         sentence: "Is this the reason (___) you were so upset with me yesterday?",
@@ -1035,7 +1047,7 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         sentence: "The guide will explain (___) we can reach the top of the mountain safely.",
         explanation: "선행사: 없음 / 뒤 절: 완전한 절 / 정답 이유: '방법'의 의미를 나타내는 관계부사 how",
         type: "A",
-        choices: ["how", "where", "which", "when"]
+        choices: ["how", "what", "which", "who"]
       },
       {
         sentence: "I clearly remember the year [that] the world changed forever due to the event.",
@@ -1044,7 +1056,8 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         choices: ["관계부사 (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
       },
       {
-        sentence: "This is the town (___) I was born and raised by my grandparents.",
+        sentence: "This is the town (___) I was born and raised.",
+        replaces: ["This is the town (___) I was born and raised by my grandparents."],
         explanation: "선행사: the town (장소) / 뒤 절: I was born and raised (완전한 절) / 정답 이유: 장소를 나타내는 관계부사 where",
         type: "A",
         choices: ["where", "when", "which", "that"]
@@ -1077,7 +1090,7 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         sentence: "The developer explained (___) they improved the user interface of the application.",
         explanation: "선행사: 없음 / 뒤 절: 완전한 절 / 정답 이유: '방법'을 나타내는 관계부사 how",
         type: "A",
-        choices: ["how", "the way", "which", "where"]
+        choices: ["how", "the way", "which", "what"]
       },
       {
         sentence: "The studio [where] the band recorded their legendary album is now a museum.",
@@ -1143,7 +1156,7 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         sentence: "Could you tell me (___) you managed to solve the mystery so quickly?",
         explanation: "선행사: 없음 / 뒤 절: 완전한 절 / 정답 이유: 방법을 나타내는 관계부사 how",
         type: "A",
-        choices: ["how", "the way", "which", "where"]
+        choices: ["how", "the way", "which", "what"]
       },
       {
         sentence: "Tell me the reason (___) you decided to change your major so late.",
@@ -1197,7 +1210,7 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         sentence: "She showed me (___) she makes this delicious chocolate cake.",
         explanation: "선행사: 없음 / 뒤 절: 완전한 절 / 정답 이유: 방법을 나타내는 관계부사 how",
         type: "A",
-        choices: ["how", "the way", "which", "where"]
+        choices: ["how", "the way", "which", "what"]
       },
       {
         sentence: "The island [where] they spent their honeymoon is very peaceful.",
@@ -1218,7 +1231,8 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         choices: ["관계부사 (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "동격 that (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
       },
       {
-        sentence: "The reason (___) the prices of goods are rising is due to inflation.",
+        sentence: "The reason (___) the prices of goods are rising is inflation.",
+        replaces: ["The reason (___) the prices of goods are rising is due to inflation."],
         explanation: "선행사: the reason (이유) / 뒤 절: 완전한 절 / 정답 이유: 이유의 관계부사 why",
         type: "A",
         choices: ["why", "where", "which", "how"]
@@ -1327,7 +1341,8 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
       },
       {
-        sentence: "He didn't lose his hope (___) his team would eventually win the championship.",
+        sentence: "He didn't lose hope (___) his team would eventually win the championship.",
+        replaces: ["He didn't lose his hope (___) his team would eventually win the championship."],
         explanation: "선행사: hope (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
         type: "A",
         choices: ["that", "which", "how", "where"]
@@ -1423,7 +1438,8 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         choices: ["동격 that (선행사 O + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "접속사 that (선행사 X + 완전한 절)"]
       },
       {
-        sentence: "Scientists are investigating the fact (___) global warming is accelerating.",
+        sentence: "Scientists are concerned about the fact (___) global warming is accelerating.",
+        replaces: ["Scientists are investigating the fact (___) global warming is accelerating."],
         explanation: "선행사: the fact (추상명사) / 뒤 절: 완전한 절 / 정답 이유: 동격의 that",
         type: "A",
         choices: ["that", "which", "how", "what"]
@@ -1571,7 +1587,7 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         sentence: "The report suggests (___) we should increase our efficiency next year.",
         explanation: "선행사: 없음 (suggests의 목적어) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
         type: "A",
-        choices: ["that", "which", "where", "how"]
+        choices: ["that", "which", "where", "who"]
       },
       {
         sentence: "We found out [that] the restaurant we wanted to visit is closed today.",
@@ -1589,7 +1605,7 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         sentence: "The teacher suggested (___) we should read at least one English book a month.",
         explanation: "선행사: 없음 (목적어 절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
         type: "A",
-        choices: ["that", "which", "where", "how"]
+        choices: ["that", "which", "where", "who"]
       },
       {
         sentence: "Most people think [that] AI will significantly change the way we work.",
@@ -1601,7 +1617,7 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         sentence: "It is important (___) you keep your personal information safe online.",
         explanation: "선행사: 없음 (가주어 It의 진주어 절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
         type: "A",
-        choices: ["that", "which", "whether", "what"]
+        choices: ["that", "which", "who", "what"]
       },
       {
         sentence: "I forgot [that] I had an appointment with the dentist this afternoon.",
@@ -1646,7 +1662,8 @@ export const RELATIVE_GRAMMAR_CONCEPTS = [
         choices: ["that", "which", "where", "what"]
       },
       {
-        sentence: "It is vital [that] medical equipment is sterilized properly before use.",
+        sentence: "It is vital [that] medical equipment should be sterilized properly before use.",
+        replaces: ["It is vital [that] medical equipment is sterilized properly before use."],
         explanation: "선행사: 없음 (가주어 It의 진주어 절) / 뒤 절: 완전한 절 / 정답 이유: 접속사 that",
         type: "B",
         choices: ["접속사 that (선행사 X + 완전한 절)", "관계대명사 (선행사 O + 불완전한 절)", "관계부사 (선행사 O + 완전한 절)", "동격 that (선행사 O + 완전한 절)"]
@@ -1891,23 +1908,23 @@ export async function seedRelativeGrammar() {
       }, { merge: true });
     }
 
-    // Add examples to subcollection if they don't exist
+    // Examples: each finds the one it was saved as (its sentence, or a sentence it had before a fix) and gets a fixed
+    // choice or explanation there; missing ones are added. Examples a teacher added stay as they are.
     const examplesRef = collection(db, `wordbooks/${wordbookId}/words/${conceptId}/examples`);
-    
-    for (const ex of concept.examples) {
-      const exQuery = query(examplesRef, where('sentence', '==', ex.sentence));
-      const exSnap = await getDocs(exQuery);
-      
-      if (exSnap.empty) {
-        await addDoc(examplesRef, {
-          sentence: ex.sentence,
-          explanation: ex.explanation,
-          type: ex.type, // A or B
-          choices: ex.choices,
-          createdAt: Timestamp.now()
-        });
-      }
-    }
+    const savedExamples = (await getDocs(examplesRef)).docs.map(d => ({ id: d.id, data: d.data() }));
+    const examples: { sentence: string; explanation: string; type: string; choices: string[]; replaces?: string[] }[] = concept.examples;
+    const matched = matchBuiltIn(examples, savedExamples,
+      ex => [`s:${ex.sentence}`, ...(ex.replaces || []).map(r => `s:${r}`)], data => [`s:${data.sentence ?? ''}`]);
+    const exampleBatch = writeBatch(db);
+    let exampleWrites = 0;
+    examples.forEach((ex, j) => {
+      const fields = { sentence: ex.sentence, explanation: ex.explanation, type: ex.type, choices: ex.choices }; // type: A or B
+      const id = matched.get(j);
+      const change = id ? changedFields(savedExamples.find(d => d.id === id)!.data, fields) : null;
+      if (id && change) { exampleBatch.set(doc(examplesRef, id), change, { merge: true }); exampleWrites++; }
+      else if (!id) { exampleBatch.set(doc(examplesRef), { ...fields, createdAt: Timestamp.now() }); exampleWrites++; }
+    });
+    if (exampleWrites) await exampleBatch.commit();
   }
 }
 
@@ -1947,46 +1964,48 @@ export async function seedGrammarCramming() {
   const wordsRef = collection(db, `wordbooks/${wordbookId}/words`);
   const existingWords = await getDocs(wordsRef);
   
-  // Track existing sentences to avoid duplicates
-  const existingSentences = new Set(existingWords.docs.map(doc => doc.data().quizSentence));
-  
-  // Also check for old format
-  const isOldFormat = existingWords.size > 0 && existingWords.docs[0].data().word.includes(' ');
-  
+  // Old format (before the quiz fields): nothing has quizSentence. Those words are replaced.
+  const isOldFormat = existingWords.size > 0 && existingWords.docs.every(d => !('quizSentence' in d.data()));
   if (isOldFormat) {
     const deleteBatch = writeBatch(db);
     for (const d of existingWords.docs) {
       deleteBatch.delete(doc(db, `wordbooks/${wordbookId}/words`, d.id));
     }
     await deleteBatch.commit();
-    existingSentences.clear();
   }
-  
-  // Add only new questions from the pool
-  const newQuestions = GRAMMAR_CRAMMING_POOL.filter(item => !existingSentences.has(item.sentence));
-  
-  if (newQuestions.length > 0) {
-    let orderCounter = existingWords.size;
-    for (let i = 0; i < newQuestions.length; i += 400) {
-      const batch = writeBatch(db);
-      const chunk = newQuestions.slice(i, i + 400);
-      chunk.forEach((item, index) => {
-        const newDocRef = doc(collection(db, `wordbooks/${wordbookId}/words`));
-        batch.set(newDocRef, {
-          word: item.category,
-          meaning: item.choices[item.answer],
-          quizSentence: item.sentence,
-          quizQuestion: item.question,
-          quizChoices: item.choices,
-          quizAnswerIndex: item.answer,
-          quizExplanation: item.explanation,
-          set: item.set,
-          category: item.category,
-          order: orderCounter + i + index
-        });
-      });
-      await batch.commit();
+  const docs = isOldFormat ? [] : existingWords.docs.map(d => ({ id: d.id, data: d.data() }));
+
+  // Each question finds the word it was saved as (its pool id, else its sentence or a sentence it had before a fix):
+  // a fixed choice, answer or explanation is written there, keeping its id and order. A teacher's own questions stay.
+  const matched = matchBuiltIn(GRAMMAR_CRAMMING_POOL, docs,
+    item => [`id:${item.id}`, `s:${item.sentence}`, ...(item.replaces || []).map(r => `s:${r}`)],
+    data => [typeof data.poolId === 'number' ? `id:${data.poolId}` : '', `s:${data.quizSentence ?? ''}`]);
+  const fields = (item: typeof GRAMMAR_CRAMMING_POOL[number]) => ({
+    word: item.category,
+    meaning: item.choices[item.answer],
+    quizSentence: item.sentence,
+    quizQuestion: item.question,
+    quizChoices: item.choices,
+    quizAnswerIndex: item.answer,
+    quizExplanation: item.explanation,
+    set: item.set,
+    category: item.category,
+    poolId: item.id,
+  });
+  let order = Math.max(-1, ...docs.map(d => Number(d.data.order) || 0)) + 1;
+  const writes: { id: string; data: Record<string, unknown>; isNew: boolean }[] = [];
+  GRAMMAR_CRAMMING_POOL.forEach((item, i) => {
+    const id = matched.get(i);
+    if (id) {
+      const change = changedFields(docs.find(d => d.id === id)!.data, fields(item));
+      if (change) writes.push({ id, data: change, isNew: false });
+    } else {
+      writes.push({ id: doc(collection(db, `wordbooks/${wordbookId}/words`)).id, data: { ...fields(item), order: order++ }, isNew: true });
     }
-    console.log(`Synced ${newQuestions.length} new grammar questions`);
+  });
+  for (let i = 0; i < writes.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const w of writes.slice(i, i + 400)) batch.set(doc(db, `wordbooks/${wordbookId}/words`, w.id), w.data, { merge: !w.isNew });
+    await batch.commit();
   }
 }

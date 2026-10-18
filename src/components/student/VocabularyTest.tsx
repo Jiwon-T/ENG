@@ -5,6 +5,7 @@ import { auth, recordStudySession, db } from '../../lib/firebase';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { PetService } from '../../lib/petService';
 import { COMPLEMENT_QUIZ_DATA } from '../../lib/grammarSets';
+import { crammingAnswer, crammingDistractors } from '../../lib/multipleChoiceItems';
 
 interface Word {
   id: string;
@@ -264,7 +265,25 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
     let correctOption: string;
     let otherOptions: string[];
 
-    if (correctWord.quizChoices && correctWord.quizChoices.length > 0) {
+    // 5형식 목적격 보어 first: its words also carry quizChoices (in the book's order), and several of them are right.
+    if (isComplementGrammar) {
+      const verb = correctWord.word;
+      const compItem = COMPLEMENT_QUIZ_DATA.find(c => c.verb.toLowerCase() === (verb || '').toLowerCase());
+      if (compItem) {
+        const correctAnswers = compItem.answers.map(a => compItem.choices[a - 1]);
+        correctOption = correctAnswers[0];
+        otherOptions = compItem.choices.filter(c => !correctAnswers.includes(c));
+        (correctWord as any)._allCorrectOptions = correctAnswers;
+      } else {
+        correctOption = correctWord.distractors?.[0] || '';
+        const standardDistractors = [`O + 명사/형용사`, `O + to V`, `O + 동사원형`, `O + V-ing`];
+        otherOptions = standardDistractors.filter(d => d !== correctOption);
+      }
+    } else if (type === 'grammar-cramming') {
+      correctOption = crammingAnswer(correctWord as any);
+      otherOptions = crammingDistractors(correctWord as any);
+    } else if (correctWord.quizChoices && correctWord.quizChoices.length > 0) {
+      // 관계사·형식 동사: prepared with the answer first
       correctOption = correctWord.quizChoices[0];
       otherOptions = correctWord.quizChoices.slice(1);
     } else if (isConversionGrammar) {
@@ -278,19 +297,6 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
       };
       correctOption = getLabelFromPattern(correctWord.pattern || '');
       otherOptions = allLabels.filter(l => l !== correctOption);
-    } else if (isComplementGrammar) {
-      const verb = correctWord.word;
-      const compItem = COMPLEMENT_QUIZ_DATA.find(c => c.verb.toLowerCase() === (verb || '').toLowerCase());
-      if (compItem) {
-        const correctAnswers = compItem.answers.map(a => compItem.choices[a - 1]);
-        correctOption = correctAnswers[0];
-        otherOptions = compItem.choices.filter(c => !correctAnswers.includes(c));
-        (correctWord as any)._allCorrectOptions = correctAnswers;
-      } else {
-        correctOption = correctWord.distractors?.[0] || '';
-        const standardDistractors = [`O + 명사/형용사`, `O + to V`, `O + 동사원형`, `O + V-ing`];
-        otherOptions = standardDistractors.filter(d => d !== correctOption);
-      }
     } else if (isToIngGrammar) {
       const allPatterns = ['to부정사만 목적어로 오는 동사', '동명사만 목적어로 오는 동사', '둘다 목적어로 오고 의미도 같은 동사', '둘다 오지만 의미는 다른 동사'];
       const word = correctWord.word;

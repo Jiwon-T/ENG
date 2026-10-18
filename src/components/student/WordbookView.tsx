@@ -6,13 +6,15 @@ import { maskName } from '../../lib/maskName';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import VocabularyTest from './VocabularyTest';
-import { BookOpen, CheckCircle2, Circle, ChevronRight, Sparkles, Trophy, Volume2, RotateCcw, ChevronLeft, Gamepad2, Timer, X, Info, GraduationCap, AlertCircle } from 'lucide-react';
+import { BookOpen, CheckCircle2, Circle, ChevronRight, Sparkles, Trophy, Volume2, RotateCcw, ChevronLeft, Gamepad2, Timer, X, Info, GraduationCap, AlertCircle, MoreHorizontal } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType, recordStudySession } from '../../lib/firebase';
 import { PetService } from '../../lib/petService';
 import { collection, query, where, onSnapshot, doc, setDoc, Timestamp, getDocs, orderBy, limit, addDoc, getDoc } from 'firebase/firestore';
 import { COMPLEMENT_QUIZ_DATA, GrammarWord } from '../../lib/grammarSets';
 import { MODAL_QUIZ_POOL, BASIC_MODAL_QUIZ_POOL } from '../../lib/modalQuizPool';
 import { VERB_FORM_QUIZ_POOL } from '../../lib/verbFormQuizPool';
+import { crammingAnswer, crammingDistractors } from '../../lib/multipleChoiceItems';
+import { grammarSetCount, grammarSetWords } from '../../lib/grammarSetRanges';
 
 import { saveRecentLearning, type RecentLearning } from '../../lib/recentLearning';
 
@@ -65,6 +67,30 @@ function shuffleArray<T>(array: T[]): T[] {
   }
   return newArray;
 }
+
+/** 문장 세트: the word games (플래시카드 … 테스트) are rarely used there, so they wait behind ⋯ 더보기; other sets show them. */
+function MoreGames({ hide, small, children }: { hide: boolean; small?: boolean; children: React.ReactNode }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (!hide) return;
+    const outside = (e: PointerEvent) => { if (ref.current?.open && !ref.current.contains(e.target as Node)) ref.current.open = false; };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [hide]);
+  if (!hide) return <>{children}</>;
+  return <details ref={ref} className="relative">
+    <summary aria-label="다른 학습 더보기" title="다른 학습" className="list-none [&::-webkit-details-marker]:hidden cursor-pointer px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black bg-white text-slate-400 border border-slate-100 hover:bg-slate-50 flex items-center gap-1"><MoreHorizontal size={small ? 12 : 14} aria-hidden="true" />더보기</summary>
+    <div className="absolute right-0 top-full mt-2 z-30 flex flex-col items-stretch gap-1.5 rounded-2xl border border-slate-100 bg-white p-2 shadow-lg min-w-[140px] [&>button]:justify-center" onClick={e => { if ((e.target as HTMLElement).closest('button')) ref.current?.removeAttribute('open'); }}>{children}</div>
+  </details>;
+}
+
+/** 4형식 → 3형식 전환: the saved pattern and the choice shown for it. */
+const CONVERSION_LABELS: Record<string, string> = {
+  to: '동사 O to + 간접목적어',
+  for: '동사 O for + 간접목적어',
+  of: '동사 O of + 간접목적어',
+  impossible: '3형식 전환 불가',
+};
 
 export default function WordbookView({ isMobile, category = 'word', onNavigate, resumeTarget, onResumeHandled }: { isMobile?: boolean; category?: 'word' | 'grammar' | 'exam' | 'sentence'; onNavigate?: (view: any) => void; resumeTarget?: RecentLearning | null; onResumeHandled?: () => void }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
@@ -331,35 +357,15 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     ? words.filter(w => (w.day ?? (Math.floor((w.order ?? 0) / daySize) + 1)) === currentChunk + 1)
     : words.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
 
-  if (selectedWordbook?.type === 'grammar-cramming') {
-    totalChunks = 6; // Based on the 6 sets in the pool
-    displayedWords = words.filter(w => (w as any).set === currentChunk + 1);
+  const setTotal = grammarSetCount(selectedWordbook?.type);
+  if (setTotal) {
+    totalChunks = setTotal;
+    displayedWords = grammarSetWords(selectedWordbook?.type, words, currentChunk + 1)!;
   } else if (selectedWordbook?.type === 'relative-grammar') {
     // For relative-grammar, we only show concepts in the list, hiding sentences with blanks
     const conceptsOnly: Word[] = words.filter(w => !w.word.includes('(___)'));
     totalChunks = Math.ceil(conceptsOnly.length / daySize);
     displayedWords = conceptsOnly.slice(currentChunk * daySize, (currentChunk + 1) * daySize);
-  } else if (selectedWordbook?.type === 'complement-grammar') {
-    totalChunks = 3;
-    if (currentChunk === 0) displayedWords = words.slice(0, 7);
-    else if (currentChunk === 1) displayedWords = words.slice(7, 17);
-    else displayedWords = words.slice(17, 29);
-  } else if (selectedWordbook?.type === 'basic-modal-grammar') {
-    totalChunks = 2;
-    if (currentChunk === 0) displayedWords = words.slice(0, 6);
-    else displayedWords = words.slice(6, 15);
-  } else if (selectedWordbook?.type === 'modal-grammar') {
-    totalChunks = 6;
-    // Boundaries: 14, 21, 30, 37, 42, 48
-    if (currentChunk === 0) displayedWords = words.slice(0, 14);
-    else if (currentChunk === 1) displayedWords = words.slice(14, 21);
-    else if (currentChunk === 2) displayedWords = words.slice(21, 30);
-    else if (currentChunk === 3) displayedWords = words.slice(30, 37);
-    else if (currentChunk === 4) displayedWords = words.slice(37, 42);
-    else displayedWords = words.slice(42, 48);
-  } else if (selectedWordbook?.type === 'verb-form-grammar') {
-    totalChunks = 6;
-    displayedWords = words.filter(w => (w as any).set === currentChunk + 1);
   } else if (selectedWordbook?.type === 'sentence-order') {
     const passageDays: number[] = Array.from(new Set<number>(words.map(w => Number(w.day ?? 1)))).sort((a, b) => a - b);
     totalChunks = Math.max(1, passageDays.length > 0 ? Math.max(...passageDays) : 1);
@@ -533,8 +539,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
 
     const cards: any[] = [];
     selectedSessionWords.forEach((w: Word) => {
-      cards.push({ id: `${w.id}_word`, content: w.word, type: 'word', matched: false, wordId: w.id });
-      cards.push({ id: `${w.id}_meaning`, content: w.meaning, type: 'meaning', matched: false, wordId: w.id });
+      // pairKey: two words with the same meaning (start / begin "시작하다") pair with either meaning card
+      cards.push({ id: `${w.id}_word`, content: w.word, type: 'word', matched: false, wordId: w.id, pairKey: w.meaning });
+      cards.push({ id: `${w.id}_meaning`, content: w.meaning, type: 'meaning', matched: false, wordId: w.id, pairKey: w.meaning });
     });
 
     setMatchCards(shuffleArray(cards));
@@ -666,9 +673,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
       return;
     }
 
-    const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || 
-                              selectedWordbook?.title?.includes('관계부사') ||
-                              selectedWordbook?.title?.includes('that');
+    // The same test as the quiz and its grading (a title with "that" in it, "that절 정리", is an ordinary set)
+    const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.title?.includes('관계부사');
     
     if (isRelativeGrammar) {
       // Collect all available examples from all concepts
@@ -722,6 +728,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
       const shuffled = shuffleArray(displayedWords);
       const selectedSessionWords = shuffled.slice(0, sessionUnitSize).map(w => ({
         ...w,
+        meaning: crammingAnswer(w as any),
         quizSentence: (w as any).quizSentence || w.word,
         quizQuestion: (w as any).quizQuestion || '',
         quizChoices: (w as any).quizChoices || [],
@@ -758,6 +765,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
         word: q.sentence, // We'll display sentence in front
         meaning: q.choices[q.answer], // Set correct meaning for match logic
         quizSentence: q.sentence,
+        quizQuestion: q.question, // "밑줄 친 could의 의미는?", "(강한 추측)": without it some choices are all right
         quizExplanation: q.explanation,
         quizChoices: q.choices,
         quizCategory: 'grammar'
@@ -869,6 +877,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
           return d >= testRange.start && d <= testRange.end;
         })
       : baseWords.slice(startIndex, endIndex);
+    // Sets with their own boundaries: the range is the same 세트 the list shows (not 10 words a set)
+    if (grammarSetCount(selectedWordbook?.type)) {
+      rangeWords = [];
+      for (let set = testRange.start; set <= testRange.end; set++) rangeWords.push(...grammarSetWords(selectedWordbook?.type, words, set)!);
+    }
     
     if (rangeWords.length === 0) {
       alert('선택한 범위에 단어가 없습니다.');
@@ -876,9 +889,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     }
 
     // Pre-fetch examples for relative-grammar or if it's a grammar set that uses them
-    const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || 
-                              selectedWordbook?.title?.includes('관계부사') ||
-                              selectedWordbook?.title?.includes('that');
+    // The same test as the quiz and its grading (a title with "that" in it, "that절 정리", is an ordinary set)
+    const isRelativeGrammar = selectedWordbook?.type === 'relative-grammar' || selectedWordbook?.title?.includes('관계부사');
     const isVerbFormGrammar = selectedWordbook?.type === 'verb-form-grammar';
     
     if ((isRelativeGrammar || isVerbFormGrammar) && selectedWordbook) {
@@ -1007,14 +1019,20 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     let correctOption: string;
     let otherOptions: string[];
 
-    if (isRelativeGrammar || isModalGrammar || isVerbFormGrammar) {
+    if (selectedWordbook?.type === 'grammar-cramming') {
+      // The question's own choices (not the answers of the other questions)
+      correctOption = crammingAnswer(correctWord as any);
+      otherOptions = crammingDistractors(correctWord as any);
+    } else if (isRelativeGrammar || isModalGrammar || isVerbFormGrammar) {
       // Use choices from the prepared quiz sentence
       const choices = correctWord.quizChoices || [];
       
       if (isModalGrammar || isVerbFormGrammar) {
         // Find the actual correct option using the answer index from the pool
-        const pool = isModalGrammar ? MODAL_QUIZ_POOL : VERB_FORM_QUIZ_POOL;
-        const originalQuestion = (pool as any[]).find(q => (isModalGrammar ? `modal_quiz_${q.id}` : `verb_form_quiz_${q.id}`) === correctWord.id);
+        const isBasic = selectedWordbook?.type === 'basic-modal-grammar';
+        const pool = isVerbFormGrammar ? VERB_FORM_QUIZ_POOL : (isBasic ? BASIC_MODAL_QUIZ_POOL : MODAL_QUIZ_POOL);
+        const prefix = isVerbFormGrammar ? 'verb_form_quiz_' : (isBasic ? 'basic_modal_quiz_' : 'modal_quiz_');
+        const originalQuestion = (pool as any[]).find(q => `${prefix}${q.id}` === correctWord.id);
         if (originalQuestion) {
           correctOption = originalQuestion.choices[originalQuestion.answer];
           otherOptions = originalQuestion.choices.filter((_: any, idx: number) => idx !== originalQuestion.answer);
@@ -1420,8 +1438,10 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     const fakeRegular = correctWord.word.endsWith('e') ? correctWord.word + 'd' : correctWord.word + 'ed';
     if (distractors.size < 4) distractors.add(fakeRegular);
 
-    // 4. Forms from words with the same pattern
-    const samePatternWords = words.filter(w => w.id !== correctWord.id && w.pattern === correctWord.pattern);
+    // 4. Forms from words with the same pattern. A word with the same base (far: farther / further, late: later /
+    // latter, old: older / elder) is left out here and below: its form is a right answer too.
+    const sameBase = (w: Word) => w.id === correctWord.id || w.word === correctWord.word;
+    const samePatternWords = words.filter(w => !sameBase(w) && w.pattern === correctWord.pattern);
     const samePatternForms: string[] = samePatternWords
       .map(w => step === 0 ? (w.comparative || w.past) : (w.superlative || w.pastParticiple))
       .filter((f): f is string => !!f && f !== correctAnswer);
@@ -1433,7 +1453,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     }
 
     // 5. Any other forms
-    const otherWords = words.filter(w => w.id !== correctWord.id);
+    const otherWords = words.filter(w => !sameBase(w));
     const otherForms: string[] = otherWords
       .map(w => step === 0 ? (w.comparative || w.past) : (w.superlative || w.pastParticiple))
       .filter((f): f is string => !!f && f !== correctAnswer);
@@ -1513,7 +1533,11 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isQuizMode && !isQuizFinished && selectedOption === null) {
         const num = parseInt(e.key);
-        if (num >= 1 && num <= quizOptions.length) {
+        if (selectedWordbook?.type === 'complement-grammar') {
+          // 모두 고르기: a number key only ticks a choice, Enter checks (as the 정답 확인 button)
+          if (num >= 1 && num <= quizOptions.length) setSelectedMultiOptions(prev => prev.includes(num - 1) ? prev.filter(i => i !== num - 1) : [...prev, num - 1]);
+          else if (e.key === 'Enter') handleComplementSubmit();
+        } else if (num >= 1 && num <= quizOptions.length) {
           handleQuizAnswer(num - 1);
         }
       }
@@ -1527,7 +1551,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isQuizMode, isQuizFinished, selectedOption, quizOptions]);
+  }, [isQuizMode, isQuizFinished, selectedOption, quizOptions, selectedMultiOptions, selectedWordbook?.type]);
 
   useEffect(() => {
     let interval: any;
@@ -1552,7 +1576,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
       const firstCard = matchCards[selectedMatchCard];
       const secondCard = matchCards[index];
 
-      if (firstCard.wordId === secondCard.wordId && firstCard.type !== secondCard.type) {
+      if (firstCard.type !== secondCard.type && (firstCard.wordId === secondCard.wordId || (!!firstCard.pairKey && firstCard.pairKey === secondCard.pairKey))) {
         // Match!
         const newCards = [...matchCards];
         newCards[selectedMatchCard].matched = true;
@@ -2006,7 +2030,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                               />
                             </div>
                           )}
-                          {selectedWordbook?.type === 'grammar-cramming' && (sessionWords[quizIndex] as any).quizQuestion && (
+                          {(sessionWords[quizIndex] as any).quizQuestion && (
                             <p className="text-xs md:text-sm font-bold text-blue-500 bg-blue-50 px-4 py-2 rounded-full mb-[-1rem]">
                               {(sessionWords[quizIndex] as any).quizQuestion}
                             </p>
@@ -2124,7 +2148,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                                 p === 'to부정사만 목적어로 오는 동사' ? `${v.word} to V` :
                                 p === '동명사만 목적어로 오는 동사' ? `${v.word} Ving` :
                                 p === '둘다 목적어로 오고 의미도 같은 동사' ? `둘 다 가능하고 의미도 같음` :
-                                p === '둘다 오지만 의미는 다른 동사' ? `둘 다 가능하고 의미 달라짐` : p
+                                p === '둘다 오지만 의미는 다른 동사' ? `둘 다 가능하고 의미 달라짐` :
+                                // 4형식 전환: the pattern is saved as to / for / of / impossible, the choice is its label
+                                selectedWordbook?.type === 'conversion-grammar' ? CONVERSION_LABELS[p] || p : p
                               );
                             })();
 
@@ -2502,6 +2528,14 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                             GRAMMAR CONCEPT
                           </div>
                         )}
+                        {selectedWordbook?.type === 'grammar-cramming' ? (
+                          // 문법 벼락치기: the question itself (its word is only the 분류, e.g. "5형식")
+                          <div className="text-center space-y-3">
+                            <div className="text-[10px] font-black text-indigo-500">{currentWord.word}</div>
+                            <div className={`${isMobile ? 'text-lg' : 'text-2xl'} font-black text-slate-900 leading-snug`}>{(currentWord as any).quizSentence || currentWord.word}</div>
+                            {(currentWord as any).quizQuestion && <div className="text-xs md:text-sm font-bold text-slate-500">{(currentWord as any).quizQuestion}</div>}
+                          </div>
+                        ) : <>
                         <div className={`${isMobile ? 'text-3xl' : 'text-5xl'} font-black text-slate-900 mb-4 md:mb-6`}>{currentWord.word}</div>
                         <button 
                           onClick={(e) => {
@@ -2512,6 +2546,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                         >
                           <Volume2 size={isMobile ? 24 : 32} />
                         </button>
+                        </>}
                         <div className="absolute bottom-4 md:bottom-6 text-[10px] md:text-xs font-bold text-slate-300">클릭하여 뜻 확인</div>
                       </div>
 
@@ -2526,6 +2561,28 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                               <div className="text-[10px] font-black uppercase tracking-widest opacity-60">문법 분류</div>
                               <div className={`${isMobile ? 'text-xl' : 'text-2xl'} font-black`}>
                                 {currentWord.pattern}
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-[10px] font-black uppercase tracking-widest opacity-60">뜻</div>
+                              <div className={`${isMobile ? 'text-xl' : 'text-2xl'} font-bold`}>{currentWord.meaning}</div>
+                            </div>
+                          </div>
+                        ) : selectedWordbook?.type === 'grammar-cramming' ? (
+                          <div className="text-center space-y-3">
+                            <div className="space-y-1">
+                              <div className="text-[10px] font-black uppercase tracking-widest opacity-60">정답</div>
+                              <div className={`${isMobile ? 'text-2xl' : 'text-3xl'} font-black`}>{crammingAnswer(currentWord as any)}</div>
+                            </div>
+                            {(currentWord as any).quizExplanation && <div className="text-xs md:text-sm font-medium opacity-90 leading-relaxed">{(currentWord as any).quizExplanation}</div>}
+                          </div>
+                        ) : (selectedWordbook?.type === 'conversion-grammar' || selectedWordbook?.type === 'complement-grammar') ? (
+                          // 4형식 전환 / 5형식 목적격 보어: the point is the pattern (to·for·of, 보어 형태), then the meaning
+                          <div className="text-center space-y-4">
+                            <div className="space-y-1">
+                              <div className="text-[10px] font-black uppercase tracking-widest opacity-60">{selectedWordbook.type === 'conversion-grammar' ? '3형식 전환' : '목적격 보어'}</div>
+                              <div className={`${isMobile ? 'text-xl' : 'text-2xl'} font-black`}>
+                                {selectedWordbook.type === 'conversion-grammar' ? CONVERSION_LABELS[currentWord.pattern || ''] || currentWord.pattern : currentWord.pattern}
                               </div>
                             </div>
                             <div className="space-y-1">
@@ -2769,6 +2826,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                         ✨ 3단 변화 챌린지
                       </button>
                     )}
+                    <MoreGames hide={selectedWordbook.type === 'sentence'} small={isMobile}>
                     <button
                       onClick={() => setPendingMode('flashcard')}
                       className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all bg-white text-slate-400 border border-slate-100 hover:bg-slate-50`}
@@ -2786,13 +2844,14 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                       <CheckCircle2 size={isMobile ? 12 : 14} />
                       객관식
                     </button>
-                    <button
+                    {/* 문법 벼락치기: a card would be "5형식" against "do", so there is nothing to match */}
+                    {selectedWordbook.type !== 'grammar-cramming' && <button
                       onClick={() => setPendingMode('match')}
                       className="px-3 md:px-4 py-1.5 md:py-2 rounded-full text-[10px] md:text-xs font-black transition-all flex items-center gap-1 md:gap-2 bg-white text-slate-400 border border-slate-100 hover:bg-slate-50"
                     >
                       <Gamepad2 size={isMobile ? 12 : 14} />
                       매치 게임
-                    </button>
+                    </button>}
                     <button
                       onClick={() => {
                         setTestRange({ start: currentChunk + 1, end: currentChunk + 1 });
@@ -2803,6 +2862,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                       <GraduationCap size={isMobile ? 12 : 14} />
                       테스트
                     </button>
+                    </MoreGames>
                   </>
                 )}
               </div>

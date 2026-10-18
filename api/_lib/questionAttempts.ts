@@ -72,7 +72,7 @@ export function touchSessions(sessions: { start: number; end: number }[], folded
 }
 
 /** Where the questions come from: one's own set, or a set a teacher gave (the snapshot fixed then; only its students). */
-interface Source { kind: 'self' | 'assigned'; id: string; title: string; questions: MadeQuestion[]; version: number; key: string; dueAt: number | null; cancelled: boolean; asgRef?: any }
+interface Source { kind: 'self' | 'assigned'; id: string; title: string; questions: MadeQuestion[]; version: number; key: string; dueAt: number | null; cancelled: boolean; asgRef?: any; setRef?: any }
 async function sourceOf(db: any, a: PassageActor, input: any): Promise<Source> {
   if (input?.assignmentId) {
     const asgRef = db.collection(QUESTION_ASSIGNMENTS).doc(clip(input.assignmentId, 64)), snap = await asgRef.get();
@@ -81,11 +81,11 @@ async function sourceOf(db: any, a: PassageActor, input: any): Promise<Source> {
     if (!(x.uids || []).includes(a.uid)) throw Error('FORBIDDEN');
     return { kind: 'assigned', id: x.id, title: x.title, questions: x.questions, version: x.createdAt, key: `asg:${a.uid}:${x.id}`, dueAt: x.dueAt ?? null, cancelled: Boolean(x.cancelled), asgRef };
   }
-  const snap = await db.collection(QUESTION_SETS).doc(clip(input?.setId, 64)).get();
+  const setRef = db.collection(QUESTION_SETS).doc(clip(input?.setId, 64)), snap = await setRef.get();
   if (!snap.exists) throw Error('PASSAGE_NOT_FOUND');
   const set = snap.data();
   if (set.uid !== a.uid) throw Error('FORBIDDEN'); // someone else's set: only when a teacher gives it
-  return { kind: 'self', id: set.id, title: set.title, questions: set.questions, version: set.createdAt, key: `set:${a.uid}:${set.id}`, dueAt: null, cancelled: false };
+  return { kind: 'self', id: set.id, title: set.title, questions: set.questions, version: set.version || set.createdAt, key: `set:${a.uid}:${set.id}`, dueAt: null, cancelled: false, setRef };
 }
 /** A given set read again inside the transaction: cancelled (or the student taken off) since it was read = stop. */
 const stillGiven = async (tx: any, s: Source, uid: string) => { if (!s.asgRef) return; const x = (await tx.get(s.asgRef)).data(); if (!x || x.cancelled || !(x.uids || []).includes(uid)) throw Error('ASSIGNMENT_CANCELLED'); };
@@ -110,7 +110,8 @@ export async function openAttempt(db: any, a: PassageActor, input: any, now = Da
     if (old?.status === 'submitted') return old;
     await stillGiven(tx, s, a.uid);
     const touched = touchSessions(old?.sessions || [], old?.folded || { count: 0, ms: 0 }, now);
-    const next = old ? { ...old, ...touched, updatedAt: now }
+    // a set that grew (더 만들기) since: the unfinished try moves to the new version, its answers kept (questions only added)
+    const next = old ? { ...old, ...touched, setVersion: s.version, updatedAt: now }
       : { id: ref.id, uid: a.uid, kind: s.kind, ...(s.kind === 'assigned' ? { assignmentId: s.id } : { setId: s.id }), title: s.title, dueAt: s.dueAt, setVersion: s.version, status: 'draft', answers: {}, ...touched, createdAt: now, updatedAt: now };
     tx.set(ref, next);
     return next;
@@ -147,13 +148,14 @@ export async function submitAttempt(db: any, a: PassageActor, input: any, now = 
   const petRef = db.collection(PET_STATES).doc(a.uid), userRef = db.collection('users').doc(a.uid), paying = s.kind === 'assigned';
   const attempt = await db.runTransaction(async (tx: any) => {
     // every read first (the pet too), then the writes
-    const [oldSnap, asgSnap, petSnap, userSnap] = await Promise.all([tx.get(ref), s.asgRef ? tx.get(s.asgRef) : null, paying ? tx.get(petRef) : null, paying ? tx.get(userRef) : null]);
-    const old = oldSnap.data(), asg = asgSnap?.data();
+    const [oldSnap, asgSnap, setSnap, petSnap, userSnap] = await Promise.all([tx.get(ref), s.asgRef ? tx.get(s.asgRef) : null, s.setRef ? tx.get(s.setRef) : null, paying ? tx.get(petRef) : null, paying ? tx.get(userRef) : null]);
+    const old = oldSnap.data(), asg = asgSnap?.data(), cur = setSnap?.data();
     if (old?.status === 'submitted') return old;
     if (!old) throw Error('ATTEMPT_NOT_OPEN');
     // the given set read again here: a cancel since it was first read stops the grading (and the points)
     if (s.asgRef && (!asg || asg.cancelled || !(asg.uids || []).includes(a.uid))) throw Error('ASSIGNMENT_CANCELLED');
-    if (old.setVersion !== s.version) throw Error('ATTEMPT_STALE');
+    // the set read again here: grown (더 만들기) since it was first read = open it again, never graded on the old count
+    if (old.setVersion !== s.version || (s.setRef && (!cur || (cur.version || cur.createdAt) !== s.version))) throw Error('ATTEMPT_STALE');
     const questions = s.questions, graded = questions.map((q, index) => ({ q, index })).filter(x => solvable(x.q));
     const missing = graded.some(({ q, index }) => { const v = answers[String(index)]; return v === undefined || (Array.isArray(v) && v.some(w => !w)); });
     if (missing) throw Error('ATTEMPT_INCOMPLETE');

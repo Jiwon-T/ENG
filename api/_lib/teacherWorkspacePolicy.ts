@@ -24,6 +24,8 @@ export const lessonDraftSchema = z.object({
     wrong:z.number().nonnegative().nullable().optional(), examWrong:z.number().nonnegative().nullable().optional(),
     // The score was typed as a percentage (kept as correct out of 100): no real 문항·오답 count to show.
     scorePercent:z.boolean().default(false), examScorePercent:z.boolean().default(false),
+    // The 테스트 점수's name (단어, 모의고사, 단원평가 or typed); empty: shown as just 테스트.
+    testName:z.string().trim().max(30).default(''),
     round: z.number().nonnegative().nullable(),
     selfStudy: z.enum(['미확인', '없음', '있음']).default('없음'),
     selfStudyStart: z.string().default(''), selfStudyEnd: z.string().default(''),

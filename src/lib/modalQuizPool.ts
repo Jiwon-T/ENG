@@ -76,7 +76,7 @@ export const MODAL_QUIZ_POOL: QuizQuestion[] = [
   },
   {
     id: 33, set: 1,
-    sentence: "We ___ always tell the truth.",
+    sentence: "We ___ always tell the truth. (우리는 항상 진실을 말하겠다.)",
     question: "빈칸에 알맞은 조동사와 의미는?",
     choices: ["will (~하겠다, 의지)", "can (~할 수 있다, 능력)", "may (~해도 된다, 허가)", "must (~해야 한다, 의무)"],
     answer: 0,
@@ -84,7 +84,7 @@ export const MODAL_QUIZ_POOL: QuizQuestion[] = [
   },
   {
     id: 34, set: 1,
-    sentence: "She ___ have a cold or the flu.",
+    sentence: "She ___ have a cold or the flu. (그녀는 감기나 독감에 걸린 것일지도 모른다.)",
     question: "빈칸에 알맞은 조동사와 의미는?",
     choices: ["might (~일지도 모른다)", "must (~임이 틀림없다)", "can't (~일 리가 없다)", "will (~할 것이다)"],
     answer: 0,
@@ -184,7 +184,7 @@ export const MODAL_QUIZ_POOL: QuizQuestion[] = [
   },
   {
     id: 18, set: 4,
-    sentence: "There ___ be a bridge here two years ago.",
+    sentence: "There ___ be a bridge here.",
     question: "빈칸에 알맞은 표현은? (과거 상태)",
     choices: ["used to (~이었다, 과거 상태 가능)", "would (~하곤 했다, 과거 습관만 가능)", "was used to (~에 익숙했다)", "had better (~하는 것이 낫다)"],
     answer: 0,
@@ -208,8 +208,8 @@ export const MODAL_QUIZ_POOL: QuizQuestion[] = [
   },
   {
     id: 21, set: 4,
-    sentence: "James (___ / ___) be short, but he is tall now.",
-    question: "빈칸에 들어갈 수 있는 표현은?",
+    sentence: "James ___ be short, but he is tall now.",
+    question: "빈칸에 used to와 would 중 들어갈 수 있는 것은?",
     choices: ["used to만 가능 (과거 상태이므로)", "would만 가능", "둘 다 가능", "둘 다 불가능"],
     answer: 0,
     explanation: "be short는 과거의 상태를 나타내므로 would는 불가. used to만 가능하다."
@@ -331,9 +331,9 @@ export const MODAL_QUIZ_POOL: QuizQuestion[] = [
   },
   {
     id: 104, set: 1,
-    sentence: "She ___ have a cold or the flu.",
+    sentence: "It ___ snow tomorrow, but I'm not sure. (내일 눈이 올지도 모르지만, 확실하지 않다.)",
     question: "빈칸에 알맞은 조동사와 의미는?",
-    choices: ["might (~일지도 모른다, 불확실한 추측)", "may (~일지도 모른다, 약한 추측)", "must (~임이 틀림없다, 강한 추측)", "can't (~일 리가 없다)"],
+    choices: ["might (~일지도 모른다, 불확실한 추측)", "will (~할 것이다, 미래)", "must (~임이 틀림없다, 강한 추측)", "can't (~일 리가 없다)"],
     answer: 0,
     explanation: "might는 may보다 더 불확실한 추측을 나타낸다."
   },
@@ -347,11 +347,11 @@ export const MODAL_QUIZ_POOL: QuizQuestion[] = [
   },
   {
     id: 106, set: 1,
-    sentence: "We ___ always tell the truth.",
+    sentence: "I ___ call you back tonight. I promise. (오늘 밤에 다시 전화할게. 약속해.)",
     question: "빈칸에 알맞은 조동사와 의미는?",
     choices: ["will (~하겠다, 의지)", "can (~할 수 있다, 능력)", "may (~할지도 모른다, 추측)", "should (~해야 한다, 충고)"],
     answer: 0,
-    explanation: "will은 의지를 나타내어 '~하겠다'를 뜻한다."
+    explanation: "will은 말하는 사람의 의지를 나타내어 '~하겠다'를 뜻한다."
   },
   {
     id: 107, set: 1,
@@ -589,9 +589,9 @@ export const MODAL_QUIZ_POOL: QuizQuestion[] = [
     id: 136, set: 6,
     sentence: "다음 중 부정형이 잘못 연결된 것은?",
     question: "",
-    choices: ["would like → would not like (X, wouldn't like가 맞음)", "would rather → would rather not (O)", "had better → had better not (O)", "may as well → may as well not (O)"],
+    choices: ["had better → had not better", "would rather → would rather not", "would like → wouldn't like", "may as well → may as well not"],
     answer: 0,
-    explanation: "would like의 부정형은 wouldn't like이다. 'would not like'도 가능하나 축약형 wouldn't like가 일반적이다. 나머지는 모두 올바른 부정형이다."
+    explanation: "had better의 부정형은 not을 맨 뒤에 붙인 had better not이다. 나머지는 모두 올바른 부정형이다."
   },
   {
     id: 137, set: 6,

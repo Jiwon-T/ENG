@@ -121,3 +121,22 @@ export async function saveOnlineEvaluation(db:any,actor:any,input:unknown,deps={
   return {evaluation:{text:value,updatedAt:date(now)}};
  });
 }
+
+/** 수업 일지 › 이날 앱 학습: one student's app sessions of one day (Seoul time), newest first, at most 20, summary fields
+ *  only (no answers). Any teacher of this student sees them, whatever the subject (the academy's choice: a 수학 teacher
+ *  writing the 일지 may want to know the student studied); the full online report stays 영어 only. The same two-way
+ *  account-link checks as that report, read again after the sessions; a teacher not on this student, or a student without
+ *  a linked account, simply gets none (the chip stays hidden). */
+export async function loadLessonDayStudy(db:any,actor:any,keyInput:unknown,dayInput:unknown,deps={readStudentMapping}){
+ const key=uuid(z.string().uuid().parse(keyInput)),day=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(dayInput);
+ try{reviewSubjects(actor,key);}catch{return {sessions:[]};}
+ const link=await linkedStudentAccount(db,key,deps);if('reason' in link)return {sessions:[]};
+ const uid=link.uid,from=Date.parse(`${day}T00:00:00+09:00`);
+ const snap=await db.collection('studySessions').where('uid','==',uid).where('createdAt','>=',Timestamp.fromMillis(from)).where('createdAt','<',Timestamp.fromMillis(from+86_400_000))
+  .orderBy('createdAt','desc').orderBy(FieldPath.documentId(),'desc').limit(20).get();
+ const latest=await deps.readStudentMapping(db,key);if(latest?.firebaseUid!==uid||latest?.internalStudentId!==link.mapping.internalStudentId)return {sessions:[]};
+ return {sessions:snap.docs.filter((d:any)=>d.data().uid===uid&&english(d.data())).map((d:any)=>{const r=d.data(),answers=Array.isArray(r.incorrectAnswers)?r.incorrectAnswers:[];return {
+  id:d.id,wordbookTitle:text(r.wordbookTitle,200)||'단어장',type:text(r.type,50),category:text(r.category,50)||'word',createdAt:date(r.createdAt),duration:number(r.duration),
+  score:number(r.score),totalItems:number(r.totalItems),dayStart:number(r.dayStart),dayEnd:number(r.dayEnd),incorrectCount:answers.length,wrongWords:answers.slice(0,5).map((a:any)=>text(a.word,60)).filter(Boolean),
+ };})};
+}
