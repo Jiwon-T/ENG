@@ -102,7 +102,7 @@ export async function previousAppSourceLesson(db: any, actor: any, studentKey: s
     return { round: d.round ?? null, selfStudyRound: d.selfStudyRound ?? null, content: d.content || '', nextPlan: d.nextPlan || '', examScope: d.examScope || '', assignment: d.assignment || '',
         attendance: d.attendance || '미확인', attitude: d.attitude || '미확인', homework: d.homework || '미확인', test: d.test || '미확인',
         total: d.total ?? null, wrong, correct: d.correct ?? null, examTotal: d.examTotal ?? null, examWrong, examCorrect: d.examCorrect ?? null,
-        scorePercent: d.scorePercent === true, testName: d.testName || '', examScorePercent: d.examScorePercent === true, sessionRecords };
+        scorePercent: d.scorePercent === true, testName: d.testName || '', extraTests: Array.isArray(d.extraTests) ? d.extraTests : [], examScorePercent: d.examScorePercent === true, sessionRecords };
 }
 
 /**

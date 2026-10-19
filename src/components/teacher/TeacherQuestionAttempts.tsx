@@ -59,7 +59,7 @@ export default function TeacherQuestionAttempts({ studentKey }: { studentKey: st
                     {([[true, '맞음으로'], [false, '틀림으로']] as const).map(([ok, label]) => <button key={label} type="button" disabled={busy || q.ok === ok} onClick={() => void judge(r, q.index, ok)} className={`rounded-lg border px-2.5 py-1 font-bold disabled:opacity-40 ${ok ? 'border-emerald-200 text-emerald-700' : 'border-rose-200 text-rose-700'}`}>{busy ? '바꾸는 중…' : label}</button>)}
                   </span>
                 </div>; })}
-              {r.kind === 'assigned' && r.reward && <p className="mt-1 text-slate-400">맞음으로 바꾸면 차이만큼 포인트를 더 줘요(오늘 공부 포인트 한도 안). 틀림으로 바꿔도 이미 받은 포인트는 그대로예요.</p>}
+              {r.kind === 'assigned' && r.reward && <p className="mt-1 text-slate-400">맞음으로 바꾸면 차이만큼 포인트를 더 줘요(오늘 공부 포인트 한도 안). 틀림으로 바꾸면 그 문제로 더 받았던 포인트의 30%만 돌려받아요.</p>}
               {judgeError && <p role="alert" className="font-bold text-rose-700">{judgeError}</p>}</>}</>}
         </div>}
       </article>;

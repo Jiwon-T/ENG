@@ -95,7 +95,7 @@ export default function AnalysisSheetOutput({ passage }: { passage: Passage }) {
       <div className="mt-1 flex flex-wrap gap-1.5">{PARTS.filter(x => x.kinds.includes(options.kind)).map(x => { const off = !has[x.id];
         return <button key={x.id} type="button" aria-pressed={used[x.id]} disabled={off} title={off ? x.missing : undefined} onClick={() => set({ [x.id]: !options[x.id] })} className={chip(used[x.id], off)}>{x.label}</button>; })}</div>
       {PARTS.some(x => x.kinds.includes(options.kind) && !has[x.id]) && <p className="mt-1 text-[11px] text-slate-400">흐린 항목은 아직 받지 않은 내용이에요.</p>}
-      <p className="mt-2.5 text-[11px] font-bold text-slate-500">방향</p>
+      <p className="mt-2.5 text-[11px] font-bold text-slate-500">방향 <span className="font-normal text-slate-400">· 분석지는 가로를 추천해요 (오른쪽 요점 정리가 넉넉해요)</span></p>
       <div className="mt-1 flex gap-1.5">{([['landscape', '가로'], ['portrait', '세로']] as const).map(([id, label]) => <button key={id} type="button" aria-pressed={options.orientation === id} onClick={() => set({ orientation: id })} className={chip(options.orientation === id)}>{label}</button>)}</div>
       <div className="mt-2.5"><FooterSetting /></div>
       {message && <p role="alert" className="mt-2 text-xs font-bold text-[#b04a5a]">{message}</p>}

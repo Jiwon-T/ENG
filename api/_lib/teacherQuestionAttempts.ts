@@ -59,10 +59,12 @@ async function reachableUid(db: any, actor: any, keyInput: unknown) {
   if ('reason' in link) throw Error('FORBIDDEN');
   return link.uid as string;
 }
+/** 판정 바꾸기 to wrong: this share of the points the drop is worth is taken back (the rest stays: it was the teacher's call). */
+export const JUDGE_RECLAIM = 0.3;
 /**
  * 판정 바꾸기 (서술형 only, after 채점): the teacher marks an answer right or wrong; the score follows. For a set a teacher
- * gave, a higher score pays the difference in points now (inside today's study cap); a lower one takes nothing back
- * (the points stay). Points are never paid twice for the same question (`peakWanted`: the most ever owed).
+ * gave, a higher score pays the difference in points now (inside today's study cap); a lower one takes back 30% of what
+ * the drop is worth. Never paid twice for the same question (`peakWanted`: the most ever owed; `target`: what is held).
  */
 export async function judgeQuestionAttempt(db: any, actor: any, input: any, now = Date.now()) {
   const uid = await reachableUid(db, actor, input?.studentKey), index = Number(input?.index), ok = input?.ok;
@@ -80,16 +82,32 @@ export async function judgeQuestionAttempt(db: any, actor: any, input: any, now 
     const score = { correct: results.filter((y: any) => y.ok).length, total: results.length };
     let reward = x.reward || null;
     if (reward && !reward.noPet) {
+      // What the student should hold now (`target`): what the score is worth, or below the highest it was worth
+      // (peak) the peak less 30% of the drop (the teacher's mistake: most of it stays). Each verdict moves the pet by
+      // the change in target — paid (inside today's cap) or taken back (never below 0) — so flipping back and forth
+      // ends where it started. XP only for points above the old peak (never taken back).
       const owed = questionReward(score.correct, score.total, Boolean(reward.late)), peak = Number(reward.peakWanted ?? reward.wanted) || 0;
-      const extra = Math.max(0, owed.points - peak);
-      if (extra > 0 && petSnap.exists) {
-        // XP in the same share as the points owed
-        const pet: ServerPetState = rollDay(petSnap.data(), now), paid = awardCapped(pet, extra, owed.points > 0 ? Math.round(extra * owed.xp / owed.points) : 0);
+      const top = Math.max(peak, owed.points), target = owed.points >= top ? owed.points : top - Math.round(JUDGE_RECLAIM * (top - owed.points));
+      // The pet moves toward the target from what was really paid (reward.points), only in the direction the verdict
+      // went: up pays what is still short, down takes back only what is held above the target, and never more than this
+      // verdict lowered the target by (what the pet could not give back then is let go, not taken on a retry or later).
+      // Points the day's cap kept from being paid are never taken back.
+      const held = Number(reward.points) || 0, before = Number(reward.target ?? reward.wanted) || 0, up = target > before;
+      const pay = up ? Math.max(0, target - held) : 0, take = up ? 0 : Math.max(0, Math.min(held - target, before - target));
+      if ((pay || take) && petSnap.exists) {
+        const pet: ServerPetState = rollDay(petSnap.data(), now);
+        if (pay) {
+          const above = Math.max(0, owed.points - peak), paid = awardCapped(pet, pay, owed.points > 0 ? Math.round(Math.min(pay, above) * owed.xp / owed.points) : 0);
+          reward = { ...reward, points: held + paid.points, xp: (reward.xp || 0) + paid.xp, capped: Boolean(reward.capped || paid.capped) };
+        } else {
+          const taken = Math.min(take, Math.max(0, pet.points));
+          pet.points -= taken;
+          reward = { ...reward, points: held - taken, reclaimed: (reward.reclaimed || 0) + taken };
+        }
         pet.updatedAt = now; tx.set(petRef, pet);
         if (userSnap.exists) tx.set(userRef, { petStats: petSummary(pet) }, { merge: true });
-        reward = { ...reward, points: (reward.points || 0) + paid.points, xp: (reward.xp || 0) + paid.xp, capped: Boolean(reward.capped || paid.capped) };
       }
-      reward = { ...reward, wanted: owed.points, peakWanted: Math.max(peak, owed.points) };
+      reward = { ...reward, wanted: owed.points, peakWanted: top, target };
     }
     const out = { ...x, results, score, reward, judgedAt: now, updatedAt: now };
     tx.set(ref, out);

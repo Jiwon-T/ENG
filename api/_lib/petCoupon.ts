@@ -5,7 +5,7 @@ import {normalizeNotionPageId as uuid, isNotionPageId} from './notionPageId.js';
 import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
 import {PET_STATES, monthEarned, rollDay, type ServerPetState} from './pet.js';
-import {PET_COUPON, medalLabel} from '../../src/lib/petCatalog.js';
+import {PET_COUPON, medalLabel, passAllows, petItem} from '../../src/lib/petCatalog.js';
 
 export const PET_COUPONS = 'petCoupons';
 export interface PetCoupon { uid: string; studentKey: string; month: string; requestedAt: number; earned: number; paidAt: number | null; paidBy: string | null }
@@ -47,12 +47,13 @@ export async function requestCoupon(db: any, uid: string, studentKey: string, no
   });
 }
 
-/** 금메달 꾸미기: where the medals sit in one room (only medals the student has, each once, inside the room). */
-export function placeDecor(s: ServerPetState, backgroundInput: unknown, itemsInput: unknown) {
+/** 꾸미기: where the medals and 탑 장식 sit in one room (only ones the student has, each once, inside the room). */
+export function placeDecor(s: ServerPetState, backgroundInput: unknown, itemsInput: unknown, plan: string = 'free') {
   const background = String(backgroundInput || '');
-  if (background !== 'default' && !s.inventory.includes(background)) throw Error('PET_BAD_ACTION');
+  // a room the student has, or a 패스 room while that pass is on
+  if (background !== 'default' && !s.inventory.includes(background) && !passAllows(petItem(background), plan)) throw Error('PET_BAD_ACTION');
   if (!Array.isArray(itemsInput) || itemsInput.length > PET_COUPON.maxDecor) throw Error('PET_BAD_ACTION');
-  const owned = new Set(s.medals || []), seen = new Set<string>();
+  const owned = new Set([...(s.medals || []), ...(s.towerDecor || [])]), seen = new Set<string>();
   const clamp = (v: unknown) => { const n = Number(v); if (!Number.isFinite(n)) throw Error('PET_BAD_ACTION'); return Math.round(Math.max(0, Math.min(100, n)) * 10) / 10; };
   const items = itemsInput.map((it: any) => {
     const id = String(it?.id || ''); if (!owned.has(id) || seen.has(id)) throw Error('PET_BAD_ACTION'); seen.add(id);

@@ -8,7 +8,7 @@ import { auth } from '../../lib/firebase';
 import { PetService, type AiTalkView, CouponView, type MedalSpot, type PetState } from '../../lib/petService';
 import {
   PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD_TEXT, PET_CHARACTERS, PET_FRIEND_LEVEL, PET_ITEMS, PET_MAX_LEVEL, PET_MAX_PETS, PET_STUDY_RATES, petStageLabel,
-  cleanPetSpeech, petEmojiLimit, petIdleLine, petItem, petStage, xpNeeded, PET_EXPEDITION, PET_WORD_FEED, type PetItem,
+  cleanPetSpeech, petEmojiLimit, petIdleLine, petItem, petStage, xpNeeded, PET_EXPEDITION, PET_WORD_FEED, type PetItem, PET_JOB3, petAura, passAllows
 } from '../../lib/petCatalog';
 import { AI_PLANS, PASS_NOTE } from '../../lib/aiPlans';
 import { ACCESSORY_SLOTS, PET_JOB2, PET_JOBS, PET_PARTY, petJobLabel, PET_TOWER, accessorySlot, wornAccessories } from '../../lib/petCatalog';
@@ -39,6 +39,11 @@ const idleLine = (level: number, seed: number) => petIdleLine(level, seed);
 const won = (n: number) => n.toLocaleString('ko-KR');
 /** Where the other pets sit in the room (left, right, then further out). */
 const SPOTS = [{ left: '4%' }, { right: '4%' }, { left: '-2%', bottom: 46 }, { right: '-2%', bottom: 46 }, { left: '18%', bottom: 2 }];
+
+/** 패스 배지 by the pet's name: a pink ribbon (펫 패스), a gold star (프리미엄). Looks only. */
+const PassMark = ({ plan }: { plan: string }) => plan === 'premium'
+  ? <span title="프리미엄 패스" className="inline-flex items-center"><svg viewBox="-8 -8 16 16" width="16" height="16" aria-label="프리미엄 패스"><path d="M0 -7 l2 4.2 4.6.7 -3.3 3.2.8 4.6 -4.1 -2.2 -4.1 2.2.8 -4.6 -3.3 -3.2 4.6 -.7z" fill="#fbbf24" stroke="#ca8a04" strokeWidth=".8" /></svg></span>
+  : <span title="펫 패스" className="inline-flex items-center"><svg viewBox="-9 -8 18 16" width="16" height="14" aria-label="펫 패스"><path d="M0 0 L-8 -6 L-8 6Z M0 0 L8 -6 L8 6Z" fill="#f472b6" /><circle r="2.2" fill="#e0587a" /></svg></span>;
 
 export default function PetHome({ onBack }: { onBack: () => void }) {
   // The slot on the right of the app's top bar (App.tsx); without it the page keeps a small header of its own.
@@ -144,7 +149,8 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   if (!state || !pet) return <div className="min-h-screen bg-white" aria-busy="true" />;
 
   const stage = petStage(pet.level), atMax = pet.level >= PET_MAX_LEVEL, need = xpNeeded(pet.level);
-  const owned = (id: string) => id === 'default' || state.inventory.includes(id);
+  // 패스 꾸미기: a pass-only room is 'owned' while the pass allows it (aiTalk.plan: the plan today)
+  const plan = aiTalk?.plan || 'free', owned = (id: string) => id === 'default' || state.inventory.includes(id) || passAllows(petItem(id), plan);
   const worn = (item: PetItem) => item.category === 'clothing' ? state.clothing === item.id : item.category === 'accessory' ? state.accessories?.[accessorySlot(item.id)] === item.id : state.background === item.id;
   const tried = trial ? petItem(trial) : undefined;
   // Trying on an accessory swaps only its place (머리·눈·목·손); the others stay on.
@@ -179,13 +185,14 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
     const energyUsed = item.revive ? !exhausted || (state.today.revivesLeft ?? 1) <= 0 : Boolean(item.energy) && (exhausted || !(state.today.energyItemsLeft > 0));
     const usedLabel = item.revive ? (exhausted ? '오늘 다 먹음' : '탈진 때만') : exhausted ? '탈진 중' : '오늘 다 먹음';
     const effect = item.xp ? `경험치 +${item.xp}` : item.energy ? `기운 +${item.energy}` : '';
-    const label = mode === 'try' ? (has ? (on ? '입는 중' : '가짐') : item.reward ? '원정대 전용' : `${won(item.price)}P`) : mode === 'wear' ? (on ? '입는 중' : '입기') : wearable && has ? (on ? '입는 중' : '가짐') : energyUsed ? usedLabel : `${won(item.price)}P`;
+    const label = mode === 'try' ? (has ? (on ? '입는 중' : item.pass ? '쓸 수 있음' : '가짐') : item.reward ? '원정대 전용' : item.pass ? '패스 전용' : `${won(item.price)}P`) : mode === 'wear' ? (on ? '입는 중' : '입기') : wearable && has ? (on ? '입는 중' : '가짐') : energyUsed ? usedLabel : `${won(item.price)}P`;
     const blocked = mode === 'buy' && (wearable ? has || poor : energyUsed || poor);
     const disabled = busy || blocked, dim = blocked && !(wearable && has);
     const picked = mode === 'try' && trial === item.id;
     const onClick = () => mode === 'try' ? setTrial(picked ? null : item.id) : mode === 'wear' ? void act('equip', { itemId: item.id }) : void act('buy', { itemId: item.id }).then(r => { if (r?.result?.message) say(r.result.message); });
     return <button key={item.id} type="button" disabled={disabled} aria-pressed={mode === 'try' ? picked : undefined} onClick={onClick} className={`flex flex-col items-center gap-0.5 rounded-2xl border bg-white px-1.5 py-2.5 text-center transition-colors ${picked ? 'border-2 border-[#d26272]' : on ? 'border-[#d26272]' : 'border-[#f3e6e8] hover:border-[#f5a3a8]'} ${dim ? 'opacity-50' : ''}`}>
       {item.reward && <span className="-mb-1 rounded-full bg-[#eef6ea] px-1.5 text-[10px] font-bold text-[#4f7a43]">원정대</span>}
+      {item.pass && <span className={`-mb-1 rounded-full px-1.5 text-[10px] font-bold ${item.pass === 'premium' ? 'bg-[#faeeda] text-[#854f0b]' : 'bg-[#fbeaf0] text-[#993556]'}`}>{item.pass === 'premium' ? '프리미엄' : '펫 패스'}</span>}
       {item.revive ? <span className="flex h-8 items-center"><MonsterCan size={32} /></span> : <span className="text-2xl" aria-hidden="true">{item.icon}</span>}
       <span className="text-xs font-bold text-[#5e1e2a]">{item.name}</span>
       {effect && <span className="text-[11px] text-slate-500">{effect}</span>}
@@ -216,7 +223,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
           <div className={`relative flex min-h-[230px] flex-col items-center justify-end px-4 pb-4 pt-5 ${SCENE[look.background] || SCENE.default}`}>
             <SceneArt id={look.background} />
             <MedalLayer spots={decorEdit ?? (state.decor?.[look.background] || [])} editing={Boolean(decorEdit)} onMove={(id, x, y) => setDecorEdit(d => d && d.map(s => s.id === id ? { ...s, x, y } : s))} />
-            {!tried && !decorEdit && (state.medals || []).length > 0 && <button type="button" onClick={() => { setTrial(null); setDecorEdit(state.decor?.[state.background] || []); }} className="absolute left-3 top-3 z-20 rounded-full border border-[#f0d9b0] bg-white px-2.5 py-1 text-[11px] font-bold text-[#8a5a12]">🏅 꾸미기</button>}
+            {!tried && !decorEdit && [...(state.medals || []), ...(state.towerDecor || [])].length > 0 && <button type="button" onClick={() => { setTrial(null); setDecorEdit(state.decor?.[state.background] || []); }} className="absolute left-3 top-3 z-20 rounded-full border border-[#f0d9b0] bg-white px-2.5 py-1 text-[11px] font-bold text-[#8a5a12]">🏅 꾸미기</button>}
             {tried && <span className="absolute left-3 top-3 z-20 rounded-full border border-[#f3d5da] bg-white px-2 py-0.5 text-[11px] font-bold text-[#b04a5a]">입어 보는 중</span>}
             {look.background === 'star_room' && STARS.map((s, i) => <span key={i} aria-hidden="true" className="absolute animate-pulse rounded-full bg-white" style={{ top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size, animationDelay: `${s.delay}s` }} />)}
             <p className="relative z-10 mb-2 max-w-[85%] rounded-2xl border border-[#f3d5da] bg-white px-3 py-1.5 text-center text-xs font-medium text-[#5e1e2a]">{cleanPetSpeech(speech, petEmojiLimit(pet.level)) || '…'}</p>
@@ -224,18 +231,18 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
               <PetCharacter character={p.character} stage={petStage(p.level)} clothing={p.clothing} accessory={wornAccessories(p)} size={58} />
             </button>)}
             <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => void petIt()} aria-label={`${pet.name} 쓰다듬기 (기운 -${PET_ACTIONS.pet.energy})`} className="relative z-10">
-              <PetCharacter character={pet.character} stage={stage} clothing={look.clothing} accessory={look.accessories} background={look.background} />
+              <PetCharacter character={pet.character} stage={stage} clothing={look.clothing} accessory={look.accessories} background={look.background} aura={petAura(pet)} />
               <AnimatePresence>{hearts.map(id => <motion.span key={id} initial={{ opacity: 1, y: 0 }} animate={{ opacity: 0, y: -60 }} exit={{ opacity: 0 }} className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2"><Heart size={22} className="fill-[#e07a87] text-[#e07a87]" aria-hidden="true" /></motion.span>)}</AnimatePresence>
             </motion.button>
           </div>
-          {decorEdit && <MedalBox medals={state.medals || []} spots={decorEdit} busy={busy} onCancel={() => setDecorEdit(null)} onSave={() => void saveDecor()}
+          {decorEdit && <MedalBox medals={[...(state.medals || []), ...(state.towerDecor || [])]} spots={decorEdit} busy={busy} onCancel={() => setDecorEdit(null)} onSave={() => void saveDecor()}
             onToggle={id => setDecorEdit(d => !d ? d : d.some(s => s.id === id) ? d.filter(s => s.id !== id) : [...d, { id, x: 14 + (d.length * 13) % 72, y: 22 }])} />}
           <div className="border-t border-[#f3e6e8] bg-white px-4 py-3">
             <div className="flex items-center justify-center gap-2">
               {editing ? <span className="flex items-center gap-1"><input value={newName} maxLength={12} autoFocus onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void rename(); if (e.key === 'Escape') setEditing(false); }} aria-label="펫 이름" className="w-28 rounded-lg border border-[#f3d5da] px-2 py-1 text-sm" /><button type="button" onClick={() => void rename()} aria-label="이름 저장" className="text-[#8b2f40]"><Check size={16} /></button><button type="button" onClick={() => setEditing(false)} aria-label="취소" className="text-slate-400"><X size={16} /></button></span>
-                : <><b className="text-base font-black text-[#5e1e2a]">{pet.name}</b><button type="button" onClick={() => { setNewName(pet.name); setEditing(true); }} aria-label="이름 바꾸기" className="text-slate-300 hover:text-[#8b2f40]"><Pencil size={13} /></button></>}
+                : <><b className={`text-base font-black text-[#5e1e2a] ${plan === 'premium' ? 'rounded-full border-2 border-[#ca8a04] px-2' : ''}`}>{pet.name}</b>{plan !== 'free' && <PassMark plan={plan} />}<button type="button" onClick={() => { setNewName(pet.name); setEditing(true); }} aria-label="이름 바꾸기" className="text-slate-300 hover:text-[#8b2f40]"><Pencil size={13} /></button></>}
               <span className="rounded-full bg-[#8b2f40] px-2 py-0.5 text-[11px] font-bold text-white">Lv.{pet.level}</span>
-              {pet.job && <span className="rounded-full bg-[#fef2f3] px-2 py-0.5 text-[11px] font-bold text-[#8b2f40]" title={pet.job2 ? PET_JOB2[pet.job2].title : undefined}>{pet.job2 ? PET_JOB2[pet.job2].icon : PET_JOBS[pet.job].icon} {petJobLabel(pet)}</span>}
+              {pet.job && <span className="rounded-full bg-[#fef2f3] px-2 py-0.5 text-[11px] font-bold text-[#8b2f40]" title={pet.job3 ? PET_JOB3[pet.job3].title : pet.job2 ? PET_JOB2[pet.job2].title : undefined}>{pet.job3 ? PET_JOB3[pet.job3].icon : pet.job2 ? PET_JOB2[pet.job2].icon : PET_JOBS[pet.job].icon} {petJobLabel(pet)}</span>}
               <span className="text-xs text-slate-500">{petStageLabel(pet.level)}{many && ' · 대표 펫'}</span>
             </div>
             <div className="mt-3 space-y-2 text-xs text-slate-500">
@@ -296,7 +303,11 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
             <div className="-mx-1 mb-2 flex gap-1 overflow-x-auto px-1">{(coupon?.eligible ? [...SHOP_GROUPS, { id: 'coupon', label: '🎟️ 쿠폰' }] : SHOP_GROUPS).map(g => <button key={g.id} type="button" aria-pressed={shopGroup === g.id} onClick={() => { setShopGroup(g.id); setTrial(null); }} className={`flex-none rounded-xl px-3 py-1.5 text-xs font-bold ${shopGroup === g.id ? 'bg-[#fef2f3] text-[#8b2f40]' : 'text-slate-400'}`}>{g.label}</button>)}</div>
             {shopGroup === 'coupon' && coupon?.eligible ? <CouponShop coupon={coupon} medals={state.medals || []} busy={busy} onRequest={() => void askCoupon()} />
               : <div className="grid grid-cols-3 gap-2">{byPrice(PET_ITEMS.filter(i => i.category !== 'consumable' && inGroup(i, shopGroup) && i.id !== 'default')).map(i => itemCard(i, 'try'))}</div>}
-            {tried?.reward && !owned(tried.id) ? (() => { return <div className="sticky bottom-24 mt-3 flex items-center gap-2 rounded-2xl border border-[#d9e8d2] bg-white px-3 py-2.5">
+            {tried?.pass && !owned(tried.id) ? <div className="sticky bottom-24 mt-3 flex items-center gap-2 rounded-2xl border border-[#f3d5da] bg-white px-3 py-2.5">
+              <div className="min-w-0 flex-1 text-xs text-[#5e1e2a]"><b className="font-bold">{tried.icon} {tried.name}</b><span className="block text-[#993556]">{tried.pass === 'premium' ? '프리미엄 패스' : '펫 패스나 프리미엄 패스'}로 쓸 수 있는 방이에요 · 꾸밈만 바뀌어요</span></div>
+              <button type="button" onClick={() => setTrial(null)} className="rounded-xl border border-[#f3d5da] px-3 py-1.5 text-xs font-bold text-[#8b2f40]">원래대로</button>
+            </div>
+            : tried?.reward && !owned(tried.id) ? (() => { return <div className="sticky bottom-24 mt-3 flex items-center gap-2 rounded-2xl border border-[#d9e8d2] bg-white px-3 py-2.5">
               <div className="min-w-0 flex-1 text-xs text-[#5e1e2a]"><b className="font-bold">{tried.icon} {tried.name}</b><span className="block text-[#4f7a43]">원정대에서만 얻어요 · {rewardSource(tried.id)}</span></div>
               <button type="button" onClick={() => setTrial(null)} className="rounded-xl border border-[#f3d5da] px-3 py-1.5 text-xs font-bold text-[#8b2f40]">원래대로</button>
               <button type="button" onClick={() => { setTrial(null); setMapOpen(true); }} className="rounded-xl bg-[#e0587a] px-3.5 py-1.5 text-xs font-bold text-white">원정대 가기</button>

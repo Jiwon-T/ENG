@@ -9,19 +9,22 @@ import { splitToken, tokenize } from './workbook.js';
 export interface PassageLevel { stars: number; label: string; measures: string[]; short: boolean }
 const LEVEL_LABEL = ['', '쉬움', '조금 쉬움', '보통', '조금 어려움', '어려움'];
 const step = (v: number, cuts: number[]) => 1 + cuts.filter(c => v >= c).length;
-/** 난이도 ★1~5 from fixed rules (sentence length, long sentences, long words, clauses). All four are ratios, so a
- *  short passage still gets stars, marked `short` (fewer than 3 sentences or 40 words: a rough value). Null only for a
- *  fragment under 15 words. */
-export function passageLevel(sentences: string[]): PassageLevel | null {
+/** 난이도 ★1~5 from fixed rules (sentence length, long sentences, long words, clauses; and, once ③ 단어 has been worked
+ *  out, the share of the passage's words not in the academy word sets). All are ratios, so a short passage still gets
+ *  stars, marked `short` (fewer than 3 sentences or 40 words: a rough value). Null only for a fragment under 15 words.
+ *  `vocab`: the stored ③ 단어 (known = found in the sets, unknown = content words that are not), used from 5 words on. */
+export function passageLevel(sentences: string[], vocab?: { known: unknown[]; unknown: unknown[] } | null): PassageLevel | null {
   const words = sentences.map(s => tokenize(s).map(t => splitToken(t).core).filter(w => /[a-z]/i.test(w)));
   const all = words.flat();
   if (all.length < 15) return null;
   const avg = all.length / sentences.length, long = words.filter(w => w.length >= 25).length;
   const longWords = all.filter(w => w.replace(/[^a-z]/gi, '').length >= 9).length / all.length;
   const clauses = sentences.reduce((n, s) => n + grammarTags(s).filter(t => t.kind === 'clause' || t.label === '분사구문').length, 0);
-  const score = (step(avg, [12, 16, 20, 25]) + step(longWords, [0.06, 0.09, 0.12, 0.16]) + step(clauses / sentences.length, [0.3, 0.6, 1, 1.4])) / 3 + (long / sentences.length >= 0.3 ? 0.5 : 0);
+  const counted = vocab ? vocab.known.length + vocab.unknown.length : 0, rare = counted >= 5 ? vocab!.unknown.length / counted : null;
+  const steps = [step(avg, [12, 16, 20, 25]), step(longWords, [0.06, 0.09, 0.12, 0.16]), step(clauses / sentences.length, [0.3, 0.6, 1, 1.4]), ...(rare === null ? [] : [step(rare, [0.15, 0.25, 0.35, 0.5])])];
+  const score = steps.reduce((t, x) => t + x, 0) / steps.length + (long / sentences.length >= 0.3 ? 0.5 : 0);
   const stars = Math.min(5, Math.max(1, Math.round(score)));
-  return { stars, label: LEVEL_LABEL[stars], short: sentences.length < 3 || all.length < 40, measures: [`평균 ${Math.round(avg)}단어`, `25단어 이상 문장 ${long}개`, `긴 단어(9글자 이상) ${Math.round(longWords * 100)}%`, `관계사·접속사·분사구 ${clauses}곳`] };
+  return { stars, label: LEVEL_LABEL[stars], short: sentences.length < 3 || all.length < 40, measures: [`평균 ${Math.round(avg)}단어`, `25단어 이상 문장 ${long}개`, `긴 단어(9글자 이상) ${Math.round(longWords * 100)}%`, `관계사·접속사·분사구 ${clauses}곳`, ...(rare === null ? [] : [`학원 단어 세트에 없는 단어 ${Math.round(rare * 100)}%`])] };
 }
 
 /* ------------------------------------------------------------------ 연결어 */

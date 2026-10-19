@@ -43,9 +43,13 @@ test('판정 바꾸기: only 서술형 answers are offered; marking right raises
   assert.deepEqual([up.attempt.score.correct, up.attempt.reward.points, points(f), up.attempt.results[1].judged], [2, 10, 10, true], '+3P (now right)');
   assert.match(f.rows.get(`questionAttempts/${row.id}`).results[1].check.reason, /맞음/);
   const down: any = await judgeQuestionAttempt(f.db, actor, { studentKey: K1, attemptId: row.id, index: row.results[1].index, ok: false }, NOW + 4);
-  assert.deepEqual([down.attempt.score.correct, down.attempt.reward.points, points(f)], [1, 10, 10], 'lower: the score drops, the points stay');
+  assert.deepEqual([down.attempt.score.correct, down.attempt.reward.points, points(f)], [1, 9, 9], 'lower: the score drops, 30% of the 3P taken back (1P)');
   const again: any = await judgeQuestionAttempt(f.db, actor, { studentKey: K1, attemptId: row.id, index: row.results[1].index, ok: true }, NOW + 5);
-  assert.deepEqual([again.attempt.score.correct, again.attempt.reward.points, points(f)], [2, 10, 10], 'right again: not paid twice');
+  assert.deepEqual([again.attempt.score.correct, again.attempt.reward.points, points(f)], [2, 10, 10], 'right again: the 1P back, nothing more (never paid twice)');
+  const xpAfter = f.rows.get('petStates/kid1').xp;
+  await judgeQuestionAttempt(f.db, actor, { studentKey: K1, attemptId: row.id, index: row.results[1].index, ok: false }, NOW + 6);
+  await judgeQuestionAttempt(f.db, actor, { studentKey: K1, attemptId: row.id, index: row.results[1].index, ok: true }, NOW + 7);
+  assert.deepEqual([points(f), f.rows.get('petStates/kid1').xp], [10, xpAfter], 'flipping again ends where it started (no extra XP)');
   assert.equal(f.rows.get(`questionAttempts/${row.id}`).results[1].check.before.by, 'none', 'the first verdict is kept');
 });
 
@@ -55,4 +59,28 @@ test('판정 바꾸기: not a chosen-answer question, not another teacher\'s stu
   await assert.rejects(judgeQuestionAttempt(f.db, { ...actor, scopes: [{ studentKey: KX, subject: '영어' }] }, { studentKey: K1, attemptId: row.id, index: 1, ok: true }, NOW), /FORBIDDEN/);
   await assert.rejects(judgeQuestionAttempt(f.db, actor, { studentKey: K1, attemptId: 'nope', index: 1, ok: true }, NOW), /FORBIDDEN/);
   await assert.rejects(judgeQuestionAttempt(f.db, actor, { studentKey: K1, attemptId: row.id, index: 1, ok: 'yes' }, NOW), /INVALID_INPUT/);
+});
+
+test('판정 바꾸기: points the daily cap kept from being paid are never taken back', async () => {
+  const { f, actor, r, row } = await setup();
+  assert.equal(r.attempt.reward.points, 7);
+  // the day's study points used up: the raise pays nothing
+  const pet = f.rows.get('petStates/kid1'); f.rows.set('petStates/kid1', { ...pet, today: { ...pet.today, studyPoints: 10_000 } });
+  const up: any = await judgeQuestionAttempt(f.db, actor, { studentKey: K1, attemptId: row.id, index: row.results[1].index, ok: true }, NOW + 3);
+  assert.deepEqual([up.attempt.score.correct, up.attempt.reward.points, points(f)], [2, 7, 7], 'capped: nothing paid');
+  const down: any = await judgeQuestionAttempt(f.db, actor, { studentKey: K1, attemptId: row.id, index: row.results[1].index, ok: false }, NOW + 4);
+  assert.deepEqual([down.attempt.reward.points, points(f)], [7, 7], 'nothing taken from the 7P really paid');
+});
+
+test('판정 바꾸기: what the pet could not give back is let go, never taken by a later lower verdict that lowers nothing', async () => {
+  const { f, actor, row } = await setup();
+  await judgeQuestionAttempt(f.db, actor, { studentKey: K1, attemptId: row.id, index: row.results[1].index, ok: true }, NOW + 3);
+  const spent = f.rows.get('petStates/kid1'); f.rows.set('petStates/kid1', { ...spent, points: 0 });
+  await judgeQuestionAttempt(f.db, actor, { studentKey: K1, attemptId: row.id, index: row.results[1].index, ok: false }, NOW + 4);
+  assert.deepEqual([f.rows.get(`questionAttempts/${row.id}`).reward.target, f.rows.get('petStates/kid1').points], [9, 0], 'nothing to take back: the target drops, the pet keeps 0');
+  // the student earns points; the same lower verdict comes again (as by another path, not marked as the teacher's)
+  const later = f.rows.get('petStates/kid1'); f.rows.set('petStates/kid1', { ...later, points: 50 });
+  const doc = f.rows.get(`questionAttempts/${row.id}`); f.rows.set(`questionAttempts/${row.id}`, { ...doc, results: doc.results.map((x: any, i: number) => i === 1 ? { ...x, check: { by: 'auto' } } : x) });
+  await judgeQuestionAttempt(f.db, actor, { studentKey: K1, attemptId: row.id, index: row.results[1].index, ok: false }, NOW + 5);
+  assert.equal(f.rows.get('petStates/kid1').points, 50, 'the target did not drop: nothing taken');
 });

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { practiceHints } from '../src/lib/practiceTypes.ts';
+import { SAMPLE_SENTENCES } from '../src/lib/samples.ts';
 
 const passage = [
   'Many people believe that talent decides success.',
@@ -26,4 +27,13 @@ test('연습 유형 추천: a short plain passage gets few or no types', () => {
   assert.deepEqual(practiceHints(['I like apples.', 'My sister likes pears.']), []);
   const types = practiceHints(['The sky is blue.', 'The sea is blue too.', 'I go to the beach often.']).map(h => h.type);
   assert.ok(!types.includes('order') && !types.includes('irrelevant') && !types.includes('summary'));
+});
+
+test('연습 유형 추천: 어휘 선택 (역접·비교 표현), 서술형 어법 (확실한 어법 포인트 2곳+), 서술형 영작 (구문이 분명한 문장)', () => {
+  const hints = practiceHints(SAMPLE_SENTENCES), by = (t: string) => hints.find(h => h.type === t);
+  assert.match(by('vocab')!.reason, /역접 연결어 \d+곳 · 비교 표현 \d+곳/);
+  assert.match(by('correct')!.reason, /확실한 어법 포인트 \d+곳 — 찾아 고쳐 쓰기/);
+  assert.match(by('compose')!.reason, /구문이 분명한 7~20단어 문장 \d+개/);
+  const plain = practiceHints(['I like apples.', 'My sister likes pears.', 'We eat them.', 'They are sweet.']).map(h => h.type);
+  assert.ok(!plain.includes('vocab') && !plain.includes('correct'), 'no clue, no hint');
 });

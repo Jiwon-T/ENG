@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import type { ParentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 import { safeFetchJson } from '../../lib/safeFetchJson';
 import { sortParentSchedules } from '../../lib/studentReportLists';
-import { testLabel, testScoreTitle } from '../../lib/lessonReportText';
+import { testLabel, testScoreTitle, extraScoresText } from '../../lib/lessonReportText';
 import {
   formatReportDetailDate,
   formatReportListDate,
@@ -1011,6 +1011,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                                 <div className="text-base sm:text-lg font-black text-indigo-600">
                                   {selectedReport.vocabularyScore}점
                                 </div>
+                                {(selectedReport.extraScores || []).length > 0 && <div className="mt-1 text-[11px] font-bold text-slate-500">{extraScoresText(selectedReport.extraScores)}</div>}
                               </div>
                             )}
 
@@ -1255,6 +1256,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                               <div className="text-lg font-black text-indigo-600">
                                 {selectedReport.vocabularyScore}점
                               </div>
+                              {(selectedReport.extraScores || []).length > 0 && <div className="mt-1 text-[11px] font-bold text-slate-500">{extraScoresText(selectedReport.extraScores)}</div>}
                             </div>
                           )}
 

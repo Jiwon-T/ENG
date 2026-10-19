@@ -12,13 +12,13 @@ import {
   PET_STATES, addXP, adoptPet, awardStudy, buyItem, chatRequest, museRequest, chooseCharacter, claimStudyRewards, currentPet, earnPoints, equipItem, evolveRequest, importLocalPet,
   homeworkGrades, initialPetState, parseAi, pendingStudyRewards, petSummary, petThePet, publicPetState, renamePet, rollDay, seoulDay, switchPet, teachRequest, wearItem, type ServerPetState,
 } from '../pet.js';
-import { cleanPetSpeech, petEmojiLimit, PET_ACTIONS, PET_STUDY_RATES, PET_WORD_FEED, stageGame, stageQuestions, stageWithSentences } from '../../../src/lib/petCatalog.js';
+import { cleanPetSpeech, petEmojiLimit, PET_ACTIONS, PET_STUDY_RATES, PET_WORD_FEED, stageGame, stageQuestions, stageWithSentences, passAllows, petItem } from '../../../src/lib/petCatalog.js';
 import { loadSentencesFor } from '../petSentences.js';
 import { PET_GAMES, answerRun, buildRun, initialGameState, loadFeedSource, publicRun, rollGameDay, runSummary, type FeedSentence, type FeedSource, type PetGameState } from '../petWordFeed.js';
 import { PET_GUILD, PET_NAMES, PET_PARTIES, addContribution, nameDocId, partyName, boardCard, checkNickname, createParty, initialGuild, joinParty, leaveParty, norm, normalizeGuild, petLook, publicParty, rankingRow, setAlias, setGuildName, settleParty, shownAlias, shownGuild, updateMemberNames, voteKick, weekOf, type GuildProfile, type Party } from '../petParty.js';
 import { readTowerHall, recordTowerHall } from '../petTowerHall.js';
 import { PET_RANKINGS, myPetRank, readRankProfile, readRankings } from '../petRanking.js';
-import { PET_TOWERS, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
+import { PET_TOWERS, syncTowerDecor, takeJob3, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
 import { couponStudentKey, couponView, placeDecor, readCoupon, requestCoupon } from '../petCoupon.js';
 import { PET_EXPEDITIONS, chooseJob, chooseJob2, finishStage, initialExpedition, levelOk, petProgress, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
 
@@ -34,6 +34,8 @@ const MESSAGES: Record<string, string> = {
   TOWER_NOT_READY: '선생님이 탑 단어장을 아직 정하지 않았어요.', TOWER_CHEST_FIRST: '먼저 1층 보물상자를 열어 보세요!', TOWER_CHEST_OPENED: '이미 연 보물상자예요.', TOWER_TOP: '지금은 여기가 꼭대기예요. 더 높은 층은 곧 열려요!',
   TOWER_NO_RUN: '전투가 끝났어요. 다시 들어가 주세요.', TOWER_WAIT: '지금은 문제에 답할 차례예요.', TOWER_SKILL_LOCKED: '스킬은 전직 후에 쓸 수 있어요. 1차 전직은 원정대 5장 설산의 왕관 스테이지에서 해요.', TOWER_SKILL_NOT_LEARNED: '아직 배우지 않은 스킬이에요.', TOWER_NO_MP: 'MP가 모자라요. 단어를 맞히면 MP가 2씩 차요.', TOWER_NO_POTION: '물약이 없어요.', TOWER_IN_BATTLE: '전투 중에는 장비를 바꿀 수 없어요.', TOWER_GEAR_JOB: '이 장비는 그 직업으로 전직한 펫만 낄 수 있어요.', TOWER_SOLD_OUT: '다 팔렸어요.', TOWER_MAX_ENHANCE: '이미 최고 강화(+5)예요.', TOWER_NO_STONES: '강화석이 모자라요.', TOWER_SNEAK_INVALID: '조금 더 천천히, 길을 따라 지나가 보세요.',
   COUPON_NOT_ELIGIBLE: '이달의 장학 쿠폰은 영어 이지원T 반 친구들이 받을 수 있어요.', COUPON_TAKEN: '이번 달 쿠폰은 이미 신청했어요.', COUPON_NOT_YET: '이번 달에 모은 포인트가 아직 10,000P가 안 됐어요.',
+  PET_PASS_ITEM: '펫 패스·프리미엄 패스로 쓸 수 있는 방이에요.',
+  PET_JOB3_LOCKED: '3차 전직은 2차 전직한 Lv.150 친구가 채움의 탑 50층을 깨면 할 수 있어요.',
   PET_JOB_BAD: '검사나 마법사 중에서 골라 주세요.', PET_JOB_TAKEN: '이 친구는 이미 전직했어요.', PET_JOB_LOCKED: '5장 설산의 왕관 스테이지를 이 친구와 통과하면 1차 전직할 수 있어요.', PET_JOB2_BAD: '이 친구의 직업에 맞는 갈래를 골라 주세요.', PET_JOB2_LOCKED: '1차 전직한 친구와 7장 꿈의 정원의 왕관 스테이지를 통과하면 2차 전직할 수 있어요.',
   PET_NOT_ENOUGH_POINTS: '포인트가 부족해요!', PET_ENERGY_ITEM_USED: '기운 회복 간식은 하루에 두 번까지 먹을 수 있어요!', PET_EXHAUSTED: '펫이 탈진했어요. 몬스터를 먹여야 깨어나요!', PET_NOT_EXHAUSTED: '몬스터는 기운을 다 써서 탈진했을 때만 먹일 수 있어요.', PET_REVIVE_USED: '몬스터는 하루에 한 번만 먹일 수 있어요.', PET_TIRED: '펫이 너무 지쳤어요. 기운을 회복시켜 주세요!',
   PET_ITEM_NOT_FOUND: '없는 물건이에요.', PET_ITEM_NOT_OWNED: '먼저 상점에서 사 주세요.', PET_ALREADY_CHOSEN: '이미 친구를 골랐어요.', PET_BAD_NAME: '이름을 입력해 주세요.',
@@ -81,6 +83,7 @@ async function changeTower(db: any, uid: string, now: number, apply: (s: ServerP
     const [snap, towerSnap, userSnap] = await Promise.all([tx.get(ref), tx.get(towerRef), tx.get(userRef)]), user = userSnap.data();
     const s: ServerPetState = rollDay(snap.exists ? snap.data() : initialPetState(now, user?.petStats), now);
     const t: TowerState = towerSnap.exists ? towerSnap.data() : initialTower(now);
+    syncTowerDecor(t, s);
     const result = apply(s, t);
     s.updatedAt = now; t.updatedAt = now;
     tx.set(ref, s); tx.set(towerRef, t);
@@ -239,6 +242,11 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       return sendJson(res, 200, {ok: true, hasPet: st.exists, points: state ? Number(state.points || 0) : 0, pass: plan === 'free' ? null : {plan, until: String(pass.data()?.until || '')},
         coupon: coupon ? {earned: coupon.earned, goal: coupon.goal, requested: coupon.requested} : null, ...rank});
     }
+    // A pass-only room after the pass ended shows the plain room in every response (the choice is kept for when it is back).
+    const shownState = async (st: ServerPetState) => {
+      const room = petItem(st.background);
+      return publicPetState(room?.pass && !passAllows(room, await planOf(db, uid, now)) ? {...st, background: 'default'} : st);
+    };
     if (req.method === 'GET') {
       // Opening the screen: every document is read at once, and the unfinished game comes along (no second request).
       const [snap, userSnap, g, e] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection('users').doc(uid).get(), db.collection(PET_GAMES).doc(uid).get(), db.collection(PET_EXPEDITIONS).doc(uid).get()]);
@@ -248,13 +256,13 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
         couponStudentKey(db, uid).catch(() => null).then(async key => couponView(s, Boolean(key), key ? await readCoupon(db, uid, s.day.slice(0, 7)) : null)),
         readPetTalk(db, uid, currentPet(s).slot, now).catch(() => null)]);
       const pending = pendingStudyRewards(s, reports, now);
-      return sendJson(res, 200, {ok: true, state: publicPetState(s), saved: snap.exists, pendingRewards: pending.length,
+      return sendJson(res, 200, {ok: true, state: await shownState(s), saved: snap.exists, pendingRewards: pending.length,
         run: publicRun(g.data()?.run || null), aiTalk, expedition: publicExpedition(e.exists ? e.data() : initialExpedition(now), currentPet(s).level, currentPet(s).slot), coupon});
     }
     if (req.method !== 'POST') return fail('PET_BAD_ACTION', 405);
     const body = await parseJsonBody(req).catch(() => ({}));
     const action = String(body?.action || '');
-    const done = (out: {state: ServerPetState; result: any}, extra: any = {}) => sendJson(res, 200, {ok: true, state: publicPetState(out.state), result: out.result, ...extra});
+    const done = async (out: {state: ServerPetState; result: any}, extra: any = {}) => sendJson(res, 200, {ok: true, state: await shownState(out.state), result: out.result, ...extra});
 
     if (action === 'import-local') return done(await change(db, uid, now, (s, exists) => { if (exists) throw Error('PET_IMPORT_CLOSED'); importLocalPet(s, body.local); return {imported: true}; }));
     if (action === 'award') { const source = String(body.source || ''); if (!Object.hasOwn(PET_STUDY_RATES, source)) return fail('PET_BAD_SOURCE'); return done(await change(db, uid, now, s => awardStudy(s, source as any, body.count))); }
@@ -262,8 +270,14 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     if (action === 'buy') return done(await change(db, uid, now, s => { const id = String(body.itemId || ''), r = buyItem(s, id); if (body.wear === true) wearItem(s, id); return r; }));
     // 이달의 장학 쿠폰 (no points are taken) and placing the 금메달 in a room.
     if (action === 'coupon-request') { const key = await couponStudentKey(db, uid); if (!key) return fail('COUPON_NOT_ELIGIBLE', 403); const out = await requestCoupon(db, uid, key, now); return done({state: out.state, result: {month: out.coupon.month}}, {coupon: couponView(out.state, true, out.coupon)}); }
-    if (action === 'decor-save') return done(await change(db, uid, now, s => placeDecor(s, body.background, body.items)));
-    if (action === 'equip') return done(await change(db, uid, now, s => equipItem(s, String(body.itemId || ''))));
+    if (action === 'decor-save') {
+      const plan = petItem(String(body.background || ''))?.pass ? await planOf(db, uid, now) : 'free';
+      return done(await change(db, uid, now, s => placeDecor(s, body.background, body.items, plan)));
+    }
+    if (action === 'equip') {
+      const id = String(body.itemId || ''), plan = petItem(id)?.pass ? await planOf(db, uid, now) : 'free';
+      return done(await change(db, uid, now, s => equipItem(s, id, plan)));
+    }
     if (action === 'choose') return done(await change(db, uid, now, s => chooseCharacter(s, String(body.character || ''))));
     // Each pet has its own 원정대 map: the new main pet's map comes back with an adoption or a switch.
     const withMap = async (out: {state: ServerPetState; result: any}) => { const e = await db.collection(PET_EXPEDITIONS).doc(uid).get(), main = currentPet(out.state); return done(out, {expedition: publicExpedition(e.exists ? e.data() : initialExpedition(now), main.level, main.slot)}); };
@@ -327,6 +341,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       }
       if (action === 'tower-chest') return towerDone(await changeTower(db, uid, now, (s, t) => openEntranceChest(t, s)));
       if (action === 'tower-equip') return towerDone(await changeTower(db, uid, now, (s, t) => equipTowerGear(t, s, body.gearId)));
+      if (action === 'tower-job3') return towerDone(await changeTower(db, uid, now, (s, t) => takeJob3(t, s)));
       if (action === 'tower-start') {
         // The words are read before the transaction (only when a new battle starts).
         const [p, t] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection(PET_TOWERS).doc(uid).get()]);

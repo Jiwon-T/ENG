@@ -1,17 +1,17 @@
 import { auth } from './firebase';
-import { petStage, type AccessorySlot, type PetJob, type PetJob2, type PetStage, type PetStudySource } from './petCatalog';
+import { petStage, type AccessorySlot, type PetJob, type PetJob2, type PetJob3, type PetStage, type PetStudySource } from './petCatalog';
 export type { PetCharacterType, PetStage } from './petCatalog';
 
 // 펫 in the browser: a thin client. The server (api/_lib/student/pet.ts) keeps the whole state and decides points,
 // purchases, daily caps and the AI talk; this file only asks it and shows the answer.
 export interface LearnedPhrase { original: string; remembered: string; learnedAtLevel: number; evolvedVersions: Record<string, string> }
-export interface PetData { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: LearnedPhrase[]; clothing: string | null; accessories?: Partial<Record<AccessorySlot, string>>; job?: PetJob | null; job2?: PetJob2 | null }
+export interface PetData { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: LearnedPhrase[]; clothing: string | null; accessories?: Partial<Record<AccessorySlot, string>>; job?: PetJob | null; job2?: PetJob2 | null; job3?: PetJob3 | null }
 export interface PetState {
   points: number; inventory: string[]; clothing: string | null; accessories?: Partial<Record<AccessorySlot, string>>; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: PetData[]; day: string;
   today: { studyPoints: number; studyCap: number; energyItemsLeft: number; revivesLeft?: number }; stage: PetStage;
   /** 금메달 by month ('2026-10') and where they sit in each room (% of the room, by background). */
-  medals?: string[]; decor?: Record<string, MedalSpot[]>;
+  medals?: string[]; /** 탑 장식 won */ towerDecor?: string[]; decor?: Record<string, MedalSpot[]>;
   /** 영어 회화 모드 (works while a 펫 패스·프리미엄 is in force) */ englishTalk?: boolean;
 }
 export interface MedalSpot { id: string; x: number; y: number }

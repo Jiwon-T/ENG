@@ -22,7 +22,7 @@ function responseMessage(result:{userMessage?:string;data?:{message?:string;diag
     return `${result.data?.message || result.userMessage || '처리하지 못했습니다. 다시 시도해 주세요.'}${result.data?.diagnosticId ? ` (오류 ID: ${result.data.diagnosticId})` : ''}`;
 }
 /** 상담·신입생 inside the student list: rows appear when the 신입생·상담 chip is on, or when the shared search matches; the 원서 opens in a dialog. */
-export default function StudentRegistrationManager({onSynced,students=[],coreMode=false,query='',active=false,startSignal=0,onCount}:{onSynced:()=>Promise<void>;coreMode?:boolean;students?:any[];query?:string;active?:boolean;startSignal?:number;onCount?:(count:number)=>void}) {
+export default function StudentRegistrationManager({onSynced,students=[],coreMode=false,query='',active=false,startSignal=0,startName='',onCount}:{onSynced:()=>Promise<void>;coreMode?:boolean;students?:any[];query?:string;active?:boolean;startSignal?:number;/** The name to start the form with (시간표 엑셀 가져오기 › 새 학생 등록). */startName?:string;onCount?:(count:number)=>void}) {
     const [intake,setIntake]=useState('all'),[enrollmentKey,setEnrollmentKey]=useState('');
     const [page,setPage]=useState(1),[reload,setReload]=useState(0);
     const [list,setList]=useState<PageResult>({ok:true,records:[],page:1,pages:1,total:0});
@@ -35,7 +35,7 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
     const [locked,setLocked]=useState(false),[retrying,setRetrying]=useState(false);
     const intent=useRef<RegistrationSaveIntent | null>(null),writeBusy=useRef(false),generation=useRef(0);
     const [current,setCurrent]=useState<RegistrationSummary | null>(null);
-    useEffect(()=>{if(startSignal)start();},[startSignal]);
+    useEffect(()=>{if(startSignal)start(startName);},[startSignal]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(()=>{onCount?.(list.counts?.all??list.total??0);},[list]);
     useEffect(()=>{
         let live=true;const uid=auth.currentUser?.uid;
@@ -66,8 +66,8 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
         }).catch(error=>{if(live && auth.currentUser?.uid===uid)setOptionsError(error.message);});
         return()=>{live=false;};
     },[open,optionsReload]);
-    function start() {
-        generation.current++;intent.current=null;setCurrent(null);setKey(crypto.randomUUID());setRevision(undefined);setValue({...emptyRegistration(),intakeStage:'consultation'});
+    function start(name='') {
+        generation.current++;intent.current=null;setCurrent(null);setKey(crypto.randomUUID());setRevision(undefined);setValue({...emptyRegistration(),intakeStage:'consultation',name:name.trim()});
         setFeedback('');setDirty(false);setLocked(false);setRetrying(false);setOpen(true);
     }
     async function edit(record:RegistrationSummary) {

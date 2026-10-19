@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { PetService, type PetState } from '../../lib/petService';
-import { PET_JOB_GUIDE, PET_TOWER, TOWER_GEAR_SLOTS, towerZone, type PetElement, accessorySlot, petStage, towerGearFor, wornAccessories, type TowerGearSlot, type TowerMonsterKind } from '../../lib/petCatalog';
+import { PET_JOB_GUIDE, PET_TOWER, TOWER_GEAR_SLOTS, towerZone, type PetElement, accessorySlot, petStage, towerGearFor, wornAccessories, type TowerGearSlot, type TowerMonsterKind, PET_JOB2, PET_JOB3, PET_JOB3_RULE, TOWER_SKILLS, job3For, petAura, petItem, type PetJob2, type PetJob3, towerDecor } from '../../lib/petCatalog';
 import { PetCharacter } from './PetCharacters';
 import { TowerChest, TowerDoors, TowerGate, TowerGearIcon } from './TowerHall';
 import { TowerEventScreen, type TowerEventView } from './TowerEvents';
@@ -12,9 +12,9 @@ import { ELEMENT_COLOR, ElementBadge, MonsterArt, TowerCodex, type TowerCodexVie
 // below (as in the old handheld RPGs), a message box and the word question. The server decides every result.
 interface TowerQ { kind: 'attack' | 'defend'; prompt: string; choices: string[]; msLeft: number | null }
 /** A skill as the server shows it: `level` 0 = not learned yet (learned at `learnAt`); `crit` = 크리티컬 확률 % on a weakness. */
-export interface TowerSkillView { id: string; name: string; kind: 'attack' | 'block' | 'heal'; element: PetElement | null; mp: number; power: number | null; learnAt: number; level: number; crit: number }
+export interface TowerSkillView { id: string; name: string; kind: 'attack' | 'block' | 'heal'; element: PetElement | null; mp: number; power: number | null; learnAt: number; level: number; crit: number; text?: string | null }
 export interface TowerInfo {
-  skills?: TowerSkillView[]; passive?: { name: string; text: string } | null; job?: string | null;
+  skills?: TowerSkillView[]; passive?: { name: string; text: string } | null; job?: string | null; job3?: PetJob3 | null; /** 「별의 시험」 passed: the 3차 전직 may be taken */ job3Ready?: boolean;
   floor: number; best: number; top: number; gear: string[]; equip: Partial<Record<TowerGearSlot, string>>; levels: Record<string, number>; chests: number[]; potions: number; stones: number; event: TowerEventView | null; stats: { atk: number; def: number; hp: number; mp: number };
   codex?: TowerCodexView[];
   run: null | { id: string; floor: number; monster: { kind: TowerMonsterKind; name: string; boss: boolean; hp: number; max: number; color?: number | null }; hp: number; maxHp: number; mp: number; maxMp: number; phase: 'act' | 'attack' | 'defend'; attacks: number; q: TowerQ | null; skill?: string | null; shield?: boolean; weak?: PetElement | null };
@@ -59,7 +59,7 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
     const x = r.result;
     if (x.won || x.lost) setFrozen({ ...run, q: null, monster: { ...run.monster, hp: x.won ? 0 : run.monster.hp }, hp: x.lost ? 0 : Math.max(0, run.hp - (x.taken || 0)) });
     setFeedback({ q: shown, picked: choice, answer: x.answer });
-    const skillName = x.skill ? tower?.skills?.find(k => k.id === x.skill)?.name : null, drained = x.drained ? ` (체력 +${x.drained})` : '';
+    const skillName = x.skill ? tower?.skills?.find(k => k.id === x.skill)?.name : null, drained = `${x.drained ? ` (체력 +${x.drained})` : ''}${x.hits === 2 ? ' 두 번 베었어요!' : ''}${x.shieldUp ? ' 다음 공격도 막아요!' : ''}${x.weakened ? ' 적의 공격이 약해졌어요!' : ''}`;
     setMessage(x.kind === 'attack'
       ? (x.crit ? `크리티컬! ${pet.name}의 ${skillName}! ${monster}에게 ${x.damage} 피해!${drained}`
         : x.correct ? `${pet.name}의 ${skillName || '때리기'}! ${monster}에게 ${x.damage} 피해!${drained}`
@@ -125,7 +125,7 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
             {fx && (fx.kind === 'block' || fx.kind === 'hurt') && <div key={`p${fx.key}`} className="pointer-events-none absolute bottom-10 left-6 z-10 flex w-24 flex-col items-center">
               {fx.kind === 'block' && <span className="tw-shield absolute -top-4 h-24 w-24 rounded-full border-4 border-[#1d9e75] bg-[#e1f5ee]/60" aria-hidden="true" />}
               <span className="tw-pop font-black" style={{ color: fx.kind === 'block' ? '#0f6e56' : '#a32d2d', fontSize: 15 }}>{fx.kind === 'block' ? '막았다! ' : ''}-{fx.amount}</span></div>}
-            <div key={fx?.kind === 'hurt' ? `h${fx.key}` : 'pet'} className={`absolute bottom-1 left-4 ${fx?.kind === 'hurt' ? 'tw-hurt' : ''}`}><PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={battleLook} size={92} /></div>
+            <div key={fx?.kind === 'hurt' ? `h${fx.key}` : 'pet'} className={`absolute bottom-1 left-4 ${fx?.kind === 'hurt' ? 'tw-hurt' : ''}`}><PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={battleLook} size={92} aura={petAura(pet)} /></div>
             <div className="absolute bottom-2.5 right-2.5 w-[50%] rounded-xl border-2 border-[#3c3489] bg-white px-2.5 py-1.5"><div className="flex justify-between text-xs"><b className="font-black text-[#26215c]">{pet.name}</b><span className="text-slate-500">Lv.{pet.level}</span></div>
               <div className="mt-1 flex items-center gap-1.5"><span className="rounded bg-[#fac775] px-1 text-[10px] font-black text-[#633806]">HP</span><Bar value={run.hp} max={run.maxHp} color={run.hp / run.maxHp < 0.3 ? 'bg-[#e24b4a]' : 'bg-[#639922]'} /></div>
               <div className="mt-0.5 flex items-center gap-1.5"><span className="rounded bg-[#b5d4f4] px-1 text-[10px] font-black text-[#0c447c]">MP</span><Bar value={run.mp} max={run.maxMp} color="bg-[#378add]" /></div>
@@ -145,7 +145,7 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
               <div className="grid grid-cols-2 gap-1.5">{skills.map(k => { const learned = k.level > 0, enough = run.mp >= k.mp, weak = Boolean(k.element && run.weak === k.element);
                 return <button key={k.id} type="button" disabled={busy || !learned || !enough} onClick={() => void act('skill', k)} className={`rounded-lg border px-2 py-1.5 text-left text-xs ${!learned ? 'border-dashed border-[#d3d1c7] text-[#b4b2a9]' : weak ? 'border-[#534ab7] bg-[#eeedfe] text-[#26215c]' : 'border-[#e4e0f5] bg-white text-[#26215c]'} disabled:cursor-not-allowed`}>
                   <span className="font-bold">{k.name}</span>{k.element && <ElementBadge e={k.element} />}{weak && <span className="ml-1 text-[10px] font-bold text-[#a32d2d]">약점!</span>}
-                  <span className="block text-[10px] text-slate-500">{!learned ? `Lv.${k.learnAt}에 배워요` : `MP ${k.mp} · ${k.kind === 'attack' ? `×${k.power}` : k.kind === 'block' ? '다음 공격 막기' : '체력 회복'} · Lv.${k.level}${!enough ? ' · MP 부족' : ''}`}</span></button>; })}</div>
+                  <span className="block text-[10px] text-slate-500">{!learned ? `Lv.${k.learnAt}에 배워요` : `MP ${k.mp} · ${k.kind === 'attack' ? `×${k.power}` : k.kind === 'block' ? '다음 공격 막기' : '체력 회복'} · Lv.${k.level}${!enough ? ' · MP 부족' : ''}`}</span>{learned && k.text && <span className="block text-[10px] text-[#534ab7]">{k.text}</span>}</button>; })}</div>
               <p className="mt-1.5 text-[10px] text-slate-400">스킬을 고른 뒤 단어를 맞히면 발동해요. 틀리면 약하게 스치고 MP는 절반만 써요. 약점은 크리티컬이 한 번 터진 몬스터에만 보여요.</p>
             </div>
             : <div className="grid grid-cols-4 gap-1.5 text-xs font-bold">
@@ -165,6 +165,7 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
         : <div className="mt-3 space-y-3">
           {tower.floor > tower.top ? <p className="rounded-3xl bg-[#232220] px-4 py-10 text-center text-sm font-bold text-[#fac775]">꼭대기 도착! 더 높은 층은 곧 열려요.</p>
             : <TowerDoors floor={tower.floor} boss={tower.floor % PET_TOWER.bossEvery === 0} busy={busy} onPick={start} />}
+          {tower.job3Ready && pet.job2 && <Job3Banner job2={pet.job2} busy={busy} onTake={() => void send('tower-job3').then(r => { if (r?.result?.job3) setNotice(`${PET_JOB3[r.result.job3 as PetJob3].label}(으)로 3차 전직했어요! ${PET_JOB3[r.result.job3 as PetJob3].title} 칭호와 ${petItem(r.result.weapon)?.name || '새 무기'}를 받았어요.`); })} />}
           <Entrance tower={tower} busy={busy} energy={pet.energy} onEquip={id => void send('tower-equip', { gearId: id })} onCodex={() => setCodexOpen(true)} onFame={() => setFameOpen(true)} />
         </div>}
     </div>
@@ -180,6 +181,18 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
       </div>
     </div>}
   </div>;
+}
+
+/** 「별의 시험」 passed (Lv.150, floor 50): the 3차 전직 of the pet's branch, with what it brings. */
+function Job3Banner({ job2, busy, onTake }: { job2: PetJob2; busy: boolean; onTake: () => void }) {
+  const job3 = job3For(job2); if (!job3) return null;
+  const j = PET_JOB3[job3], skill = TOWER_SKILLS.find(k => k.job3 === job3);
+  return <section aria-label="3차 전직" className="rounded-2xl border-2 border-[#fac775] bg-[#fffbeb] px-4 py-3 text-center">
+    <p className="text-2xl" aria-hidden="true">🌟</p>
+    <b className="block text-sm font-black text-[#633806]">{PET_JOB3_RULE.name} 통과! 3차 전직할 수 있어요</b>
+    <p className="mt-1 text-xs text-[#854f0b]">{PET_JOB2[job2].label} → <b>{j.label}</b> · 칭호 「{j.title}」 · {petItem(j.weapon)?.name}{skill ? ` · 스킬 ${skill.name}` : ''} · 은은한 오라</p>
+    <button type="button" disabled={busy} onClick={onTake} className="mt-2 rounded-xl bg-[#ba7517] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{j.icon} {j.label}(으)로 전직하기</button>
+  </section>;
 }
 
 /** 능력치 and 장비: at the entrance (gear can be changed) and under the battle (to look at only). */
@@ -223,6 +236,7 @@ function Ending({ ending, tower, onAgain }: { ending: any; tower: TowerInfo; onA
       {ending.hall && <p className="mt-2 rounded-xl bg-[#fef9c3] px-3 py-2 text-sm font-black text-[#854d0e]">🏆 명예의 전당에 올랐어요! {[ending.hall.first && '처음 깬 모험가', ending.hall.fewest && '가장 적은 공격'].filter(Boolean).join(' · ')}</p>}
       {ending.first && <p className="mt-2 text-sm font-bold text-[#633806]">처음 돌파 보상 +{ending.points}P · 경험치 +{ending.xp}</p>}
       {ending.chest && <p className="mt-2 rounded-xl bg-[#fffaf0] px-3 py-2 text-sm font-bold text-[#633806]">🎁 보스의 보물상자: {ending.chest.gear.map((id: string) => towerGearFor(id, tower.job as any)?.name).join(', ')}{ending.chest.potions ? ` · 물약 ${ending.chest.potions}개` : ''}</p>}
+      {ending.decor && <p className="mt-2 rounded-xl bg-[#fdf2f8] px-3 py-2 text-sm font-bold text-[#72243e]">🪴 탑 장식 「{towerDecor(ending.decor)?.name}」을(를) 받았어요! 펫 방의 꾸미기에서 놓아 보세요.</p>}
     </> : ending.lost ? <>
       <p className="text-3xl" aria-hidden="true">💫</p><h2 className="mt-1 text-lg font-black text-[#5e1e2a]">쓰러졌어요…</h2><p className="mt-1 text-sm text-slate-600">{ending.floor}층에서 다시 도전할 수 있어요. 레벨을 올리거나 장비를 바꿔 보세요.</p>
     </> : <>

@@ -48,6 +48,8 @@ export interface StoredLessonReport {
   vocabularyScore: number | null;
   /** The 테스트 점수's name from the 일지 (단어, 모의고사 …); empty: just 테스트. */
   testName?: string;
+  /** The other tests of that day (벼락치기 85 …), after the first one above. */
+  extraScores?: { name: string; score: number }[];
   schoolExamScore: number | null;
   feedback: string;
   sourceUpdatedAt: string;
@@ -93,6 +95,8 @@ export interface ParentLessonReportDTO {
   vocabularyScore: number | null;
   /** The 테스트 점수's name from the 일지 (단어, 모의고사 …); empty: just 테스트. */
   testName?: string;
+  /** The other tests of that day (벼락치기 85 …), after the first one above. */
+  extraScores?: { name: string; score: number }[];
   schoolExamScore: number | null;
   feedback: string;
 }

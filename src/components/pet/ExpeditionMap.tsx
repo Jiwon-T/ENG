@@ -3,7 +3,7 @@ import { ChevronLeft, Lock, Check } from 'lucide-react';
 import { PetCharacter } from './PetCharacters';
 import WordFeed, { type FeedRunView } from './WordFeed';
 import { askConfirm } from '../teacher/ConfirmDialog';
-import { PET_EXPEDITION, PET_JOB2, PET_JOB_GUIDE, PET_JOBS, PET_WORD_FEED, STAGE_GAME_LABEL, petItem, petStage, stageGame, stageHasSound, wornAccessories, type PetJob, type PetJob2 } from '../../lib/petCatalog';
+import { PET_EXPEDITION, PET_JOB2, PET_JOB_GUIDE, PET_JOBS, PET_WORD_FEED, STAGE_GAME_LABEL, petItem, petStage, stageGame, stageHasSound, wornAccessories, type PetJob, type PetJob2, petAura } from '../../lib/petCatalog';
 import { speechRecognitionClass } from '../../lib/sentenceGame';
 import { QuietPrompt } from '../sentence/SentenceGame';
 import type { PetResponse, PetState } from '../../lib/petService';
@@ -98,7 +98,7 @@ export default function ExpeditionMap({ state, send, onClose, onGuild, initial }
               {s.boss ? '👑' : s.unlocked ? i + 1 : <Lock size={14} aria-hidden="true" />}
               {s.stars > 0 && <span className="absolute -bottom-3 text-[10px] tracking-tighter text-[#f2b84b]" aria-hidden="true">{'★'.repeat(s.stars)}</span>}
             </button>; })}
-          {chapter.stages.some(s => s.id === exp.current) && (() => { const [x, y] = SPOTS[chapter.stages.findIndex(s => s.id === exp.current)]; return <span className="pointer-events-none absolute" style={{ left: `calc(${x}% + 18px)`, top: `calc(${y}% - 30px)` }}><PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet)} size={44} /></span>; })()}
+          {chapter.stages.some(s => s.id === exp.current) && (() => { const [x, y] = SPOTS[chapter.stages.findIndex(s => s.id === exp.current)]; return <span className="pointer-events-none absolute" style={{ left: `calc(${x}% + 18px)`, top: `calc(${y}% - 30px)` }}><PetCharacter aura={petAura(pet)} character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet)} size={44} /></span>; })()}
         </div>
         <p className="mt-2 text-center text-[11px] font-bold text-[#8b2f40]">✨ {PET_JOB_GUIDE}</p>
         <div className="mt-1 flex justify-between text-xs font-bold text-[#8b2f40]"><span>★ {chapterStars} / {chapter.stages.length * 3}</span><span>{chapter.rewarded ? `${rewardText(chapter)} 받음 ✓` : `${petItem(chapter.reward)?.icon} ${rewardText(chapter)}까지 ${left}스테이지`}</span></div>
@@ -113,7 +113,7 @@ export default function ExpeditionMap({ state, send, onClose, onGuild, initial }
           <h2 id="job-title" className="text-base font-black text-[#5e1e2a]">1차 전직할 시간이에요!</h2>
           <p className="mt-1 text-xs text-slate-500">{pet.name}은(는) 어떤 길을 갈까요? 펫마다 한 번만 고를 수 있어요. 직업 무기와 첫 스킬을 받아요.</p>
           <div className="mt-4 grid grid-cols-2 gap-2">{(Object.keys(PET_JOBS) as PetJob[]).map(job => <button key={job} type="button" disabled={busy} onClick={() => void chooseJob(job)} className="flex flex-col items-center gap-1 rounded-2xl border border-[#f3e6e8] bg-[#fdf6f7] px-2 py-3 hover:border-[#f5a3a8] disabled:opacity-60">
-            <PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={[...wornAccessories(pet).filter(id => petItem(id)?.slot !== 'hand'), PET_JOBS[job].weapon]} size={72} />
+            <PetCharacter aura={petAura(pet)} character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={[...wornAccessories(pet).filter(id => petItem(id)?.slot !== 'hand'), PET_JOBS[job].weapon]} size={72} />
             <b className="text-sm font-black text-[#5e1e2a]">{PET_JOBS[job].icon} {PET_JOBS[job].line}</b><span className="text-[11px] text-slate-500">{petItem(PET_JOBS[job].weapon)?.name}을(를) 받아요</span></button>)}</div>
           {state.pets.some(p => p.slot !== pet.slot && p.job) && <p className="mt-2 text-[11px] text-slate-400">다른 친구는 {state.pets.filter(p => p.slot !== pet.slot && p.job).map(p => `${p.name} ${PET_JOBS[p.job!].label}`).join(' · ')}예요</p>}
           <button type="button" onClick={() => setJobLater(true)} className="mt-3 text-xs text-slate-400">나중에 고를게요</button>
@@ -126,7 +126,7 @@ export default function ExpeditionMap({ state, send, onClose, onGuild, initial }
           <h2 id="job2-title" className="text-base font-black text-[#5e1e2a]">2차 전직: 꿈을 이룰 시간이에요!</h2>
           <p className="mt-1 text-xs text-slate-500">{PET_JOBS[pet.job].label} {pet.name}은(는) 빛과 어둠 중 어느 길을 갈까요? 펫마다 한 번만 고를 수 있어요.</p>
           <div className="mt-4 grid grid-cols-2 gap-2">{(Object.keys(PET_JOB2) as PetJob2[]).filter(b => PET_JOB2[b].base === pet.job).map(b => <button key={b} type="button" disabled={busy} onClick={() => void chooseJob2(b)} className={`flex flex-col items-center gap-1 rounded-2xl border px-2 py-3 disabled:opacity-60 ${PET_JOB2[b].element === '빛' ? 'border-[#f5e6a8] bg-[#fffbea] hover:border-[#e8c547]' : 'border-[#d9d4f0] bg-[#f5f3ff] hover:border-[#8b7fd6]'}`}>
-            <PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={[...wornAccessories(pet).filter(id => petItem(id)?.slot !== 'hand'), PET_JOB2[b].weapon]} size={72} />
+            <PetCharacter aura={petAura(pet)} character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={[...wornAccessories(pet).filter(id => petItem(id)?.slot !== 'hand'), PET_JOB2[b].weapon]} size={72} />
             <b className="text-sm font-black text-[#5e1e2a]">{PET_JOB2[b].icon} {PET_JOB2[b].label} <span className="text-[11px] font-bold text-slate-500">({PET_JOB2[b].element})</span></b>
             <span className="text-[11px] text-slate-500">{petItem(PET_JOB2[b].weapon)?.name} · 칭호 '{PET_JOB2[b].title}'</span></button>)}</div>
           <button type="button" onClick={() => setJobLater(true)} className="mt-3 text-xs text-slate-400">나중에 고를게요</button>

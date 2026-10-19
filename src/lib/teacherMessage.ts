@@ -1,7 +1,15 @@
 import {studyLastEnd} from './sessionNumbers';
+import {testLabel} from './lessonReportText';
+/** {{테스트 점수}}: the first test's score; with more tests that day, each with its name ("단어 90점 · 벼락치기 85",
+ *  the template's own 점 closing the last one). */
+function allScores(lesson:any,score:(a:any,b:any)=>number|undefined){
+ const first=score(lesson.correct,lesson.total),more=(Array.isArray(lesson.extraTests)?lesson.extraTests:[]).map((t:any)=>({name:t.name,value:score(t.correct,t.total)})).filter((t:any)=>t.value!==undefined);
+ if(first===undefined||!more.length)return first;
+ return [{name:lesson.testName,value:first},...more].map(t=>`${testLabel(t.name)} ${t.value}`).join('점 · ');
+}
 export function messageVariables(profile:any,lesson:any={}) {
  const score=(a:any,b:any)=>typeof a==='number'&&typeof b==='number'&&b>0?Math.round(a/b*100):undefined;
- return {'학생':profile.displayName,'학생 호칭':profile.studentSalutation||profile.displayName,'학생호칭':profile.studentSalutation||profile.displayName,'보호자이름':profile.guardianName,'학교':profile.school,'학년':profile.grade,'수강료':profile.tuition==null?undefined:profile.tuition.toLocaleString('ko-KR'),'납부기한':profile.paymentDeadline,'출결':lesson.attendance,'태도':lesson.attitude,'숙제':lesson.homework,'테스트':lesson.test,'단어':score(lesson.correct,lesson.total),'단어테스트 점수':score(lesson.correct,lesson.total),'테스트 점수':score(lesson.correct,lesson.total),'내신 대비 점수':score(lesson.examCorrect,lesson.examTotal),'내용 및 피드백':[lesson.content,lesson.note].filter(Boolean).join('\n'),'피드백':lesson.note,'틀린단어':lesson.wrong??(lesson.total!=null&&lesson.correct!=null?lesson.total-lesson.correct:undefined),'문항':lesson.examScorePercent?undefined:lesson.examTotal,'오답':lesson.examScorePercent?undefined:lesson.examWrong??(lesson.examTotal!=null&&lesson.examCorrect!=null?lesson.examTotal-lesson.examCorrect:undefined),'수업일':lesson.date,'과목':lesson.subject,'수업 시작':lesson.start,'수업 종료':lesson.end,'자습 시작':lesson.selfStudyStart,'자습 종료':studyLastEnd(lesson)} as Record<string,unknown>;
+ return {'학생':profile.displayName,'학생 호칭':profile.studentSalutation||profile.displayName,'학생호칭':profile.studentSalutation||profile.displayName,'보호자이름':profile.guardianName,'학교':profile.school,'학년':profile.grade,'수강료':profile.tuition==null?undefined:profile.tuition.toLocaleString('ko-KR'),'납부기한':profile.paymentDeadline,'출결':lesson.attendance,'태도':lesson.attitude,'숙제':lesson.homework,'테스트':lesson.test,'단어':score(lesson.correct,lesson.total),'단어테스트 점수':score(lesson.correct,lesson.total),'테스트 점수':allScores(lesson,score),'내신 대비 점수':score(lesson.examCorrect,lesson.examTotal),'내용 및 피드백':[lesson.content,lesson.note].filter(Boolean).join('\n'),'피드백':lesson.note,'틀린단어':lesson.wrong??(lesson.total!=null&&lesson.correct!=null?lesson.total-lesson.correct:undefined),'문항':lesson.examScorePercent?undefined:lesson.examTotal,'오답':lesson.examScorePercent?undefined:lesson.examWrong??(lesson.examTotal!=null&&lesson.examCorrect!=null?lesson.examTotal-lesson.examCorrect:undefined),'수업일':lesson.date,'과목':lesson.subject,'수업 시작':lesson.start,'수업 종료':lesson.end,'자습 시작':lesson.selfStudyStart,'자습 종료':studyLastEnd(lesson)} as Record<string,unknown>;
 }
 /** Lesson-result variables that are often blank. A line using one of them is left out when that lesson has no value,
  *  so one template works whether a lesson has a 테스트 score, a 내신 대비 score, both or neither. */

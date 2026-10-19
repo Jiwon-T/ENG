@@ -132,8 +132,17 @@ function panelFor(p: Passage, o: SheetOptions, width: number, room: number): She
     used += box(ko + (panel.summary.en ? en : 0));
   }
   if (o.words && p.parts.words?.known.length) {
-    const rows = Math.max(0, Math.floor((room - used - 5.5) / FULL));
-    panel.words = p.parts.words.known.slice(0, Math.min(16, rows * 2)).map(w => ({ word: w.word, meaning: w.meaning }));
+    // two columns; a long meaning takes two lines in a narrow (portrait) panel, so words are added while the rows they
+    // really take still fit
+    const col = (w - 3) / 2, lines = (x: { word: string; meaning: string }) => linesOf(`${x.word} ${x.meaning}`, SHEET_TYPE.panel, col);
+    const left = room - used - 5.5, list = p.parts.words.known.slice(0, 16).map(x => ({ word: x.word, meaning: x.meaning }));
+    let take = 0;
+    for (let n = 1; n <= list.length; n++) {
+      const half = Math.ceil(n / 2), rows = list.slice(0, half).reduce((t, x) => t + lines(x), 0), rows2 = list.slice(half, n).reduce((t, x) => t + lines(x), 0);
+      if (Math.max(rows, rows2) * FULL > left) break;
+      take = n;
+    }
+    panel.words = list.slice(0, take);
   }
   const empty = !panel.structure.length && !panel.mainIdea && !panel.summary && !panel.title && !panel.words.length;
   return empty ? null : panel;
@@ -185,7 +194,7 @@ export function layoutSheet(p: Passage, o: SheetOptions): SheetLayout {
     pages.push({ number: pages.length + 1, first, columns });
     if (!bases.length) break;
   }
-  const level = passageLevel(p.sentences);
+  const level = passageLevel(p.sentences, p.parts.words);
   return { kind: o.kind, orientation: o.orientation, title: p.title || p.parts.summary?.title || '지문 분석', subtitle: p.examInfo || '', topic: o.kind === 'analysis' ? p.parts.summary?.topic.ko || '' : '', level, panel, pages, meaning: o.kind === 'analysis' && o.meaning };
 }
 /** The options a passage can use: parts it does not have yet are off (and say why on screen). */

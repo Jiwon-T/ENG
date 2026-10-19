@@ -3,14 +3,14 @@
 // teacher screens. The AI talk uses fixed instructions written here; the student's text is only ever passed as data.
 import {
   PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_CHARACTERS, PET_DAILY_STUDY_POINTS, PET_ENERGY_ITEMS_PER_DAY, PET_FRIEND_LEVEL, PET_MAX_ENERGY, PET_MAX_LEVEL, PET_MAX_PETS, PET_REVIVES_PER_DAY,
-  PET_COUPON, PET_REWARD_WINDOW_DAYS, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, accessorySlot, type AccessorySlot, type PetJob} from '../../src/lib/petCatalog.js';
+  PET_COUPON, PET_REWARD_WINDOW_DAYS, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob} from '../../src/lib/petCatalog.js';
 
 export const PET_STATES = 'petStates';
 export interface ServerPhrase { original: string; remembered: string; learnedAtLevel: number; evolvedVersions: Record<string, string> }
 /** Each pet wears its own outfit; the shop items (inventory), points and the room are shared. */
 /** `accessories`: one per place (머리·눈·목·손). `accessory`: what older saves kept (one item), moved into its place on load.
  *  `job`: 1차 전직, chosen once on 5장 설산; `job2`: 2차 전직 (light or dark branch), chosen once on 7장 꿈의 정원. */
-export interface ServerPet { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: ServerPhrase[]; clothing: string | null; accessories: Partial<Record<AccessorySlot, string>>; accessory?: string | null; job?: PetJob | null; job2?: PetJob2 | null }
+export interface ServerPet { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: ServerPhrase[]; clothing: string | null; accessories: Partial<Record<AccessorySlot, string>>; accessory?: string | null; job?: PetJob | null; job2?: PetJob2 | null; /** 3차 전직 (「별의 시험」, Lv.150 + 탑 50층) */ job3?: PetJob3 | null }
 export interface ServerPetState {
   version: 1; points: number; inventory: string[]; /** before 여러 마리: what pet 1 wore */ clothing?: string | null; accessory?: string | null; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: ServerPet[];
@@ -19,6 +19,7 @@ export interface ServerPetState {
   /** 이달의 장학 쿠폰: points earned in `month` ('YYYY-MM', Korea time). */ earned?: { month: string; points: number };
   /** 금메달 by month ('2026-10'), and where each one sits in each room (% of the room, by background). */
   medals?: string[]; decor?: Record<string, { id: string; x: number; y: number }[]>;
+  /** 탑 장식 won (TOWER_DECOR ids), placed with the medals. */ towerDecor?: string[];
   /** 영어 회화 모드 on (works only while a pass is in force) */ englishTalk?: boolean;
 }
 export const seoulDay = (at = Date.now()) => new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Seoul'}).format(new Date(at));
@@ -108,7 +109,7 @@ export function buyItem(s: ServerPetState, id: string) {
   const item = petItem(id); if (!item) throw Error('PET_ITEM_NOT_FOUND');
   const pet = currentPet(s);
   if (item.category !== 'consumable' && s.inventory.includes(id)) return {message: '이미 가지고 있어요.'};
-  if (item.reward) throw Error('PET_ITEM_NOT_FOUND');
+  if (item.reward || item.pass) throw Error('PET_ITEM_NOT_FOUND');
   // 탈진 (0 기운): only 몬스터 wakes the pet (once a day); 커피·에너지드링크 wait until then.
   if (item.revive) { if (pet.energy > 0) throw Error('PET_NOT_EXHAUSTED'); if ((s.today.revives || 0) >= PET_REVIVES_PER_DAY) throw Error('PET_REVIVE_USED'); }
   else if (item.energy) { if (pet.energy <= 0) throw Error('PET_EXHAUSTED'); if (energyItemsUsed(s) >= PET_ENERGY_ITEMS_PER_DAY) throw Error('PET_ENERGY_ITEM_USED'); }
@@ -123,9 +124,11 @@ export function buyItem(s: ServerPetState, id: string) {
   return {message: '구매 완료!'};
 }
 
-export function equipItem(s: ServerPetState, id: string) {
+/** `plan`: the person's AI plan today, for a pass-only room (looked up by the caller only for those). */
+export function equipItem(s: ServerPetState, id: string, plan = 'free') {
   const item = petItem(id); if (!item || item.category === 'consumable') throw Error('PET_ITEM_NOT_FOUND');
-  if (id !== 'default' && !s.inventory.includes(id)) throw Error('PET_ITEM_NOT_OWNED');
+  if (item.pass) { if (!passAllows(item, plan)) throw Error('PET_PASS_ITEM'); }
+  else if (id !== 'default' && !s.inventory.includes(id)) throw Error('PET_ITEM_NOT_OWNED');
   const pet = currentPet(s);
   if (item.category === 'clothing') pet.clothing = pet.clothing === id ? null : id;
   if (item.category === 'accessory') { const slot = accessorySlot(id); if (pet.accessories[slot] === id) delete pet.accessories[slot]; else pet.accessories[slot] = id; }
@@ -277,7 +280,7 @@ export const parseAi = (text: string) => { try { return JSON.parse(text); } catc
 /** What the browser sees: everything but the bookkeeping. */
 export function publicPetState(s: ServerPetState) {
   const pet = currentPet(s);
-  return {englishTalk: Boolean(s.englishTalk), medals: s.medals || [], decor: s.decor || {}, points: s.points, inventory: s.inventory, clothing: pet.clothing, accessories: pet.accessories, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
+  return {englishTalk: Boolean(s.englishTalk), medals: s.medals || [], towerDecor: s.towerDecor || [], decor: s.decor || {}, points: s.points, inventory: s.inventory, clothing: pet.clothing, accessories: pet.accessories, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
     today: {studyPoints: s.today.studyPoints, studyCap: PET_DAILY_STUDY_POINTS, energyItemsLeft: Math.max(0, PET_ENERGY_ITEMS_PER_DAY - energyItemsUsed(s)), revivesLeft: Math.max(0, PET_REVIVES_PER_DAY - (s.today.revives || 0))}, stage: petStage(pet.level)};
 }
 /** For the teacher screens: the highest-level pet and how many live here. */

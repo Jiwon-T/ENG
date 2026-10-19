@@ -44,7 +44,7 @@ export default function PassageResult({ passage, onChange, reused, extra, onMake
   const points = useMemo(() => grammarHighlights(passage.sentences), [passage.sentences]);
   const pointCount = useMemo(() => { const all = points.flat(); return { all: all.length, sure: all.filter(p => p.kind === 'sure').length, check: all.filter(p => p.kind === 'check').length }; }, [points]);
   const [busy, setBusy] = useState<'' | PassagePartName | 'structure' | 'words'>('');
-  const level = useMemo(() => passageLevel(passage.sentences), [passage.sentences]);
+  const level = useMemo(() => passageLevel(passage.sentences, passage.parts.words), [passage.sentences, passage.parts.words]);
   const [message, setMessage] = useState('');
   const { parts } = passage;
 

@@ -11,7 +11,7 @@ export function LevelBadge({ level }: { level: PassageLevel | null }) {
     <button type="button" aria-expanded={open} onClick={() => setOpen(x => !x)} className="w-fit rounded-full bg-[#fbeaf0] px-2 py-0.5 text-[11px] font-bold text-[#72243e]">
       {level ? <>난이도 <span aria-label={`5개 중 ${level.stars}개`} className="tracking-[1px]">{'★'.repeat(level.stars)}{'☆'.repeat(5 - level.stars)}</span> {level.label}</> : '난이도 —'}
     </button>
-    {open && <span className="mt-1 text-[11px] font-normal text-slate-400">{level ? `${level.measures.join(' · ')} — 정해진 규칙으로 센 참고용이에요(관계사·분사구는 놓칠 수 있어요)${level.short ? ' · 짧은 지문이라 대략적인 값이에요' : ''}` : '판단할 자료가 적어요 (15단어 이상이면 보여요)'}</span>}
+    {open && <span className="mt-1 text-[11px] font-normal text-slate-400">{level ? `${level.measures.join(' · ')} — 정해진 규칙으로 센 참고용이에요(관계사·분사구는 놓칠 수 있어요)${level.short ? ' · 짧은 지문이라 대략적인 값이에요' : ''}${level.measures.some(m => m.startsWith('학원 단어')) ? '' : ' · ③ 단어 탭을 열면 학원 단어 기준도 더해져요'}` : '판단할 자료가 적어요 (15단어 이상이면 보여요)'}</span>}
   </span>;
 }
 

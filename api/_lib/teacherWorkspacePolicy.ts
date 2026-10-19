@@ -1,4 +1,4 @@
-import {lessonFeedbackText,percentage as sharedPercentage} from '../../src/lib/lessonReportText.js';
+import {MAX_EXTRA_TESTS,lessonFeedbackText,percentage as sharedPercentage} from '../../src/lib/lessonReportText.js';
 import { z } from 'zod';
 export const subjects = ['영어', '수학', '국어', '과학', '한국사'] as const;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -9,6 +9,21 @@ function orderedStudyPieces(d: {selfStudyStart: string; selfStudyEnd: string; se
     if (!more.length || pieces.some(p => !TIME.test(p.start) || !TIME.test(p.end))) return {selfStudyMore: more};
     const [first, ...rest] = [...pieces].sort((a, b) => a.start.localeCompare(b.start));
     return {selfStudyStart: first.start, selfStudyEnd: first.end, selfStudyMore: rest};
+}
+const extraTestSchema = z.object({
+    name: z.string().trim().max(30).default(''),
+    correct: z.number().nonnegative().nullable().default(null), total: z.number().positive().nullable().default(null),
+    wrong: z.number().nonnegative().nullable().optional(), scorePercent: z.boolean().default(false),
+}).strict();
+type ExtraTestInput = z.infer<typeof extraTestSchema>;
+const emptyTest = (t: {correct?: number | null; total?: number | null; wrong?: number | null}) => t.correct == null && t.total == null && t.wrong == null;
+/** The other tests of the day: blank ones dropped, 오답 수 counted the same way as the first test. When the first test is
+ *  empty and another has a score, that one becomes the first (what reports, charts and averages read). */
+function orderedTests(d: {correct?: number | null; total?: number | null; wrong?: number | null; extraTests: ExtraTestInput[]}) {
+    const tests = d.extraTests.map(t => ({...t, correct: t.wrong != null && t.total != null ? t.total - t.wrong : t.correct, scorePercent: t.scorePercent && t.total === 100})).filter(t => !emptyTest(t));
+    if (!emptyTest(d) || !tests.length) return {extraTests: tests};
+    const [first, ...rest] = tests;
+    return {correct: first.correct, total: first.total, wrong: first.wrong ?? null, scorePercent: first.scorePercent, testName: first.name, extraTests: rest};
 }
 export const lessonDraftSchema = z.object({
     studentKey: z.string().uuid(), subject: z.enum(subjects), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -26,6 +41,8 @@ export const lessonDraftSchema = z.object({
     scorePercent:z.boolean().default(false), examScorePercent:z.boolean().default(false),
     // The 테스트 점수's name (단어, 모의고사, 단원평가 or typed); empty: shown as just 테스트.
     testName:z.string().trim().max(30).default(''),
+    // More tests the same day (단어 + 벼락치기 …), after the first one above.
+    extraTests:z.array(extraTestSchema).max(MAX_EXTRA_TESTS).default([]),
     round: z.number().nonnegative().nullable(),
     selfStudy: z.enum(['미확인', '없음', '있음']).default('없음'),
     selfStudyStart: z.string().default(''), selfStudyEnd: z.string().default(''),
@@ -33,7 +50,7 @@ export const lessonDraftSchema = z.object({
     selfStudyMore: z.array(z.object({ start: z.string().max(5), end: z.string().max(5) }).strict()).max(2).default([]),
     selfStudyRound: z.number().nonnegative().nullable().default(null),
     attendanceNote: z.string().max(5000).default(''), specialNote: z.string().max(5000).default(''), examScope:z.string().max(5000).default(''), teacherNote:z.string().max(5000).default(''),
-}).transform(d=>({...d,...orderedStudyPieces(d),selfStudy:d.selfStudy==='미확인'&&!d.selfStudyStart&&!d.selfStudyEnd&&!d.selfStudyRound&&!d.selfStudyMore.length?'없음':d.selfStudy,correct:d.wrong!=null&&d.total!=null?d.total-d.wrong:d.correct,examCorrect:d.examWrong!=null&&d.examTotal!=null?d.examTotal-d.examWrong:d.examCorrect,scorePercent:d.scorePercent&&d.total===100,examScorePercent:d.examScorePercent&&d.examTotal===100})).superRefine((d, ctx) => {
+}).transform(d=>({...d,...orderedStudyPieces(d),selfStudy:d.selfStudy==='미확인'&&!d.selfStudyStart&&!d.selfStudyEnd&&!d.selfStudyRound&&!d.selfStudyMore.length?'없음':d.selfStudy,correct:d.wrong!=null&&d.total!=null?d.total-d.wrong:d.correct,examCorrect:d.examWrong!=null&&d.examTotal!=null?d.examTotal-d.examWrong:d.examCorrect,scorePercent:d.scorePercent&&d.total===100,examScorePercent:d.examScorePercent&&d.examTotal===100,...orderedTests(d)})).superRefine((d, ctx) => {
     if (d.classSession === '있음' && d.end <= d.start)
         ctx.addIssue({ code: 'custom', message: '종료 시간은 시작 시간 뒤여야 합니다.' });
     if(d.wrong!=null&&d.total==null||d.examWrong!=null&&d.examTotal==null)ctx.addIssue({code:'custom',message:'오답 수와 문항 수를 함께 입력해 주세요.'});
@@ -42,6 +59,8 @@ export const lessonDraftSchema = z.object({
         ctx.addIssue({ code: 'custom', message: '오답 수와 문항 수를 확인해 주세요.' });
     if ((d.examCorrect === null) !== (d.examTotal === null) || (d.examCorrect !== null && d.examCorrect > d.examTotal!))
         ctx.addIssue({ code: 'custom', message: '내신 대비 테스트의 오답 수와 문항 수를 확인해 주세요.' });
+    if (d.extraTests.some(t => (t.correct === null) !== (t.total === null) || t.wrong != null && (t.total == null || t.wrong > t.total) || t.correct !== null && t.correct > t.total!))
+        ctx.addIssue({ code: 'custom', message: '추가한 테스트의 오답 수와 문항 수를 확인해 주세요.' });
     const date = new Date(`${d.date}T00:00:00Z`);
     if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== d.date || (d.classSession === '있음' && (!/^([01]\d|2[0-3]):[0-5]\d$/.test(d.start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(d.end))))
         ctx.addIssue({ code: 'custom', message: '날짜와 시간을 확인해 주세요.' });
@@ -61,7 +80,7 @@ export function canTeach(actor: {
 }, studentKey: string, subject: string) { return actor.admin || (actor.principal ? actor.teachingScopes || [] : actor.scopes).some(s => s.studentKey === studentKey && s.subject === subject); }
 export function percentage(correct: number | null, total: number | null) { return sharedPercentage(correct, total); }
 export function lessonFeedback(d: z.infer<typeof lessonDraftSchema>) { return lessonFeedbackText(d); }
-export function continuation(previous: any) { return { examScope:previous.examScope||'', content: previous.content || '', assignment: previous.assignment || '', note: '', nextPlan: previous.nextPlan || '', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', correct: null, total: null, wrong:null,examWrong:null,examCorrect: null, examTotal: null, round: null, selfStudy: '없음', selfStudyRound: null, selfStudyStart: '', selfStudyEnd: '', attendanceNote: '', specialNote: '' }; }
+export function continuation(previous: any) { return { examScope:previous.examScope||'', content: previous.content || '', assignment: previous.assignment || '', note: '', nextPlan: previous.nextPlan || '', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', correct: null, total: null, wrong:null,extraTests:[],examWrong:null,examCorrect: null, examTotal: null, round: null, selfStudy: '없음', selfStudyRound: null, selfStudyStart: '', selfStudyEnd: '', attendanceNote: '', specialNote: '' }; }
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 /** Self-study block attached to a regular lesson (same weekday). No students = everyone in the slot. */
 export const studyBlockSchema = z.object({

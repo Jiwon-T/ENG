@@ -166,3 +166,45 @@ test('서술형 채점: a claim left by a failed check is given back (the next p
   const id = [...f.rows.keys()].find(k => k.startsWith('questionAttempts/'))!;
   assert.equal(f.rows.get(id).composeLock ?? null, null, 'no claim left behind');
 });
+
+test('서술형 채점: a late request whose claim ran out never gives back a newer claim', async () => {
+  const { f, kid, set } = await setup();
+  await openAttempt(f.db, kid, { setId: set.id }, NOW + 1);
+  const id = [...f.rows.keys()].find(k => k.startsWith('questionAttempts/'))!;
+  const body = { setId: set.id, answers: { 0: ['ⓐ a', 'ⓑ b'], 1: ['Another sentence here.'] } };
+  let openA: () => void = () => {}, openB: () => void = () => {};
+  const gateA = new Promise<void>(r => { openA = r; }), gateB = new Promise<void>(r => { openB = r; });
+  const reply = JSON.stringify({ checks: [{ id: 'q1', ok: true, reason: '맞아요.' }] });
+  const A = submitAttempt(f.db, kid, body, NOW + 2, async () => { await gateA; return reply; });
+  await new Promise(r => setTimeout(r, 20));
+  const tokenA = f.rows.get(id).composeLock.token;
+  // the set changes and the student opens it again after A's claim ran out; B claims anew
+  await editQuestion(f.db, kid, { setId: set.id, index: 1, question: { prompt: '고친 발문', explanation: '고친 해설' } }, NOW + 3);
+  const later = NOW + 2 + 61_000;
+  await openAttempt(f.db, kid, { setId: set.id }, later);
+  const B = submitAttempt(f.db, kid, body, later + 1, async () => { await gateB; return reply; });
+  await new Promise(r => setTimeout(r, 20));
+  const tokenB = f.rows.get(id).composeLock.token;
+  assert.notEqual(tokenB, tokenA);
+  openA();
+  await assert.rejects(A, /ATTEMPT_STALE/, 'A was for the old version');
+  assert.equal(f.rows.get(id).composeLock?.token, tokenB, "A did not clear B's claim");
+  // a third with an answer not judged yet waits while B checks (the same answer would use A's kept verdict)
+  await assert.rejects(submitAttempt(f.db, kid, { setId: set.id, answers: { 0: ['ⓐ a', 'ⓑ b'], 1: ['A totally different sentence.'] } }, later + 2, async () => reply), /ATTEMPT_CHECKING/, 'a third waits while B checks');
+  openB();
+  const r: any = await B;
+  assert.equal(r.attempt.status, 'submitted');
+});
+
+test('서술형 채점: a verdict kept just before the claim is read inside it (not asked again)', async () => {
+  const { f, kid, set } = await setup();
+  await openAttempt(f.db, kid, { setId: set.id }, NOW + 1);
+  const id = [...f.rows.keys()].find(k => k.startsWith('questionAttempts/'))!;
+  const run = f.db.runTransaction.bind(f.db);
+  let first = true;
+  // another request finishes right after this one read the draft (before it claims)
+  (f.db as any).runTransaction = async (fn: any) => { if (first) { first = false; f.rows.set(id, { ...f.rows.get(id), composeChecks: { 1: { answer: 'Another sentence here.', ok: true, reason: '먼저 확인됨', by: 'ai', sig: questionSig(set.questions[1]) } } }); } return run(fn); };
+  const r: any = await submitAttempt(f.db, kid, { setId: set.id, answers: { 0: ['ⓐ a', 'ⓑ b'], 1: ['Another sentence here.'] } }, NOW + 2, async () => { throw Error('not asked'); });
+  assert.deepEqual([r.attempt.results[1].ok, r.attempt.results[1].check.reason], [true, '먼저 확인됨']);
+  assert.equal(f.rows.get(id).composeLock ?? null, null, 'no claim taken');
+});

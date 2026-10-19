@@ -142,3 +142,13 @@ test('분석지: a short English piece with a very long Korean is cut by the Kor
     assert.deepEqual(pieces.map(c => Boolean(c.slash)), [...cut.map((_, k) => k === cut.length - 1), false], `${orientation}: one / after the cut piece`);
   }
 });
+
+test('분석지 핵심 어휘: a long meaning that wraps in the panel counts as two lines, so fewer words go in (nothing runs over)', () => {
+  const mk = (long: boolean) => { const p: any = samplePassage(); p.parts.summary.summary.ko = p.parts.summary.summary.ko.repeat(6);
+    p.parts.words.known = Array.from({ length: 16 }, (_, i) => ({ word: `word${i}`, meaning: long ? '아주 길게 늘어난 뜻풀이가 여러 줄로 넘어가는 경우를 보려고 일부러 길게 썼어요' : '뜻', seen: 'x' })); return p; };
+  for (const orientation of ['landscape', 'portrait'] as const) {
+    const long = layoutSheet(mk(true), { ...DEFAULT_SHEET_OPTIONS, orientation }).panel!.words.length, short = layoutSheet(mk(false), { ...DEFAULT_SHEET_OPTIONS, orientation }).panel!.words.length;
+    assert.equal(short, 16, `${orientation}: short meanings all fit`);
+    assert.ok(long > 0 && long < short, `${orientation}: long meanings, fewer words (${long})`);
+  }
+});

@@ -77,3 +77,13 @@ test('구조 지도 (server): comes free with a new summary; alone it counts onc
   assert.deepEqual([m.passage.parts.structure.roles[3], m.passage.parts.summary.title, f.rows.get(`aiMonthly/kid_${month}`).analyzer], ['', '선생님이 고친 제목', 3], "the teacher's summary edit is untouched");
   await assert.rejects(() => editPassagePart(f.db, t1, { id: other.passage.id, part: 'structure', data: { roles: [], key: 0 } }, NOW), /BAD_REQUEST/);
 });
+
+test('난이도: with ③ 단어, the share of words not in the academy sets is a fifth measure', () => {
+  const plain = passageLevel(SENTENCES)!;
+  const easy = passageLevel(SENTENCES, { known: Array(19).fill(0), unknown: [1] })!, hard = passageLevel(SENTENCES, { known: Array(4).fill(0), unknown: Array(16).fill(0) })!;
+  assert.equal(easy.measures[4], '학원 단어 세트에 없는 단어 5%');
+  assert.equal(hard.measures[4], '학원 단어 세트에 없는 단어 80%');
+  assert.ok(hard.stars > easy.stars, 'more unknown words, more stars');
+  assert.equal(plain.measures.length, 4);
+  assert.equal(passageLevel(SENTENCES, { known: [1, 2], unknown: [3] })!.measures.length, 4, 'fewer than 5 words found: not used');
+});

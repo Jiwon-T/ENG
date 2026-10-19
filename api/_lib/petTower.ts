@@ -7,7 +7,7 @@ import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
 import {awardCapped, currentPet, type ServerPet, type ServerPetState} from './pet.js';
 import {meaningsOverlap, randomDocId} from './petWordFeed.js';
-import { TOWER_ZONES, BRANCH_PASSIVE, TOWER_GEAR, TOWER_SKILL_RULES, TOWER_WEAKNESS, critChance, jobSkills, skillLevel, towerSkill,PET_TOWER, TOWER_CHESTS, TOWER_ENHANCE, TOWER_EVENTS, towerGear, towerGearFor, towerHit, towerMonster, towerStats, towerTaken, type TowerEvent, type TowerGear, type TowerGearSlot, type TowerMonsterKind} from '../../src/lib/petCatalog.js';
+import { TOWER_DECOR, PET_JOB3, PET_JOB3_RULE, job3For, TOWER_ZONES, BRANCH_PASSIVE, TOWER_GEAR, TOWER_SKILL_RULES, TOWER_WEAKNESS, critChance, jobSkills, skillLevel, towerSkill,PET_TOWER, TOWER_CHESTS, TOWER_ENHANCE, TOWER_EVENTS, towerGear, towerGearFor, towerHit, towerMonster, towerStats, towerTaken, type TowerEvent, type TowerGear, type TowerGearSlot, type TowerMonsterKind} from '../../src/lib/petCatalog.js';
 import {gradeOf} from '../../src/lib/schoolGrade.js';
 
 export const PET_TOWERS = 'petTowers';
@@ -23,6 +23,7 @@ export interface TowerRun {
   right: number; asked: number; wrongs: TowerWrong[]; pool: PoolWord[]; next: number; wordbookId: string; wordbookTitle: string; startedAt: number; books?: {id: string; title: string}[];
   /** Extra prize for winning (길 잃은 요정 fought: two potions). */ bonus?: {potions?: number};
   /** The skill the pending attack question casts; 방패 막기 up for the monster's next attack. */ skill?: string | null; shield?: boolean;
+  /** 그믐 저주 has cut the monster's 공격 (once a battle). */ weakened?: boolean;
 }
 /** A door's event that isn't a battle (yet): the 상인's stock, a riddle or trap question, the fairy's choice. */
 export interface TowerEventState { id: string; floor: number; door: number; type: Exclude<TowerEvent, 'monster' | 'mirror' | 'treasure'>; q: TowerQuestion | null; stock: {stone: number; potion: number}; pool: TowerPool; wrongs: TowerWrong[]; startedAt: number; /** 잠든 드래곤's look */ color?: number }
@@ -42,7 +43,7 @@ export function towerPet(t: TowerState, slot: number): TowerPet {
 const worn = (tp: TowerPet, pet: ServerPet) => Object.values(tp.equip).map(id => towerGearFor(String(id), pet.job));
 /** 원정대 job weapons the student owns, for this pet's job (and branch), count as this pet's tower gear. */
 function syncJobWeapons(tp: TowerPet, pet: ServerPet, s: ServerPetState) {
-  for (const g of TOWER_GEAR) if (g.expedition && s.inventory.includes(g.id) && g.job === pet.job && (!g.job2 || g.job2 === pet.job2) && !tp.gear.includes(g.id)) tp.gear.push(g.id);
+  for (const g of TOWER_GEAR) if (g.expedition && s.inventory.includes(g.id) && g.job === pet.job && (!g.job2 || g.job2 === pet.job2) && (!g.job3 || g.job3 === pet.job3) && !tp.gear.includes(g.id)) tp.gear.push(g.id);
 }
 export const petTowerStats = (pet: ServerPet, tp: TowerPet) => towerStats(pet.level, worn(tp, pet), tp.levels || {});
 const shuffle = <T,>(list: T[], rand: () => number) => { const a = [...list]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -79,7 +80,7 @@ export function equipTowerGear(t: TowerState, s: ServerPetState, idInput: unknow
   syncJobWeapons(tp, pet, s);
   if (!g || !tp.gear.includes(id)) throw Error('PET_ITEM_NOT_OWNED');
   if (tp.run || tp.event) throw Error('TOWER_IN_BATTLE');
-  if ((g.job && pet.job !== g.job) || (g.job2 && pet.job2 !== g.job2)) throw Error('TOWER_GEAR_JOB');
+  if ((g.job && pet.job !== g.job) || (g.job2 && pet.job2 !== g.job2) || (g.job3 && pet.job3 !== g.job3)) throw Error('TOWER_GEAR_JOB');
   if (tp.equip[g.slot] === id) delete tp.equip[g.slot]; else tp.equip[g.slot] = id;
   return {equip: tp.equip};
 }
@@ -176,13 +177,37 @@ function openDoor(tp: TowerPet, pet: ServerPet, s: ServerPetState, uid: string, 
 /** A battle behind the chosen door, whatever the layout (tests and tools). */
 export const startTowerRun = (t: TowerState, s: ServerPetState, pool: TowerPool, now: number, rand: () => number = Math.random, doorInput: unknown = 0) => openTowerDoor(t, s, 'test', pool, now, rand, doorInput, ['monster', 'monster', 'monster']);
 
+/** 「별의 시험」: a pet with its 2차 job, at Lv.150, that has cleared floor 50 may take its branch's 3차 job. */
+export const job3Ready = (pet: ServerPet, tp: TowerPet) => Boolean(pet.job2 && !pet.job3 && pet.level >= PET_JOB3_RULE.level && tp.best >= PET_JOB3_RULE.floor);
+/** 3차 전직: the job of the pet's branch, its weapon (owned, in hand and as tower gear). */
+export function takeJob3(t: TowerState, s: ServerPetState) {
+  const pet = currentPet(s), tp = towerPet(t, pet.slot);
+  if (pet.job3) throw Error('PET_JOB_TAKEN');
+  if (!job3Ready(pet, tp)) throw Error('PET_JOB3_LOCKED');
+  const job3 = job3For(pet.job2)!, weapon = PET_JOB3[job3].weapon;
+  pet.job3 = job3; if (!s.inventory.includes(weapon)) s.inventory.push(weapon); pet.accessories.hand = weapon;
+  if (!tp.gear.includes(weapon)) tp.gear.push(weapon);
+  return {job3, weapon};
+}
+/** 탑 장식 for a boss floor cleared (once a student): the new one's id, or null when already owned. */
+function giveTowerDecor(s: ServerPetState, floor: number) {
+  const d = TOWER_DECOR.find(x => x.floor === floor);
+  if (!d || (s.towerDecor || []).includes(d.id)) return null;
+  s.towerDecor = [...(s.towerDecor || []), d.id];
+  return d.id;
+}
+/** Boss floors any pet already cleared before 탑 장식 existed give theirs too (on the next tower action). */
+export function syncTowerDecor(t: TowerState, s: ServerPetState) {
+  const best = Math.max(0, ...Object.values(t.pets || {}).map(tp => Number(tp?.best) || 0));
+  for (const d of TOWER_DECOR) if (d.floor <= best) giveTowerDecor(s, d.floor);
+}
 /** Floor cleared: saved, the first clear pays points and XP (inside the daily cap), a boss floor opens its chest. */
 function clearFloor(tp: TowerPet, s: ServerPetState, floor: number, boss: boolean) {
   const first = floor > tp.best;
   tp.best = Math.max(tp.best, floor); tp.floor = Math.max(tp.floor, floor + 1);
   let points = 0, xp = 0;
   if (first) { const r = PET_TOWER.reward, want = boss ? r.boss : r.base + r.perFloor * floor, got = awardCapped(s, want, want * 2); points = got.points; xp = got.xp; }
-  return {cleared: true, floor, first, points, xp, chest: boss ? openChestFor(tp, floor, currentPet(s)) : null};
+  return {cleared: true, floor, first, points, xp, chest: boss ? openChestFor(tp, floor, currentPet(s)) : null, decor: boss ? giveTowerDecor(s, floor) : null};
 }
 const ended = (tp: TowerPet, run: TowerRun) => { tp.run = null; return {runId: run.id, wrongs: run.wrongs, right: run.right, asked: run.asked, wordbookId: run.wordbookId, wordbookTitle: run.wordbookTitle, startedAt: run.startedAt, books: run.books}; };
 const eventEnded = (tp: TowerPet, ev: TowerEventState, right: number, asked: number) => { tp.event = null; return {runId: ev.id, wrongs: ev.wrongs, right, asked, wordbookId: ev.pool.wordbookId, wordbookTitle: ev.pool.wordbookTitle, startedAt: ev.startedAt, books: ev.pool.books}; };
@@ -202,7 +227,7 @@ export function towerAct(t: TowerState, s: ServerPetState, action: unknown, now:
     if (k.kind === 'attack') { run.skill = k.id; ask(run, 'attack', now, rand); return {phase: run.phase, skill: k.id}; }
     run.mp -= k.mp; run.skill = null;
     if (k.kind === 'block') { run.shield = true; ask(run, 'defend', now, rand); return {phase: run.phase, skill: k.id, shield: true}; }
-    const heal = Math.round(run.maxHp * TOWER_SKILL_RULES.heal * (pet.job2 === 'white_mage' ? TOWER_SKILL_RULES.blessing : 1));
+    const heal = Math.round(run.maxHp * TOWER_SKILL_RULES.heal * (k.power || 1) * (pet.job2 === 'white_mage' ? TOWER_SKILL_RULES.blessing : 1));
     run.hp = Math.min(run.maxHp, run.hp + heal); ask(run, 'defend', now, rand); return {phase: run.phase, skill: k.id, healed: heal};
   }
   if (action === 'potion') {
@@ -245,6 +270,10 @@ export function towerAnswer(t: TowerState, s: ServerPetState, runId: unknown, ch
           t.weakFound ||= [];
           if (!t.weakFound.includes(run.monster.kind)) { t.weakFound.push(run.monster.kind); out.weakFound = {kind: run.monster.kind, name: shownMonsterName(t, run.monster.kind, run.monster.name), element: k.element}; }
         }
+        // 3차 skills: 그림자 베기 hits twice (a second roll), 하늘 가르기 also blocks the next attack, 그믐 저주 weakens once
+        if (k.effect === 'double') { const second = towerHit(st.atk * (k.power || 1), def) * (0.9 + rand() * 0.2) * (out.crit ? TOWER_SKILL_RULES.crit : 1); dmg += second; out.hits = 2; }
+        if (k.effect === 'shield') { run.shield = true; out.shieldUp = true; }
+        if (k.effect === 'weaken' && !run.weakened) { run.weakened = true; run.monster.atk = Math.max(1, Math.round(run.monster.atk * TOWER_SKILL_RULES.weaken)); out.weakened = true; }
         out.damage = Math.max(1, Math.round(dmg));
       } else { out.damage = Math.max(1, Math.round(towerHit(st.atk, def) * TOWER_SKILL_RULES.missDamage * roll)); out.glancing = true; }
     } else if (correct) out.damage = Math.max(1, Math.round(towerHit(st.atk, def) * roll));
@@ -346,11 +375,11 @@ export function publicTower(t: TowerState, s: ServerPetState, now: number) {
   const pet = currentPet(s), tp = towerPet(t, pet.slot), run = tp.run, ev = tp.event;
   syncJobWeapons(tp, pet, s);
   const weakKnown = (kind: string) => (t.weakFound || []).includes(kind) ? TOWER_WEAKNESS[kind as TowerMonsterKind] || null : null;
-  const skills = pet.job ? jobSkills(pet).map(k => ({id: k.id, name: k.name, kind: k.kind, element: k.element || null, mp: k.mp, power: k.power || null, learnAt: k.level, level: skillLevel(k, pet.level),
+  const skills = pet.job ? jobSkills(pet).map(k => ({id: k.id, name: k.name, kind: k.kind, element: k.element || null, mp: k.mp, power: k.power || null, learnAt: k.level, level: skillLevel(k, pet.level), text: k.text || null,
     crit: k.element ? critChance(pet.level, skillLevel(k, pet.level), worn(tp, pet), tp.levels || {}) : 0})) : [];
   const pq = (q: TowerQuestion | null) => q && {kind: q.kind, prompt: q.kind === 'defend' || q.kind === 'trap' ? q.word : q.meaning, choices: q.choices, msLeft: q.deadline === null ? null : Math.max(0, q.deadline - now)};
   return {
-    skills, passive: pet.job2 ? BRANCH_PASSIVE[pet.job2] : null, job: pet.job || null, job2: pet.job2 || null,
+    skills, passive: pet.job2 ? BRANCH_PASSIVE[pet.job2] : null, job: pet.job || null, job2: pet.job2 || null, job3: pet.job3 || null, job3Ready: job3Ready(pet, tp),
     floor: tp.floor, best: tp.best, top: PET_TOWER.floors, gear: tp.gear, equip: tp.equip, levels: tp.levels || {}, chests: tp.chests, potions: tp.potions, stones: tp.stones || 0, stats: petTowerStats(pet, tp),
     run: run && {id: run.id, floor: run.floor, monster: {kind: run.monster.kind, name: shownMonsterName(t, run.monster.kind, run.monster.name), boss: run.monster.boss, hp: run.monster.hp, max: run.monster.max, color: run.monster.color ?? null},
       hp: run.hp, maxHp: run.maxHp, mp: run.mp, maxMp: run.maxMp, phase: run.phase, attacks: run.attacks, q: pq(run.q), skill: run.skill || null, shield: Boolean(run.shield), weak: weakKnown(run.monster.kind)},

@@ -1,0 +1,59 @@
+/* 일정·시간표 › 내보내기: the small panel by the header, and the printed weekly sheet (A4 landscape). */
+.teacher-workspace .schedule-view-actions{display:inline-flex;align-items:center;gap:6px}
+.teacher-workspace .schedule-view-actions>.primary-button{display:flex;align-items:center;gap:4px}
+.teacher-workspace .tt-export{position:relative;display:inline-flex}
+.teacher-workspace .tt-export-button{display:inline-flex;align-items:center;gap:5px}
+.teacher-workspace .tt-export-pop{position:absolute;top:calc(100% + 6px);right:0;z-index:60;display:grid;gap:8px;width:min(300px,calc(100vw - 32px));padding:12px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;box-shadow:0 10px 28px #0f172a1f}
+.teacher-workspace .tt-export-week{display:flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:700;color:#334155}
+.teacher-workspace .tt-export-week button{display:grid;place-items:center;width:28px;height:28px;min-height:28px;padding:0;border:1px solid #e2e8f0;border-radius:999px;background:#fff;color:#64748b;cursor:pointer}
+.teacher-workspace .tt-export-name{display:flex;align-items:center;gap:8px;font-size:12px;color:#64748b;white-space:nowrap}
+.teacher-workspace .tt-export-name input{flex:1;min-width:0;height:32px;min-height:32px;padding:0 8px;font-size:13px}
+.teacher-workspace .tt-export-note{margin:0;font-size:11px;color:#94a3b8}
+.teacher-workspace .tt-export-error{margin:0;font-size:12px;font-weight:700;color:#b04a5a}
+.teacher-workspace .tt-export-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.teacher-workspace .tt-export-actions button{display:inline-flex;align-items:center;justify-content:center;gap:5px}
+
+/* The printed sheet (drawn outside the workspace, so not scoped): the Excel layout — gray headers, thin borders. */
+.tt-sheet{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9.5pt;color:#111}
+.tt-sheet th,.tt-sheet td{border:1px solid #333;padding:4px 5px}
+.tt-sheet thead th{background:#d9d9d9;font-weight:600;text-align:center}
+.tt-sheet thead th:first-child{width:62px}
+.tt-sheet tbody th{background:#f2f2f2;font-weight:600;text-align:center;white-space:pre-line}
+.tt-sheet td{vertical-align:top;white-space:pre-line;line-height:1.45}
+.tt-sheet .tt-row-lesson td{height:62mm}
+.tt-sheet .tt-row-study td{height:44mm}
+.tt-sheet .tt-row-test td{height:36mm}
+
+/* 엑셀 가져오기: the 가져오기 row in the panel, and the one-screen preview. */
+.teacher-workspace .tt-export-import{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:12px;color:#64748b}
+.teacher-workspace .tt-export-import button{display:inline-flex;align-items:center;gap:5px}
+.tt-import{display:grid;gap:10px;font-size:13px;color:#334155}
+.tt-import-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:#047857}
+.tt-import-head>div{flex:1;min-width:0;color:#334155}
+.tt-import-head p{margin:2px 0 0;font-size:12px;color:#94a3b8}
+.tt-import-pills{display:flex;gap:4px;flex-wrap:wrap}
+.tt-pill{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+.tt-pill-same{background:#f1f5f9;color:#64748b}
+.tt-pill-change{background:#e6f1fb;color:#0c447c}
+.tt-pill-new{background:#fef2f3;color:#8b2f40}
+.tt-pill-ask{background:#fef3c7;color:#92400e}
+.tt-import-asks{display:grid;gap:6px;padding:10px 12px;border-radius:12px;background:#fffbeb;border:1px solid #fde68a}
+.tt-import-asks p{margin:0;font-size:12px;color:#92400e}
+.tt-import-asks label{display:flex;align-items:center;gap:8px;font-size:12px}
+.tt-import-asks b{min-width:56px}
+.tt-import-asks select{flex:1;min-width:0;height:30px;min-height:30px;font-size:12px}
+.tt-import-asks label>button{flex:none;height:30px;min-height:30px;padding:0 10px;font-size:12px}
+.tt-import-asks label>small{flex:none;font-size:11px;color:#92400e}
+.tt-import-asks-note{font-size:11px;color:#92400e}
+.tt-import-list{display:grid;gap:8px;max-height:min(56vh,520px);overflow-y:auto}
+.tt-import-class{padding:8px 12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff}
+.tt-import-class-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tt-import-class-head input{flex:1;min-width:140px;height:28px;min-height:28px;padding:0 8px;font-size:13px}
+.tt-import-changes{font-size:11px;color:#0c447c}
+.tt-import-line{display:grid;grid-template-columns:24px minmax(0,1fr);gap:6px;padding:6px 0 0;font-size:12px}
+.tt-import-line small{display:block;font-size:11px;color:#94a3b8}
+.tt-import-day{font-weight:700;color:#64748b}
+.tt-import-empty{margin:0;font-size:12px;color:#94a3b8}
+.tt-import-error{margin:0;font-size:12px;font-weight:700;color:#b04a5a}
+.tt-import-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tt-import-foot span{flex:1;min-width:180px;font-size:11px;color:#94a3b8}

@@ -3,7 +3,7 @@
 // live in questionAttempts (server only; never in studySessions, which the pet's word feed and study rewards read).
 // A person's own sets, and sets a teacher gave (questionAssignments; points when graded). The attempt id is fixed per
 // person and set or assignment, so a resent submission returns the result already recorded instead of a second one.
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { CIRCLED, LETTERS5, sameWriting, typeLabel, type MadeQuestion } from '../../src/lib/questionMaker.js';
 import { aiErrorCode, guardAiBurst } from './aiModel.js';
 import { QUESTION_SETS } from './questionSets.js';
@@ -195,7 +195,7 @@ const missingAnswer = (questions: MadeQuestion[], answers: Record<string, number
 });
 /** Asks only for answers not already checked by the AI (`cache`: index → the answer it saw and its verdict); the short-time
  *  guard comes first when it will be asked. A failed check is not kept (it may be asked again, within the guard). */
-async function checkCompose(questions: MadeQuestion[], answers: Record<string, number | string[]>, cache: Record<string, Judged & { answer: string; sig?: string }>, ask: (items: { id: string; ko: string; box: string; model: string; answer: string }[]) => Promise<any>) {
+async function checkCompose(questions: MadeQuestion[], answers: Record<string, number | string[]>, cache: Record<string, Judged & { answer: string; sig?: string }>, ask: (items: { id: string; ko: string; box: string; model: string; answer: string; sig: string }[]) => Promise<any>) {
   const out = new Map<number, Judged>(), fresh: Record<string, Judged & { answer: string; sig: string }> = {};
   const items = questions.map((q, index) => ({ q, index, answer: Array.isArray(answers[String(index)]) ? (answers[String(index)] as string[])[0] : '' }))
     .filter(({ q, answer }) => q.type === 'compose' && !sameWriting(answer, (q.answer as string[])[0]));
@@ -203,7 +203,7 @@ async function checkCompose(questions: MadeQuestion[], answers: Record<string, n
   const todo = items.filter(({ q, index, answer }) => { const c = cache[String(index)]; if (c?.by === 'ai' && c.answer === answer && c.sig === questionSig(q)) { out.set(index, { ok: c.ok, reason: c.reason, by: 'ai' }); return false; } return true; });
   if (todo.length) {
     try {
-      const checks = (await ask(todo.map(({ q, index, answer }) => ({ id: `q${index}`, ko: String(q.box || ''), box: (q.paragraphs || []).map(x => x.text).join(' / '), model: (q.answer as string[])[0], answer }))))?.checks;
+      const checks = (await ask(todo.map(({ q, index, answer }) => ({ id: `q${index}`, ko: String(q.box || ''), box: (q.paragraphs || []).map(x => x.text).join(' / '), model: (q.answer as string[])[0], answer, sig: questionSig(q) }))))?.checks;
       for (const { q, index, answer } of todo) { const c = (Array.isArray(checks) ? checks : []).find((x: any) => x?.id === `q${index}`); if (c) { const j: Judged = { ok: c.ok === true, reason: clip(c.reason, 200), by: 'ai' }; out.set(index, j); fresh[String(index)] = { ...j, answer, sig: questionSig(q) }; } }
     } catch (error: any) { if (error?.message === 'AI_TOO_FAST' || error?.message === 'ATTEMPT_CHECKING') throw error; console.warn('COMPOSE_CHECK_FAILED', { code: aiErrorCode(error) }); } // the code only, never the answers
   }
@@ -224,26 +224,40 @@ export async function submitAttempt(db: any, a: PassageActor, input: any, now = 
     if (missingAnswer(s.questions, answers)) throw Error('ATTEMPT_INCOMPLETE');
     // Asking claims the draft first (composeLock, in a transaction): a second request at the same time stops there
     // instead of asking the AI about the same answers. The claim ends with the verdicts written, or on failure.
+    // Asking claims the draft first (composeLock with this request's token, in a transaction). Inside the claim the
+    // latest kept verdicts are read again: answers judged meanwhile (by a request that just finished) are taken from
+    // there, and the AI is asked only about the rest — or not at all. A second request while the claim stands stops
+    // with ATTEMPT_CHECKING. Only the holder of the token gives the claim back (a late request whose claim ran out never
+    // clears a newer one); verdicts are kept either way.
+    const token = randomUUID();
     let claimed = false;
     const finish = (fresh: Record<string, unknown>) => db.runTransaction(async (tx: any) => {
       const cur = (await tx.get(ref)).data();
-      if (cur && cur.status !== 'submitted') tx.set(ref, { ...cur, composeChecks: { ...(cur.composeChecks || {}), ...fresh }, composeLock: null });
+      if (!cur || cur.status === 'submitted') return;
+      const mine = cur.composeLock?.token === token;
+      tx.set(ref, { ...cur, composeChecks: { ...(cur.composeChecks || {}), ...fresh }, composeLock: mine ? null : cur.composeLock ?? null });
     });
     const checked = await checkCompose(s.questions, answers, before.composeChecks || {}, async items => {
-      await db.runTransaction(async (tx: any) => {
+      const known: { id: string; ok: boolean; reason: string }[] = [];
+      const rest = await db.runTransaction(async (tx: any) => {
         const cur = (await tx.get(ref)).data();
         if (!cur || cur.status === 'submitted') throw Error('ATTEMPT_CHECKING');
+        const kept = cur.composeChecks || {}, left = items.filter(x => { const c = kept[x.id.slice(1)]; if (c?.by === 'ai' && c.answer === x.answer && c.sig === x.sig) { known.push({ id: x.id, ok: c.ok, reason: c.reason }); return false; } return true; });
+        if (!left.length) return left;
         if (Number(cur.composeLock?.until) > now) throw Error('ATTEMPT_CHECKING');
-        tx.set(ref, { ...cur, composeLock: { until: now + COMPOSE_LOCK_MS } });
+        tx.set(ref, { ...cur, composeLock: { until: now + COMPOSE_LOCK_MS, token } });
+        return left;
       });
+      if (!rest.length) return { checks: known };
       claimed = true;
       if (!a.admin) await guardAiBurst(db, a.uid, now);
       if (!generate) throw Error('AI_FAILED');
-      return JSON.parse(await generate(composeCheckRequest(items)));
+      const reply = JSON.parse(await generate(composeCheckRequest(rest.map(({ sig: _, ...x }) => x))));
+      return { checks: [...known, ...(Array.isArray(reply?.checks) ? reply.checks : [])] };
     }).catch(async (error: any) => { if (claimed) await finish({}).catch(() => undefined); throw error; });
     judged = checked.judged;
-    // the verdicts kept on the draft (read again: a save meanwhile is not lost), the claim given back
-    if (claimed) await finish(checked.fresh);
+    // the verdicts kept on the draft (read again: a save meanwhile is not lost), the claim given back if still ours
+    if (claimed || Object.keys(checked.fresh).length) await finish(checked.fresh);
   }
   const petRef = db.collection(PET_STATES).doc(a.uid), userRef = db.collection('users').doc(a.uid), paying = s.kind === 'assigned';
   const attempt = await db.runTransaction(async (tx: any) => {

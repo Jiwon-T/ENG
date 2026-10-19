@@ -8,7 +8,8 @@ export type AccessorySlot = 'head' | 'eyes' | 'neck' | 'hand';
 export const ACCESSORY_SLOTS: { id: AccessorySlot; label: string }[] = [{ id: 'head', label: '머리' }, { id: 'eyes', label: '눈' }, { id: 'neck', label: '목' }, { id: 'hand', label: '손' }];
 /** `reward`: earned on the 원정대 (never sold in the shop). `slot`: where an accessory is worn. `revive`: only for a pet
  *  with no 기운 left (탈진), once a day, apart from the two 기운 간식. */
-export interface PetItem { id: string; name: string; price: number; icon: string; category: PetItemCategory; xp?: number; energy?: number; reward?: boolean; slot?: AccessorySlot; revive?: boolean }
+/** `pass`: a pass-only room (looks only; never bought): 'pet' for any pass, 'premium' for the 프리미엄 패스. */
+export interface PetItem { id: string; name: string; price: number; icon: string; category: PetItemCategory; xp?: number; energy?: number; reward?: boolean; slot?: AccessorySlot; revive?: boolean; pass?: 'pet' | 'premium' }
 
 export const PET_CHARACTERS: { id: PetCharacterType; name: string }[] = [
   { id: 'unicorn', name: '다롱' }, { id: 'mymelody', name: '아롱' }, { id: 'haemi', name: '해미' }, { id: 'molang', name: '말랑' }, { id: 'mang_bear', name: '고미' }, { id: 'hodu', name: '호두' },
@@ -73,6 +74,10 @@ export const PET_ITEMS: PetItem[] = [
   { id: 'snow_cabin', name: '눈 오두막', price: 0, icon: '🏔️', category: 'background', reward: true },
   { id: 'galaxy', name: '은하수', price: 0, icon: '🌌', category: 'background', reward: true },
   { id: 'dream_garden', name: '꿈의 정원', price: 0, icon: '🌈', category: 'background', reward: true },
+  // 패스 꾸미기 (looks only: nothing in the rankings, the coupon or the tower)
+  { id: 'cherry_window', name: '벚꽃 창가', price: 0, icon: '🌸', category: 'background', pass: 'pet' },
+  { id: 'night_sky', name: '밤하늘', price: 0, icon: '🌃', category: 'background', pass: 'premium' },
+  { id: 'seaside', name: '바닷가', price: 0, icon: '🏖️', category: 'background', pass: 'premium' },
   // 원정대 무기 (손): 4장 사막은 나무 검·나무 지팡이를 함께 (전직 전 연습 무기). 5장 설산 왕관에서 1차 전직하면 그 직업의
   // 무기, 6장 밤하늘 왕관은 내 직업의 더 좋은 무기, 7장 꿈의 정원 왕관에서 2차 전직하면 고른 갈래의 무기를 받아요.
   // 꿈의 검·꿈의 지팡이는 7장 왕관을 별 3개로 깼을 때 주는 꾸미기 무기예요.
@@ -88,6 +93,11 @@ export const PET_ITEMS: PetItem[] = [
   { id: 'obsidian_sword', name: '흑요 마검', price: 0, icon: '🗡️', category: 'accessory', slot: 'hand', reward: true },
   { id: 'dawn_scepter', name: '새벽빛 홀', price: 0, icon: '✨', category: 'accessory', slot: 'hand', reward: true },
   { id: 'crescent_staff', name: '그믐달 지팡이', price: 0, icon: '🌙', category: 'accessory', slot: 'hand', reward: true },
+  // 3차 전직 (Lv.150 + 채움의 탑 50층, 「별의 시험」) weapons
+  { id: 'sky_spear', name: '천공의 성창', price: 0, icon: '🌤️', category: 'accessory', slot: 'hand', reward: true },
+  { id: 'abyss_greatsword', name: '심연의 대검', price: 0, icon: '🌑', category: 'accessory', slot: 'hand', reward: true },
+  { id: 'dawn_staff', name: '여명의 지팡이', price: 0, icon: '🌅', category: 'accessory', slot: 'hand', reward: true },
+  { id: 'dusk_tome', name: '그믐달 마도서', price: 0, icon: '📖', category: 'accessory', slot: 'hand', reward: true },
   { id: 'cookie', name: '쿠키', price: 30, xp: 5, icon: '🍪', category: 'consumable' },
   { id: 'macaron', name: '마카롱', price: 50, xp: 10, icon: '🍭', category: 'consumable' },
   { id: 'cake', name: '딸기케이크', price: 60, xp: 15, icon: '🍰', category: 'consumable' },
@@ -97,6 +107,8 @@ export const PET_ITEMS: PetItem[] = [
   { id: 'monster', name: '몬스터', price: 150, energy: 50, icon: '🥤', category: 'consumable', revive: true },
 ];
 export const petItem = (id: string) => PET_ITEMS.find(item => item.id === id);
+/** A pass-only room can be used on this plan ('free' | 'pet' | 'premium'): 프리미엄 opens all, 펫 패스 the 'pet' ones. */
+export const passAllows = (item: { pass?: 'pet' | 'premium' } | undefined, plan: string | null | undefined) => Boolean(item?.pass) && (plan === 'premium' || (item!.pass === 'pet' && plan === 'pet'));
 /** 이달의 장학 쿠폰: when the points earned in a month (Korea time, from the 1st; spending doesn't matter) reach `goal`,
  *  영어 이지원T's students may ask for that month's coupon (no points are taken; not asked for = that month is gone) and
  *  get that month's 금메달 to place in their room. In the first season the points held when counting began count too. */
@@ -223,10 +235,24 @@ export const PET_JOB2: Record<PetJob2, { label: string; base: PetJob; element: '
   white_mage: { label: '백마법사', base: 'wizard', element: '빛', weapon: 'dawn_scepter', title: '새벽의 현자', icon: '✨', line: '빛의 길로 갈래요' },
   dark_mage: { label: '흑마법사', base: 'wizard', element: '어둠', weapon: 'crescent_staff', title: '달그림자 마도사', icon: '🌙', line: '어둠의 길로 갈래요' },
 };
-/** The job shown on a pet (the 2차 job when it has one). */
-export const petJobLabel = (pet: { job?: PetJob | null; job2?: PetJob2 | null }) => pet.job2 ? PET_JOB2[pet.job2].label : pet.job ? PET_JOBS[pet.job].label : '';
+/** 3차 전직 「별의 시험」: a pet with its 2차 job at Lv.150 that has cleared 채움의 탑 floor 50 takes the one 3차 job of its
+ *  branch (no choice: the branch was chosen at the 2차). The weapon, a title, an aura around the pet (looks only) and a skill. */
+export type PetJob3 = 'sky_knight' | 'abyss_knight' | 'dawn_sage' | 'dusk_mage';
+export const PET_JOB3: Record<PetJob3, { label: string; from: PetJob2; weapon: string; title: string; icon: string }> = {
+  sky_knight: { label: '천공의 기사', from: 'paladin', weapon: 'sky_spear', title: '하늘을 가르는 자', icon: '🌤️' },
+  abyss_knight: { label: '심연의 기사', from: 'dark_knight', weapon: 'abyss_greatsword', title: '심연을 걷는 자', icon: '🌑' },
+  dawn_sage: { label: '여명의 대현자', from: 'white_mage', weapon: 'dawn_staff', title: '새벽을 여는 자', icon: '🌅' },
+  dusk_mage: { label: '그믐의 마도사', from: 'dark_mage', weapon: 'dusk_tome', title: '그믐밤의 별', icon: '📖' },
+};
+export const PET_JOB3_RULE = { name: '별의 시험', level: 150, floor: 50 } as const;
+/** The 3차 job a 2차 job leads to. */
+export const job3For = (job2?: PetJob2 | null) => (Object.keys(PET_JOB3) as PetJob3[]).find(k => PET_JOB3[k].from === job2) || null;
+/** The aura a 3차 pet shows: the light branches glow gold and sky, the dark ones violet. */
+export const petAura = (pet: { job3?: PetJob3 | null }) => pet.job3 ? (PET_JOB2[PET_JOB3[pet.job3].from].element === '빛' ? 'light' : 'dark') : null;
+/** The job shown on a pet (the highest it has taken). */
+export const petJobLabel = (pet: { job?: PetJob | null; job2?: PetJob2 | null; job3?: PetJob3 | null }) => pet.job3 ? PET_JOB3[pet.job3].label : pet.job2 ? PET_JOB2[pet.job2].label : pet.job ? PET_JOBS[pet.job].label : '';
 /** Where the jobs are taken (next to the skill button, the tower stats and the expedition map). */
-export const PET_JOB_GUIDE = '스킬은 전직 후 · 1차 전직: 5장 설산 · 2차 전직: 7장 꿈의 정원';
+export const PET_JOB_GUIDE = '스킬은 전직 후 · 1차 전직: 5장 설산 · 2차 전직: 7장 꿈의 정원 · 3차 전직: Lv.150 + 탑 50층';
 /** 파티 원정대: 2–4 students, one team a week (Monday–Sunday, Seoul). Every word a member answers right for the first time
  *  that week (in 단어 먹이 주기 or a stage) takes 1 off the boss. Rewards are paid after the week, by contribution, outside
  *  the daily study cap but at most `weeklyCap` per student. Names are picked from fixed words; nicknames are free text
@@ -262,7 +288,7 @@ export const PET_TOWER = {
 export type TowerGearSlot = 'weapon' | 'helmet' | 'armor' | 'shoulder' | 'gloves' | 'boots';
 export const TOWER_GEAR_SLOTS: { id: TowerGearSlot; label: string }[] = [{ id: 'weapon', label: '무기' }, { id: 'helmet', label: '투구' }, { id: 'armor', label: '갑옷' }, { id: 'shoulder', label: '견갑' }, { id: 'gloves', label: '장갑' }, { id: 'boots', label: '신발' }];
 /** Tower equipment (never in the shop). `job`: only for a pet with that job (none = 견습자도 OK). */
-export interface TowerGear { id: string; name: string; /** in the small slot */ short: string; slot: TowerGearSlot; icon: string; atk?: number; def?: number; hp?: number; mp?: number; job?: PetJob; job2?: PetJob2;
+export interface TowerGear { id: string; name: string; /** in the small slot */ short: string; slot: TowerGearSlot; icon: string; atk?: number; def?: number; hp?: number; mp?: number; job?: PetJob; job2?: PetJob2; job3?: PetJob3;
   /** Boss treasures change with the pet's job (name and stats): 검사 more 방어/체력, 마법사 more 마력. */ variants?: Partial<Record<PetJob, { name: string; short: string; atk?: number; def?: number; hp?: number; mp?: number }>>;
   /** 크리티컬 확률 per 강화 level (%): 견습 0.5, boss gear 1, job weapons 1.5. */ critPerLevel?: number;
   /** A 원정대 job weapon: owned through the expedition (the student's inventory), not found in the tower. */ expedition?: boolean }
@@ -277,6 +303,11 @@ export const TOWER_GEAR: TowerGear[] = [
   { id: 'obsidian_sword', name: '흑요 마검', short: '흑요 마검', slot: 'weapon', icon: '🗡️', atk: 32, job: 'swordsman', job2: 'dark_knight', critPerLevel: 1.5, expedition: true },
   { id: 'dawn_scepter', name: '새벽빛 홀', short: '새벽빛 홀', slot: 'weapon', icon: '✨', atk: 32, job: 'wizard', job2: 'white_mage', critPerLevel: 1.5, expedition: true },
   { id: 'crescent_staff', name: '그믐달 지팡이', short: '그믐달 지팡이', slot: 'weapon', icon: '🌙', atk: 32, job: 'wizard', job2: 'dark_mage', critPerLevel: 1.5, expedition: true },
+  // 3차 전직 weapons (44 공격, above the 40층 서리 용 treasures)
+  { id: 'sky_spear', name: '천공의 성창', short: '천공의 성창', slot: 'weapon', icon: '🌤️', atk: 44, job: 'swordsman', job2: 'paladin', job3: 'sky_knight', critPerLevel: 1.5, expedition: true },
+  { id: 'abyss_greatsword', name: '심연의 대검', short: '심연의 대검', slot: 'weapon', icon: '🌑', atk: 44, job: 'swordsman', job2: 'dark_knight', job3: 'abyss_knight', critPerLevel: 1.5, expedition: true },
+  { id: 'dawn_staff', name: '여명의 지팡이', short: '여명의 지팡이', slot: 'weapon', icon: '🌅', atk: 44, job: 'wizard', job2: 'white_mage', job3: 'dawn_sage', critPerLevel: 1.5, expedition: true },
+  { id: 'dusk_tome', name: '그믐달 마도서', short: '그믐달 마도서', slot: 'weapon', icon: '📖', atk: 44, job: 'wizard', job2: 'dark_mage', job3: 'dusk_mage', critPerLevel: 1.5, expedition: true },
   // Each boss keeps a treasure of its own: 10층 수문장 골렘 → 돌 견갑 (later bosses: 투구·장갑·신발·갑옷; past the floors for
   // Lv.70+, weapons for 검사 or 마법사).
   { id: 'golem_pauldron', name: '수문장의 돌 견갑', short: '돌 견갑', slot: 'shoulder', icon: '🪨', def: 8, hp: 20, critPerLevel: 1,
@@ -299,6 +330,13 @@ export function towerGearFor(id: string, job?: PetJob | null): TowerGear | undef
   const g = towerGear(id), v = job && g?.variants?.[job];
   return g && v ? { ...g, ...v } : g;
 }
+/** 탑 장식: the first clear of each zone's boss floor gives that zone's room decoration (once a student, never in the
+ *  shop), placed in the room like the 금메달 (the same 꾸미기). Floors 51–100 will bring five more. */
+export const TOWER_DECOR: { id: string; name: string; floor: number }[] = [
+  { id: 'moss_pot', name: '이끼 화분', floor: 10 }, { id: 'crystal_lamp', name: '수정 램프', floor: 20 }, { id: 'hourglass', name: '모래시계', floor: 30 },
+  { id: 'ice_statue', name: '얼음 조각상', floor: 40 }, { id: 'spellbook_shelf', name: '마도서 책장', floor: 50 },
+];
+export const towerDecor = (id: string) => TOWER_DECOR.find(d => d.id === id);
 /** Treasure chests: floor 1 (at the entrance) and after each boss (that boss's own treasure). */
 export const TOWER_CHESTS: Record<number, { gear: string[]; potions: number; /** a job weapon: the one for the pet's job */ jobWeapon?: Record<PetJob, string> }> = {
   1: { gear: ['apprentice_club'], potions: PET_TOWER.startPotions },
@@ -365,7 +403,10 @@ export const TOWER_ENHANCE: { to: number; stones: number; rate: number }[] = [
 export type PetElement = '화' | '수' | '목' | '금' | '토' | '빛' | '어둠';
 /** A tower skill: learned at `level` by a pet with `job` (and `branch`, the 2차 job). Attack skills hit with `power` × 공격;
  *  방패 막기 blocks the monster's next attack; 치유 heals. Every skill is cast by answering a word. */
-export interface TowerSkill { id: string; name: string; job: PetJob; branch?: PetJob2; level: number; mp: number; kind: 'attack' | 'block' | 'heal'; power?: number; element?: PetElement }
+/** `job3`: a 3차 skill (only for a pet with that 3차 job). `effect`, on a right answer: 'shield' also blocks the monster's
+ *  next attack, 'double' hits twice, 'weaken' cuts the monster's 공격 for the rest of the battle (once); a heal's `power`
+ *  multiplies the heal. */
+export interface TowerSkill { id: string; name: string; job: PetJob; branch?: PetJob2; job3?: PetJob3; level: number; mp: number; kind: 'attack' | 'block' | 'heal'; power?: number; element?: PetElement; effect?: 'shield' | 'double' | 'weaken'; text?: string }
 const skillAtk = (id: string, name: string, job: PetJob, level: number, mp: number, power: number, element: PetElement, branch?: PetJob2): TowerSkill => ({ id, name, job, level, mp, kind: 'attack', power, element, ...(branch ? { branch } : {}) });
 export const TOWER_SKILLS: TowerSkill[] = [
   skillAtk('slash', '베기', 'swordsman', 35, 4, 1.5, '금'),
@@ -386,10 +427,15 @@ export const TOWER_SKILLS: TowerSkill[] = [
   skillAtk('star_storm', '별빛 폭풍', 'wizard', 150, 12, 2.5, '토'),
   skillAtk('eclipse', '월식', 'wizard', 200, 15, 3.0, '어둠', 'white_mage'),
   skillAtk('dawn', '여명', 'wizard', 200, 15, 3.0, '빛', 'dark_mage'),
+  // 3차 전직 skills (Lv.150, after 「별의 시험」)
+  { ...skillAtk('sky_cleave', '하늘 가르기', 'swordsman', 150, 14, 2.8, '빛', 'paladin'), job3: 'sky_knight', effect: 'shield', text: '맞히면 다음 공격도 막아요' },
+  { ...skillAtk('shadow_cut', '그림자 베기', 'swordsman', 150, 14, 1.6, '어둠', 'dark_knight'), job3: 'abyss_knight', effect: 'double', text: '두 번 베어요' },
+  { id: 'dawn_heal', name: '새벽빛 치유', job: 'wizard', branch: 'white_mage', job3: 'dawn_sage', level: 150, mp: 14, kind: 'heal', power: 2, text: '체력을 크게 회복해요' },
+  { ...skillAtk('dusk_curse', '그믐 저주', 'wizard', 150, 14, 2.6, '어둠', 'dark_mage'), job3: 'dusk_mage', effect: 'weaken', text: '맞히면 적 공격이 약해져요' },
 ];
 export const towerSkill = (id: string) => TOWER_SKILLS.find(k => k.id === id);
 /** The skills of a pet's job and branch, learned or not yet (branch skills appear once the 2차 job is taken). */
-export const jobSkills = (pet: { job?: PetJob | null; job2?: PetJob2 | null }) => TOWER_SKILLS.filter(k => k.job === pet.job && (!k.branch || k.branch === pet.job2));
+export const jobSkills = (pet: { job?: PetJob | null; job2?: PetJob2 | null; job3?: PetJob3 | null }) => TOWER_SKILLS.filter(k => k.job === pet.job && (!k.branch || k.branch === pet.job2) && (!k.job3 || k.job3 === pet.job3));
 /** Skill level: 1 when learned, +1 every 10 pet levels after, at most 10 (0 = not learned yet). */
 export const skillLevel = (k: TowerSkill, petLevel: number) => petLevel < k.level ? 0 : Math.min(10, 1 + Math.floor((petLevel - k.level) / 10));
 /** 2차 job passives: 수호 (damage taken −10%), 흡혈 (10% of damage dealt healed), 축복 (healing ×1.5), 저주 (monster 방어 −10%). */
@@ -409,4 +455,4 @@ export function critChance(petLevel: number, skillLv: number, gear: (TowerGear |
   return Math.min(50, Math.round((petLevel * 0.1 + skillLv * 2 + fromGear) * 10) / 10);
 }
 /** 빗나가면 공격 피해의 30%만, MP는 절반만 써요. 치유 30% (축복 ×1.5); 수호 ×0.9 받는 피해; 흡혈 10%; 저주 적 방어 ×0.9; 크리 ×2. */
-export const TOWER_SKILL_RULES = { missDamage: 0.3, missMp: 0.5, heal: 0.3, blessing: 1.5, guard: 0.9, drain: 0.1, curse: 0.9, crit: 2 } as const;
+export const TOWER_SKILL_RULES = { missDamage: 0.3, missMp: 0.5, heal: 0.3, blessing: 1.5, guard: 0.9, drain: 0.1, curse: 0.9, crit: 2, weaken: 0.8 } as const;

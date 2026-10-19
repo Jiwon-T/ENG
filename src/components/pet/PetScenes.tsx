@@ -4,7 +4,34 @@ import React from 'react';
 // 230×190 grid; the pet stands on the ground strip at the bottom.
 const Star = ({ x, y, s = 1 }: { x: number; y: number; s?: number }) => <path transform={`translate(${x} ${y}) scale(${s})`} d="M0 -5 l1.5 3.5 l3.5 .6 l-2.6 2.2 l.7 3.6 l-3.1 -1.8 l-3.1 1.8 l.7 -3.6 l-2.6 -2.2 l3.5 -.6z" fill="#ffd166" />;
 
+/** The 패스 rooms' twinkle (kept in the scene's own <style>; still for people who ask for less motion). */
+const TWINKLE_CSS = '.pass-twinkle{transform-box:fill-box;transform-origin:center;animation:pass-twinkle 2.4s ease-in-out infinite}@keyframes pass-twinkle{0%,100%{opacity:.15;transform:scale(.6)}50%{opacity:1;transform:scale(1.1)}}@media (prefers-reduced-motion:reduce){.pass-twinkle{animation:none;opacity:.8}}';
+const TWINKLING = new Set(['cherry_window', 'night_sky', 'seaside']);
+/** A twinkle for the 패스 rooms (4-point sparkle, `delay` in seconds so they don't blink together). */
+const Twinkle = ({ x, y, s = 1, color = '#ffffff', delay = 0 }: { x: number; y: number; s?: number; color?: string; delay?: number }) =>
+  <g transform={`translate(${x} ${y}) scale(${s})`}><path className="pass-twinkle" style={{ animationDelay: `${delay}s` }} d="M0 -6 Q1 -1 6 0 Q1 1 0 6 Q-1 1 -6 0 Q-1 -1 0 -6Z" fill={color} /></g>;
+
 const SCENES: Record<string, React.ReactNode> = {
+  // 패스 꾸미기: 벚꽃 창가 (펫 패스), 밤하늘 · 바닷가 (프리미엄)
+  cherry_window: <>
+    <rect width="230" height="190" fill="#fdf2f8" /><rect y="150" width="230" height="40" fill="#fbcfe8" />
+    <rect x="70" y="26" width="90" height="70" rx="5" fill="#e0f2fe" stroke="#f9a8d4" strokeWidth="4" /><path d="M115 26 V96 M70 61 H160" stroke="#f9a8d4" strokeWidth="3" />
+    <path d="M60 24 Q66 60 62 100 L74 100 Q70 60 74 24Z" fill="#fbcfe8" opacity=".8" /><path d="M170 24 Q164 60 168 100 L156 100 Q160 60 156 24Z" fill="#fbcfe8" opacity=".8" />
+    {[[28, 40], [44, 70], [196, 50], [206, 88], [30, 110], [190, 120], [120, 120]].map(([x, y], i) => <g key={i} transform={`translate(${x} ${y})`}><circle r="3.4" fill="#f9a8d4" /><circle r="1.3" fill="#fef3c7" /></g>)}
+    <Twinkle x={92} y={40} s={0.8} color="#fbbf24" delay={0} /><Twinkle x={140} y={78} s={0.6} color="#f472b6" delay={0.8} /><Twinkle x={52} y={132} s={0.7} color="#f472b6" delay={1.4} /><Twinkle x={178} y={34} s={0.6} color="#fbbf24" delay={0.4} /><Twinkle x={210} y={140} s={0.7} color="#fbbf24" delay={1.8} />
+  </>,
+  night_sky: <>
+    <rect width="230" height="190" fill="#1e1b4b" /><rect y="150" width="230" height="40" fill="#312e81" />
+    <path d="M170 30 A18 18 0 1 0 192 56 A14 14 0 1 1 170 30Z" fill="#fde68a" />
+    <Star x={36} y={30} s={0.9} /><Star x={80} y={56} s={0.7} /><Star x={120} y={22} s={0.8} /><Star x={60} y={100} s={0.6} /><Star x={206} y={104} s={0.7} /><Star x={146} y={80} s={0.5} />
+    <Twinkle x={20} y={70} s={0.7} color="#fde68a" delay={0.2} /><Twinkle x={100} y={86} s={0.6} delay={1} /><Twinkle x={150} y={20} s={0.8} color="#fde68a" delay={1.6} /><Twinkle x={214} y={64} s={0.6} delay={0.6} /><Twinkle x={180} y={128} s={0.5} color="#c7d2fe" delay={2} /><Twinkle x={40} y={124} s={0.5} color="#c7d2fe" delay={1.2} />
+  </>,
+  seaside: <>
+    <rect width="230" height="190" fill="#e0f2fe" /><circle cx="186" cy="38" r="16" fill="#fde68a" />
+    <path d="M0 112 Q28 104 56 112 T112 112 T168 112 T230 112 V150 H0Z" fill="#38bdf8" /><path d="M0 122 Q28 116 56 122 T112 122 T168 122 T230 122" stroke="#ffffff" strokeWidth="2" fill="none" />
+    <rect y="150" width="230" height="40" fill="#fde68a" /><path d="M30 150 L44 120 L58 150Z" fill="#fb7185" /><path d="M44 120 V150" stroke="#be123c" strokeWidth="1.5" />
+    <Twinkle x={70} y={128} s={0.6} delay={0} /><Twinkle x={120} y={138} s={0.7} delay={0.9} /><Twinkle x={168} y={126} s={0.6} delay={1.5} /><Twinkle x={204} y={140} s={0.5} delay={0.5} /><Twinkle x={186} y={60} s={0.7} color="#fef3c7" delay={1.9} />
+  </>,
   forest_cabin: <>
     <rect width="230" height="190" fill="#eef6ea" /><rect y="150" width="230" height="40" fill="#dcebd3" />
     <path d="M18 150 L34 104 L50 150Z" fill="#9cc58f" /><path d="M24 128 L34 96 L44 128Z" fill="#b4d6a8" /><rect x="32" y="150" width="4" height="8" fill="#a07a5a" />
@@ -96,10 +123,10 @@ export const hasSceneArt = (id: string | null | undefined) => Boolean(id && SCEN
 /** Fills its (relative) parent; the bottom of the drawing stays at the bottom so the pet stands on the ground. */
 export function SceneArt({ id, className = '' }: { id: string; className?: string }) {
   if (!SCENES[id]) return null;
-  return <svg viewBox="0 0 230 190" preserveAspectRatio="xMidYMax slice" className={`absolute inset-0 h-full w-full ${className}`} aria-hidden="true">{SCENES[id]}</svg>;
+  return <svg viewBox="0 0 230 190" preserveAspectRatio="xMidYMax slice" className={`absolute inset-0 h-full w-full ${className}`} aria-hidden="true">{TWINKLING.has(id) && <style>{TWINKLE_CSS}</style>}{SCENES[id]}</svg>;
 }
 
 /** The room colour under each background (white pets need a faint fill to show; solid colours only). */
-export const SCENE: Record<string, string> = { forest_cabin: 'bg-[#eef6ea]', coral_sea: 'bg-[#e8f3fb]', cloud_castle: 'bg-[#f3f0fb]', oasis: 'bg-[#fdf3e1]', snow_cabin: 'bg-[#eef4fb]', galaxy: 'bg-[#3d3a6b]', dream_garden: 'bg-[#fdf0f5]', default: 'bg-[#fdf6f7]', pink_cushion: 'bg-[#fff5f7]', bed: 'bg-[#f2f7fd]', desk: 'bg-[#fffaf1]', star_room: 'bg-[#1e1b4b]' };
+export const SCENE: Record<string, string> = { cherry_window: 'bg-[#fdf2f8]', night_sky: 'bg-[#1e1b4b]', seaside: 'bg-[#e0f2fe]', forest_cabin: 'bg-[#eef6ea]', coral_sea: 'bg-[#e8f3fb]', cloud_castle: 'bg-[#f3f0fb]', oasis: 'bg-[#fdf3e1]', snow_cabin: 'bg-[#eef4fb]', galaxy: 'bg-[#3d3a6b]', dream_garden: 'bg-[#fdf0f5]', default: 'bg-[#fdf6f7]', pink_cushion: 'bg-[#fff5f7]', bed: 'bg-[#f2f7fd]', desk: 'bg-[#fffaf1]', star_room: 'bg-[#1e1b4b]' };
 // Fixed star positions (not random on every render).
 export const STARS = Array.from({ length: 18 }, (_, i) => ({ top: (i * 37) % 100, left: (i * 61 + 13) % 100, size: 1 + (i % 3), delay: (i % 5) * 0.7 }));

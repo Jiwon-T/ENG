@@ -5,6 +5,12 @@ export const parentFeedbackText = (d: {content?: string; note?: string; assignme
   [lessonFeedbackText(d), d.attendanceNote ? `출결 메모: ${d.attendanceNote}` : '', d.specialNote ? `특이 사항: ${d.specialNote}` : ''].filter(Boolean).join('\n\n');
 export function percentage(correct: number | null | undefined, total: number | null | undefined) { return correct == null || total == null || total <= 0 ? null : Math.round(correct / total * 10000) / 100; }
 /** The 일지's general 테스트 점수 can be any test: its name (단어, 모의고사 …) when the teacher gave one, else just 테스트. */
-export const TEST_NAME_OPTIONS = ['단어', '모의고사', '단원평가'] as const;
+export const TEST_NAME_OPTIONS = ['단어', '문법', '모의고사', '단원평가'] as const;
+/** More tests on the same day (단어 + 벼락치기 …): up to 3 after the first one, which stays in correct/total/testName. */
+export const MAX_EXTRA_TESTS = 3;
+export interface ExtraTest { name: string; correct: number | null; total: number | null; wrong?: number | null; scorePercent?: boolean }
+/** An extra test as the report shows it: its name and 점수 out of 100. */
+export interface ExtraScore { name: string; score: number }
+export const extraScoresText = (list?: ExtraScore[] | null) => (list || []).map(t => `${testLabel(t.name)} ${t.score}점`).join(' · ');
 export const testLabel = (name?: string | null) => name?.trim() || '테스트';
 export const testScoreTitle = (name?: string | null) => name?.trim() ? `테스트 점수 · ${name.trim()}` : '테스트 점수';

@@ -229,6 +229,12 @@ const WEAPONS: Record<string, React.ReactNode> = {
   dawn_scepter: <g transform="translate(91 104) rotate(10)"><rect x="-2" y="-40" width="4" height="48" rx="2" fill="#f3f4f6" stroke="#ca8a04" strokeWidth=".6" /><circle cy="-50" r="9" fill="#fef9c3" opacity=".8" /><path d="M0 -59 L4.5 -50 L0 -41 L-4.5 -50Z" fill="#ffffff" stroke="#ca8a04" strokeWidth="1" strokeLinejoin="round" /><path d="M-7 -41 Q0 -36 7 -41" stroke="#ca8a04" strokeWidth="1.4" fill="none" /></g>,
   crescent_staff: <g transform="translate(91 104) rotate(10)"><rect x="-2.2" y="-40" width="4.4" height="48" rx="2.2" fill="#312e81" /><path d="M-1 -55 A9 9 0 1 0 8 -41 A7 7 0 1 1 -1 -55Z" fill="#a78bfa" stroke="#4c1d95" strokeWidth=".9" strokeLinejoin="round" /><circle cx="7" cy="-52" r="1.4" fill="#ede9fe" /><path d="M-6 -36 Q0 -32 6 -36" stroke="#4c1d95" strokeWidth="1.3" fill="none" /></g>,
   dream_staff: <g transform="translate(91 104) rotate(10)"><rect x="-2.2" y="-40" width="4.4" height="48" rx="2.2" fill="#f49bb8" /><path d="M0 -58 l2.4 5 l5.6 .8 l-4 3.8 l1 5.4 l-5 -2.6 l-5 2.6 l1 -5.4 l-4 -3.8 l5.6 -.8z" fill="#ffd166" stroke="#f0b429" strokeLinejoin="round" /><circle cx="-7.5" cy="-46" r="1.5" fill="#a8dcf2" /><circle cx="7.5" cy="-44" r="1.5" fill="#f7b8d4" /></g>,
+  // 3차 전직 weapons: 천공의 성창 (a long white spear, gold head, sky glow), 심연의 대검 (a black greatsword with violet edges),
+  // 여명의 지팡이 (a sunburst on a pale rod), 그믐달 마도서 (an indigo book with a lilac crescent, held open).
+  sky_spear: <g transform="translate(92 100) rotate(14)"><circle cy="-34" r="10" fill="#e0f2fe" opacity=".8" /><path d="M0 -58 L2.4 -48 L1.6 6 L-1.6 6 L-2.4 -48Z" fill="#ffffff" stroke="#0ea5e9" strokeWidth=".9" /><path d="M-5.5 -48 L0 -58 L5.5 -48 L0 -45Z" fill="#fde68a" stroke="#ca8a04" strokeWidth=".7" strokeLinejoin="round" /><path d="M-7 -4 Q0 -7 7 -4" stroke="#ca8a04" strokeWidth="2.4" fill="none" strokeLinecap="round" /><path d="M-5 -38 l-3 -2.4 M5 -38 l3 -2.4" stroke="#bae6fd" strokeWidth="1.2" strokeLinecap="round" /></g>,
+  abyss_greatsword: <g transform="translate(92 98) rotate(14)"><path d="M0 -44 L7 -33 L5.5 -4 L-5.5 -4 L-7 -33Z" fill="#111827" stroke="#4c1d95" strokeWidth="1.1" /><path d="M-2.6 -36 V-7 M2.6 -36 V-7" stroke="#a855f7" strokeWidth=".9" /><path d="M-11 -2 Q0 -8 11 -2" stroke="#1f2937" strokeWidth="3.4" fill="none" strokeLinecap="round" /><circle cx="-11" cy="-2" r="1.8" fill="#a855f7" /><circle cx="11" cy="-2" r="1.8" fill="#a855f7" /><rect x="-1.8" y="-1" width="3.6" height="10" rx="1.8" fill="#111827" /></g>,
+  dawn_staff: <g transform="translate(91 104) rotate(10)"><rect x="-2" y="-40" width="4" height="48" rx="2" fill="#fff7ed" stroke="#f59e0b" strokeWidth=".6" /><circle cy="-50" r="10" fill="#fef3c7" opacity=".85" /><circle cy="-50" r="5.2" fill="#fbbf24" /><path d="M0 -61 V-57.5 M0 -42.5 V-39 M-11 -50 H-7.5 M7.5 -50 H11 M-7.8 -57.8 l2.4 2.4 M5.4 -44.6 l2.4 2.4 M7.8 -57.8 l-2.4 2.4 M-5.4 -44.6 l-2.4 2.4" stroke="#f59e0b" strokeWidth="1.1" strokeLinecap="round" /></g>,
+  dusk_tome: <g transform="translate(96 96) rotate(-8)"><rect x="-11" y="-14" width="22" height="26" rx="2.5" fill="#312e81" stroke="#1e1b4b" strokeWidth="1.1" /><rect x="-9" y="-12" width="18" height="22" rx="2" fill="none" stroke="#a78bfa" strokeWidth=".7" /><path d="M-1 -6 A5 5 0 1 0 4.5 1.5 A4 4 0 1 1 -1 -6Z" fill="#c4b5fd" /><circle cx="-5" cy="6" r=".9" fill="#ede9fe" /><rect x="-12.5" y="-12" width="2.4" height="22" rx="1.2" fill="#4c1d95" /></g>,
 };
 
 /** `top` is the highest point of the head (hair for 다롱) and `side` a point on the upper-right outline, so hats and pins sit on the head, never above it. */
@@ -258,11 +264,13 @@ const Sparkle = ({ x, y, s }: { x: number; y: number; s: number }) => <path tran
 
 const SIZE: Record<PetStage, number> = { baby: 84, child: 100, teen: 116, adult: 132, master: 140 };
 
-export const PetCharacter = ({ character, stage, clothing, accessory, background, className = '', portrait, size: fixedSize }: CharacterProps & { character: string }) => {
+/** `aura`: the 3차 전직 glow behind the pet (light: gold and sky; dark: violet). */
+export const PetCharacter = ({ character, stage, clothing, accessory, background, className = '', portrait, size: fixedSize, aura }: CharacterProps & { character: string; aura?: 'light' | 'dark' | null }) => {
   const worn = (Array.isArray(accessory) ? accessory : accessory ? [accessory] : []).filter(Boolean) as string[];
   const look = LOOKS[character] || LOOKS.molang, outfit = clothing ? OUTFITS[clothing] : undefined, [fill, stroke, belly] = look.body;
   const size = fixedSize || SIZE[stage] || SIZE.baby;
   const art = <svg viewBox={portrait ? '14 8 92 88' : '0 0 120 130'} width={size} height={portrait ? size : size * 130 / 120} className="relative z-10" aria-hidden="true">
+    {aura && <g aria-hidden="true"><circle cx="60" cy="78" r="56" fill={aura === 'light' ? '#fef9c3' : '#ede9fe'} opacity=".55" /><circle cx="60" cy="80" r="44" fill={aura === 'light' ? '#e0f2fe' : '#ddd6fe'} opacity=".55" /><circle cx="14" cy="50" r="2" fill={aura === 'light' ? '#fde68a' : '#c4b5fd'} /><circle cx="108" cy="62" r="1.7" fill={aura === 'light' ? '#bae6fd' : '#a78bfa'} /><circle cx="98" cy="118" r="1.8" fill={aura === 'light' ? '#fde68a' : '#c4b5fd'} /></g>}
     {outfit?.back}{look.tail}
     <ellipse cx="47" cy="121" rx="8" ry="5" fill={fill} stroke={stroke} /><ellipse cx="73" cy="121" rx="8" ry="5" fill={fill} stroke={stroke} />
     <path d={BODY} fill={fill} stroke={stroke} />{belly && <ellipse cx="60" cy="104" rx="13" ry="10" fill={belly} />}{arms(fill, stroke)}
