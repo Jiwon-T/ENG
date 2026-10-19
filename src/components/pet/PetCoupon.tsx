@@ -1,6 +1,6 @@
 import { type ReactNode, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { medalLabel, PET_COUPON, towerDecor } from '../../lib/petCatalog';
-import type { CouponView, MedalSpot } from '../../lib/petService';
+import type { CouponMonth, CouponView, LedgerItem, MedalSpot } from '../../lib/petService';
 
 // 이달의 장학 쿠폰 and its 금메달: the goal gauge on the pet home, the 쿠폰 shop tab, and the medals placed in the room
 // (꾸미기: drag a medal anywhere in the room; the 메달함 puts one in or takes it out). One medal design for every month,
@@ -34,39 +34,89 @@ export function DecorArt({ id, size = 44 }: { id: string; size?: number }) {
 const Placed = ({ id, size }: { id: string; size: number }) => towerDecor(id) ? <DecorArt id={id} size={size * 1.1} /> : <MedalArt month={id} size={size} />;
 
 /** 펫 홈: how far this month's points are from the coupon (shown to students linked to the academy). */
-export function CouponGauge({ coupon, onShop }: { coupon: CouponView; onShop: () => void }) {
-  const pct = Math.min(100, Math.floor((coupon.earned / coupon.goal) * 100)), ready = coupon.earned >= coupon.goal;
+/** 포인트 내역 kinds: colour, icon and name (the bar under the gauge and each line). */
+const KINDS: Record<LedgerItem['kind'], { color: string; icon: string; name: string }> = {
+  class: { color: '#e0587a', icon: '🏫', name: '수업' }, study: { color: '#efa23a', icon: '📚', name: '앱 공부' }, cert: { color: '#7f77dd', icon: '✅', name: '선생님 인증' },
+  adventure: { color: '#5dcaa5', icon: '🗺️', name: '모험' }, etc: { color: '#cbd5e1', icon: '✨', name: '그 밖' },
+};
+const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+const dayTitle = (day: string) => { const d = new Date(`${day}T12:00:00+09:00`); return `${d.getMonth() + 1}월 ${d.getDate()}일 (${DAYS[d.getDay()]})`; };
+/** 이번 달 내역: what this month's points came from — a bar by kind, then (folded) a line per day and kind, newest first. */
+export function PointsHistory({ coupon, ledger, defaultOpen = false }: { coupon: Pick<CouponView, 'month' | 'earned'>; ledger: LedgerItem[]; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen), [days, setDays] = useState(5);
+  const mine = ledger.filter(x => x.day.slice(0, 7) === coupon.month);
+  const byKind = new Map<LedgerItem['kind'], number>();
+  for (const x of mine) byKind.set(x.kind, (byKind.get(x.kind) || 0) + x.points);
+  // points counted before the 내역 began (the first season's points held, older records)
+  const rest = coupon.earned - mine.reduce((sum, x) => sum + x.points, 0); if (rest > 0) byKind.set('etc', (byKind.get('etc') || 0) + rest);
+  const parts = (Object.keys(KINDS) as LedgerItem['kind'][]).map(k => [k, byKind.get(k) || 0] as const).filter(([, n]) => n > 0);
+  const lines = new Map<string, { day: string; kind: LedgerItem['kind']; labels: string[]; points: number }>();
+  for (const x of mine) { const key = `${x.day}|${x.kind}`, l = lines.get(key) || { day: x.day, kind: x.kind, labels: [], points: 0 }; if (x.label && !l.labels.includes(x.label)) l.labels.push(x.label); l.points += x.points; lines.set(key, l); }
+  const grouped = [...new Set([...lines.values()].map(l => l.day))].sort().reverse();
+  if (!parts.length) return null;
+  return <div className="mt-2">
+    <div className="flex h-1 gap-0.5 overflow-hidden rounded-full" aria-hidden="true">{parts.map(([k, n]) => <span key={k} style={{ flex: n, background: KINDS[k].color }} />)}</div>
+    <p className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[11px] text-slate-500">{parts.map(([k, n]) => <span key={k}><b style={{ color: KINDS[k].color }} aria-hidden="true">●</b> {k === 'etc' && rest > 0 && !mine.some(x => x.kind === 'etc') ? '이전 포인트' : KINDS[k].name} {won(n)}</span>)}</p>
+    {grouped.length > 0 && <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="mt-2 w-full border-t border-dashed border-[#f3d5da] pt-2 text-left text-xs font-bold text-[#8b2f40]">{open ? '이번 달 내역 접기 ▴' : '이번 달 내역 보기 ▾'}</button>}
+    {open && <div className="mt-1 text-xs text-[#5e1e2a]">
+      {grouped.slice(0, days).map(day => <div key={day}>
+        <p className="mb-0.5 mt-2 text-[11px] text-slate-400">{dayTitle(day)}</p>
+        {[...lines.values()].filter(l => l.day === day).sort((a, b) => Object.keys(KINDS).indexOf(a.kind) - Object.keys(KINDS).indexOf(b.kind)).map(l =>
+          <p key={l.kind} className="flex items-baseline justify-between gap-2 py-0.5"><span className="min-w-0"><span aria-hidden="true">{KINDS[l.kind].icon}</span> {l.labels.join(' · ') || KINDS[l.kind].name}</span><b className="flex-none font-bold">+{won(l.points)}</b></p>)}
+      </div>)}
+      {grouped.length > days && <button type="button" onClick={() => setDays(days + 7)} className="mt-1 w-full text-center text-[11px] font-bold text-[#8b2f40]">더 보기</button>}
+    </div>}
+  </div>;
+}
+
+export function CouponGauge({ coupon, onShop, ledger = [] }: { coupon: CouponView; onShop: () => void; ledger?: LedgerItem[] }) {
+  const pct = Math.min(100, Math.floor((coupon.earned / coupon.goal) * 100)), ready = (coupon.options || []).some(o => o.ready) || !coupon.options && coupon.earned >= coupon.goal && !coupon.requested;
+  const lastOpen = Boolean(coupon.last && (coupon.last.options || []).some(o => o.ready));
+  const half = coupon.tiered ? PET_COUPON.tiers.find(t => t.id === 'half')!.points : 0;
   return <section aria-label={PET_COUPON.name} className="rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
+    {lastOpen && <button type="button" onClick={onShop} className="mb-2 flex w-full items-center gap-2 rounded-xl bg-[#fff6e6] px-3 py-2 text-left text-xs font-bold text-[#8a5a12]"><span className="flex-1">지난달({coupon.last!.label}) 쿠폰도 {Number(coupon.last!.until.slice(8))}일까지 신청할 수 있어요!</span><span>상점 가기 ›</span></button>}
     <div className="flex items-center justify-between gap-2">
       <b className="text-sm font-black text-[#5e1e2a]">🎟️ {coupon.requested ? `${coupon.label} 장학 쿠폰 신청 완료` : `이달의 장학 쿠폰까지 ${pct}%`}</b>
       <span className="text-xs text-slate-500">{won(coupon.earned)} / {won(coupon.goal)}P</span>
     </div>
-    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f6e3e6]"><div className="h-full rounded-full bg-[#efa23a]" style={{ width: `${pct}%` }} /></div>
-    {coupon.requested ? <p className="mt-1.5 text-[11px] text-slate-500">{coupon.paid ? '선생님이 쿠폰을 주셨어요.' : '선생님이 곧 쿠폰을 주실 거예요.'} 금메달은 방 꾸미기에서 놓을 수 있어요.</p>
-      : ready ? <button type="button" onClick={onShop} className="mt-2 flex w-full items-center gap-2 rounded-xl bg-[#fff6e6] px-3 py-2 text-left text-xs font-bold text-[#8a5a12]"><span className="flex-1">이번 달 쿠폰을 받을 수 있어요!</span><span>상점 가기 ›</span></button>
-      : <p className="mt-1.5 text-[11px] text-slate-400">이번 달 1일부터 모은 포인트예요 (써도 줄지 않아요) · 쿠폰은 한 달에 1장</p>}
+    <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-[#f6e3e6]"><div className="h-full rounded-full bg-[#efa23a]" style={{ width: `${pct}%` }} />{half > 0 && <span className="absolute top-0 h-full w-0.5 bg-white" style={{ left: `${half / coupon.goal * 100}%` }} title="6,000P · 5천 원" />}</div>
+    {coupon.tiered && <p className="mt-1 flex justify-between text-[10px] text-slate-400"><span>6,000P · 5천 원</span><span>10,000P · 1만 원</span></p>}
+    {ready ? <button type="button" onClick={onShop} className="mt-2 flex w-full items-center gap-2 rounded-xl bg-[#fff6e6] px-3 py-2 text-left text-xs font-bold text-[#8a5a12]"><span className="flex-1">{coupon.requested ? '쿠폰을 한 장 더 받을 수 있어요!' : '이번 달 쿠폰을 받을 수 있어요!'}</span><span>상점 가기 ›</span></button>
+      : coupon.requested ? <p className="mt-1.5 text-[11px] text-slate-500">{coupon.paid ? '선생님이 쿠폰을 주셨어요.' : '선생님이 곧 쿠폰을 주실 거예요.'}{coupon.tiered && (coupon.won || 0) < PET_COUPON.monthWon ? ` 남은 ${won(coupon.left ?? 0)}P로 6,000P를 채우면 5천 원을 한 번 더 받아요.` : ''} 금메달은 방 꾸미기에서 놓을 수 있어요.</p>
+      : <p className="mt-1.5 text-[11px] text-slate-400">이번 달 1일부터 모은 포인트예요 (써도 줄지 않아요) · {coupon.tiered ? '한 달 최대 1만 원' : '쿠폰은 한 달에 1장'}</p>}
+    <PointsHistory coupon={coupon} ledger={ledger} />
   </section>;
 }
 
 /** 상점 › 쿠폰: ask for this month's coupon (no points are taken) and see the medals. */
-export function CouponShop({ coupon, medals, busy, onRequest }: { coupon: CouponView; medals: string[]; busy: boolean; onRequest: () => void }) {
-  const [asking, setAsking] = useState(false), ready = coupon.earned >= coupon.goal;
-  const shown = [...new Set([coupon.month, ...medals])].sort().reverse();
-  return <div className="space-y-3">
-    <div className="rounded-2xl border border-[#f3e6e8] bg-white px-3 py-3">
-      <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-[#fff6e6] text-xl" aria-hidden="true">🎟️</span>
-        <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">{coupon.label} {PET_COUPON.name}</b><span className="block text-xs text-slate-500">이번 달 {won(coupon.goal)}P 모으면 교환 · 포인트는 그대로예요</span></span>
-        {coupon.requested ? <span className="flex-none rounded-full bg-[#eef6ea] px-2.5 py-1 text-[11px] font-bold text-[#4f7a43]">{coupon.paid ? '받았어요' : '신청 완료'}</span>
-          : !asking && <button type="button" disabled={!ready || busy} onClick={() => setAsking(true)} className="flex-none rounded-xl bg-[#e0587a] px-3.5 py-2 text-xs font-bold text-white disabled:bg-[#f8f1f2] disabled:text-[#b9a0a5]">교환하기</button>}
-      </div>
-      {!coupon.requested && !ready && <p className="mt-2 text-[11px] text-slate-500">{won(coupon.goal - coupon.earned)}P 더 모으면 교환할 수 있어요. 신청하지 않고 달이 바뀌면 그 달 쿠폰은 넘어가요.</p>}
-      {asking && !coupon.requested && <div className="mt-2 flex items-center gap-2 rounded-xl bg-[#fff6e6] px-3 py-2 text-xs text-[#8a5a12]">
-        <span className="flex-1">{coupon.label} 쿠폰을 신청할까요? 금메달도 함께 받아요.</span>
-        <button type="button" onClick={() => setAsking(false)} className="rounded-lg border border-[#f0d9b0] bg-white px-2.5 py-1 font-bold">취소</button>
-        <button type="button" disabled={busy} onClick={() => { setAsking(false); onRequest(); }} className="rounded-lg bg-[#e0587a] px-2.5 py-1 font-bold text-white disabled:opacity-60">신청</button>
-      </div>}
+const wonText = (n: number) => n >= 10_000 ? `${n / 10_000}만 원` : `${n / 1_000}천 원`;
+/** One month's coupon card: what was asked for, then each coupon that can be asked for now (단계 쿠폰: 5천 원 · 1만 원). */
+function CouponMonthCard({ title, note, m, busy, onRequest }: { title: string; note: string; m: CouponMonth; busy: boolean; onRequest: (tier: 'half' | 'full') => void }) {
+  const [asking, setAsking] = useState<'half' | 'full' | null>(null);
+  const options = m.options || [{ id: 'full' as const, points: PET_COUPON.goal, won: PET_COUPON.monthWon, ready: !m.requested && m.earned >= PET_COUPON.goal }];
+  const left = m.left ?? m.earned, next = options.filter(o => !o.ready && (m.won || 0) + o.won <= PET_COUPON.monthWon).sort((a, b) => a.points - b.points)[0];
+  return <div className="rounded-2xl border border-[#f3e6e8] bg-white px-3 py-3">
+    <div className="flex items-center gap-3">
+      <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-[#fff6e6] text-xl" aria-hidden="true">🎟️</span>
+      <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">{title}</b><span className="block text-xs text-slate-500">{note}</span></span>
     </div>
+    {(m.coupons || []).length > 0 && <p className="mt-2 flex flex-wrap gap-1.5">{m.coupons!.map((c, k) => <span key={k} className="rounded-full bg-[#eef6ea] px-2.5 py-1 text-[11px] font-bold text-[#4f7a43]">{wonText(c.won)} {c.paid ? '받았어요' : '신청 완료'}</span>)}</p>}
+    <div className="mt-2 grid gap-1.5">{options.map(o => <div key={o.id} className="flex items-center gap-2 rounded-xl bg-[#fffaf6] px-3 py-2 text-xs">
+      <span className="min-w-0 flex-1"><b className="font-black text-[#5e1e2a]">{wonText(o.won)} 쿠폰</b> <span className="text-slate-500">· {won(o.points)}P{m.tiered && o.id === 'half' ? ' 사용 (남은 포인트는 계속 모여요)' : ''}</span></span>
+      {asking === o.id ? <><button type="button" onClick={() => setAsking(null)} className="rounded-lg border border-[#f0d9b0] bg-white px-2.5 py-1 font-bold">취소</button><button type="button" disabled={busy} onClick={() => { setAsking(null); onRequest(o.id); }} className="rounded-lg bg-[#e0587a] px-2.5 py-1 font-bold text-white disabled:opacity-60">신청</button></>
+        : <button type="button" disabled={!o.ready || busy} onClick={() => setAsking(o.id)} className="flex-none rounded-xl bg-[#e0587a] px-3 py-1.5 font-bold text-white disabled:bg-[#f8f1f2] disabled:text-[#b9a0a5]">교환하기</button>}
+    </div>)}</div>
+    {next && <p className="mt-2 text-[11px] text-slate-500">{won(Math.max(0, next.points - left))}P 더 모으면 {wonText(next.won)} 쿠폰을 받을 수 있어요{m.tiered ? ' (한 달 최대 1만 원)' : ''}. 신청하지 않고 기간이 지나면 넘어가요.</p>}
+  </div>;
+}
+
+export function CouponShop({ coupon, medals, busy, onRequest }: { coupon: CouponView; medals: string[]; busy: boolean; onRequest: (month?: string, tier?: 'half' | 'full') => void }) {
+  const shown = [...new Set([coupon.month, ...medals])].sort().reverse();
+  const last = coupon.last && (coupon.last.options || []).some(o => o.ready) ? coupon.last : null;
+  return <div className="space-y-3">
+    {/* last month's coupons, in the first days of a month (its lessons' points came in late) */}
+    {last && <CouponMonthCard title={`지난달 ${last.label} ${PET_COUPON.name}`} note={`${Number(last.until.slice(8))}일까지 신청할 수 있어요 · 남은 포인트 ${won(last.left ?? last.earned)}P`} m={last} busy={busy} onRequest={tier => onRequest(last.month, tier)} />}
+    <CouponMonthCard title={`${coupon.label} ${PET_COUPON.name}`} note={coupon.tiered ? `이번 달 모은 ${won(coupon.earned)}P · 남은 ${won(coupon.left ?? coupon.earned)}P (포인트를 써도 줄지 않아요)` : `이번 달 ${won(coupon.goal)}P 모으면 교환 · 포인트는 그대로예요`} m={coupon} busy={busy} onRequest={tier => onRequest(undefined, tier)} />
     <div>
       <p className="mb-1.5 text-xs font-bold text-[#8b2f40]">금메달 · 쿠폰을 신청하면 그 달 메달을 받아요</p>
       <div className="grid grid-cols-3 gap-2">{shown.map(m => { const mine = medals.includes(m); return <div key={m} className={`flex flex-col items-center rounded-2xl border px-1 py-2 text-center ${mine ? 'border-[#efc77a] bg-[#fffaf0]' : 'border-[#f3e6e8] bg-white'}`}>

@@ -11,7 +11,7 @@ import { aiErrorCode, generateAi, planOf, readPetTalk, refundPetTalkQuota, takeP
 import { AI_PLANS, PASS_NOTE, PET_TALK_DAILY_GUARD, activePlan } from '../../../src/lib/aiPlans.js';
 import {
   PET_STATES, addXP, adoptPet, awardStudy, buyItem, chatRequest, museRequest, chooseCharacter, claimStudyRewards, currentPet, earnPoints, equipItem, evolveRequest, importLocalPet,
-  homeworkGrades, initialPetState, parseAi, pendingStudyRewards, petSummary, petThePet, publicPetState, renamePet, rollDay, seoulDay, switchPet, teachRequest, wearItem, type ServerPetState,
+  homeworkGrades, initialPetState, parseAi, pendingStudyRewards, petSummary, petThePet, publicPetState, renamePet, setGearShow, rollDay, seoulDay, switchPet, teachRequest, wearItem, type ServerPetState,
 } from '../pet.js';
 import { cleanPetSpeech, petEmojiLimit, PET_ACTIONS, PET_REWARD_WINDOW_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PET_WORD_FEED, stageGame, stageQuestions, stageWithSentences, passAllows, petItem } from '../../../src/lib/petCatalog.js';
 import { loadSentencesFor } from '../petSentences.js';
@@ -19,8 +19,8 @@ import { PET_GAMES, answerRun, buildRun, initialGameState, loadFeedSource, publi
 import { PET_GUILD, PET_NAMES, PET_PARTIES, addContribution, nameDocId, partyName, boardCard, checkNickname, createParty, initialGuild, joinParty, leaveParty, norm, normalizeGuild, petLook, publicParty, rankingRow, setAlias, setGuildName, settleParty, shownAlias, shownGuild, updateMemberNames, voteKick, weekOf, type GuildProfile, type Party } from '../petParty.js';
 import { readTowerHall, recordTowerHall } from '../petTowerHall.js';
 import { PET_RANKINGS, myPetRank, readRankProfile, readRankings, refreshRankings } from '../petRanking.js';
-import { PET_TOWERS, syncTowerDecor, takeJob3, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
-import { couponStudentKey, couponView, placeDecor, readCoupon, requestCoupon } from '../petCoupon.js';
+import { PET_TOWERS, syncTowerDecor, syncGearLooks, syncGearInbox, takeJob3, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
+import { couponStudentKey, couponView, placeDecor, readCoupon, readCouponView, requestCoupon } from '../petCoupon.js';
 import { PET_EXPEDITIONS, chooseJob, chooseJob2, finishStage, initialExpedition, levelOk, petProgress, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
 
 // GET /api/student/pet → the pet state (+ 공부 보상 waiting). POST {action,...} → one change, decided here.
@@ -58,14 +58,14 @@ async function studyReports(db: any, uid: string, preloadedUser?: any) {
   const reports = await db.collection('lessonReports').where('internalStudentId', '==', mapping.internalStudentId).get();
   const rows = reports.docs.map((d: any) => d.data() as StoredLessonReport).filter((r: StoredLessonReport) => r.reportIdentity || r.notionPageId).map((r: StoredLessonReport) => ({
     id: lessonReportId(r), date: r.lessonDateStart, subject: r.subject || '영어', attendance: r.attendance || '', homework: r.homework || '', hasAssignment: Boolean(r.derivedAssignment?.trim()),
-    test: r.test || '', testPaper: typeof r.testPaper === 'boolean' ? r.testPaper : null,
+    test: r.test || '', testPaper: typeof r.testPaper === 'boolean' ? r.testPaper : null, attitude: r.attitude || '',
   }));
   const grades = homeworkGrades(rows);
   // 테스트 평가 left on 자동: paper unless the student took an app 단어 테스트 that day (read once, only when needed; a
   // failed read counts every such test as an app test, the smaller reward)
   const appDays = rows.some(r => r.testPaper === null && PET_TEST_REWARD.paper[r.test]) ? await appTestDays(db, uid) : null;
   return rows.map(r => ({id: r.id, date: r.date, attendance: r.attendance, homeworkGrade: grades.get(r.id)?.grade, gradedAt: grades.get(r.id)?.gradedAt,
-    test: r.test, testPaper: r.testPaper ?? isPaperDay(appDays, String(r.date).slice(0, 10))}));
+    test: r.test, testPaper: r.testPaper ?? isPaperDay(appDays, String(r.date).slice(0, 10)), attitude: r.attitude}));
 }
 /** 자동: paper only when the day was read in full and had no app 단어 테스트 (a day not read = app, the smaller reward). */
 export const isPaperDay = (seen: {days: Set<string>; from: string} | null, day: string) => Boolean(seen && day >= seen.from && !seen.days.has(day));
@@ -83,6 +83,12 @@ async function appTestDays(db: any, uid: string): Promise<{days: Set<string>; fr
   } catch { console.warn('PET_APP_TEST_DAYS_FAILED'); return null; }
 }
 
+/** The lessons' rewards waiting (출석·숙제·시험·태도), taken when the app or the pet screen opens: their points (0 when none). */
+async function autoClaimStudy(db: any, uid: string, now: number, reportsIn?: any[]) {
+  const snap = await db.collection(PET_STATES).doc(uid).get(); if (!snap.exists) return 0;
+  const reports = reportsIn ?? await studyReports(db, uid); if (!reports.length || !pendingStudyRewards(rollDay(snap.data(), now), reports, now).length) return 0;
+  return (await change(db, uid, now, s => claimStudyRewards(s, pendingStudyRewards(s, reports, now)))).result.points as number;
+}
 /** Read → change → save in one transaction (users.petStats follows). The change throws a PET_* code to refuse. */
 async function change(db: any, uid: string, now: number, apply: (s: ServerPetState, exists: boolean) => any) {
   const ref = db.collection(PET_STATES).doc(uid), userRef = db.collection('users').doc(uid);
@@ -104,8 +110,9 @@ async function changeTower(db: any, uid: string, now: number, apply: (s: ServerP
     const [snap, towerSnap, userSnap] = await Promise.all([tx.get(ref), tx.get(towerRef), tx.get(userRef)]), user = userSnap.data();
     const s: ServerPetState = rollDay(snap.exists ? snap.data() : initialPetState(now, user?.petStats), now);
     const t: TowerState = towerSnap.exists ? towerSnap.data() : initialTower(now);
-    syncTowerDecor(t, s);
+    syncTowerDecor(t, s); syncGearInbox(t, s);
     const result = apply(s, t);
+    syncGearLooks(t, s);
     s.updatedAt = now; t.updatedAt = now;
     tx.set(ref, s); tx.set(towerRef, t);
     // A finished battle's missed words (오답 복습) are saved together with its end.
@@ -147,7 +154,7 @@ async function settleIfDue(db: any, partyId: string, now: number) {
     const results = settleParty(p, now); if (!results) return null;
     p.members.forEach((m, i) => {
       const reward = results[m.uid] || 0;
-      if (reward > 0) { const st: ServerPetState = rollDay(pets[i].exists ? pets[i].data() : initialPetState(now), now); earnPoints(st, reward); st.points += reward; st.updatedAt = now; tx.set(db.collection(PET_STATES).doc(m.uid), st); }
+      if (reward > 0) { const st: ServerPetState = rollDay(pets[i].exists ? pets[i].data() : initialPetState(now), now); earnPoints(st, reward, 'adventure', '파티 원정대'); st.points += reward; st.updatedAt = now; tx.set(db.collection(PET_STATES).doc(m.uid), st); }
       const g: GuildProfile = guilds[i].exists ? guilds[i].data() : initialGuild(now);
       // The result note shows the newest week: an older week settled late never replaces a newer note.
       if (!g.lastResult || g.lastResult.week <= p.week) g.lastResult = {week: p.week, party: partyName(p.name), progress: Math.round(Math.min(1, p.hp / p.hpMax) * 100), reward, counted: m.status === 'active' && m.count >= 10};
@@ -254,14 +261,16 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     if (req.method === 'GET' && new URL(req.url || '', 'http://localhost').searchParams.get('summary') === '1') {
       // The home screen and the top bar: points, the AI pass, the best 모험가 place and, for 장학 쿠폰 students, this month's
       // progress (reads only; the ranking snapshot is used as it is, rebuilt here only when over 6 hours old).
+      // the lessons' points come in by themselves when the app opens (no button to press)
+      const claimed = await autoClaimStudy(db, uid, now).catch(() => { console.warn('PET_AUTO_CLAIM_FAILED'); return 0; });
       const [st, pass, couponKey] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection('aiPasses').doc(uid).get(), couponStudentKey(db, uid).catch(() => null)]);
       const plan = activePlan(pass.data(), seoulDay(now)), state = st.exists ? rollDay(st.data(), now) : null;
-      const coupon = couponKey && state ? couponView(state, true, await readCoupon(db, uid, state.day.slice(0, 7))) : null;
+      const coupon = couponKey && state ? await readCouponView(db, uid, state, true) : null;
       // A failed ranking read leaves `rank` out (not null = 'no place yet', shown as –위), so the chip waits for the next
       // visit. rankTeacher: the place is in the ranking with the teachers (the chip opens that view).
       const rank = await myPetRank(db, uid, now, Boolean(state)).then(r => ({rank: r.rank, ...(r.teacher ? {rankTeacher: true} : {})}), () => { console.warn('PET_RANK_FAILED'); return {}; });
       return sendJson(res, 200, {ok: true, hasPet: st.exists, points: state ? Number(state.points || 0) : 0, pass: plan === 'free' ? null : {plan, until: String(pass.data()?.until || '')},
-        coupon: coupon ? {earned: coupon.earned, goal: coupon.goal, requested: coupon.requested} : null, ...rank});
+        coupon: coupon ? {earned: coupon.earned, goal: coupon.goal, requested: coupon.requested} : null, ...(claimed ? {claimed} : {}), ...rank});
     }
     // A pass-only room after the pass ended shows the plain room in every response (the choice is kept for when it is back).
     const shownState = async (st: ServerPetState) => {
@@ -270,11 +279,14 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     };
     if (req.method === 'GET') {
       // Opening the screen: every document is read at once, and the unfinished game comes along (no second request).
+      // the lessons read once: taken first, and the same list counts what is still waiting below
+      const studied = await studyReports(db, uid).catch(() => []);
+      await autoClaimStudy(db, uid, now, studied).catch(() => { console.warn('PET_AUTO_CLAIM_FAILED'); return 0; });
       const [snap, userSnap, g, e] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection('users').doc(uid).get(), db.collection(PET_GAMES).doc(uid).get(), db.collection(PET_EXPEDITIONS).doc(uid).get()]);
       const user = userSnap.data() || {}, s = rollDay(snap.exists ? snap.data() : initialPetState(now, user.petStats), now);
       // Study rewards, the 장학 쿠폰 and the talks left are independent: read together.
-      const [reports, coupon, aiTalk] = await Promise.all([studyReports(db, uid, user).catch(() => []),
-        couponStudentKey(db, uid).catch(() => null).then(async key => couponView(s, Boolean(key), key ? await readCoupon(db, uid, s.day.slice(0, 7)) : null)),
+      const [reports, coupon, aiTalk] = await Promise.all([Promise.resolve(studied),
+        couponStudentKey(db, uid).catch(() => null).then(key => readCouponView(db, uid, s, Boolean(key))),
         readPetTalk(db, uid, currentPet(s).slot, now).catch(() => null)]);
       const pending = pendingStudyRewards(s, reports, now);
       return sendJson(res, 200, {ok: true, state: await shownState(s), saved: snap.exists, pendingRewards: pending.length,
@@ -290,7 +302,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     if (action === 'claim-study') { const reports = await studyReports(db, uid); return done(await change(db, uid, now, s => claimStudyRewards(s, pendingStudyRewards(s, reports, now))), {pendingRewards: 0}); }
     if (action === 'buy') return done(await change(db, uid, now, s => { const id = String(body.itemId || ''), r = buyItem(s, id); if (body.wear === true) wearItem(s, id); return r; }));
     // 이달의 장학 쿠폰 (no points are taken) and placing the 금메달 in a room.
-    if (action === 'coupon-request') { const key = await couponStudentKey(db, uid); if (!key) return fail('COUPON_NOT_ELIGIBLE', 403); const out = await requestCoupon(db, uid, key, now); return done({state: out.state, result: {month: out.coupon.month}}, {coupon: couponView(out.state, true, out.coupon)}); }
+    if (action === 'coupon-request') { const key = await couponStudentKey(db, uid); if (!key) return fail('COUPON_NOT_ELIGIBLE', 403); const out = await requestCoupon(db, uid, key, now, body.month, body.tier); return done({state: out.state, result: {month: out.coupon.month}}, {coupon: await readCouponView(db, uid, out.state, true)}); }
     if (action === 'decor-save') {
       const plan = petItem(String(body.background || ''))?.pass ? await planOf(db, uid, now) : 'free';
       return done(await change(db, uid, now, s => placeDecor(s, body.background, body.items, plan)));
@@ -392,6 +404,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     if (action.startsWith('guild-') || action.startsWith('party-')) return handleGuild(action, body, db, uid, now, res, fail);
     if (action === 'rename') return done(await change(db, uid, now, s => renamePet(s, String(body.name || ''))));
     if (action === 'pet') return done(await change(db, uid, now, s => petThePet(s)));
+    if (action === 'gear-show') return done(await change(db, uid, now, s => setGearShow(s, body.show, body.style)));
 
     // 영어 회화 모드: on only with a pass (펫 패스·프리미엄); off any time.
     if (action === 'english-talk') {

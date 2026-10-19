@@ -8,7 +8,13 @@ export function percentage(correct: number | null | undefined, total: number | n
 export const TEST_NAME_OPTIONS = ['단어', '문법', '모의고사', '단원평가'] as const;
 /** More tests on the same day (단어 + 벼락치기 …): up to 3 after the first one, which stays in correct/total/testName. */
 export const MAX_EXTRA_TESTS = 3;
-export interface ExtraTest { name: string; correct: number | null; total: number | null; wrong?: number | null; scorePercent?: boolean }
+export interface ExtraTest { name: string; correct: number | null; total: number | null; wrong?: number | null; scorePercent?: boolean; /** 종이 (true) · 앱 (false) · 자동 (null) */ paper?: boolean | null }
+/** The lesson's 테스트 for the 테스트 평가 points: paper when any test was on paper (an app test alongside pays its own
+ *  단어 테스트 points), app when only app was chosen, null (자동) when none was chosen. */
+export const lessonTestPaper = (d: { testPaper?: boolean | null; extraTests?: { paper?: boolean | null }[] }) => {
+  const marks = [d.testPaper ?? null, ...(d.extraTests || []).map(t => t.paper ?? null)];
+  return marks.includes(true) ? true : marks.includes(false) ? false : null;
+};
 /** An extra test as the report shows it: its name and 점수 out of 100. */
 export interface ExtraScore { name: string; score: number }
 export const extraScoresText = (list?: ExtraScore[] | null) => (list || []).map(t => `${testLabel(t.name)} ${t.score}점`).join(' · ');

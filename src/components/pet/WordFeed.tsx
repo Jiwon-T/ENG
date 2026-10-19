@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
 import { PetCharacter } from './PetCharacters';
-import { PET_EXPEDITION, PET_WORD_FEED, STAGE_GAME_LABEL, petItem, petStage, stageGame, stageHasSound, wornAccessories } from '../../lib/petCatalog';
+import { PET_EXPEDITION, PET_WORD_FEED, STAGE_GAME_LABEL, petItem, petStage, stageGame, stageHasSound, towerGearFor, wornAccessories } from '../../lib/petCatalog';
 import { speechRecognitionClass } from '../../lib/sentenceGame';
 import { QuietPrompt } from '../sentence/SentenceGame';
 import { ListenButton, MatchBoard, OrderBoard, ReadBoard, SpellBoard, type StageAnswer } from './StageQuestion';
@@ -11,7 +11,7 @@ import type { PetResponse, PetState } from '../../lib/petService';
 // 단어 먹이 주기: the pet holds a word, the student feeds it the right meaning. The server builds and grades every
 // question (this screen only shows what it gets back), and the same screen becomes a 원정대 stage later.
 export interface FeedQuestionView { type?: 'meaning' | 'listen' | 'spell' | 'match' | 'order' | 'read'; word: string; choices: string[]; retry: boolean; meaning?: string; hint?: string; letters?: string[]; pieces?: string[]; triesLeft?: number; words?: string[]; meanings?: string[]; matched?: number[]; mistakes?: number; answer?: number; choice?: number; correct?: boolean; points?: number }
-export interface StageOutcome { stage: string; boss?: boolean; stars: number; best: number; cleared: boolean; bonus: number; bonuses: string[]; paid?: Record<string, number>; unlocked: string | null; chapterReward: string | null }
+export interface StageOutcome { stage: string; boss?: boolean; stars: number; best: number; cleared: boolean; bonus: number; bonuses: string[]; paid?: Record<string, number>; unlocked: string | null; chapterReward: string | null; setGear?: string | null }
 export interface FeedRunView { id: string; stage?: string | null; finished: boolean; total: number; index: number; questions: FeedQuestionView[]; summary?: { correct: number; total: number; points: number; stars: number } }
 
 /** `title`: the 원정대 stage name; `onNext`: open the stage this one just unlocked. */
@@ -73,6 +73,7 @@ export default function WordFeed({ run: initial, state, send, onClose, title, on
             처음 맞힌 문제 {run.summary!.correct} / {run.summary!.total}개 · <b className="font-bold">+{run.summary!.points}P</b><br />
             {outcome && outcome.bonuses.map(b => { const full = PET_EXPEDITION.bonus[b as keyof typeof PET_EXPEDITION.bonus], got = outcome.paid?.[b] ?? 0; return <span key={b} className="block">{b === 'clear' ? '처음 통과 보너스' : b === 'star2' ? '★★ 처음 달성' : '★★★ 처음 달성'} <b className="font-bold">+{got}P</b>{got < full && <span className="text-slate-400"> (오늘 공부 포인트가 가득 찼어요)</span>}</span>; })}
             {outcome?.unlocked && <span className="block font-bold text-[#b04a5a]">다음 스테이지가 열렸어요!</span>}
+            {outcome?.setGear && <span className="block font-bold text-[#3c3489]">🎁 ★3 장비: {towerGearFor(outcome.setGear, pet.job)?.name} (채움의 탑에 들어가면 받아요)</span>}
             {outcome?.chapterReward && <span className="block font-bold text-[#b04a5a]">장 완료 보상: {petItem(outcome.chapterReward)?.icon} {petItem(outcome.chapterReward)?.name} (옷장의 배경)</span>}
             <span className="text-slate-500">오늘 공부 포인트 {state.today.studyPoints} / {state.today.studyCap}P · 기운 {pet.energy}</span>
           </div>

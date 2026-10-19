@@ -129,3 +129,12 @@
 .admission-level-table th { background: #fff5f8; font-weight: 600; }
 .admission-level-table td { width: 20%; }
 .admission-level-table input { min-width: 0; width: 100%; padding: .45rem; font-size: .8rem; }
+
+/* 장비 움직임 (petGearArt): 반짝임·숨 쉬는 빛·망토·회전·별 궤도·눈송이. 움직임 줄이기면 멈춰요. */
+.pg-tw{animation:pg-tw 1.8s ease-in-out infinite}.pg-d2{animation-delay:.9s}@keyframes pg-tw{0%,100%{opacity:.35}50%{opacity:1}}
+.pg-pulse{transform-box:fill-box;transform-origin:center;animation:pg-pulse 2.4s ease-in-out infinite}@keyframes pg-pulse{0%,100%{transform:scale(.85);opacity:.45}50%{transform:scale(1.15);opacity:1}}
+.pg-sway{transform-box:fill-box;transform-origin:50% 0;animation:pg-sway 3s ease-in-out infinite}@keyframes pg-sway{0%,100%{transform:skewX(-4deg)}50%{transform:skewX(4deg)}}
+.pg-spin{transform-box:fill-box;transform-origin:center;animation:pg-spin 7s linear infinite}.pg-slow{animation-duration:12s}@keyframes pg-spin{to{transform:rotate(360deg)}}
+.pg-orbit{transform-box:view-box;transform-origin:60px 70px;animation:pg-spin 9s linear infinite}
+.pg-fall{animation:pg-fall 3.2s linear infinite;opacity:0}@keyframes pg-fall{0%{transform:translateY(-6px);opacity:0}20%{opacity:1}100%{transform:translateY(36px);opacity:0}}
+@media (prefers-reduced-motion:reduce){.pg-tw,.pg-pulse,.pg-sway,.pg-spin,.pg-orbit,.pg-fall{animation:none!important;opacity:1}.pg-fall{opacity:.8}}

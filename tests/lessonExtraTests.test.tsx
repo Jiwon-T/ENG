@@ -18,7 +18,7 @@ test('테스트 점수 chips: 문법 right after 단어', () => {
 
 test('more tests: saved after the first, blank ones dropped, 오답 수 counted like the first', () => {
   const d = lessonDraftSchema.parse({...lesson, extraTests: [{name: ' 벼락치기 ', correct: null, total: 20, wrong: 3}, {name: '', correct: null, total: null}]});
-  assert.deepEqual(d.extraTests, [{name: '벼락치기', correct: 17, total: 20, wrong: 3, scorePercent: false}]);
+  assert.deepEqual(d.extraTests, [{name: '벼락치기', correct: 17, total: 20, wrong: 3, scorePercent: false, paper: null}]);
   assert.equal(d.correct, 18);
   assert.deepEqual(lessonDraftSchema.parse(lesson).extraTests, [], 'old lessons: none');
   assert.throws(() => lessonDraftSchema.parse({...lesson, extraTests: [{name: 'a', correct: null, total: 10, wrong: 11}]}), /추가한 테스트/);

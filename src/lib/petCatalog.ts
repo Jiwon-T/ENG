@@ -112,7 +112,11 @@ export const passAllows = (item: { pass?: 'pet' | 'premium' } | undefined, plan:
 /** 이달의 장학 쿠폰: when the points earned in a month (Korea time, from the 1st; spending doesn't matter) reach `goal`,
  *  any 채움 학원 student (linked to the academy) may ask for that month's coupon (no points are taken; not asked for = that month is gone) and
  *  get that month's 금메달 to place in their room. In the first season the points held when counting began count too. */
-export const PET_COUPON = { name: '이달의 장학 쿠폰', goal: 10_000, firstSeason: '2026-10', maxDecor: 24 } as const;
+export const PET_COUPON = { name: '이달의 장학 쿠폰', goal: 10_000, firstSeason: '2026-10', maxDecor: 24, /** last month's coupon may still be asked for until this day of the new month (a lesson's points count for its own month) */ graceDays: 3,
+  /** 단계 쿠폰 (from tiersFrom): 6,000P → 5천 원 (those 6,000P are used; what is left keeps counting), 10,000P → 1만 원; at
+   *  most monthWon a month. Before it: one 1만 원 coupon at the goal. */
+  tiersFrom: '2026-11', monthWon: 10_000, tiers: [{ id: 'half', points: 6_000, won: 5_000 }, { id: 'full', points: 10_000, won: 10_000 }] } as const;
+export type CouponTier = 'half' | 'full';
 /** '2026-10' → '26.10' (on the medal and the badges). */
 export const medalLabel = (month: string) => `${month.slice(2, 4)}.${month.slice(5, 7)}`;
 export const accessorySlot = (id: string): AccessorySlot => petItem(id)?.slot || 'head';
@@ -147,6 +151,9 @@ export const PET_TEST_REWARD: Record<'paper' | 'app', Record<string, { points: n
   app: { '최상': { points: 20, xp: 30 }, '상': { points: 15, xp: 22 }, '중상': { points: 10, xp: 15 }, '중': { points: 5, xp: 8 } },
 };
 export const PET_TEST_REWARD_TEXT = (kind: 'paper' | 'app') => Object.entries(PET_TEST_REWARD[kind]).map(([grade, r]) => `${grade} ${r.points}`).join(' · ') + 'P';
+/** 수업 태도 칭찬: the 일지's 태도 최상 or 상 (once a lesson, outside the daily cap); below that nothing (never taken away),
+ *  so the points never tell a student a lower grade. */
+export const PET_ATTITUDE_REWARD: Record<string, { points: number; xp: number }> = { '최상': { points: 15, xp: 25 }, '상': { points: 10, xp: 15 } };
 /** "최상 40 · 상 30 · 중상 20 · 중 10P" for the screens that explain the rewards. */
 export const PET_HOMEWORK_REWARD_TEXT = Object.entries(PET_HOMEWORK_REWARD).map(([grade, r]) => `${grade} ${r.points}`).join(' · ') + 'P';
 export const PET_REWARD_WINDOW_DAYS = 30;
@@ -301,7 +308,8 @@ export const TOWER_GEAR_SLOTS: { id: TowerGearSlot; label: string }[] = [{ id: '
 export interface TowerGear { id: string; name: string; /** in the small slot */ short: string; slot: TowerGearSlot; icon: string; atk?: number; def?: number; hp?: number; mp?: number; job?: PetJob; job2?: PetJob2; job3?: PetJob3;
   /** Boss treasures change with the pet's job (name and stats): 검사 more 방어/체력, 마법사 more 마력. */ variants?: Partial<Record<PetJob, { name: string; short: string; atk?: number; def?: number; hp?: number; mp?: number }>>;
   /** 크리티컬 확률 per 강화 level (%): 견습 0.5, boss gear 1, job weapons 1.5. */ critPerLevel?: number;
-  /** A 원정대 job weapon: owned through the expedition (the student's inventory), not found in the tower. */ expedition?: boolean }
+  /** A 원정대 job weapon: owned through the expedition (the student's inventory), not found in the tower. */ expedition?: boolean;
+  /** 장비 세트 piece: its tier (0 견습 … 5 마도사) */ set?: number }
 export const TOWER_GEAR: TowerGear[] = [
   { id: 'apprentice_club', name: '견습 몽둥이', short: '몽둥이', slot: 'weapon', icon: '🏏', atk: 6, critPerLevel: 0.5 },
   // 원정대 job weapons, also worn in the tower (1차 전직 12, 6장 22, 2차 전직 32 공격; enhanced like the rest).
@@ -334,11 +342,54 @@ export const TOWER_GEAR: TowerGear[] = [
   { id: 'frost_greatsword', name: '서리 용의 대검', short: '서리 대검', slot: 'weapon', icon: '🗡️', atk: 40, job: 'swordsman', critPerLevel: 1.5 },
   { id: 'frost_staff', name: '서리 용의 지팡이', short: '서리 지팡이', slot: 'weapon', icon: '🪄', atk: 40, job: 'wizard', critPerLevel: 1.5 },
 ];
+/** 장비 세트: one set a tier (견습 → 마도사), 6 places each, found in the tower (and on 원정대 ★3); 검사 and 마법사 versions.
+ *  Stats grow with the tier; 3 places of one set: 능력치 +5%, all 6: +12% and a glow. */
+const SET_NOUNS: Record<TowerGearSlot, [string, string, string]> = { weapon: ['무기', '검', '지팡이'], helmet: ['투구', '투구', '모자'], armor: ['갑옷', '갑옷', '로브'], shoulder: ['견갑', '견갑', '견갑'], gloves: ['장갑', '건틀릿', '장갑'], boots: ['신발', '장화', '신발'] };
+const SET_ICONS: Record<TowerGearSlot, string> = { weapon: '🗡️', helmet: '⛑️', armor: '🛡️', shoulder: '🪨', gloves: '🧤', boots: '🥾' };
+const SET_BASE: Record<TowerGearSlot, { atk?: number; def?: number; hp?: number }> = { weapon: { atk: 4 }, helmet: { def: 3, hp: 8 }, armor: { def: 4, hp: 12 }, shoulder: { def: 3, hp: 6 }, gloves: { atk: 2, def: 2 }, boots: { def: 3, hp: 8 } };
+export const GEAR_SET_SHORT = ['견습', '이끼', '수정', '모래', '얼음', '마도'] as const;
+export const GEAR_SET_BONUS = { three: 0.05, six: 0.12 } as const;
+export const setGearId = (tier: number, slot: TowerGearSlot) => `set_${tier}_${slot}`;
+function setPiece(tier: number, slot: TowerGearSlot): TowerGear {
+  const k = 1 + tier * 0.6, b = SET_BASE[slot], up = (n?: number, x = 1) => n ? Math.round(n * k * x) : undefined, [plain, sword, wiz] = SET_NOUNS[slot], name = (noun: string) => `${GEAR_SET_SHORT[tier]} ${noun}`;
+  const clean = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
+  return clean({ id: setGearId(tier, slot), name: name(plain), short: name(plain), slot, icon: SET_ICONS[slot], set: tier, atk: up(b.atk), def: up(b.def), hp: up(b.hp), critPerLevel: Math.round((0.5 + tier * 0.1) * 10) / 10,
+    variants: { swordsman: clean({ name: name(sword), short: name(sword), atk: up(b.atk), def: up(b.def, 1.25), hp: up(b.hp, 1.25) }), wizard: clean({ name: name(wiz), short: name(wiz), atk: up(b.atk), def: up(b.def), hp: up(b.hp), mp: slot === 'weapon' ? undefined : 2 + tier * 2 }) } });
+}
+export const TOWER_SET_GEAR: TowerGear[] = GEAR_SET_SHORT.flatMap((_, t) => TOWER_GEAR_SLOTS.map(s => setPiece(t, s.id)));
+TOWER_GEAR.push(...TOWER_SET_GEAR);
+/** Which set a floor drops (1–5 견습, 6–10 이끼 숲, 11–20 수정 동굴, 21–30 모래 신전, 31–40 얼음 성채, 41+ 마도사) and a 원정대 chapter
+ *  gives on ★3 (1–2장 견습, 3장 이끼 숲 … 7장 마도사). Normal floors: 15% on the first clear; boss floors: always one. */
+export const floorGearTier = (floor: number) => floor <= 5 ? 0 : floor <= 10 ? 1 : Math.min(5, 2 + Math.floor((floor - 11) / 10));
+export const chapterGearTier = (chapterIndex: number) => [0, 0, 1, 2, 3, 4, 5][chapterIndex] ?? 5;
+export const GEAR_DROP = { floorChance: 0.15 } as const;
 export const towerGear = (id: string) => TOWER_GEAR.find(g => g.id === id);
 /** A piece of gear as this pet wears it: boss treasures take the job's name and stats (before the job, the plain one). */
 export function towerGearFor(id: string, job?: PetJob | null): TowerGear | undefined {
   const g = towerGear(id), v = job && g?.variants?.[job];
   return g && v ? { ...g, ...v } : g;
+}
+/** 장비 그림 단계: 0 견습 · 1 이끼 숲 · 2 수정 동굴 · 3 모래 신전 · 4 얼음 성채 · 5 마도사 (more detail, and from 수정 동굴 it moves). */
+export const GEAR_TIER_NAMES = ['견습', '이끼 숲', '수정 동굴', '모래 신전', '얼음 성채', '마도사'] as const;
+const GEAR_LOOKS: Record<string, number> = {
+  apprentice_club: 0, golem_pauldron: 1, crystal_helm: 2, sun_gloves: 3, snow_boots: 4, star_armor: 5, frost_greatsword: 4, frost_staff: 4,
+  ice_sword: 3, ice_staff: 3, star_sword: 4, moon_staff: 4, holy_sword: 5, obsidian_sword: 5, dawn_scepter: 5, crescent_staff: 5,
+  sky_spear: 5, abyss_greatsword: 5, dawn_staff: 5, dusk_tome: 5,
+};
+export const gearLookTier = (id: string) => towerGear(id)?.set ?? GEAR_LOOKS[id] ?? 0;
+/** How the worn tower gear looks (kept on the pet, so the home, the ranking and the party can draw it). */
+export interface PetGearLook { look: Partial<Record<TowerGearSlot, number>>; /** a full 6-piece set of one tier: glow (and more) */ full?: number | null }
+export interface PetGearView extends PetGearLook { style: 'knight' | 'mage' }
+export function gearLookOf(equip: Partial<Record<TowerGearSlot, string>>): PetGearLook {
+  const look: Partial<Record<TowerGearSlot, number>> = {};
+  for (const { id: slot } of TOWER_GEAR_SLOTS) { const id = equip[slot]; if (id && towerGear(id)) look[slot] = gearLookTier(id); }
+  const sets = TOWER_GEAR_SLOTS.map(s => towerGear(String(equip[s.id] || ''))?.set);
+  return { look, full: sets.every(t => t !== undefined && t === sets[0]) ? sets[0]! : null };
+}
+/** What the pet shows (null: 👁 off or nothing worn). 검사 → 검사 모양, 마법사 → 마법사 모양; before the job, the look picked. */
+export function petGearView(pet: { job?: PetJob | null; gear?: PetGearLook | null; gearShow?: boolean; gearStyle?: PetJob | null } | null | undefined): PetGearView | null {
+  if (!pet || pet.gearShow === false || !pet.gear || !Object.keys(pet.gear.look || {}).length) return null;
+  return { style: (pet.job || pet.gearStyle) === 'wizard' ? 'mage' : 'knight', look: pet.gear.look, full: pet.gear.full ?? null };
 }
 /** 탑 장식: the first clear of each zone's boss floor gives that zone's room decoration (once a student, never in the
  *  shop), placed in the room like the 금메달 (the same 꾸미기). Floors 51–100 will bring five more. */
@@ -381,7 +432,13 @@ const golemFor = (floor: number) => floor >= 21 ? { kind: 'gold_golem' as const,
 export function towerStats(level: number, gear: (TowerGear | undefined)[], levels: Record<string, number> = {}) {
   const plus = (g: TowerGear | undefined, k: 'atk' | 'def') => g && (levels[g.id] || 0) * ((g.slot === 'weapon') === (k === 'atk') ? TOWER_ENHANCE_STEP : 0) || 0;
   const add = (k: 'atk' | 'def' | 'hp' | 'mp') => gear.reduce((n, g) => n + (g?.[k] || 0) + (k === 'hp' || k === 'mp' ? 0 : plus(g, k)), 0);
-  return { atk: 10 + level * 2 + add('atk'), def: 4 + level + add('def'), hp: 60 + level * 4 + add('hp'), mp: 20 + Math.floor(level / 2) + add('mp') };
+  const up = 1 + gearSetBonus(gear), x = (n: number) => Math.round(n * up);
+  return { atk: x(10 + level * 2 + add('atk')), def: x(4 + level + add('def')), hp: x(60 + level * 4 + add('hp')), mp: x(20 + Math.floor(level / 2) + add('mp')) };
+}
+/** 세트 효과: each set with 3 places worn +5%, a full set +12% (two half sets: +10%). */
+export function gearSetBonus(gear: (TowerGear | undefined)[]) {
+  const count: Record<number, number> = {}; for (const g of gear) if (g?.set !== undefined) count[g.set] = (count[g.set] || 0) + 1;
+  return Object.values(count).reduce((n, c) => n + (c >= 6 ? GEAR_SET_BONUS.six : c >= 3 ? GEAR_SET_BONUS.three : 0), 0);
 }
 /** `door`: which of the floor's three doors was opened (a different monster behind each; same strength). */
 export function towerMonster(floor: number, door = 0) {

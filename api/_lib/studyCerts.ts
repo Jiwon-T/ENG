@@ -5,7 +5,7 @@
 // asked again. A photo (studyCertPhotos/{id}) is kept only until the teacher decides.
 import { createHash } from 'node:crypto';
 import { FieldPath } from 'firebase-admin/firestore';
-import { CERT_GRADES, CERT_RULES, workbookSig, type CertGrade, type CertKind, type CertView } from '../../src/lib/studyCert.js';
+import { CERT_GRADES, CERT_KIND_LABEL, CERT_RULES, workbookSig, type CertGrade, type CertKind, type CertView } from '../../src/lib/studyCert.js';
 import { PET_STATES, addXP, earnPoints, initialPetState, petSummary, rollDay, seoulDay, type ServerPetState } from './pet.js';
 import { QUESTION_ATTEMPTS, attemptId, questionReward } from './questionAttempts.js';
 import { PASSAGES, canSeePassage } from './passage.js';
@@ -164,7 +164,7 @@ export async function decideStudyCert(db: any, actor: any, input: any, now = Dat
     }
     const s: ServerPetState = rollDay(petSnap.exists ? petSnap.data() : initialPetState(now, userSnap.data()?.petStats), now);
     if ((s.today.certs || 0) >= CERT_RULES.dailyPaid) throw Error('CERT_DAILY_LIMIT');
-    earnPoints(s, reward.points); s.points += reward.points; addXP(s, reward.xp);
+    earnPoints(s, reward.points, 'cert', `${CERT_KIND_LABEL[x.kind as CertKind]} 인증`); s.points += reward.points; addXP(s, reward.xp);
     s.today.certs = (s.today.certs || 0) + 1; s.updatedAt = now;
     const out = { ...decided, status: 'approved', points: reward.points };
     tx.set(petRef, s);

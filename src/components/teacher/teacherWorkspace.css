@@ -744,6 +744,10 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 .workspace-nav-title h1 {font-size:var(--workspace-font-lg);font-weight:700;line-height:20px;color:var(--workspace-text);}
 .workspace-nav-title>span {font-size:var(--workspace-font-xs);color:var(--workspace-muted);}
 .workspace-tab-fades {position:relative;min-width:0;flex:1;}
+/* 학생 인증 요청: a bell with the count beside the name, like a notice (tapping it opens 인증 요청 모아 보기) */
+.teacher-workspace .workspace-notice {position:relative;display:inline-grid;place-items:center;flex:none;width:34px;height:34px;min-height:34px;padding:0;margin-right:4px;border:0;border-radius:999px;background:#fef2f3;color:#8b2f40;cursor:pointer;}
+.teacher-workspace .workspace-notice:hover {background:#fde4e8;}
+.teacher-workspace .workspace-notice-count {position:absolute;top:-3px;right:-4px;min-width:17px;height:17px;padding:0 4px;border:2px solid var(--workspace-surface,#fff);border-radius:999px;background:#e0587a;color:#fff;font-size:10px;font-weight:800;line-height:13px;text-align:center;}
 .workspace-tab-fades:before,.workspace-tab-fades:after {content:'';position:absolute;z-index:1;top:0;bottom:0;width:8px;pointer-events:none;}
 .workspace-tab-fades:before {left:0;background:linear-gradient(to right,var(--workspace-surface),transparent);}
 .workspace-tab-fades:after {right:0;background:linear-gradient(to left,var(--workspace-surface),transparent);}
@@ -1086,6 +1090,12 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 /* 학생 목록: 이달의 장학 쿠폰 badge (gold before it is handed out, grey after). */
 .student-master-row .smr-coupon{display:inline-flex;align-items:center;flex:none;padding:1px 7px;border-radius:999px;border:1px solid #efc77a;background:#fff8e8;color:#8a5a12;font-size:11px;font-weight:800;cursor:pointer;}
 .student-master-row .smr-coupon.is-paid{border-color:#e5e7eb;background:#f8fafc;color:#94a3b8;}
+/* 이달의 장학 쿠폰 % beside the pet (opens the student's coupon card) */
+.student-master-row .smr-gauge{display:inline-flex;align-items:center;gap:4px;flex:none;padding:1px 6px;border-radius:999px;background:#fff7f8;color:#8b2f40;font-size:10.5px;font-weight:800;cursor:pointer;}
+.student-master-row .smr-gauge:hover{background:#fde4e8;}
+.student-master-row .smr-gauge-bar{display:block;width:26px;height:4px;overflow:hidden;border-radius:999px;background:#f6e3e6;}
+.student-master-row .smr-gauge-bar>span{display:block;height:100%;border-radius:999px;background:#e0587a;}
+.student-master-row .smr-gauge-bar>span.is-full{background:#efa23a;}
 /* 워크북: the robot at work while the AI translates (typing hands, blinking light, eyes looking around, dots). */
 .wb-robot-hand{animation:wb-type .32s ease-in-out infinite alternate}
 .wb-robot-hand.is-right{animation-delay:.16s}

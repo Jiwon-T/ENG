@@ -1,22 +1,29 @@
 import { auth } from './firebase';
-import { petStage, type AccessorySlot, type PetJob, type PetJob2, type PetJob3, type PetStage, type PetStudySource } from './petCatalog';
+import { petStage, type AccessorySlot, type PetJob, type PetJob2, type PetJob3, type PetStage, type PetStudySource, type PetGearLook } from './petCatalog';
 export type { PetCharacterType, PetStage } from './petCatalog';
 
 // 펫 in the browser: a thin client. The server (api/_lib/student/pet.ts) keeps the whole state and decides points,
 // purchases, daily caps and the AI talk; this file only asks it and shows the answer.
 export interface LearnedPhrase { original: string; remembered: string; learnedAtLevel: number; evolvedVersions: Record<string, string> }
-export interface PetData { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: LearnedPhrase[]; clothing: string | null; accessories?: Partial<Record<AccessorySlot, string>>; job?: PetJob | null; job2?: PetJob2 | null; job3?: PetJob3 | null }
+export interface PetData { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: LearnedPhrase[]; clothing: string | null; accessories?: Partial<Record<AccessorySlot, string>>; job?: PetJob | null; job2?: PetJob2 | null; job3?: PetJob3 | null; gear?: PetGearLook | null; gearShow?: boolean; gearStyle?: PetJob | null }
 export interface PetState {
   points: number; inventory: string[]; clothing: string | null; accessories?: Partial<Record<AccessorySlot, string>>; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: PetData[]; day: string;
   today: { studyPoints: number; studyCap: number; energyItemsLeft: number; revivesLeft?: number }; stage: PetStage;
   /** 금메달 by month ('2026-10') and where they sit in each room (% of the room, by background). */
-  medals?: string[]; /** 탑 장식 won */ towerDecor?: string[]; decor?: Record<string, MedalSpot[]>;
+  medals?: string[]; /** 탑 장식 won */ towerDecor?: string[]; decor?: Record<string, MedalSpot[]>; /** 포인트 내역 (this month and last) */ ledger?: LedgerItem[];
   /** 영어 회화 모드 (works while a 펫 패스·프리미엄 is in force) */ englishTalk?: boolean;
 }
 export interface MedalSpot { id: string; x: number; y: number }
 /** 이달의 장학 쿠폰 on the pet screen (`eligible`: a student linked to the academy). */
-export interface CouponView { eligible: boolean; month: string; label: string; earned: number; goal: number; requested: boolean; paid: boolean }
+/** One month's coupons: earned, used by coupons, left, the won given, and which can be asked for (단계 쿠폰: 5천 원 at 6,000P,
+ *  1만 원 at 10,000P, at most 1만 원 a month). */
+export interface CouponMonth { earned: number; spent?: number; left?: number; won?: number; tiered?: boolean; requested: boolean; paid: boolean;
+  options?: { id: 'half' | 'full'; points: number; won: number; ready: boolean }[]; coupons?: { tier: 'half' | 'full'; won: number; paid: boolean }[] }
+export interface CouponView extends CouponMonth { eligible: boolean; month: string; label: string; goal: number;
+  /** last month's, in the first days of a month (its lessons' points count for it) */ last?: CouponMonth & { month: string; label: string; until: string } }
+/** 포인트 내역: one line a day, kind and what it was for. */
+export interface LedgerItem { day: string; kind: 'class' | 'study' | 'cert' | 'adventure' | 'etc'; label: string; points: number }
 /** Talks (말 가르치기·대화하기) left this month: free = for this pet (`perPet`), a 펫 패스 = all pets together. */
 export interface AiTalkView { plan: 'free' | 'pet' | 'premium'; limit: number; left: number; perPet: boolean }
 /** Points and the AI pass for the home screen and the top bar (GET ?summary=1, two reads). */

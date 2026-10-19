@@ -97,7 +97,7 @@ export async function judgeQuestionAttempt(db: any, actor: any, input: any, now 
       if ((pay || take) && petSnap.exists) {
         const pet: ServerPetState = rollDay(petSnap.data(), now);
         if (pay) {
-          const above = Math.max(0, owed.points - peak), paid = awardCapped(pet, pay, owed.points > 0 ? Math.round(Math.min(pay, above) * owed.xp / owed.points) : 0);
+          const above = Math.max(0, owed.points - peak), paid = awardCapped(pet, pay, owed.points > 0 ? Math.round(Math.min(pay, above) * owed.xp / owed.points) : 0, 'study', '변형 문제');
           reward = { ...reward, points: held + paid.points, xp: (reward.xp || 0) + paid.xp, capped: Boolean(reward.capped || paid.capped) };
         } else {
           const taken = Math.min(take, Math.max(0, pet.points));

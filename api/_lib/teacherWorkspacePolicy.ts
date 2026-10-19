@@ -14,6 +14,8 @@ const extraTestSchema = z.object({
     name: z.string().trim().max(30).default(''),
     correct: z.number().nonnegative().nullable().default(null), total: z.number().positive().nullable().default(null),
     wrong: z.number().nonnegative().nullable().optional(), scorePercent: z.boolean().default(false),
+    // this test on paper (true) or in the app (false); null: 자동
+    paper: z.boolean().nullable().default(null),
 }).strict();
 type ExtraTestInput = z.infer<typeof extraTestSchema>;
 const emptyTest = (t: {correct?: number | null; total?: number | null; wrong?: number | null}) => t.correct == null && t.total == null && t.wrong == null;

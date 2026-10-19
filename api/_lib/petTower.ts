@@ -8,7 +8,7 @@ import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
 import {awardCapped, currentPet, type ServerPet, type ServerPetState} from './pet.js';
 import {meaningsOverlap, randomDocId} from './petWordFeed.js';
-import { TOWER_DECOR, PET_JOB3, PET_JOB3_RULE, job3For, TOWER_ZONES, BRANCH_PASSIVE, TOWER_GEAR, TOWER_SKILL_RULES, TOWER_WEAKNESS, critChance, jobSkills, skillLevel, towerSkill,PET_TOWER, TOWER_CHESTS, TOWER_ENHANCE, TOWER_EVENTS, towerGear, towerGearFor, towerHit, towerMonster, towerStats, towerTaken, type TowerEvent, type TowerGear, type TowerGearSlot, type TowerMonsterKind} from '../../src/lib/petCatalog.js';
+import { TOWER_DECOR, PET_JOB3, PET_JOB3_RULE, job3For, TOWER_ZONES, BRANCH_PASSIVE, TOWER_GEAR, TOWER_SKILL_RULES, TOWER_WEAKNESS, critChance, jobSkills, skillLevel, towerSkill,PET_TOWER, TOWER_CHESTS, TOWER_ENHANCE, TOWER_EVENTS, towerGear, towerGearFor, towerHit, towerMonster, towerStats, towerTaken, gearLookOf, GEAR_DROP, TOWER_GEAR_SLOTS, floorGearTier, setGearId, type TowerEvent, type TowerGear, type TowerGearSlot, type TowerMonsterKind} from '../../src/lib/petCatalog.js';
 import {gradeOf} from '../../src/lib/schoolGrade.js';
 
 export const PET_TOWERS = 'petTowers';
@@ -48,6 +48,14 @@ const worn = (tp: TowerPet, pet: ServerPet) => Object.values(tp.equip).map(id =>
 /** 원정대 job weapons the student owns, for this pet's job (and branch), count as this pet's tower gear. */
 function syncJobWeapons(tp: TowerPet, pet: ServerPet, s: ServerPetState) {
   for (const g of TOWER_GEAR) if (g.expedition && s.inventory.includes(g.id) && g.job === pet.job && (!g.job2 || g.job2 === pet.job2) && (!g.job3 || g.job3 === pet.job3) && !tp.gear.includes(g.id)) tp.gear.push(g.id);
+}
+/** Each pet keeps how its worn gear looks (the home, the ranking and the party draw it without the tower). */
+export function syncGearLooks(t: TowerState, s: ServerPetState) {
+  for (const pet of s.pets) {
+    const tp = t.pets?.[String(pet.slot)]; if (!tp) continue;
+    const equip = Object.fromEntries(Object.entries(tp.equip || {}).filter(([, id]) => { const g = towerGear(String(id)); return g && (!g.job || g.job === pet.job) && (!g.job2 || g.job2 === pet.job2) && (!g.job3 || g.job3 === pet.job3); }));
+    pet.gear = gearLookOf(equip);
+  }
 }
 export const petTowerStats = (pet: ServerPet, tp: TowerPet) => towerStats(pet.level, worn(tp, pet), tp.levels || {});
 const shuffle = <T,>(list: T[], rand: () => number) => { const a = [...list]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -183,8 +191,8 @@ function openDoor(tp: TowerPet, pet: ServerPet, s: ServerPetState, uid: string, 
   if (type === 'treasure') {
     const r = rand(), loot: {stones?: number; potions?: number; points?: number} = r < 0.45 ? {stones: 1 + Math.floor(rand() * 2)} : r < 0.8 ? {potions: 1} : {points: 30};
     tp.stones = (tp.stones || 0) + (loot.stones || 0); tp.potions += loot.potions || 0;
-    if (loot.points) loot.points = awardCapped(s, loot.points, 0).points;
-    return {opened: type, loot, ...clearFloor(tp, s, floor, false)};
+    if (loot.points) loot.points = awardCapped(s, loot.points, 0, 'adventure', '탑 보물').points;
+    return {opened: type, loot, ...clearFloor(tp, s, floor, false, rand)};
   }
   const words = shuffle(pool.words, rand);
   tp.event = {id: randomDocId(rand), floor, door, type, q: null, stock: {stone: 1 + Math.floor(rand() * 3), potion: PET_TOWER.merchantPotions}, pool: {...pool, words}, wrongs: [], startedAt: now};
@@ -220,12 +228,28 @@ export function syncTowerDecor(t: TowerState, s: ServerPetState) {
   for (const d of TOWER_DECOR) if (d.floor <= best) giveTowerDecor(s, d.floor);
 }
 /** Floor cleared: saved, the first clear pays points and XP (inside the daily cap), a boss floor opens its chest. */
-function clearFloor(tp: TowerPet, s: ServerPetState, floor: number, boss: boolean) {
+/** A set piece found: kept (and worn at once when that place is empty), or a 강화석 when the pet already has it. */
+function giveSetPiece(tp: TowerPet, id: string) {
+  if (tp.gear.includes(id)) { tp.stones = (tp.stones || 0) + 1; return {id, stone: true}; }
+  tp.gear.push(id); const g = towerGear(id)!; if (!tp.equip[g.slot]) tp.equip[g.slot] = id;
+  return {id, stone: false};
+}
+/** 원정대 ★3 pieces wait on the pet until its next tower visit (then kept, or a 강화석 when it has it). */
+export function syncGearInbox(t: TowerState, s: ServerPetState) {
+  for (const pet of s.pets) { if (!pet.gearInbox?.length) continue; const tp = towerPet(t, pet.slot); for (const id of pet.gearInbox) if (towerGear(id)) giveSetPiece(tp, id); delete pet.gearInbox; }
+}
+/** 장비 세트 drop on a first clear: a boss floor always, other floors 15%; a random place of the floor's set. */
+export function dropSetPiece(tp: TowerPet, floor: number, boss: boolean, rand: () => number) {
+  if (!boss && rand() >= GEAR_DROP.floorChance) return null;
+  const slot = TOWER_GEAR_SLOTS[Math.min(TOWER_GEAR_SLOTS.length - 1, Math.floor(rand() * TOWER_GEAR_SLOTS.length))].id;
+  return giveSetPiece(tp, setGearId(floorGearTier(floor), slot));
+}
+function clearFloor(tp: TowerPet, s: ServerPetState, floor: number, boss: boolean, rand: () => number = Math.random) {
   const first = floor > tp.best;
   tp.best = Math.max(tp.best, floor); tp.floor = Math.max(tp.floor, floor + 1);
   let points = 0, xp = 0;
-  if (first) { const r = PET_TOWER.reward, want = boss ? r.boss : r.base + r.perFloor * floor, got = awardCapped(s, want, want * 2); points = got.points; xp = got.xp; }
-  return {cleared: true, floor, first, points, xp, chest: boss ? openChestFor(tp, floor, currentPet(s)) : null, decor: boss ? giveTowerDecor(s, floor) : null};
+  if (first) { const r = PET_TOWER.reward, want = boss ? r.boss : r.base + r.perFloor * floor, got = awardCapped(s, want, want * 2, 'adventure', '채움의 탑'); points = got.points; xp = got.xp; }
+  return {cleared: true, floor, first, points, xp, chest: boss ? openChestFor(tp, floor, currentPet(s)) : null, decor: boss ? giveTowerDecor(s, floor) : null, drop: first ? dropSetPiece(tp, floor, boss, rand) : null};
 }
 const ended = (tp: TowerPet, run: TowerRun) => { tp.run = null; return {runId: run.id, wrongs: run.wrongs, right: run.right, asked: run.asked, wordbookId: run.wordbookId, wordbookTitle: run.wordbookTitle, startedAt: run.startedAt, books: run.books}; };
 const eventEnded = (tp: TowerPet, ev: TowerEventState, right: number, asked: number) => { tp.event = null; return {runId: ev.id, wrongs: ev.wrongs, right, asked, wordbookId: ev.pool.wordbookId, wordbookTitle: ev.pool.wordbookTitle, startedAt: ev.startedAt, books: ev.pool.books}; };
@@ -314,7 +338,7 @@ export function towerAnswer(t: TowerState, s: ServerPetState, runId: unknown, ch
 function win(tp: TowerPet, s: ServerPetState, run: TowerRun, rand: () => number) {
   const potions = run.bonus?.potions || 0; tp.potions += potions;
   const stone = !run.monster.boss && rand() < PET_TOWER.stoneDrop ? 1 : 0; tp.stones = (tp.stones || 0) + stone;
-  return {won: true, attacks: run.attacks, potions, stone, ...clearFloor(tp, s, run.floor, run.monster.boss), end: ended(tp, run)};
+  return {won: true, attacks: run.attacks, potions, stone, ...clearFloor(tp, s, run.floor, run.monster.boss, rand), end: ended(tp, run)};
 }
 
 /** Playing an event behind a door. 요정: save it (a potion) or fight it (two potions for winning). 상인: buy, enhance,
@@ -329,7 +353,7 @@ function playEvent(t: TowerState, s: ServerPetState, move: unknown, input: any, 
   if (!ev) throw Error('TOWER_NO_RUN');
   const stone = (n = 1) => { tp.stones = (tp.stones || 0) + n; return n; };
   if (ev.type === 'fairy') {
-    if (move === 'save') { tp.potions += 1; return {saved: true, potions: 1, ...clearFloor(tp, s, ev.floor, false), end: eventEnded(tp, ev, 0, 0)}; }
+    if (move === 'save') { tp.potions += 1; return {saved: true, potions: 1, ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 0)}; }
     if (move === 'fight') { const run = battle(tp, pet, ev.pool, fairyOf(ev.floor), ev.floor, now, rand); run.bonus = {potions: 2}; tp.event = null; return {fight: true}; }
   }
   if (ev.type === 'merchant') {
@@ -349,15 +373,15 @@ function playEvent(t: TowerState, s: ServerPetState, move: unknown, input: any, 
       const ok = rand() < step.rate; if (ok) tp.levels![id] = step.to;
       return {enhanced: ok, gearId: id, level: tp.levels![id] || 0, stones: step.stones};
     }
-    if (move === 'leave') return {left: true, ...clearFloor(tp, s, ev.floor, false), end: eventEnded(tp, ev, 0, 0)};
+    if (move === 'leave') return {left: true, ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 0)};
   }
   if ((ev.type === 'riddle' || ev.type === 'trap') && move === 'answer' && ev.q) {
     const q = ev.q, choice = Number(input?.choice), late = q.deadline !== null && now > q.deadline + 1500, correct = !late && choice === q.answer;
     const out = {correct, late, answer: q.answer, word: q.word, meaning: q.meaning};
     if (!correct) ev.wrongs.push(wrongOf(q, choice, late));
     ev.q = null;
-    if (correct) return {...out, stone: stone(), ...clearFloor(tp, s, ev.floor, false), end: eventEnded(tp, ev, 1, 1)};
-    if (ev.type === 'riddle') return {...out, stone: 0, ...clearFloor(tp, s, ev.floor, false), end: eventEnded(tp, ev, 0, 1)};
+    if (correct) return {...out, stone: stone(), ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 1, 1)};
+    if (ev.type === 'riddle') return {...out, stone: 0, ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 1)};
     // 함정에 빠짐: a monster jumps in while the pet is hurt (70% HP); the missed word goes with that battle.
     const missed = ev.wrongs; tp.event = null;
     const run = battle(tp, pet, ev.pool, towerMonster(ev.floor, ev.door), ev.floor, now, rand, 0.7); run.wrongs.push(...missed); run.asked += 1;
@@ -367,7 +391,7 @@ function playEvent(t: TowerState, s: ServerPetState, move: unknown, input: any, 
     if (input?.ok === true) {
       // The mini-game runs in the browser; the server checks its time and the path it reports before letting the pet past.
       if (!sneakLooksPlayed(input.samples, now - ev.startedAt)) throw Error('TOWER_SNEAK_INVALID');
-      return {sneaked: true, stone: stone(), ...clearFloor(tp, s, ev.floor, false), end: eventEnded(tp, ev, 0, 0)};
+      return {sneaked: true, stone: stone(), ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 0)};
     }
     tp.event = null; battle(tp, pet, ev.pool, dragonOf(ev.color), ev.floor, now, rand); return {woke: true};
   }

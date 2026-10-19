@@ -64,7 +64,12 @@ async function reportReview(db:any,actor:any,studentKey:string,audience:'parent'
     return {...snapshot,reports:paged.records,reportTotal:paged.total,reportPage:paged.page,reportPages:paged.pages};
 }
 /** Only the picked emoji icon and pet name/level leave the user document; photo URLs and anything else stay private. */
-function studentLook(u:any){if(!u)return null;const icon=typeof u.photoURL==='string'&&u.photoURL.length<=8&&!/^https?:/i.test(u.photoURL)?u.photoURL:null;const p=u.petStats,pet=p&&typeof p.petName==='string'&&p.petName&&p.petName!=='친구가 필요해요'?{name:String(p.petName).slice(0,20),level:Number.isFinite(p.highestLevel)?Number(p.highestLevel):null,character:typeof p.character==='string'?p.character.slice(0,30):null,count:Number.isFinite(p.petCount)?Math.max(1,Math.min(6,Math.floor(p.petCount))):1}:null;return icon||pet?{icon,pet}:null;}
+function studentLook(u:any){if(!u)return null;const icon=typeof u.photoURL==='string'&&u.photoURL.length<=8&&!/^https?:/i.test(u.photoURL)?u.photoURL:null;const p=u.petStats,pet=p&&typeof p.petName==='string'&&p.petName&&p.petName!=='친구가 필요해요'?{name:String(p.petName).slice(0,20),level:Number.isFinite(p.highestLevel)?Number(p.highestLevel):null,character:typeof p.character==='string'?p.character.slice(0,30):null,count:Number.isFinite(p.petCount)?Math.max(1,Math.min(6,Math.floor(p.petCount))):1}:null;
+    // 장학 쿠폰 this month (from the pet summary): another month = nothing earned yet this month; a summary saved before it
+    // carried the month (no couponMonth) = not known yet, so no % is shown rather than a wrong 0%
+    const month=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date()).slice(0,7),known=pet&&typeof p.couponMonth==='string';
+    const coupon=!known?null:p.couponMonth===month&&Number.isFinite(p.couponEarned)?Math.max(0,Math.floor(p.couponEarned)):0;
+    return icon||pet?{icon,pet:pet&&{...pet,coupon}}:null;}
 
 /** One page of this teacher's saved lessons (newest first). Shared by drafts-page and the lesson bootstrap. */
 async function readDraftsPage(db:any,actor:any,pageNo:number,sizeInput:number,force:boolean){
@@ -140,6 +145,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(action==='ai-passes'){failureStage='ai-usage';const {readAiPasses}=await import('../_lib/aiModel.js');return sendJson(res,200,{ok:true,...await readAiPasses(db,actor)});}
             if(action==='ai-monthly'){failureStage='ai-usage';const {readAiMonthly}=await import('../_lib/aiModel.js');return sendJson(res,200,{ok:true,...await readAiMonthly(db,actor)});}
             if(action==='ai-usage'){failureStage='ai-usage';const {readAiUsage}=await import('../_lib/aiModel.js');return sendJson(res,200,{ok:true,...await readAiUsage(db,actor)});}
+            if(action==='student-coupon'){failureStage='pet-coupon';const {teacherStudentCoupon}=await import('../_lib/petCoupon.js');return sendJson(res,200,{ok:true,...await teacherStudentCoupon(db,actor,params.get('studentKey'))});}
+            if(action==='pet-points'){failureStage='pet-coupon';const {listPetPoints}=await import('../_lib/petCoupon.js');return sendJson(res,200,{ok:true,...await listPetPoints(db,actor)});}
             if(action==='pet-coupons'){failureStage='pet-coupon';const {listCoupons}=await import('../_lib/petCoupon.js');return sendJson(res,200,{ok:true,...await listCoupons(db,actor)});}
             if(action==='guild-nicknames'){failureStage='pet-party';const {listGuildNicknames}=await import('../_lib/teacherPetParty.js');return sendJson(res,200,{ok:true,...await listGuildNicknames(db,actor)});}
             if(action==='student-school'){failureStage='student-school';const {readStudentSchool}=await import('../_lib/studentSchool.js');return sendJson(res,200,{ok:true,...await readStudentSchool(db,actor,params.get('studentKey'))});}

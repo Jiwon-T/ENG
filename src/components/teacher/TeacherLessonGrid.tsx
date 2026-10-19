@@ -1,5 +1,6 @@
 import type {ReactNode} from 'react';
 import StatusBadge,{statusKind} from './StatusBadge';
+import {withAutoTestGrade} from '../../lib/lessonTestInput';
 import {fieldDisclosureError} from '../../lib/lessonDisclosure';
 import {ChevronLeft,ChevronRight} from 'lucide-react';
 import AutoTextarea from './AutoTextarea';
@@ -75,7 +76,7 @@ export default function TeacherLessonGrid({ headingActions,data, busy, request, 
     useEffect(()=>{const c=data.classes.find((c:any)=>c.id===classId);const slot=c?.slots?.filter((s:any)=>s.status!=='중단'&&s.weekday===new Date(`${date}T12:00:00+09:00`).getUTCDay()).sort((a:any,b:any)=>a.start.localeCompare(b.start))[0];if(slot){setStart(slot.start);setEnd(slot.end);}},[classId,date,data.classes]);
     const students = data.students.filter((s: any) => data.admin || (data.teachingScopes||data.scopes).some((x: any) => x.studentKey === s.studentKey && x.subject === subject));
     const setRow = (id: string, patch: Partial<Row>) => setRows(previous => previous.map(r => r.id === id ? { ...r, ...patch,...(patch.savedData&&patch.stage==='draft'?{savedAt:Date.now()}: {}) } : r));
-    const setField = (id: string, key: string, value: any,manual=true) => {if(pendingRows.current.has(id))return;dismissNotice();setRows(previous => previous.map(r => r.id === id ? { ...r, error: undefined,touched:[...(r.touched||[]),...(manual?[key]:[])],data: r.savedData?editedSessionNumbers(withStudyDefaults({...r.data,[key]:value},key),r.savedData,[...(r.touched||[]),...(manual?[key]:[])],r.sessionRecords||[]):r.sessionRecords?autoSessionNumbers(withStudyDefaults({...r.data,[key]:value},key),r.sessionRecords,[...(r.touched||[]),...(manual?[key]:[])],Boolean(r.savedData)||r.stage!=='new').data:withStudyDefaults({...r.data,[key]:value},key) } : r));};
+    const setField = (id: string, key: string, value: any,manual=true) => {if(pendingRows.current.has(id))return;dismissNotice();setRows(previous => previous.map(r => r.id === id ? { ...r, error: undefined,touched:[...(r.touched||[]),...(manual?[key]:[])],data: r.savedData?editedSessionNumbers(withAutoTestGrade(r.data,withStudyDefaults({...r.data,[key]:value},key),key,r.touched||[]),r.savedData,[...(r.touched||[]),...(manual?[key]:[])],r.sessionRecords||[]):r.sessionRecords?autoSessionNumbers(withAutoTestGrade(r.data,withStudyDefaults({...r.data,[key]:value},key),key,r.touched||[]),r.sessionRecords,[...(r.touched||[]),...(manual?[key]:[])],Boolean(r.savedData)||r.stage!=='new').data:withAutoTestGrade(r.data,withStudyDefaults({...r.data,[key]:value},key),key,r.touched||[]) } : r));};
     async function run(mode: 'save' | 'publish', ids: string[]) {
         const chosen = rows.filter(r => ids.includes(r.id)&&!r.loading);
         const { succeeded, failed } = await processLessonRows(chosen, mode, request, setRow);

@@ -99,7 +99,7 @@ test('pet: 공부 보상 — attended lessons, and 숙제 by the next lesson 숙
     {id: 'f', date: '2026-10-08', attendance: '출석', homeworkGrade: '중', gradedAt: '2026-10-09'},
   ];
   const pending = pendingStudyRewards(s, reports, NOW);
-  assert.deepEqual(pending, [{id: 'a', kind: 'attendance'}, {id: 'a', kind: 'assignment', grade: '최상'}, {id: 'b', kind: 'attendance', grade: '지각'}, {id: 'f', kind: 'attendance'}, {id: 'f', kind: 'assignment', grade: '중'}]);
+  assert.deepEqual(pending.map(({day, ...p}) => p), [{id: 'a', kind: 'attendance'}, {id: 'a', kind: 'assignment', grade: '최상'}, {id: 'b', kind: 'attendance', grade: '지각'}, {id: 'f', kind: 'attendance'}, {id: 'f', kind: 'assignment', grade: '중'}]);
   const got = claimStudyRewards(s, pending);
   assert.deepEqual([got.points, got.xp, got.count], [30 * 2 + 15 + 40 + 10, 50 * 2 + 25 + 60 + 15, 5], '지각: 15P');
   assert.equal(s.today.studyPoints, 0, 'outside the daily study cap');

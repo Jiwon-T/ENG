@@ -3,20 +3,25 @@
 // teacher screens. The AI talk uses fixed instructions written here; the student's text is only ever passed as data.
 import {
   PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_CHARACTERS, PET_DAILY_STUDY_POINTS, PET_ENERGY_ITEMS_PER_DAY, PET_FRIEND_LEVEL, PET_MAX_ENERGY, PET_MAX_LEVEL, PET_MAX_PETS, PET_REVIVES_PER_DAY,
-  PET_COUPON, PET_LATE_REWARD, PET_REWARD_WINDOW_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob} from '../../src/lib/petCatalog.js';
+  PET_ATTITUDE_REWARD, PET_COUPON, PET_LATE_REWARD, PET_REWARD_WINDOW_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob, type PetGearLook} from '../../src/lib/petCatalog.js';
 
 export const PET_STATES = 'petStates';
 export interface ServerPhrase { original: string; remembered: string; learnedAtLevel: number; evolvedVersions: Record<string, string> }
 /** Each pet wears its own outfit; the shop items (inventory), points and the room are shared. */
 /** `accessories`: one per place (머리·눈·목·손). `accessory`: what older saves kept (one item), moved into its place on load.
  *  `job`: 1차 전직, chosen once on 5장 설산; `job2`: 2차 전직 (light or dark branch), chosen once on 7장 꿈의 정원. */
-export interface ServerPet { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: ServerPhrase[]; clothing: string | null; accessories: Partial<Record<AccessorySlot, string>>; accessory?: string | null; job?: PetJob | null; job2?: PetJob2 | null; /** 3차 전직 (「별의 시험」, Lv.150 + 탑 50층) */ job3?: PetJob3 | null }
+export interface ServerPet { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: ServerPhrase[]; clothing: string | null; accessories: Partial<Record<AccessorySlot, string>>; accessory?: string | null; job?: PetJob | null; job2?: PetJob2 | null; /** 3차 전직 (「별의 시험」, Lv.150 + 탑 50층) */ job3?: PetJob3 | null;
+  /** 장비 모양 (the worn tower gear, copied on each tower change), 👁 (false: the outfit only), the look before a job (검사 or 마법사) */
+  gear?: PetGearLook | null; gearShow?: boolean; gearStyle?: PetJob | null;
+  /** 장비 세트 pieces from 원정대 ★3, moved into the pet's tower gear on its next tower visit */ gearInbox?: string[] }
 export interface ServerPetState {
   version: 1; points: number; inventory: string[]; /** before 여러 마리: what pet 1 wore */ clothing?: string | null; accessory?: string | null; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: ServerPet[];
   day: string; today: { studyPoints: number; energyItems?: number; /** before 2/day */ energyItem?: boolean; /** 몬스터 today */ revives?: number; /** 선생님 인증 paid today */ certs?: number };
   rewarded: Record<string, string[]>; updatedAt: number;
   /** 이달의 장학 쿠폰: points earned in `month` ('YYYY-MM', Korea time). */ earned?: { month: string; points: number };
+  /** Earned by month (this month and last): a lesson's points count for the month of the lesson. */ earnedBy?: Record<string, number>;
+  /** 포인트 내역 (this month and last), by day, kind and what it was for. */ ledger?: LedgerItem[];
   /** 금메달 by month ('2026-10'), and where each one sits in each room (% of the room, by background). */
   medals?: string[]; decor?: Record<string, { id: string; x: number; y: number }[]>;
   /** 탑 장식 won (TOWER_DECOR ids), placed with the medals. */ towerDecor?: string[];
@@ -80,21 +85,38 @@ export function addXP(s: ServerPetState, amount: number, pet = currentPet(s)) {
   return {leveledUp};
 }
 
-/** This month's earned points (the month of `s.day`, which is Korea time). The first season also counts the points held
- *  when counting began. */
-export function monthEarned(s: ServerPetState) {
-  const month = s.day.slice(0, 7);
+/** 포인트 내역 kinds: 수업 (출석·숙제·시험·태도), 앱 공부, 선생님 인증, 모험 (원정대·탑), 그 밖. */
+export type PointKind = 'class' | 'study' | 'cert' | 'adventure' | 'etc';
+export interface LedgerItem { day: string; kind: PointKind; label: string; points: number }
+export const prevMonth = (month: string) => { const [y, m] = month.split('-').map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; };
+/** Points earned for `month` (this month or last). The first season also counts the points held when counting began. */
+export function earnedIn(s: ServerPetState, month: string) {
+  if (s.earnedBy && Object.hasOwn(s.earnedBy, month)) return s.earnedBy[month];
   if (s.earned?.month === month) return s.earned.points;
-  return !s.earned && month === PET_COUPON.firstSeason ? s.points : 0;
+  return !s.earned && !s.earnedBy && month === PET_COUPON.firstSeason ? s.points : 0;
 }
+/** This month's earned points (the month of `s.day`, which is Korea time). */
+export function monthEarned(s: ServerPetState) { return earnedIn(s, s.day.slice(0, 7)); }
 /** Every point a student receives also counts for this month's coupon (call before adding it to `points`). */
-export function earnPoints(s: ServerPetState, points: number) { if (points > 0) s.earned = {month: s.day.slice(0, 7), points: monthEarned(s) + points}; }
+export function earnPoints(s: ServerPetState, points: number, kind: PointKind = 'etc', label = '', dayInput?: string) {
+  if (!(points > 0)) return;
+  const cur = s.day.slice(0, 7), prev = prevMonth(cur), asked = String(dayInput || s.day).slice(0, 10);
+  // the month it was earned for: a lesson's own month (this month or last), anything else this month
+  const day = asked.slice(0, 7) === prev || asked.slice(0, 7) === cur && asked <= s.day ? asked : s.day, month = day.slice(0, 7);
+  const by: Record<string, number> = {};
+  for (const m of [prev, cur]) { const v = earnedIn(s, m); if (v) by[m] = v; }
+  by[month] = (by[month] || 0) + points;
+  s.earnedBy = by; s.earned = {month: cur, points: by[cur] || 0};
+  const list = (s.ledger || []).filter(x => x.day.slice(0, 7) >= prev), hit = list.find(x => x.day === day && x.kind === kind && x.label === label);
+  if (hit) hit.points += points; else list.push({day, kind, label, points});
+  s.ledger = list.sort((a, b) => a.day.localeCompare(b.day)).slice(-400);
+}
 export const energyItemsUsed = (s: ServerPetState) => s.today.energyItems ?? (s.today.energyItem ? 1 : 0);
 /** Points inside the daily study cap; XP is cut by the same share. */
-export function awardCapped(s: ServerPetState, wanted: number, wantedXp: number) {
+export function awardCapped(s: ServerPetState, wanted: number, wantedXp: number, kind: PointKind = 'study', label = '') {
   const room = Math.max(0, PET_DAILY_STUDY_POINTS - s.today.studyPoints), points = Math.min(Math.max(0, Math.floor(wanted)), room);
   const xp = wanted > 0 ? Math.floor(wantedXp * (points / wanted)) : 0;
-  earnPoints(s, points); s.points += points; s.today.studyPoints += points;
+  earnPoints(s, points, kind, label); s.points += points; s.today.studyPoints += points;
   const {leveledUp} = addXP(s, xp);
   return {points, xp, capped: points < wanted, leveledUp};
 }
@@ -102,8 +124,9 @@ export function awardCapped(s: ServerPetState, wanted: number, wantedXp: number)
 export function awardStudy(s: ServerPetState, source: PetStudySource, count: number) {
   const rate = PET_STUDY_RATES[source]; if (!rate) throw Error('PET_BAD_SOURCE');
   const n = clampInt(count, 0, 200, 0);
-  return awardCapped(s, rate.points * n, rate.xp * n);
+  return awardCapped(s, rate.points * n, rate.xp * n, 'study', STUDY_LABEL[source] || '앱 공부');
 }
+const STUDY_LABEL: Record<string, string> = {'vocab-test': '단어 테스트', 'wordbook-quiz': '단어 퀴즈', 'wordbook-match': '매치 게임', 'wordbook-flashcard': '플래시카드', 'review-confirm': '오답 복습', 'review-round': '오답 복습'};
 
 export function buyItem(s: ServerPetState, id: string) {
   const item = petItem(id); if (!item) throw Error('PET_ITEM_NOT_FOUND');
@@ -160,6 +183,13 @@ export function adoptPet(s: ServerPetState, character: string) {
 /** The main pet (gets the XP, talks, wears the outfit on screen). */
 export function switchPet(s: ServerPetState, slot: number) { if (!s.pets.some(p => p.slot === slot)) throw Error('PET_BAD_SLOT'); s.currentPetSlot = slot; }
 export function renamePet(s: ServerPetState, name: string) { const clean = cleanText(name, 12); if (!clean) throw Error('PET_BAD_NAME'); currentPet(s).name = clean; }
+/** 👁 장비 보이기 (false: the outfit only) and, before the 1차 전직, which look the gear takes (검사 or 마법사; stats stay the same). */
+export function setGearShow(s: ServerPetState, show: unknown, style: unknown) {
+  const pet = currentPet(s);
+  if (typeof show === 'boolean') pet.gearShow = show;
+  if (style !== undefined) { if (style !== 'swordsman' && style !== 'wizard') throw Error('PET_BAD_ACTION'); if (pet.job) throw Error('PET_JOB_TAKEN'); pet.gearStyle = style; }
+  return {gearShow: pet.gearShow !== false, gearStyle: pet.gearStyle ?? null};
+}
 export function petThePet(s: ServerPetState) {
   const pet = currentPet(s); if (pet.energy < PET_ACTIONS.pet.energy) throw Error('PET_TIRED');
   pet.energy -= PET_ACTIONS.pet.energy; return addXP(s, PET_ACTIONS.pet.xp);
@@ -202,27 +232,31 @@ export function homeworkGrades(reports: {id: string; date: string; subject: stri
   });
   return out;
 }
-type StudyReward = {id: string; kind: 'attendance' | 'assignment' | 'test'; grade?: string; paper?: boolean};
+type StudyReward = {id: string; kind: 'attendance' | 'assignment' | 'test' | 'attitude'; grade?: string; paper?: boolean; /** the lesson's day (숙제: the lesson that graded it) */ day?: string};
 /** 공부 보상 waiting: attended lessons, graded 숙제 and 테스트 평가 (중 and above) from the last 30 days not yet rewarded. */
-export function pendingStudyRewards(s: ServerPetState, reports: {id: string; date: string; attendance: string; homeworkGrade?: string; gradedAt?: string; test?: string; testPaper?: boolean}[], now = Date.now()) {
+export function pendingStudyRewards(s: ServerPetState, reports: {id: string; date: string; attendance: string; homeworkGrade?: string; gradedAt?: string; test?: string; testPaper?: boolean; attitude?: string}[], now = Date.now()) {
   const from = seoulDay(now - PET_REWARD_WINDOW_DAYS * 86_400_000), today = seoulDay(now), out: StudyReward[] = [];
   const inWindow = (date?: string) => { const day = String(date || '').slice(0, 10); return Boolean(day) && day >= from && day <= today; };
   for (const r of reports) {
     const done = s.rewarded[r.id] || [];
-    if (inWindow(r.date) && ATTENDED(r.attendance) && !done.includes('attendance')) out.push({id: r.id, kind: 'attendance', ...(/지각/.test(r.attendance) ? {grade: '지각'} : {})});
-    if (r.homeworkGrade && PET_HOMEWORK_REWARD[r.homeworkGrade] && inWindow(r.gradedAt) && !done.includes('assignment')) out.push({id: r.id, kind: 'assignment', grade: r.homeworkGrade});
-    if (r.test && PET_TEST_REWARD.paper[r.test] && inWindow(r.date) && !done.includes('test')) out.push({id: r.id, kind: 'test', grade: r.test, paper: Boolean(r.testPaper)});
+    if (inWindow(r.date) && ATTENDED(r.attendance) && !done.includes('attendance')) out.push({id: r.id, kind: 'attendance', day: String(r.date).slice(0, 10), ...(/지각/.test(r.attendance) ? {grade: '지각'} : {})});
+    if (r.homeworkGrade && PET_HOMEWORK_REWARD[r.homeworkGrade] && inWindow(r.gradedAt) && !done.includes('assignment')) out.push({id: r.id, kind: 'assignment', grade: r.homeworkGrade, day: String(r.gradedAt).slice(0, 10)});
+    if (r.test && PET_TEST_REWARD.paper[r.test] && inWindow(r.date) && !done.includes('test')) out.push({id: r.id, kind: 'test', grade: r.test, paper: Boolean(r.testPaper), day: String(r.date).slice(0, 10)});
+    if (r.attitude && PET_ATTITUDE_REWARD[r.attitude] && inWindow(r.date) && !done.includes('attitude')) out.push({id: r.id, kind: 'attitude', grade: r.attitude, day: String(r.date).slice(0, 10)});
   }
   return out;
 }
 export function claimStudyRewards(s: ServerPetState, pending: StudyReward[]) {
   let points = 0, xp = 0;
   for (const p of pending) {
-    const r = p.kind === 'attendance' ? (p.grade === '지각' ? PET_LATE_REWARD : PET_ATTENDANCE_REWARD) : p.kind === 'test' ? PET_TEST_REWARD[p.paper ? 'paper' : 'app'][p.grade || ''] : PET_HOMEWORK_REWARD[p.grade || ''];
+    const r = p.kind === 'attendance' ? (p.grade === '지각' ? PET_LATE_REWARD : PET_ATTENDANCE_REWARD) : p.kind === 'test' ? PET_TEST_REWARD[p.paper ? 'paper' : 'app'][p.grade || ''] : p.kind === 'attitude' ? PET_ATTITUDE_REWARD[p.grade || ''] : PET_HOMEWORK_REWARD[p.grade || ''];
     if (!r) continue;
     points += r.points; xp += r.xp; s.rewarded[p.id] = [...new Set([...(s.rewarded[p.id] || []), p.kind])];
+    // each counts for its lesson's month and shows in the 포인트 내역 on that day
+    const label = p.kind === 'attendance' ? (p.grade === '지각' ? '지각' : '출석') : p.kind === 'assignment' ? `숙제 ${p.grade}` : p.kind === 'test' ? `시험(${p.paper ? '종이' : '앱'}) ${p.grade}` : '수업 태도 칭찬';
+    earnPoints(s, r.points, 'class', label, p.day);
   }
-  earnPoints(s, points); s.points += points; const {leveledUp} = addXP(s, xp);
+  s.points += points; const {leveledUp} = addXP(s, xp);
   return {points, xp, count: pending.length, leveledUp};
 }
 
@@ -281,8 +315,8 @@ export const parseAi = (text: string) => { try { return JSON.parse(text); } catc
 /** What the browser sees: everything but the bookkeeping. */
 export function publicPetState(s: ServerPetState) {
   const pet = currentPet(s);
-  return {englishTalk: Boolean(s.englishTalk), medals: s.medals || [], towerDecor: s.towerDecor || [], decor: s.decor || {}, points: s.points, inventory: s.inventory, clothing: pet.clothing, accessories: pet.accessories, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
+  return {ledger: s.ledger || [], englishTalk: Boolean(s.englishTalk), medals: s.medals || [], towerDecor: s.towerDecor || [], decor: s.decor || {}, points: s.points, inventory: s.inventory, clothing: pet.clothing, accessories: pet.accessories, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
     today: {studyPoints: s.today.studyPoints, studyCap: PET_DAILY_STUDY_POINTS, energyItemsLeft: Math.max(0, PET_ENERGY_ITEMS_PER_DAY - energyItemsUsed(s)), revivesLeft: Math.max(0, PET_REVIVES_PER_DAY - (s.today.revives || 0))}, stage: petStage(pet.level)};
 }
 /** For the teacher screens: the highest-level pet and how many live here. */
-export const petSummary = (s: ServerPetState) => { const pet = [...s.pets].sort((a, b) => b.level - a.level || b.xp - a.xp)[0]; return {points: s.points, totalXP: pet.xp, highestLevel: pet.level, petName: pet.name, character: pet.character, petCount: s.pets.length}; };
+export const petSummary = (s: ServerPetState) => { const pet = [...s.pets].sort((a, b) => b.level - a.level || b.xp - a.xp)[0]; return {points: s.points, totalXP: pet.xp, highestLevel: pet.level, petName: pet.name, character: pet.character, petCount: s.pets.length, /** 장학 쿠폰: this month's earned (the % on the student list) */ couponMonth: s.day.slice(0, 7), couponEarned: monthEarned(s)}; };

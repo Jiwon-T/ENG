@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { PetService, type PetState } from '../../lib/petService';
-import { PET_JOB_GUIDE, PET_TOWER, TOWER_GEAR_SLOTS, towerZone, type PetElement, accessorySlot, petStage, towerGearFor, wornAccessories, type TowerGearSlot, type TowerMonsterKind, PET_JOB2, PET_JOB3, PET_JOB3_RULE, TOWER_SKILLS, job3For, petAura, petItem, type PetJob2, type PetJob3, towerDecor } from '../../lib/petCatalog';
+import { PET_JOB_GUIDE, PET_TOWER, TOWER_GEAR_SLOTS, towerZone, type PetElement, accessorySlot, petStage, towerGearFor, wornAccessories, type TowerGearSlot, type TowerMonsterKind, PET_JOB2, PET_JOB3, PET_JOB3_RULE, TOWER_SKILLS, job3For, petAura, petItem, type PetJob2, type PetJob3, towerDecor, petGearView, GEAR_SET_SHORT, GEAR_SET_BONUS, gearSetBonus, towerGear } from '../../lib/petCatalog';
 import { PetCharacter } from './PetCharacters';
 import { TowerChest, TowerDoors, TowerGate, TowerGearIcon } from './TowerHall';
 import { TowerEventScreen, type TowerEventView } from './TowerEvents';
@@ -126,7 +126,7 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
             {fx && (fx.kind === 'block' || fx.kind === 'hurt') && <div key={`p${fx.key}`} className="pointer-events-none absolute bottom-10 left-6 z-10 flex w-24 flex-col items-center">
               {fx.kind === 'block' && <span className="tw-shield absolute -top-4 h-24 w-24 rounded-full border-4 border-[#1d9e75] bg-[#e1f5ee]/60" aria-hidden="true" />}
               <span className="tw-pop font-black" style={{ color: fx.kind === 'block' ? '#0f6e56' : '#a32d2d', fontSize: 15 }}>{fx.kind === 'block' ? '막았다! ' : ''}-{fx.amount}</span></div>}
-            <div key={fx?.kind === 'hurt' ? `h${fx.key}` : 'pet'} className={`absolute bottom-1 left-4 ${fx?.kind === 'hurt' ? 'tw-hurt' : ''}`}><PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={battleLook} size={92} aura={petAura(pet)} /></div>
+            <div key={fx?.kind === 'hurt' ? `h${fx.key}` : 'pet'} className={`absolute bottom-1 left-4 ${fx?.kind === 'hurt' ? 'tw-hurt' : ''}`}><PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={battleLook} size={92} aura={petAura(pet)} gear={petGearView(pet as any)} /></div>
             <div className="absolute bottom-2.5 right-2.5 w-[50%] rounded-xl border-2 border-[#3c3489] bg-white px-2.5 py-1.5"><div className="flex justify-between text-xs"><b className="font-black text-[#26215c]">{pet.name}</b><span className="text-slate-500">Lv.{pet.level}</span></div>
               <div className="mt-1 flex items-center gap-1.5"><span className="rounded bg-[#fac775] px-1 text-[10px] font-black text-[#633806]">HP</span><Bar value={run.hp} max={run.maxHp} color={run.hp / run.maxHp < 0.3 ? 'bg-[#e24b4a]' : 'bg-[#639922]'} /></div>
               <div className="mt-0.5 flex items-center gap-1.5"><span className="rounded bg-[#b5d4f4] px-1 text-[10px] font-black text-[#0c447c]">MP</span><Bar value={run.mp} max={run.maxMp} color="bg-[#378add]" /></div>
@@ -202,6 +202,20 @@ function Job3Banner({ job2, busy, onTake }: { job2: PetJob2; busy: boolean; onTa
 }
 
 /** 능력치 and 장비: at the entrance (gear can be changed) and under the battle (to look at only). */
+/** 장비 세트 모으기: 6 places a set; 3 worn +5%, all 6 +12% and a glow. */
+export function GearSets({ tower }: { tower: TowerInfo }) {
+  const worn = Object.values(tower.equip).map(id => towerGear(String(id))), bonus = gearSetBonus(worn);
+  return <div className="mt-3">
+    <div className="flex items-baseline justify-between"><b className="text-sm font-black text-[#26215c]">장비 세트</b><span className="text-[11px] text-slate-400">{bonus > 0 ? `세트 효과 능력치 +${Math.round(bonus * 100)}%` : `3부위 +${GEAR_SET_BONUS.three * 100}% · 6부위 +${GEAR_SET_BONUS.six * 100}%`}</span></div>
+    <div className="mt-1.5 grid grid-cols-6 gap-1 text-center">{GEAR_SET_SHORT.map((name, t) => {
+      const have = tower.gear.filter(id => towerGear(id)?.set === t).length, on = worn.filter(g => g?.set === t).length;
+      return <div key={t} className={`rounded-lg border border-[#e4e0f5] px-0.5 py-1 ${have ? '' : 'opacity-50'}`} title={`${name} 세트 ${have}/6 (끼는 중 ${on})`}><span className="block text-[10px] font-bold text-[#26215c]">{name}</span>
+        <span className="mt-0.5 flex gap-px" aria-hidden="true">{Array.from({ length: 6 }, (_, k) => <span key={k} className={`h-1 flex-1 rounded-full ${k < on ? 'bg-[#7f77dd]' : k < have ? 'bg-[#c9c5f0]' : 'bg-[#efedf9]'}`} />)}</span>
+        <span className="block text-[9px] text-slate-400">{have}/6</span></div>;
+    })}</div>
+    <p className="mt-1 text-[10px] text-slate-400">처음 깨는 층 15% · 보스 층은 꼭 하나 · 원정대 ★3 처음 · 겹치면 강화석</p>
+  </div>;
+}
 function StatsGear({ tower, busy, onEquip }: { tower: TowerInfo; busy: boolean; onEquip?: (id: string) => void }) {
   return <>
     <section aria-label="능력치" className="rounded-2xl border border-[#e4e0f5] bg-white px-4 py-3">
@@ -209,8 +223,9 @@ function StatsGear({ tower, busy, onEquip }: { tower: TowerInfo; busy: boolean; 
       <div className="mt-2 grid grid-cols-4 gap-1.5 text-center text-xs">{([['공격', tower.stats.atk], ['방어', tower.stats.def], ['체력', tower.stats.hp], ['마력', tower.stats.mp]] as const).map(([k, v]) => <div key={k} className="rounded-xl bg-[#f7f6fd] py-1.5"><span className="block text-slate-500">{k}</span><b className="font-black text-[#26215c]">{v}</b></div>)}</div>
       <p className="mt-1.5 text-[11px] text-slate-400">레벨이 오르고 장비를 끼거나 강화하면 강해져요 · 물약 {tower.potions}개 · 강화석 {tower.stones}개</p>
       <b className="mt-3 block text-sm font-black text-[#26215c]">장비</b>
-      <div className="mt-1.5 grid grid-cols-3 gap-1.5 text-center text-[11px]">{TOWER_GEAR_SLOTS.map(s => { const id = tower.equip[s.id], g = id ? towerGearFor(id, tower.job as any) : null; return <div key={s.id} className={`rounded-xl border px-1 py-1.5 ${g ? 'border-[#d6d2ee] bg-white' : 'border-dashed border-[#e4e0f5] text-slate-300'}`}><span className="block text-slate-400">{s.label}</span><b className="flex items-center justify-center gap-0.5 truncate font-bold text-[#26215c]">{g ? <><TowerGearIcon id={g.id} size={16} />{g.short}{tower.levels[g.id] ? ` +${tower.levels[g.id]}` : ''}</> : '—'}</b></div>; })}</div>
-      {onEquip && tower.gear.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{tower.gear.map(id => { const g = towerGearFor(id, tower.job as any); if (!g) return null; const on = tower.equip[g.slot] === id; return <button key={id} type="button" disabled={busy || !onEquip} aria-pressed={on} onClick={() => onEquip?.(id)} className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${on ? 'border-[#7f77dd] bg-[#eeedfe] text-[#3c3489]' : 'border-[#e4e0f5] text-slate-500'}`}><span className="inline-flex items-center gap-1"><TowerGearIcon id={g.id} size={14} />{g.name} {on ? '· 끼는 중' : '· 끼기'}</span></button>; })}</div>}
+      <div className="mt-1.5 grid grid-cols-3 gap-1.5 text-center text-[11px]">{TOWER_GEAR_SLOTS.map(s => { const id = tower.equip[s.id], g = id ? towerGearFor(id, tower.job as any) : null; return <div key={s.id} className={`rounded-xl border px-1 py-1.5 ${g ? 'border-[#d6d2ee] bg-white' : 'border-dashed border-[#e4e0f5] text-slate-300'}`}><span className="block text-slate-400">{s.label}</span><b className="flex items-center justify-center gap-0.5 truncate font-bold text-[#26215c]">{g ? <><TowerGearIcon id={g.id} size={16} job={tower.job as any} />{g.short}{tower.levels[g.id] ? ` +${tower.levels[g.id]}` : ''}</> : '—'}</b></div>; })}</div>
+      {onEquip && tower.gear.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{tower.gear.map(id => { const g = towerGearFor(id, tower.job as any); if (!g) return null; const on = tower.equip[g.slot] === id; return <button key={id} type="button" disabled={busy || !onEquip} aria-pressed={on} onClick={() => onEquip?.(id)} className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${on ? 'border-[#7f77dd] bg-[#eeedfe] text-[#3c3489]' : 'border-[#e4e0f5] text-slate-500'}`}><span className="inline-flex items-center gap-1"><TowerGearIcon id={g.id} size={14} job={tower.job as any} />{g.name} {on ? '· 끼는 중' : '· 끼기'}</span></button>; })}</div>}
+      <GearSets tower={tower} />
     </section>
     {!onEquip && <p className="-mt-1 text-center text-[11px] text-slate-400">전투 중에는 장비를 바꿀 수 없어요</p>}
   </>;
@@ -242,6 +257,7 @@ function Ending({ ending, tower, onAgain }: { ending: any; tower: TowerInfo; onA
       {ending.hall && <p className="mt-2 rounded-xl bg-[#fef9c3] px-3 py-2 text-sm font-black text-[#854d0e]">🏆 명예의 전당에 올랐어요! {[ending.hall.first && '처음 깬 모험가', ending.hall.fewest && '가장 적은 공격'].filter(Boolean).join(' · ')}</p>}
       {ending.first && <p className="mt-2 text-sm font-bold text-[#633806]">처음 돌파 보상 +{ending.points}P · 경험치 +{ending.xp}</p>}
       {ending.chest && <p className="mt-2 rounded-xl bg-[#fffaf0] px-3 py-2 text-sm font-bold text-[#633806]">🎁 보스의 보물상자: {ending.chest.gear.map((id: string) => towerGearFor(id, tower.job as any)?.name).join(', ')}{ending.chest.potions ? ` · 물약 ${ending.chest.potions}개` : ''}</p>}
+      {ending.drop && <p className="mt-2 rounded-xl bg-[#f7f6fd] px-3 py-2 text-sm font-bold text-[#3c3489]">{ending.drop.stone ? `🪨 ${towerGearFor(ending.drop.id, tower.job as any)?.name}이(가) 또 나와서 강화석 1개로 바꿨어요` : `🎁 장비 「${towerGearFor(ending.drop.id, tower.job as any)?.name}」을(를) 얻었어요!`}</p>}
       {ending.decor && <p className="mt-2 rounded-xl bg-[#fdf2f8] px-3 py-2 text-sm font-bold text-[#72243e]">🪴 탑 장식 「{towerDecor(ending.decor)?.name}」을(를) 받았어요! 펫 방의 꾸미기에서 놓아 보세요.</p>}
     </> : ending.lost ? <>
       <p className="text-3xl" aria-hidden="true">💫</p><h2 className="mt-1 text-lg font-black text-[#5e1e2a]">쓰러졌어요…</h2><p className="mt-1 text-sm text-slate-600">{ending.floor}층에서 다시 도전할 수 있어요. 레벨을 올리거나 장비를 바꿔 보세요.</p>

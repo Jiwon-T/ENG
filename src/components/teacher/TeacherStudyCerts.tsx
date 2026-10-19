@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { BadgeCheck, X } from 'lucide-react';
 import { auth } from '../../lib/firebase';
 import { teacherAuthenticatedRequest } from '../../lib/teacherAuthenticatedRequest';
@@ -66,7 +66,7 @@ export default function TeacherStudyCerts({ studentKey }: { studentKey: string }
 
 /** 인증 요청 모아 보기: a slim bar when any student of this teacher is waiting; it opens every waiting request, oldest
  *  first. Decided ones stay in the open list (with their result) until it is closed. */
-export function TeacherCertInbox() {
+export function TeacherCertInbox({ openTick = 0, onCount }: { openTick?: number; onCount?: (n: number) => void } = {}) {
   const [certs, setCerts] = useState<Row[]>([]), [open, setOpen] = useState(false), [next, setNext] = useState<string | null>(null);
   // From the start (or on from `after`, adding to the list). A read that finds none of this teacher's but has more goes on
   // by itself (a few times), so requests far down the list still show.
@@ -81,9 +81,13 @@ export function TeacherCertInbox() {
     setCerts(list => (after ? [...list, ...found] : found)); setNext(cursor || null);
   };
   useEffect(() => { void load(); }, []);
+  const box = useRef<HTMLDivElement>(null);
+  // the badge on 수업 일지 작성: tapping it opens this list and brings it into view
+  useEffect(() => { if (!openTick) return; setOpen(true); window.setTimeout(() => box.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }, [openTick]);
   const waiting = certs.filter(c => c.status === 'pending').length;
+  useEffect(() => { onCount?.(waiting); }, [waiting]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!waiting && !open && !next) return null;
-  return <>
+  return <div ref={box}>
     {!open && <button type="button" onClick={() => setOpen(true)} className="mb-3 flex w-full items-center gap-2 rounded-xl border border-[#f3d5da] bg-[#fffafb] px-3 py-2 text-left text-sm text-[#8b2f40] hover:bg-[#fef2f3]">
       <BadgeCheck size={16} aria-hidden="true" /><b className="font-bold">학생 인증 요청 {waiting}{next ? '+' : ''}건</b><span className="text-xs text-slate-500">워크북 · 지문 분석지 회독 · 직접 만든 변형 문제</span><span className="ml-auto text-xs font-bold">확인하기 ›</span>
     </button>}
@@ -93,5 +97,5 @@ export function TeacherCertInbox() {
       {certs.length ? <CertItems certs={certs} onChange={c => setCerts(list => list.map(x => (x.id === c.id ? c : x)))} /> : <p className="report-caption">{next ? '아직 찾지 못했어요. 더 불러와 주세요.' : '기다리는 요청이 없어요.'}</p>}
       {next && <button type="button" onClick={() => void load(next)} className="mt-2 w-full rounded-lg border border-[#f3d5da] py-1.5 text-xs font-bold text-[#8b2f40] hover:bg-[#fef2f3]">요청 더 불러오기</button>}
     </section>}
-  </>;
+  </div>;
 }

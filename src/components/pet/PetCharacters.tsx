@@ -1,5 +1,6 @@
 import React from 'react';
-import type { PetStage } from '../../lib/petCatalog';
+import { accessorySlot, type PetGearView, type PetStage } from '../../lib/petCatalog';
+import { gearArt, gearSetBack, gearSetFront } from './petGearArt'; // its moving parts: .pg-* in index.css
 
 // 펫 그림: every character is one SVG on the same 120×130 grid (head + small body), so outfits follow the body shape and
 // accessories sit at each character's own head points. Order: outfit back → tail → body → outfit → head → accessory.
@@ -14,6 +15,8 @@ interface CharacterProps {
   portrait?: boolean;
   /** Width in px instead of the stage size (small friends in the room, the switcher). */
   size?: number;
+  /** 장비 (👁 on): drawn over the pet; armor covers the outfit and neck things, the helmet head things, the weapon hand things. */
+  gear?: PetGearView | null;
 }
 
 const BODY = 'M36 92 Q60 80 84 92 L86 112 Q60 124 34 112 Z';
@@ -265,17 +268,24 @@ const Sparkle = ({ x, y, s }: { x: number; y: number; s: number }) => <path tran
 const SIZE: Record<PetStage, number> = { baby: 84, child: 100, teen: 116, adult: 132, master: 140 };
 
 /** `aura`: the 3차 전직 glow behind the pet (light: gold and sky; dark: violet). */
-export const PetCharacter = ({ character, stage, clothing, accessory, background, className = '', portrait, size: fixedSize, aura }: CharacterProps & { character: string; aura?: 'light' | 'dark' | null }) => {
-  const worn = (Array.isArray(accessory) ? accessory : accessory ? [accessory] : []).filter(Boolean) as string[];
-  const look = LOOKS[character] || LOOKS.molang, outfit = clothing ? OUTFITS[clothing] : undefined, [fill, stroke, belly] = look.body;
+/** The helmet sits higher on taller heads (다롱's hair and horn, 호두's ears). */
+const HELMET_Y: Record<string, number> = { unicorn: -6, hodu: -3 };
+
+export const PetCharacter = ({ character, stage, clothing, accessory, background, className = '', portrait, size: fixedSize, aura, gear }: CharacterProps & { character: string; aura?: 'light' | 'dark' | null }) => {
+  const on = gear && Object.keys(gear.look).length ? gear : null, covers = (s: 'helmet' | 'armor' | 'weapon') => on?.look[s] != null;
+  const hidden = (id: string) => { const at = accessorySlot(id); return (at === 'head' && covers('helmet')) || (at === 'neck' && covers('armor')) || (at === 'hand' && covers('weapon')); };
+  const worn = (Array.isArray(accessory) ? accessory : accessory ? [accessory] : []).filter(Boolean).filter(id => !hidden(String(id))) as string[];
+  const look = LOOKS[character] || LOOKS.molang, outfit = clothing && !covers('armor') ? OUTFITS[clothing] : undefined, [fill, stroke, belly] = look.body;
   const size = fixedSize || SIZE[stage] || SIZE.baby;
   const art = <svg viewBox={portrait ? '14 8 92 88' : '0 0 120 130'} width={size} height={portrait ? size : size * 130 / 120} className="relative z-10" aria-hidden="true">
     {aura && <g aria-hidden="true"><circle cx="60" cy="78" r="56" fill={aura === 'light' ? '#fef9c3' : '#ede9fe'} opacity=".55" /><circle cx="60" cy="80" r="44" fill={aura === 'light' ? '#e0f2fe' : '#ddd6fe'} opacity=".55" /><circle cx="14" cy="50" r="2" fill={aura === 'light' ? '#fde68a' : '#c4b5fd'} /><circle cx="108" cy="62" r="1.7" fill={aura === 'light' ? '#bae6fd' : '#a78bfa'} /><circle cx="98" cy="118" r="1.8" fill={aura === 'light' ? '#fde68a' : '#c4b5fd'} /></g>}
+    {on?.full != null && <g dangerouslySetInnerHTML={{ __html: gearSetBack(on.full) }} />}
     {outfit?.back}{look.tail}
     <ellipse cx="47" cy="121" rx="8" ry="5" fill={fill} stroke={stroke} /><ellipse cx="73" cy="121" rx="8" ry="5" fill={fill} stroke={stroke} />
     <path d={BODY} fill={fill} stroke={stroke} />{belly && <ellipse cx="60" cy="104" rx="13" ry="10" fill={belly} />}{arms(fill, stroke)}
-    {outfit?.front}{worn.filter(id => NECK.has(id)).map(id => <React.Fragment key={id}><Accessory id={id} look={look} /></React.Fragment>)}{look.front}{look.head}{outfit?.top?.(look)}{worn.filter(id => !NECK.has(id) && !WEAPONS[id]).map(id => <React.Fragment key={id}><Accessory id={id} look={look} /></React.Fragment>)}
+    {outfit?.front}{worn.filter(id => NECK.has(id)).map(id => <React.Fragment key={id}><Accessory id={id} look={look} /></React.Fragment>)}{look.front}{look.head}{!covers('helmet') && outfit?.top?.(look)}{worn.filter(id => !NECK.has(id) && !WEAPONS[id]).map(id => <React.Fragment key={id}><Accessory id={id} look={look} /></React.Fragment>)}
     {worn.filter(id => WEAPONS[id]).map(id => <React.Fragment key={id}>{WEAPONS[id]}</React.Fragment>)}
+    {on && <g dangerouslySetInnerHTML={{ __html: gearArt(on.style, on.look, HELMET_Y[character] || 0) + (on.full != null ? gearSetFront(on.full) : '') }} />}
     {stage === 'master' && <><Sparkle x={16} y={30} s={1} /><Sparkle x={104} y={44} s={0.8} /><Sparkle x={100} y={14} s={0.6} /></>}
   </svg>;
   if (portrait) return <div className={className}>{art}</div>;

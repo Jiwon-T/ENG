@@ -278,7 +278,7 @@ export async function submitAttempt(db: any, a: PassageActor, input: any, now = 
     if (paying) {
       const late = s.dueAt !== null && now > s.dueAt, wanted = questionReward(score.correct, score.total, late);
       if (petSnap?.exists) {
-        const pet: ServerPetState = rollDay(petSnap.data(), now), paid = awardCapped(pet, wanted.points, wanted.xp);
+        const pet: ServerPetState = rollDay(petSnap.data(), now), paid = awardCapped(pet, wanted.points, wanted.xp, 'study', '변형 문제');
         pet.updatedAt = now; tx.set(petRef, pet);
         if (userSnap?.exists) tx.set(userRef, { petStats: petSummary(pet) }, { merge: true });
         reward = { points: paid.points, xp: paid.xp, wanted: wanted.points, capped: paid.capped, late };

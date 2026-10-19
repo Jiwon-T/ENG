@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { PET_TOWER, towerGearFor, type PetJob } from '../../lib/petCatalog';
+import { PET_TOWER, towerGear, towerGearFor, type PetJob } from '../../lib/petCatalog';
+import { gearPiece } from './petGearArt';
 import './towerHall.css';
 
 // 채움의 탑 inside: a dark stone hall lit by torches. The gate opens first; on floor 1 a lone treasure chest waits; every
@@ -11,7 +12,9 @@ const doorsFor = (floor: number) => [0, 1, 2].map(i => CRESTS[(floor * 2 + i * 3
 
 /** Tower gear pictures. The 견습 몽둥이: a beginner's wooden club in a classic RPG style (light wood, a thick rounded
  *  head tapering to a wrapped grip); our own drawing. */
-export function TowerGearIcon({ id, size = 22 }: { key?: string; id: string; size?: number }) {
+export function TowerGearIcon({ id, size = 22, job }: { key?: string; id: string; size?: number; job?: PetJob | null }) {
+  const set = towerGear(id);
+  if (set?.set !== undefined) { const p = gearPiece(job === 'wizard' ? 'mage' : 'knight', set.slot, set.set); return <svg viewBox={p.box} width={size} height={size} role="img" aria-label={towerGearFor(id, job)?.name} dangerouslySetInnerHTML={{ __html: p.svg }} />; }
   if (id === 'apprentice_club') return <svg viewBox="0 0 48 48" width={size} height={size} role="img" aria-label="견습 몽둥이">
     <g transform="rotate(-40 24 24)">
       <path d="M19.5 4 Q24 1 28.5 4 Q31 9 29.5 22 L27 34 H21 L18.5 22 Q17 9 19.5 4 Z" fill="#e3a65a" stroke="#6b3d08" strokeWidth="1.8" strokeLinejoin="round" />

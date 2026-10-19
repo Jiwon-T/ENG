@@ -50,3 +50,23 @@ test('자동: paper only for a day read in full with no app 단어 테스트; a 
   assert.equal(isPaperDay(seen, '2026-10-05'), false, 'older than what was read in full');
   assert.equal(isPaperDay(null, '2026-10-16'), false, 'the read failed');
 });
+
+test('수업 태도 칭찬: 최상 15P, 상 10P, below that nothing; once a lesson, outside the study cap', () => {
+  const s = initialPetState(NOW); s.today.studyPoints = 10_000;
+  const reports = ['최상', '상', '중상', '하'].map((attitude, i) => ({id: `t${i}`, date: '2026-10-18T14:00:00+09:00', attendance: '결석', attitude}));
+  const pending = pendingStudyRewards(s, reports, NOW);
+  assert.deepEqual(pending.map(p => [p.id, p.kind, p.grade]), [['t0', 'attitude', '최상'], ['t1', 'attitude', '상']]);
+  assert.equal(claimStudyRewards(s, pending).points, 25);
+  assert.deepEqual(pendingStudyRewards(s, reports, NOW), [], 'once');
+});
+
+test('테스트가 여럿일 때: each test its own 종이/앱; one on paper makes the lesson paper', async () => {
+  const {lessonTestPaper} = await import('../src/lib/lessonReportText.ts');
+  assert.equal(lessonTestPaper({testPaper: false, extraTests: [{paper: true}]}), true, '앱 1개 + 종이 1개 = 종이');
+  assert.equal(lessonTestPaper({testPaper: false, extraTests: [{paper: null}]}), false);
+  assert.equal(lessonTestPaper({testPaper: null, extraTests: []}), null, '자동');
+  const r: any = directLessonReport('22222222-2222-4222-8222-222222222222', {data: {...lesson, testPaper: false, extraTests: [{name: '문법', correct: 8, total: 10, paper: true}]}, revision: 1}, {studentKey: lesson.studentKey, internalStudentId: 's'});
+  assert.equal(r.testPaper, true);
+  const chip = renderToStaticMarkup(<LessonTests value={{...lesson, testPaper: false, extraTests: [{name: '문법', correct: 8, total: 10, paper: true}]}} onChange={() => {}}/>).match(/class="lesson-test-paper"[^>]*>([^<]+)</)?.[1];
+  assert.equal(chip, '앱 시험', 'the chip shows the chosen tab (the first)');
+});
