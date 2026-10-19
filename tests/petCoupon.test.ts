@@ -4,6 +4,7 @@ import {registrationFirestore} from './helpers/registrationFirestore.js';
 import {awardCapped, claimStudyRewards, earnPoints, initialPetState, monthEarned, rollDay} from '../api/_lib/pet.js';
 import {couponStudentKey, listCoupons, markCouponPaid, placeDecor, requestCoupon} from '../api/_lib/petCoupon.js';
 import {handlePet} from '../api/_lib/student/pet.js';
+import {hashStudentKey} from '../api/_lib/security.js';
 import {PET_COUPON, medalLabel} from '../src/lib/petCatalog.js';
 
 const OCT = Date.parse('2026-10-16T03:00:00Z'), NOV1_KST = Date.parse('2026-10-31T15:30:00Z'); // 11월 1일 00:30 in Seoul
@@ -31,13 +32,16 @@ const setup = () => {
   f.rows.set('users/kid', {notionStudentKey: KEY}); f.rows.set('users/other', {notionStudentKey: OTHER});
   f.rows.set(`academyStudentMemberships/${KEY}`, {academyId: 'main'}); f.rows.set(`academyStudentMemberships/${OTHER}`, {academyId: 'main'});
   f.rows.set('teacherWorkspaceAccess/admin', {academyId: 'main', scopes: [{studentKey: KEY, subject: '영어'}, {studentKey: OTHER, subject: '수학'}]});
+  for (const [key, uid] of [[KEY, 'kid'], [OTHER, 'other']]) f.rows.set(`notionStudentMappings/${hashStudentKey(key)}`, {studentKey: key, notionStudentPageId: key, internalStudentId: `int-${uid}`, studentDisplayName: '학생', sourceMode: 'firestore', firebaseUid: uid});
   return f;
 };
 
-test('coupon: only 영어 이지원T students; once a month at the goal; no points taken; the month medal is added', async () => {
+test('coupon: any 채움 학원 student linked to this account; once a month at the goal; no points taken; the month medal is added', async () => {
   const f = setup();
   assert.equal(await couponStudentKey(f.db, 'kid'), KEY);
-  assert.equal(await couponStudentKey(f.db, 'other'), null, 'taught 수학 by the admin, not 영어');
+  assert.equal(await couponStudentKey(f.db, 'other'), OTHER, 'any subject, any teacher');
+  f.rows.set('users/faker', {notionStudentKey: KEY});
+  assert.equal(await couponStudentKey(f.db, 'faker'), null, 'a key this account is not linked to');
   f.rows.set(`academyStudentMemberships/${OTHER}`, {academyId: 'main', disabled: true});
   const s = initialPetState(OCT); s.points = PET_COUPON.goal - 1; f.rows.set('petStates/kid', s);
   await assert.rejects(() => requestCoupon(f.db, 'kid', KEY, OCT), /COUPON_NOT_YET/);
@@ -59,7 +63,9 @@ test('coupon API: the screen shows the gauge only for eligible students; others 
   };
   const view = (await call('kid', 'GET')).coupon;
   assert.deepEqual([view.eligible, view.earned, view.goal, view.requested, view.label], [true, 12000, 10000, false, '26.10']);
-  assert.equal((await call('other', 'GET')).coupon.eligible, false);
+  assert.equal((await call('other', 'GET')).coupon.eligible, true, 'a student of another subject too');
+  f.rows.set(`academyStudentMemberships/${OTHER}`, {academyId: 'main', disabled: true});
+  assert.equal((await call('other', 'GET')).coupon.eligible, false, 'no longer a member');
   assert.equal((await call('other', 'POST', {action: 'coupon-request'})).error, 'COUPON_NOT_ELIGIBLE');
   const got = await call('kid', 'POST', {action: 'coupon-request'});
   assert.deepEqual([got.ok, got.coupon.requested, got.state.medals, got.state.points], [true, true, ['2026-10'], 12000]);

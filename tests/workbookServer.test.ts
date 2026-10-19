@@ -6,13 +6,13 @@ import {docxXmlText} from '../src/lib/workbookImport.ts';
 
 const admin = {uid: 'admin', admin: true}, teacher = {uid: 't1', admin: false, academyId: 'main'}, principal = {uid: 'p1', admin: false, principal: true, academyId: 'main'};
 
-test('workbook: teachers, principals and the admin; anyone else is refused before any AI call or read', async () => {
+test('workbook: any signed-in account (students too); without an account refused before any AI call or read', async () => {
   let calls = 0; const generate = async () => { calls++; return JSON.stringify({translations: ['안녕']}); };
-  const stranger = {uid: 'kid'};
+  const stranger = {} as any;
   await assert.rejects(translateWorkbook(stranger, {sentences: ['Hi.']}, generate), /FORBIDDEN/);
   await assert.rejects(readWorkbookHistory(registrationFirestore().db, stranger, 'abc123def'), /FORBIDDEN/);
   assert.equal(calls, 0);
-  for (const actor of [teacher, principal]) assert.deepEqual((await translateWorkbook(actor, {sentences: ['Hi.']}, generate)).translations, ['안녕']);
+  for (const actor of [teacher, principal, {uid: 'kid'}]) assert.deepEqual((await translateWorkbook(actor, {sentences: ['Hi.']}, generate)).translations, ['안녕']);
 });
 
 test('AI translations: one per sentence in order, otherwise nothing is used', async () => {
@@ -71,7 +71,7 @@ test('AI errors become codes the screen can explain (region refusal, busy, quota
   await assert.rejects(translateWorkbook(admin, {sentences: ['Hi.']}, async () => { throw Error('User location is not supported for the API use.'); }), /AI_REGION_UNSUPPORTED/);
 });
 
-test('워크북 AI route (/api/gemini?task=workbook): teachers with a monthly limit, the admin without; students refused', async () => {
+test('워크북 AI route (/api/gemini?task=workbook): accounts with a monthly limit (students too), the admin without', async () => {
   const {handleWorkbookAi} = await import('../api/gemini.ts');
   const {AI_MONTHLY_LIMITS} = await import('../api/_lib/aiModel.ts');
   const f = registrationFirestore();
@@ -83,8 +83,8 @@ test('워크북 AI route (/api/gemini?task=workbook): teachers with a monthly li
   assert.deepEqual((await call({sentences: ['I run.']}, 'admin', ok)).out, {ok: true, left: null, translations: ['나는 달린다.']});
   const byTeacher = await call({sentences: ['I run.']}, 'teacher', ok);
   assert.deepEqual([byTeacher.out.ok, byTeacher.out.left], [true, AI_MONTHLY_LIMITS.workbook - 1]);
-  const refused = await call({sentences: ['I run.']}, 'kid', ok);
-  assert.deepEqual([refused.status, refused.out.error, calls], [403, 'FORBIDDEN', 2], 'a student never reaches the model');
+  const byStudent = await call({sentences: ['I run.']}, 'kid', ok);
+  assert.deepEqual([byStudent.out.ok, byStudent.out.left, calls], [true, AI_MONTHLY_LIMITS.workbook - 1, 3], 'a student: the same monthly limit');
   const failed = await call({sentences: ['I run.']}, 'teacher', async () => { throw Error('503 overloaded'); });
   assert.equal(failed.out.error, 'AI_BUSY');
   assert.equal([...f.rows.entries()].find(([k]) => k.startsWith('aiMonthly/teacher_'))![1].workbook, 1, 'a failed call is given back');

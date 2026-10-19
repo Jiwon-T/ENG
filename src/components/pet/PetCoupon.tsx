@@ -33,7 +33,7 @@ export function DecorArt({ id, size = 44 }: { id: string; size?: number }) {
 /** One thing in the room: a 금메달 (by month) or a 탑 장식 (by id). */
 const Placed = ({ id, size }: { id: string; size: number }) => towerDecor(id) ? <DecorArt id={id} size={size * 1.1} /> : <MedalArt month={id} size={size} />;
 
-/** 펫 홈: how far this month's points are from the coupon (shown only to 영어 이지원T's students). */
+/** 펫 홈: how far this month's points are from the coupon (shown to students linked to the academy). */
 export function CouponGauge({ coupon, onShop }: { coupon: CouponView; onShop: () => void }) {
   const pct = Math.min(100, Math.floor((coupon.earned / coupon.goal) * 100)), ready = coupon.earned >= coupon.goal;
   return <section aria-label={PET_COUPON.name} className="rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">

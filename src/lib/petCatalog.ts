@@ -110,7 +110,7 @@ export const petItem = (id: string) => PET_ITEMS.find(item => item.id === id);
 /** A pass-only room can be used on this plan ('free' | 'pet' | 'premium'): 프리미엄 opens all, 펫 패스 the 'pet' ones. */
 export const passAllows = (item: { pass?: 'pet' | 'premium' } | undefined, plan: string | null | undefined) => Boolean(item?.pass) && (plan === 'premium' || (item!.pass === 'pet' && plan === 'pet'));
 /** 이달의 장학 쿠폰: when the points earned in a month (Korea time, from the 1st; spending doesn't matter) reach `goal`,
- *  영어 이지원T's students may ask for that month's coupon (no points are taken; not asked for = that month is gone) and
+ *  any 채움 학원 student (linked to the academy) may ask for that month's coupon (no points are taken; not asked for = that month is gone) and
  *  get that month's 금메달 to place in their room. In the first season the points held when counting began count too. */
 export const PET_COUPON = { name: '이달의 장학 쿠폰', goal: 10_000, firstSeason: '2026-10', maxDecor: 24 } as const;
 /** '2026-10' → '26.10' (on the medal and the badges). */
@@ -134,9 +134,19 @@ export const PET_DAILY_STUDY_POINTS = 300;
 /** Real lessons, once per lesson, from the last 30 days on: each 출석, and each 숙제 by the 숙제 평가 the teacher writes in
  *  the next lesson's 일지 (중하 and below, 미제출: nothing). The student's own 완료 check is a to-do mark and gives nothing. */
 export const PET_ATTENDANCE_REWARD = { points: 30, xp: 50 };
+/** 지각 (보강 지각 too): half the 출석 reward. */
+export const PET_LATE_REWARD = { points: 15, xp: 25 };
 export const PET_HOMEWORK_REWARD: Record<string, { points: number; xp: number }> = {
   '최상': { points: 40, xp: 60 }, '상': { points: 30, xp: 45 }, '중상': { points: 20, xp: 30 }, '중': { points: 10, xp: 15 },
 };
+/** 테스트 평가 (the 일지's 테스트 grade, once per lesson, outside the daily cap): a test on paper pays more (it is harder,
+ *  and an app test already paid its 단어 테스트 points). Paper or app: the teacher's chip in the 일지, else 자동 (no app
+ *  단어 테스트 that day = paper). */
+export const PET_TEST_REWARD: Record<'paper' | 'app', Record<string, { points: number; xp: number }>> = {
+  paper: { '최상': { points: 40, xp: 60 }, '상': { points: 30, xp: 45 }, '중상': { points: 20, xp: 30 }, '중': { points: 10, xp: 15 } },
+  app: { '최상': { points: 20, xp: 30 }, '상': { points: 15, xp: 22 }, '중상': { points: 10, xp: 15 }, '중': { points: 5, xp: 8 } },
+};
+export const PET_TEST_REWARD_TEXT = (kind: 'paper' | 'app') => Object.entries(PET_TEST_REWARD[kind]).map(([grade, r]) => `${grade} ${r.points}`).join(' · ') + 'P';
 /** "최상 40 · 상 30 · 중상 20 · 중 10P" for the screens that explain the rewards. */
 export const PET_HOMEWORK_REWARD_TEXT = Object.entries(PET_HOMEWORK_REWARD).map(([grade, r]) => `${grade} ${r.points}`).join(' · ') + 'P';
 export const PET_REWARD_WINDOW_DAYS = 30;

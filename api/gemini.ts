@@ -9,6 +9,7 @@ import { AI_PLANS, PASS_NOTE } from '../src/lib/aiPlans.js';
 import { bundleQuestionSets, listQuestionSets, makeQuestionSet, readQuestionSet } from './_lib/questionSets.js';
 import { editQuestion, redoQuestion } from './_lib/questionEdits.js';
 import { myAssignedSets, openAttempt, saveAttempt, submitAttempt } from './_lib/questionAttempts.js';
+import { readWorkbookHistory, saveWorkbookVersion } from './_lib/teacherWorkbook.js';
 import { PASSAGE_MESSAGES, askPassagePart, editPassagePart, listPassages, openPassage, passageActor, passageWordsPart, readPassage, setPassageInfo } from './_lib/passage.js';
 export { AI_MODEL, generateAi };
 
@@ -30,8 +31,8 @@ const monthlyMessage = async (db: any, uid: string, feature: 'analyzer' | 'workb
     const plan = await planOf(db, uid).catch(() => 'free' as const), name = feature === 'analyzer' ? '지문 분석' : feature === 'generator' ? '변형 문제 만들기' : '워크북 AI 해석';
     return plan === 'premium' ? `이번 달 ${name} ${AI_PLANS.premium[feature]}번을 다 썼어요. 다음 달에 또 써 주세요.` : `이번 달 ${name} ${AI_PLANS[plan][feature]}번을 다 썼어요. ${PASS_NOTE.premium}`;
 };
-/** 워크북 AI 해석 (/api/gemini?task=workbook): teachers (a monthly limit) and the admin (none), one Korean sentence per
- *  English sentence. */
+/** 워크북 AI 해석 (/api/gemini?task=workbook): every signed-in account (a monthly limit by plan) and the admin (none),
+ *  one Korean sentence per English sentence. */
 export async function handleWorkbookAi(req: IncomingMessage, res: ServerResponse, deps: Deps = defaultDeps()) {
     if (req.method !== 'POST') return sendJson(res, 405, {ok: false, error: 'Method not allowed'});
     const header = req.headers.authorization || '';
@@ -42,8 +43,6 @@ export async function handleWorkbookAi(req: IncomingMessage, res: ServerResponse
     let left: number | null = null;
     try {
         if (!admin) {
-            const [user, access] = await Promise.all([deps.db().collection('users').doc(uid).get(), deps.db().collection('teacherWorkspaceAccess').doc(uid).get()]);
-            if (!['teacher', 'principal'].includes(user.data()?.role) || !access.exists || access.data()?.disabled) return sendJson(res, 403, {ok: false, error: 'FORBIDDEN', message: WORKBOOK_AI_MESSAGES.FORBIDDEN});
             const burst = await takeAiBurst(deps.db(), uid); if (!burst.ok) return tooFast(res, burst.retryAfter ?? 60, true);
             left = await takeMonthlyQuota(deps.db(), uid, 'workbook');
             if (left < 0) return sendJson(res, 429, {ok: false, error: 'AI_MONTHLY_LIMIT', message: await monthlyMessage(deps.db(), uid, 'workbook')});
@@ -91,6 +90,9 @@ export async function handlePassage(req: IncomingMessage, res: ServerResponse, d
             : action === 'attempt-save' ? await saveAttempt(db, actor, body, now)
             : action === 'attempt-submit' ? await submitAttempt(db, actor, body, now, request => deps.generate(request, 'generator'))
             : action === 'assigned-list' ? await myAssignedSets(db, actor)
+            // 워크북 (학생도): the blanks and orders used before for this passage, and this version's (for 선생님 인증)
+            : action === 'workbook-history' ? await readWorkbookHistory(db, actor, body?.key)
+            : action === 'workbook-save' ? await saveWorkbookVersion(db, actor, {key: body?.key, title: body?.title, blanks: body?.blanks, orders: body?.orders}, now)
             : null;
         if (!out) return sendJson(res, 400, {ok: false, error: 'BAD_REQUEST', message: PASSAGE_MESSAGES.BAD_REQUEST});
         return sendJson(res, 200, {ok: true, ...out});

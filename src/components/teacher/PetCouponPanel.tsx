@@ -28,7 +28,7 @@ export default function PetCouponPanel({busy,request,act,autoLoad=false}:{busy:b
  return <section className="panel rv">
   <div className="rv-head"><h2>이달의 장학 쿠폰{rows&&<small>{list.length}장{waiting?` · 지급 전 ${waiting}`:''}</small>}</h2>
    {months.length>1&&<select aria-label="달" value={shown} onChange={e=>setMonth(e.target.value)}>{months.map(m=><option key={m} value={m}>{m.replace('-','년 ')}월</option>)}</select>}</div>
-  <p className="mt-1 text-xs text-slate-500">영어 이지원T 반 학생이 한 달에 모은 포인트가 1만 P를 넘으면 신청할 수 있어요 (포인트는 줄지 않아요).</p>
+  <p className="mt-1 text-xs text-slate-500">채움 학원 학생이 한 달에 모은 포인트가 1만 P를 넘으면 신청할 수 있어요 (포인트는 줄지 않아요).</p>
   {rows&&(list.length?<ul className="mt-2">{list.map(c=><CouponLine key={c.id} c={c} busy={busy} onPaid={paid}/>)}</ul>:<p className="mt-2 text-sm text-slate-500">아직 신청한 학생이 없어요.</p>)}
  </section>;
 }

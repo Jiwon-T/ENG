@@ -7,13 +7,15 @@ import h2 from './_lib/student/academic.js';
 import h3 from './_lib/student/assignment-completion.js';
 import h4 from './_lib/student/link-code.js';
 import h5 from './_lib/student/pet.js';
+import h6 from './_lib/student/study-cert.js';
 const handlers = {
   'lesson-reports': h0,
   'schedules': h1,
   'academic': h2,
   'assignment-completion': h3,
   'link-code': h4,
-  'pet': h5
+  'pet': h5,
+  'study-cert': h6
 };
 export default function handler(req: IncomingMessage, res: ServerResponse) { return routeHandler(req, res); }
 async function routeHandler(req: IncomingMessage, res: ServerResponse) {

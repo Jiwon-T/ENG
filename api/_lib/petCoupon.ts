@@ -1,4 +1,4 @@
-// 이달의 장학 쿠폰: one coupon a month for 영어 이지원T's students whose points earned this month (Korea time) reached the
+// 이달의 장학 쿠폰: one coupon a month for any 채움 학원 student (linked, an active member) whose points earned this month (Korea time) reached the
 // goal. Asking for it takes no points and gives that month's 금메달 (a room decoration). petCoupons/{uid}_{YYYY-MM}
 // (server only) is the record the admin hands out from; the document id keeps it to one per student per month.
 import {normalizeNotionPageId as uuid, isNotionPageId} from './notionPageId.js';
@@ -9,17 +9,14 @@ import {PET_COUPON, medalLabel, passAllows, petItem} from '../../src/lib/petCata
 
 export const PET_COUPONS = 'petCoupons';
 export interface PetCoupon { uid: string; studentKey: string; month: string; requestedAt: number; earned: number; paidAt: number | null; paidBy: string | null }
-const sameKey = (a: unknown, b: unknown) => typeof a === 'string' && typeof b === 'string' && isNotionPageId(a) && isNotionPageId(b) && uuid(a) === uuid(b);
 
-/** The student's academy key when the admin (영어 이지원T) teaches them 영어 in this academy; otherwise null. */
-export async function couponStudentKey(db: any, uid: string, adminUid = process.env.ADMIN_UID) {
-  if (!adminUid) return null;
+/** The student's academy key when this account is the one linked to them (the server's mapping says so) and they are an
+ *  active member of this academy (any subject, any teacher); otherwise null. */
+export async function couponStudentKey(db: any, uid: string) {
   const key = (await db.collection('users').doc(uid).get()).data()?.notionStudentKey;
   if (typeof key !== 'string' || !isNotionPageId(key)) return null;
-  const [profile, member] = await Promise.all([db.collection('teacherWorkspaceAccess').doc(adminUid).get(), db.collection('academyStudentMemberships').doc(uuid(key)).get()]);
-  const p = profile.data(), m = member.data();
-  if (!p || p.disabled || !m || m.disabled || m.academyId !== 'main') return null;
-  return (p.scopes || []).some((s: any) => s?.subject === '영어' && sameKey(s.studentKey, key)) ? uuid(key) : null;
+  const [m, mapping] = await Promise.all([db.collection('academyStudentMemberships').doc(uuid(key)).get().then((s: any) => s.data()), readStudentMapping(db, key)]);
+  return m && !m.disabled && m.academyId === 'main' && mapping?.firebaseUid === uid ? uuid(key) : null;
 }
 
 /** What the pet screen shows: the goal gauge, and whether this month's coupon was asked for or handed out. */

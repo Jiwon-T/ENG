@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { parseJsonBody, sendJson } from '../http.js';
 import { getFirebaseAdmin } from '../firebaseAdmin.js';
 import { verifyFirebaseSession } from '../firebaseSession.js';
+import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { readStudentMapping } from '../studentIdentity.js';
 import { lessonReportId } from '../reportAudienceDTO.js';
 import type { StoredLessonReport } from '../reportSchemas.js';
@@ -12,7 +13,7 @@ import {
   PET_STATES, addXP, adoptPet, awardStudy, buyItem, chatRequest, museRequest, chooseCharacter, claimStudyRewards, currentPet, earnPoints, equipItem, evolveRequest, importLocalPet,
   homeworkGrades, initialPetState, parseAi, pendingStudyRewards, petSummary, petThePet, publicPetState, renamePet, rollDay, seoulDay, switchPet, teachRequest, wearItem, type ServerPetState,
 } from '../pet.js';
-import { cleanPetSpeech, petEmojiLimit, PET_ACTIONS, PET_STUDY_RATES, PET_WORD_FEED, stageGame, stageQuestions, stageWithSentences, passAllows, petItem } from '../../../src/lib/petCatalog.js';
+import { cleanPetSpeech, petEmojiLimit, PET_ACTIONS, PET_REWARD_WINDOW_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PET_WORD_FEED, stageGame, stageQuestions, stageWithSentences, passAllows, petItem } from '../../../src/lib/petCatalog.js';
 import { loadSentencesFor } from '../petSentences.js';
 import { PET_GAMES, answerRun, buildRun, initialGameState, loadFeedSource, publicRun, rollGameDay, runSummary, type FeedSentence, type FeedSource, type PetGameState } from '../petWordFeed.js';
 import { PET_GUILD, PET_NAMES, PET_PARTIES, addContribution, nameDocId, partyName, boardCard, checkNickname, createParty, initialGuild, joinParty, leaveParty, norm, normalizeGuild, petLook, publicParty, rankingRow, setAlias, setGuildName, settleParty, shownAlias, shownGuild, updateMemberNames, voteKick, weekOf, type GuildProfile, type Party } from '../petParty.js';
@@ -33,7 +34,7 @@ const defaults = (): Deps => ({
 const MESSAGES: Record<string, string> = {
   TOWER_NOT_READY: '선생님이 탑 단어장을 아직 정하지 않았어요.', TOWER_CHEST_FIRST: '먼저 1층 보물상자를 열어 보세요!', TOWER_CHEST_OPENED: '이미 연 보물상자예요.', TOWER_TOP: '지금은 여기가 꼭대기예요. 더 높은 층은 곧 열려요!',
   TOWER_NO_RUN: '전투가 끝났어요. 다시 들어가 주세요.', TOWER_WAIT: '지금은 문제에 답할 차례예요.', TOWER_SKILL_LOCKED: '스킬은 전직 후에 쓸 수 있어요. 1차 전직은 원정대 5장 설산의 왕관 스테이지에서 해요.', TOWER_SKILL_NOT_LEARNED: '아직 배우지 않은 스킬이에요.', TOWER_NO_MP: 'MP가 모자라요. 단어를 맞히면 MP가 2씩 차요.', TOWER_NO_POTION: '물약이 없어요.', TOWER_IN_BATTLE: '전투 중에는 장비를 바꿀 수 없어요.', TOWER_GEAR_JOB: '이 장비는 그 직업으로 전직한 펫만 낄 수 있어요.', TOWER_SOLD_OUT: '다 팔렸어요.', TOWER_MAX_ENHANCE: '이미 최고 강화(+5)예요.', TOWER_NO_STONES: '강화석이 모자라요.', TOWER_SNEAK_INVALID: '조금 더 천천히, 길을 따라 지나가 보세요.',
-  COUPON_NOT_ELIGIBLE: '이달의 장학 쿠폰은 영어 이지원T 반 친구들이 받을 수 있어요.', COUPON_TAKEN: '이번 달 쿠폰은 이미 신청했어요.', COUPON_NOT_YET: '이번 달에 모은 포인트가 아직 10,000P가 안 됐어요.',
+  COUPON_NOT_ELIGIBLE: '이달의 장학 쿠폰은 학원에 연결된 채움 학원 학생이 받을 수 있어요.', COUPON_TAKEN: '이번 달 쿠폰은 이미 신청했어요.', COUPON_NOT_YET: '이번 달에 모은 포인트가 아직 10,000P가 안 됐어요.',
   PET_PASS_ITEM: '펫 패스·프리미엄 패스로 쓸 수 있는 방이에요.',
   PET_JOB3_LOCKED: '3차 전직은 2차 전직한 Lv.150 친구가 채움의 탑 50층을 깨면 할 수 있어요.',
   PET_JOB_BAD: '검사나 마법사 중에서 골라 주세요.', PET_JOB_TAKEN: '이 친구는 이미 전직했어요.', PET_JOB_LOCKED: '5장 설산의 왕관 스테이지를 이 친구와 통과하면 1차 전직할 수 있어요.', PET_JOB2_BAD: '이 친구의 직업에 맞는 갈래를 골라 주세요.', PET_JOB2_LOCKED: '1차 전직한 친구와 7장 꿈의 정원의 왕관 스테이지를 통과하면 2차 전직할 수 있어요.',
@@ -57,9 +58,29 @@ async function studyReports(db: any, uid: string, preloadedUser?: any) {
   const reports = await db.collection('lessonReports').where('internalStudentId', '==', mapping.internalStudentId).get();
   const rows = reports.docs.map((d: any) => d.data() as StoredLessonReport).filter((r: StoredLessonReport) => r.reportIdentity || r.notionPageId).map((r: StoredLessonReport) => ({
     id: lessonReportId(r), date: r.lessonDateStart, subject: r.subject || '영어', attendance: r.attendance || '', homework: r.homework || '', hasAssignment: Boolean(r.derivedAssignment?.trim()),
+    test: r.test || '', testPaper: typeof r.testPaper === 'boolean' ? r.testPaper : null,
   }));
   const grades = homeworkGrades(rows);
-  return rows.map(r => ({id: r.id, date: r.date, attendance: r.attendance, homeworkGrade: grades.get(r.id)?.grade, gradedAt: grades.get(r.id)?.gradedAt}));
+  // 테스트 평가 left on 자동: paper unless the student took an app 단어 테스트 that day (read once, only when needed; a
+  // failed read counts every such test as an app test, the smaller reward)
+  const appDays = rows.some(r => r.testPaper === null && PET_TEST_REWARD.paper[r.test]) ? await appTestDays(db, uid) : null;
+  return rows.map(r => ({id: r.id, date: r.date, attendance: r.attendance, homeworkGrade: grades.get(r.id)?.grade, gradedAt: grades.get(r.id)?.gradedAt,
+    test: r.test, testPaper: r.testPaper ?? isPaperDay(appDays, String(r.date).slice(0, 10))}));
+}
+/** 자동: paper only when the day was read in full and had no app 단어 테스트 (a day not read = app, the smaller reward). */
+export const isPaperDay = (seen: {days: Set<string>; from: string} | null, day: string) => Boolean(seen && day >= seen.from && !seen.days.has(day));
+/** Korea-time days of the student's app 단어 테스트 (studySessions type 'test') in the reward window, and from which day
+ *  the read is complete (when the newest MAX sessions do not reach back to the window start, older days are not known). */
+async function appTestDays(db: any, uid: string): Promise<{days: Set<string>; from: string} | null> {
+  const from = Date.now() - (PET_REWARD_WINDOW_DAYS + 2) * 86_400_000;
+  try {
+    const MAX = 500, snap = await db.collection('studySessions').where('uid', '==', uid).where('createdAt', '>=', Timestamp.fromMillis(from)).orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc').limit(MAX).get();
+    const at = (v: any) => typeof v?.toMillis === 'function' ? v.toMillis() : Date.parse(String(v));
+    const mine = snap.docs.map((d: any) => d.data()).filter((x: any) => x.uid === uid);
+    // cut at MAX: the oldest day read may be partial, so only the days after it are complete
+    const complete = snap.docs.length < MAX ? seoulDay(from) : seoulDay(at(mine[mine.length - 1]?.createdAt) + 86_400_000);
+    return {days: new Set(mine.filter((x: any) => x.type === 'test').map((x: any) => seoulDay(at(x.createdAt)))), from: complete};
+  } catch { console.warn('PET_APP_TEST_DAYS_FAILED'); return null; }
 }
 
 /** Read → change → save in one transaction (users.petStats follows). The change throws a PET_* code to refuse. */

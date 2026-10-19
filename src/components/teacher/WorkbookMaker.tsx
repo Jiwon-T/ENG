@@ -10,6 +10,7 @@ import { FooterSetting } from '../print/PrintSheet';
 import SampleModal, { SampleButton } from '../SampleModal';
 import { sampleWorkbook } from '../../lib/samples';
 import { PASSAGE_LIMITS } from '../../lib/passageTools';
+import CertRequest from '../student/CertRequest';
 
 const QuestionGenerator = lazy(() => import('../generator/QuestionGenerator'));
 
@@ -42,7 +43,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
   const [sentences, setSentences] = useState<WorkbookSentence[]>([]);
   const [build, setBuild] = useState<WorkbookBuild | null>(null), [history, setHistory] = useState<WorkbookHistory>({ blanks: [], orders: [] });
   // The build already downloaded (and remembered): downloading it again saves nothing new.
-  const savedBuild = useRef<WorkbookBuild | null>(null);
+  const savedBuild = useRef<WorkbookBuild | null>(null), [savedKey, setSavedKey] = useState('');
   const [view, setView] = useState<'part1' | 'part2' | 'key'>('part1'), [sample, setSample] = useState(false);
   // 이 지문으로 변형 문제 만들기: the generator opens here with the sentences already pasted (워크북 stays as it is)
   const [making, setMaking] = useState(false);
@@ -113,7 +114,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
     if (savedBuild.current === build) return setMessage('같은 워크북을 다시 내려받았어요. 다른 빈칸·배열이 필요하면 다시 섞기를 눌러 주세요.');
     // Remember these blanks and orders, so the next workbook from the same passage picks different ones.
     await request('workbook-save', { key: build.key, title: title.slice(0, 120), blanks: build.blanks.map(b => b.blanks), orders: build.arrange.map(a => a.order) });
-    savedBuild.current = build;
+    savedBuild.current = build; setSavedKey(build.key);
     setHistory(h => ({ blanks: [...h.blanks, build.blanks.map(b => b.blanks)], orders: [...h.orders, build.arrange.map(a => a.order)] }));
     setMessage('내려받았어요. 이 지문으로 다음에 만들거나 다시 섞기를 누르면 이번과 다른 빈칸·배열이 나와요.');
   });
@@ -192,6 +193,8 @@ export default function WorkbookMaker({ request }: { request: Request }) {
         <button type="button" className={quiet} disabled={!!busy} onClick={() => void generate(true)}><RefreshCw size={13} aria-hidden="true" />다시 섞기</button>
         <button type="button" className={`${primary} inline-flex items-center gap-1`} disabled={!!busy || issues.length > 0 || (aiCount > 0 && !reviewed)} onClick={() => void download()}><Download size={15} aria-hidden="true" />{busy === 'docx' ? '만드는 중…' : 'Word 다운로드'}</button>
       </div>
+      {/* 학생: a workbook made (its Word file taken) can be checked by the teacher once done on paper */}
+      {(savedKey === build.key || history.blanks.length > 0) && <CertRequest kind="workbook" refId={build.key} />}
     </div>}
   </section>;
 }

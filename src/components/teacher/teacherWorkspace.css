@@ -652,6 +652,8 @@
 .teacher-workspace .lesson-test-tabs {display:inline-flex;align-items:center;gap:3px;margin-left:2px;min-width:0;overflow-x:auto;scrollbar-width:none;}
 .teacher-workspace .lesson-test-tabs>button {flex:none;display:inline-flex;align-items:center;height:18px;min-height:18px;padding:0 6px;border:1px solid var(--workspace-line,#e2e8f0);border-radius:999px;background:var(--workspace-surface,#fff);color:var(--workspace-muted);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;gap:2px;}
 .teacher-workspace .lesson-test-tabs>button[aria-pressed=true] {border-color:#f3a5b4;background:#fef2f3;color:#8b2f40;}
+.teacher-workspace .lesson-test-paper {flex:none;height:18px;min-height:18px;padding:0 6px;margin-left:4px;border:1px dashed var(--workspace-line,#cbd5e1);border-radius:999px;background:var(--workspace-surface,#fff);color:var(--workspace-muted);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;vertical-align:middle;}
+.teacher-workspace .lesson-test-paper[aria-pressed=true] {border-style:solid;border-color:#f3a5b4;background:#fef2f3;color:#8b2f40;}
 .teacher-workspace .lesson-test-tab-name {display:inline-block;max-width:44px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;}
 .teacher-workspace .lesson-test-tabs>.lesson-test-add {width:18px;padding:0;justify-content:center;color:#8b2f40;}
 /* Narrow box with several tests: (선택) and the names give way so every tab still shows. */

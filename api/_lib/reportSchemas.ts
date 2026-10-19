@@ -135,6 +135,8 @@ export interface StoredLessonReport {
   vocabularyScore: number | null;
   /** The 테스트 점수's name from the 일지 (단어, 모의고사 …); empty: just 테스트. */
   testName?: string;
+  /** The 테스트 on paper (true), in the app (false), or 자동 (null): for the 테스트 평가 points only, never shown. */
+  testPaper?: boolean | null;
   /** The other tests of that day (벼락치기 85 …), after the first one above. */
   extraScores?: { name: string; score: number }[];
   schoolExamScore: number | null;

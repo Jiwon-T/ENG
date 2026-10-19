@@ -14,6 +14,11 @@ function TestNamePicker({value,onChange}:{key?:number;value:string;onChange:(nam
   {open&&<input aria-label="테스트 이름 직접 입력" maxLength={30} placeholder="예: 듣기평가" value={preset?'':value} onChange={e=>onChange(e.target.value)}/>}</div>;
 }
 const circled=['①','②','③','④'];
+/** 테스트 평가 points: 종이 시험지 pays more. 자동 (null): no app 단어 테스트 that day counts as paper. Tap: 자동 → 종이 → 앱. */
+function PaperChip({value,onChange}:{value:boolean|null;onChange:(next:boolean|null)=>void}){
+ const label=value===true?'종이':value===false?'앱':'자동';
+ return <button type="button" className="lesson-test-paper" aria-pressed={value!==null} aria-label={`테스트 방식 ${label} (눌러서 바꾸기)`} title={'테스트 평가 포인트: 종이 시험지는 더 많이 받아요. 자동: 그날 앱 단어 테스트를 안 봤으면 종이로 쳐요'} onClick={()=>onChange(value===null?true:value===true?false:null)}>{label==='자동'?'시험 자동':label==='종이'?'종이 시험':'앱 시험'}</button>;
+}
 /** 테스트 점수 can hold more than one test (단어 + 벼락치기 …): small tabs in the title row, the box below edits the chosen
  *  one, so the box never grows. The first test stays in correct/total/…/testName; the others go in extraTests. */
 function TestTabs({tests,active,onPick,onAdd}:{tests:{name:string;score:number|null}[];active:number;onPick:(i:number)=>void;onAdd:()=>void}){
@@ -39,7 +44,7 @@ export default function LessonTests({value,onChange,error=false}:{value:any;onCh
    for(const [field,next] of Object.entries(patch))onChange(field,next);
   };
   const label=isGeneral&&tests.length>1?`${title} ${active+1}`:title;
-  return <fieldset key={name} className="lesson-test"><legend>{title} <OptionalMark/><AudienceTag to="all"/>{isGeneral&&<TestTabs tests={tests} active={active} onPick={setTab} onAdd={()=>{setExtras([...extras,{name:'',correct:null,total:null,wrong:null,scorePercent:false}]);setTab(extras.length+1);}}/>}</legend>
+  return <fieldset key={name} className="lesson-test"><legend>{title} <OptionalMark/><AudienceTag to="all"/>{isGeneral&&<PaperChip value={value.testPaper??null} onChange={next=>onChange('testPaper',next)}/>}{isGeneral&&<TestTabs tests={tests} active={active} onPick={setTab} onAdd={()=>{setExtras([...extras,{name:'',correct:null,total:null,wrong:null,scorePercent:false}]);setTab(extras.length+1);}}/>}</legend>
  {/* Scores carried over from the previous lesson are cleared in one tap (shown on both boxes; dimmed when empty). An added test is taken away whole. */}
  <button type="button" className="lesson-test-clear" disabled={!(isGeneral&&extra)&&![correct,total,wrong].some(key=>v[key]!=null)} aria-label={`${label} 지우기`} title={isGeneral&&extra?'이 테스트 지우기':'점수 지우기'} onClick={()=>{if(isGeneral&&extra){setExtras(extras.filter((_,i)=>i!==active-1));setTab(active-1);return;}for(const key of [correct,total,wrong])onChange(key,null);}}><Trash2 size={13} aria-hidden="true"/></button>
  {/* 백분율: a score already worked out (85점) goes in as it is; it is kept as 100문항 so every average still works. */}

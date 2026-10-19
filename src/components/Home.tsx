@@ -69,8 +69,8 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
   const extras = [
     {id: 'analyzer', title: '지문 분석기', description: '영어 지문 분석', icon: Languages, beta: true, show: true},
     {id: 'generator', title: '변형 문제 만들기', description: '지문으로 문제 만들기', icon: Sparkles, beta: true, show: true},
-    // Teachers: 선생님방's 워크북 tab, one tap from home.
-    {id: 'workbook', title: '워크북', description: '지문으로 워크북 만들기', icon: ClipboardList, beta: false, show: isEducator},
+    // Teachers: 선생님방's 워크북 tab, one tap from home; students: their own (printed, then 선생님 인증).
+    {id: 'workbook', title: '워크북', description: '지문으로 워크북 만들기', icon: ClipboardList, beta: false, show: true},
   ].filter(item => item.show);
   // PC (md and up) uses a wider page and larger type; the phone layout stays compact.
   const row = 'group -mx-2 flex min-h-[44px] w-[calc(100%+1rem)] items-center gap-3 border-t border-[#fbeef0] px-2 py-2.5 text-left text-sm text-slate-700 transition-colors first:border-t-0 hover:bg-[#fff7f8] md:-mx-3 md:w-[calc(100%+1.5rem)] md:gap-4 md:px-3 md:py-3.5 md:text-base';

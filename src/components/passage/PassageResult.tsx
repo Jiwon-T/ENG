@@ -11,6 +11,7 @@ import { LevelBadge, LinkLegend, StructureMap, linkedPieces } from './PassageLev
 import { passageLevel } from '../../lib/passageLevel';
 import type { QuestionType } from '../../lib/questionMaker';
 import { AiWorking } from '../teacher/workbookAi';
+import CertRequest from '../student/CertRequest';
 
 type Tab = 'reading' | 'grammar' | 'words' | 'summary';
 const TABS: [Tab, string][] = [['reading', '① 직독직해'], ['grammar', '② 문법·구조'], ['words', '③ 단어'], ['summary', '④ 주제·요약']];
@@ -85,6 +86,7 @@ export default function PassageResult({ passage, onChange, reused, extra, onMake
       </span>
     </div>
     {extra}
+    {!staff && <CertRequest kind="reading" refId={passage.id} />}
     {onMakeQuestions && <PracticeHints sentences={passage.sentences} essay={parts.grammar?.essay ?? null} onMake={types => onMakeQuestions(types)} />}
     <div role="tablist" aria-label="분석 보기" className="mt-3 flex gap-1 overflow-x-auto border-b border-slate-100">
       {TABS.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setMessage(''); setEditing(null); }} className={`flex-1 whitespace-nowrap border-b-2 px-2 py-2 text-xs font-bold md:text-sm ${tab === id ? 'border-[#d26272] text-[#8b2f40]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>{label}</button>)}

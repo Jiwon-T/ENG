@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowLeft, Check, CloudCheck, X } from 'lucide-react';
 import { passageCall } from '../../lib/passageApi';
 import { CIRCLED, LETTERS5 } from '../../lib/questionMaker';
+import CertRequest from '../student/CertRequest';
 
 // 변형 문제 풀기: one question at a time; each choice is saved on the server (나갔다 와도 남아요), 채점 once at the end,
 // then the result with the right answers and explanations. The server never sends the answers before grading.
@@ -65,6 +66,7 @@ export default function QuestionSolve({ setId, assignmentId, onBack, backLabel =
           {r.explanation && <p className="mt-1 whitespace-pre-line pl-5 text-slate-500">{r.explanation}</p>}
         </li>;
       })}</ul>
+      {setId && !assignmentId && <CertRequest kind="questions" refId={setId} />}
     </div>);
   }
 

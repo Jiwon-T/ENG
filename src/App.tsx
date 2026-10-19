@@ -99,6 +99,7 @@ const Login = lazy(loadLogin);
 const Home = lazy(() => import('./components/Home'));
 const PassageAnalyzer = lazy(() => import('./components/passage/PassageAnalyzer'));
 const QuestionGenerator = lazy(() => import('./components/generator/QuestionGenerator'));
+const StudentWorkbook = lazy(() => import('./components/student/StudentWorkbook'));
 const TeacherRoom = lazy(() => import('./components/teacher/TeacherRoom'));
 const WordbookView = lazy(() => import('./components/student/WordbookView'));
 const LearningReport = lazy(() => import('./components/student/LearningReport'));
@@ -107,7 +108,7 @@ const ParentReportView = lazy(() => import('./components/parent/ParentReportView
 
 /** 변형문제 생성기: question types made in one go (fewer at a time lets the AI think them through carefully). */
 const MAX_QUESTION_TYPES = 3;
-type View = 'home' | 'analyzer' | 'generator' | 'vocab' | 'grammar' | 'exam' | 'sentence' | 'tutor' | 'report' | 'teacher-room' | 'pet';
+type View = 'home' | 'analyzer' | 'generator' | 'workbook' | 'vocab' | 'grammar' | 'exam' | 'sentence' | 'tutor' | 'report' | 'teacher-room' | 'pet';
 /** The screen's name in the top bar (the same words as on the home tiles and in the menu). */
 const VIEW_TITLES: Partial<Record<View, string>> = { analyzer: '지문 분석기', generator: '문제 생성기', vocab: '단어 세트', grammar: '문법 세트', exam: '시험기간', sentence: '문장 세트', tutor: 'AI 튜터', report: '학습 리포트', pet: '나만의 펫' };
 
@@ -335,7 +336,7 @@ export default function App() {
     const reservedList = [
       'api', 'admin', 'teacher', 'student', 'parent', 'report', 'reports',
       'login', 'logout', 'signup', 'register', 'home', 'profile', 'settings',
-      'archive', 'analyzer', 'generator', 'library', 'auth', 'callback',
+      'archive', 'analyzer', 'generator', 'workbook', 'library', 'auth', 'callback',
       'assets', 'static', 'favicon', 'robots', 'sitemap', 'manifest', 'health',
       'vocab', 'grammar', 'exam', 'tutor', 'teacher-room', 'pet', 'sw', 'icon'
     ];
@@ -601,7 +602,7 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
             >
               <Home 
-                onNavigate={view => { setTeacherStartTab(view === 'workbook' ? 'workbook' : undefined); setCurrentView(view === 'workbook' ? 'teacher-room' : view); }} 
+                onNavigate={view => { const room = view === 'workbook' && ['teacher', 'principal', 'admin'].includes(String(profile?.role)); setTeacherStartTab(room ? 'workbook' : undefined); setCurrentView(room ? 'teacher-room' : view); }} 
                 userRole={profile?.role} 
                 userEmail={profile?.email}
                 studentLinked={Boolean((profile as any)?.notionStudentKey)}
@@ -634,6 +635,11 @@ export default function App() {
             <motion.div key="generator" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               {/* 변형 문제 만들기 (Beta): app-made types first, counted monthly (components/generator). */}
               <Suspense fallback={<p className="py-10 text-center text-sm text-slate-400">불러오는 중…</p>}><QuestionGenerator /></Suspense>
+            </motion.div>
+          ) : currentView === 'workbook' && user ? (
+            <motion.div key="workbook" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              {/* 워크북 (학생): made like the teachers', then 선생님 인증 once done on paper */}
+              <Suspense fallback={<p className="py-10 text-center text-sm text-slate-400">불러오는 중…</p>}><StudentWorkbook /></Suspense>
             </motion.div>
           ) : currentView === 'teacher-room' ? (
             <motion.div

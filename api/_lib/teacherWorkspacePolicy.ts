@@ -43,6 +43,8 @@ export const lessonDraftSchema = z.object({
     testName:z.string().trim().max(30).default(''),
     // More tests the same day (단어 + 벼락치기 …), after the first one above.
     extraTests:z.array(extraTestSchema).max(MAX_EXTRA_TESTS).default([]),
+    // The 테스트 was on paper (true) or in the app (false); null: 자동 (no app 단어 테스트 that day = paper), for its points.
+    testPaper:z.boolean().nullable().default(null),
     round: z.number().nonnegative().nullable(),
     selfStudy: z.enum(['미확인', '없음', '있음']).default('없음'),
     selfStudyStart: z.string().default(''), selfStudyEnd: z.string().default(''),
@@ -80,7 +82,7 @@ export function canTeach(actor: {
 }, studentKey: string, subject: string) { return actor.admin || (actor.principal ? actor.teachingScopes || [] : actor.scopes).some(s => s.studentKey === studentKey && s.subject === subject); }
 export function percentage(correct: number | null, total: number | null) { return sharedPercentage(correct, total); }
 export function lessonFeedback(d: z.infer<typeof lessonDraftSchema>) { return lessonFeedbackText(d); }
-export function continuation(previous: any) { return { examScope:previous.examScope||'', content: previous.content || '', assignment: previous.assignment || '', note: '', nextPlan: previous.nextPlan || '', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', correct: null, total: null, wrong:null,extraTests:[],examWrong:null,examCorrect: null, examTotal: null, round: null, selfStudy: '없음', selfStudyRound: null, selfStudyStart: '', selfStudyEnd: '', attendanceNote: '', specialNote: '' }; }
+export function continuation(previous: any) { return { examScope:previous.examScope||'', content: previous.content || '', assignment: previous.assignment || '', note: '', nextPlan: previous.nextPlan || '', attendance: '미확인', attitude: '미확인', homework: '미확인', test: '미확인', correct: null, total: null, wrong:null,extraTests:[],testPaper:null,examWrong:null,examCorrect: null, examTotal: null, round: null, selfStudy: '없음', selfStudyRound: null, selfStudyStart: '', selfStudyEnd: '', attendanceNote: '', specialNote: '' }; }
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 /** Self-study block attached to a regular lesson (same weekday). No students = everyone in the slot. */
 export const studyBlockSchema = z.object({

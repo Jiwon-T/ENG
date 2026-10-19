@@ -3,7 +3,7 @@
 // teacher screens. The AI talk uses fixed instructions written here; the student's text is only ever passed as data.
 import {
   PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_CHARACTERS, PET_DAILY_STUDY_POINTS, PET_ENERGY_ITEMS_PER_DAY, PET_FRIEND_LEVEL, PET_MAX_ENERGY, PET_MAX_LEVEL, PET_MAX_PETS, PET_REVIVES_PER_DAY,
-  PET_COUPON, PET_REWARD_WINDOW_DAYS, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob} from '../../src/lib/petCatalog.js';
+  PET_COUPON, PET_LATE_REWARD, PET_REWARD_WINDOW_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob} from '../../src/lib/petCatalog.js';
 
 export const PET_STATES = 'petStates';
 export interface ServerPhrase { original: string; remembered: string; learnedAtLevel: number; evolvedVersions: Record<string, string> }
@@ -14,7 +14,7 @@ export interface ServerPet { slot: number; character: string; name: string; chos
 export interface ServerPetState {
   version: 1; points: number; inventory: string[]; /** before 여러 마리: what pet 1 wore */ clothing?: string | null; accessory?: string | null; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: ServerPet[];
-  day: string; today: { studyPoints: number; energyItems?: number; /** before 2/day */ energyItem?: boolean; /** 몬스터 today */ revives?: number };
+  day: string; today: { studyPoints: number; energyItems?: number; /** before 2/day */ energyItem?: boolean; /** 몬스터 today */ revives?: number; /** 선생님 인증 paid today */ certs?: number };
   rewarded: Record<string, string[]>; updatedAt: number;
   /** 이달의 장학 쿠폰: points earned in `month` ('YYYY-MM', Korea time). */ earned?: { month: string; points: number };
   /** 금메달 by month ('2026-10'), and where each one sits in each room (% of the room, by background). */
@@ -202,22 +202,23 @@ export function homeworkGrades(reports: {id: string; date: string; subject: stri
   });
   return out;
 }
-type StudyReward = {id: string; kind: 'attendance' | 'assignment'; grade?: string};
-/** 공부 보상 waiting: attended lessons and graded 숙제 (중 and above) from the last 30 days not yet rewarded. */
-export function pendingStudyRewards(s: ServerPetState, reports: {id: string; date: string; attendance: string; homeworkGrade?: string; gradedAt?: string}[], now = Date.now()) {
+type StudyReward = {id: string; kind: 'attendance' | 'assignment' | 'test'; grade?: string; paper?: boolean};
+/** 공부 보상 waiting: attended lessons, graded 숙제 and 테스트 평가 (중 and above) from the last 30 days not yet rewarded. */
+export function pendingStudyRewards(s: ServerPetState, reports: {id: string; date: string; attendance: string; homeworkGrade?: string; gradedAt?: string; test?: string; testPaper?: boolean}[], now = Date.now()) {
   const from = seoulDay(now - PET_REWARD_WINDOW_DAYS * 86_400_000), today = seoulDay(now), out: StudyReward[] = [];
   const inWindow = (date?: string) => { const day = String(date || '').slice(0, 10); return Boolean(day) && day >= from && day <= today; };
   for (const r of reports) {
     const done = s.rewarded[r.id] || [];
-    if (inWindow(r.date) && ATTENDED(r.attendance) && !done.includes('attendance')) out.push({id: r.id, kind: 'attendance'});
+    if (inWindow(r.date) && ATTENDED(r.attendance) && !done.includes('attendance')) out.push({id: r.id, kind: 'attendance', ...(/지각/.test(r.attendance) ? {grade: '지각'} : {})});
     if (r.homeworkGrade && PET_HOMEWORK_REWARD[r.homeworkGrade] && inWindow(r.gradedAt) && !done.includes('assignment')) out.push({id: r.id, kind: 'assignment', grade: r.homeworkGrade});
+    if (r.test && PET_TEST_REWARD.paper[r.test] && inWindow(r.date) && !done.includes('test')) out.push({id: r.id, kind: 'test', grade: r.test, paper: Boolean(r.testPaper)});
   }
   return out;
 }
 export function claimStudyRewards(s: ServerPetState, pending: StudyReward[]) {
   let points = 0, xp = 0;
   for (const p of pending) {
-    const r = p.kind === 'attendance' ? PET_ATTENDANCE_REWARD : PET_HOMEWORK_REWARD[p.grade || ''];
+    const r = p.kind === 'attendance' ? (p.grade === '지각' ? PET_LATE_REWARD : PET_ATTENDANCE_REWARD) : p.kind === 'test' ? PET_TEST_REWARD[p.paper ? 'paper' : 'app'][p.grade || ''] : PET_HOMEWORK_REWARD[p.grade || ''];
     if (!r) continue;
     points += r.points; xp += r.xp; s.rewarded[p.id] = [...new Set([...(s.rewarded[p.id] || []), p.kind])];
   }

@@ -51,7 +51,7 @@ export async function loadStudentQuestionAttempts(db: any, actor: any, keyInput:
 }
 
 /** The student's attempts are this teacher's to see (English, the linked account): the same reach as reading them. */
-async function reachableUid(db: any, actor: any, keyInput: unknown) {
+export async function reachableUid(db: any, actor: any, keyInput: unknown) {
   let key: string; try { key = uuid(String(keyInput || '')); } catch { throw Error('INVALID_INPUT'); }
   const subjects = reviewSubjects(actor, key);
   if (subjects && !subjects.has('영어')) throw Error('FORBIDDEN');

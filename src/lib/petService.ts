@@ -15,7 +15,7 @@ export interface PetState {
   /** 영어 회화 모드 (works while a 펫 패스·프리미엄 is in force) */ englishTalk?: boolean;
 }
 export interface MedalSpot { id: string; x: number; y: number }
-/** 이달의 장학 쿠폰 on the pet screen (`eligible`: 영어 이지원T's student). */
+/** 이달의 장학 쿠폰 on the pet screen (`eligible`: a student linked to the academy). */
 export interface CouponView { eligible: boolean; month: string; label: string; earned: number; goal: number; requested: boolean; paid: boolean }
 /** Talks (말 가르치기·대화하기) left this month: free = for this pet (`perPet`), a 펫 패스 = all pets together. */
 export interface AiTalkView { plan: 'free' | 'pet' | 'premium'; limit: number; left: number; perPet: boolean }
