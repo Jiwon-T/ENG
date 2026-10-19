@@ -4,12 +4,12 @@
 // Teachers' wins go only into a second set of records (`all`, students and teachers), which teachers can switch on.
 import {currentPet, type ServerPetState} from './pet.js';
 import {PET_GUILD, adventurerLabel, shownAlias, shownGuild, shownNickname, type GuildProfile} from './petParty.js';
-import {PET_TOWERS, climber, towerPet, type TowerState} from './petTower.js';
-import {TOWER_GEAR_SLOTS, TOWER_ZONES, towerMonster, wornAccessories, type PetJob, type TowerGearSlot} from '../../src/lib/petCatalog.js';
+import {PET_TOWERS, climber, gearViewFor, towerPet, type TowerState} from './petTower.js';
+import {TOWER_GEAR_SLOTS, TOWER_ZONES, towerMonster, wornAccessories, type PetGearView, type PetJob, type TowerGearSlot} from '../../src/lib/petCatalog.js';
 
 export const PET_TOWER_HALL = 'petTowerHall';
 export const NO_NICKNAME = '이름 없는 모험가';
-export interface HallPet { /** which of the student's pets (for its 모험가 별칭) */ slot?: number; name: string; character: string; level: number; clothing: string | null; accessories: string[]; background: string; job: PetJob | null; gear: {slot: TowerGearSlot; id: string; level: number}[] }
+export interface HallPet { /** which of the student's pets (for its 모험가 별칭) */ slot?: number; name: string; character: string; level: number; clothing: string | null; accessories: string[]; background: string; job: PetJob | null; gear: {slot: TowerGearSlot; id: string; level: number}[]; /** 장비 as shown (👁 applied) */ look?: PetGearView | null }
 export interface HallEntry { uid: string; pet: HallPet; attacks: number; at: number; teacher?: boolean }
 export interface HallRecords { first: HallEntry | null; fewest: HallEntry | null }
 export interface HallFloor extends HallRecords { floor: number; /** with the teachers' wins too */ all?: HallRecords }
@@ -19,7 +19,7 @@ export const HALL_FLOORS = TOWER_ZONES.map(z => z.to);
 export function hallPet(s: ServerPetState, t: TowerState): HallPet {
   const pet = currentPet(s), tp = towerPet(t, pet.slot);
   const gear = TOWER_GEAR_SLOTS.flatMap(g => { const id = tp.equip[g.id]; return id ? [{slot: g.id, id, level: tp.levels?.[id] || 0}] : []; });
-  return {slot: pet.slot, name: pet.name, character: pet.character, level: pet.level, clothing: pet.clothing ?? null, accessories: wornAccessories(pet), background: s.background || 'default', job: pet.job || null, gear};
+  return {slot: pet.slot, name: pet.name, character: pet.character, level: pet.level, clothing: pet.clothing ?? null, accessories: wornAccessories(pet), background: s.background || 'default', job: pet.job || null, gear, look: gearViewFor(pet, tp)};
 }
 
 /** A boss win against a set of records: the first clear is kept forever; fewest attacks needs strictly fewer (ties keep the

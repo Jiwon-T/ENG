@@ -2,19 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { PetCharacter } from './PetCharacters';
 import { askConfirm } from '../teacher/ConfirmDialog';
-import { PET_PARTY, petStage, wornAccessories } from '../../lib/petCatalog';
+import { PET_PARTY, petStage, wornAccessories, type PetGearView } from '../../lib/petCatalog';
 import AdventureNames, { type NamesView } from './AdventureNames';
 
 // 모험가 길드: the board of team notes (fixed phrases only), my team this week, and the team ranking. Students only see
 // 원정대 이름·모험가 별칭 and pets here — never real names, even from the same academy.
-interface Look { character: string; name: string; level: number; clothing: string | null; accessories?: string[]; accessory?: string | null }
+interface Look { character: string; name: string; level: number; clothing: string | null; accessories?: string[]; accessory?: string | null; gear?: PetGearView | null }
 interface MemberView { index: number; rank: number; nickname: string; pet: Look; count: number; status: string; me: boolean; idleDays: number; votes: number; votedByMe: boolean; needVotes: number; canVote: boolean }
 interface PartyView { id: string; endDay: string; name: string; boss: string; size: number; phrases: string[]; hp: number; hpMax: number; progress: number; members: MemberView[] }
 interface GuildView { shown: string; names: NamesView; joinedThisWeek: boolean; lastResult: { week: string; party: string; progress: number; reward: number; counted: boolean } | null }
 type Send = (action: string, payload?: Record<string, unknown>) => Promise<any>;
 
 const boss = (id: string) => PET_PARTY.bosses.find(b => b.id === id) || PET_PARTY.bosses[0];
-const Pet: React.FC<{ pet: Look; size?: number }> = ({ pet, size = 22 }) => <span className="inline-flex items-center justify-center overflow-hidden rounded-full border border-[#f3d5da] bg-[#fdecef]" style={{ width: size, height: size }}><PetCharacter character={pet.character} stage={petStage(pet.level)} accessory={wornAccessories(pet)} portrait size={size - 2} /></span>;
+const Pet: React.FC<{ pet: Look; size?: number }> = ({ pet, size = 22 }) => <span className="inline-flex items-center justify-center overflow-hidden rounded-full border border-[#f3d5da] bg-[#fdecef]" style={{ width: size, height: size }}><PetCharacter character={pet.character} stage={petStage(pet.level)} accessory={wornAccessories(pet)} gear={pet.gear} portrait size={size - 2} /></span>;
 const dDay = (end: string) => { const days = Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(new Date().toISOString().slice(0, 10) + 'T00:00:00Z')) / 86_400_000); return days <= 0 ? '오늘 마감' : `D-${days}`; };
 const Chip: React.FC<{ on: boolean; children: React.ReactNode; onClick: () => void }> = ({ on, children, onClick }) => <button type="button" aria-pressed={on} onClick={onClick} className={`rounded-full border px-3 py-1 text-xs font-bold ${on ? 'border-[#e0587a] bg-[#e0587a] text-white' : 'border-[#eadcc2] bg-[#fffdf6] text-[#6b5a40]'}`}>{children}</button>;
 

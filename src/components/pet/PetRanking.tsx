@@ -5,18 +5,18 @@ import PassMark from './PassMark';
 import { SCENE, SceneArt } from './PetScenes';
 import { MedalLayer } from './PetCoupon';
 import AdventureNames, { type NamesView } from './AdventureNames';
-import { PET_JOBS, petStage, type PetJob } from '../../lib/petCatalog';
+import { GEAR_SET_SHORT, PET_JOBS, petStage, type PetGearView, type PetJob } from '../../lib/petCatalog';
 
 // 순위: 모험가 (each pet) and 원정대 (each student), every academy together, by 원정대 이름·모험가 별칭 only. A row opens that
 // pet's room (outfit, background, 금메달) to look at. Teachers can switch their own pets in ('선생님 포함').
 type Send = (action: string, payload?: Record<string, unknown>) => Promise<any>;
-interface Look { character: string; level: number; clothing: string | null; accessories: string[]; aura?: 'light' | 'dark' | null }
+interface Look { character: string; level: number; clothing: string | null; accessories: string[]; aura?: 'light' | 'dark' | null; gear?: PetGearView | null }
 interface RankRow { rank: number; id: number; label: string; sub: string; job: PetJob | null; pass?: 'pet' | 'premium' | null; value: number; stars: number; looks: Look[]; teacher: boolean; me: boolean }
 interface Ranking { at: number; kind: 'pet' | 'guild'; teacherView: boolean; withTeachers: boolean; total: number; rows: RankRow[]; mine: RankRow[] }
-interface Profile { label: string; guild: string; name: string; character: string; level: number; job: PetJob | null; aura?: 'light' | 'dark' | null; pass?: 'pet' | 'premium' | null; clothing: string | null; accessories: string[]; background: string; decor: { id: string; x: number; y: number }[]; medals: number; best: number; stars: number; me: boolean }
+interface Profile { gear?: PetGearView | null; label: string; guild: string; name: string; character: string; level: number; job: PetJob | null; aura?: 'light' | 'dark' | null; pass?: 'pet' | 'premium' | null; clothing: string | null; accessories: string[]; background: string; decor: { id: string; x: number; y: number }[]; medals: number; best: number; stars: number; me: boolean }
 
 const MEDAL = ['#ef9f27', '#b4b2a9', '#d85a30'];
-const Portrait = ({ look, size = 30 }: { key?: number; look: Look; size?: number }) => <span className="inline-flex flex-none items-center justify-center overflow-hidden rounded-full border border-[#e4e0f5] bg-[#f7f6fd]" style={{ width: size, height: size }}><PetCharacter character={look.character} stage={petStage(look.level)} clothing={look.clothing} accessory={look.accessories} aura={look.aura} portrait size={size - 2} /></span>;
+const Portrait = ({ look, size = 30 }: { key?: number; look: Look; size?: number }) => <span className="inline-flex flex-none items-center justify-center overflow-hidden rounded-full border border-[#e4e0f5] bg-[#f7f6fd]" style={{ width: size, height: size }}><PetCharacter character={look.character} stage={petStage(look.level)} clothing={look.clothing} accessory={look.accessories} aura={look.aura} gear={look.gear} portrait size={size - 2} /></span>;
 
 function Row({ r, onOpen }: { key?: string; r: RankRow; onOpen: () => void }) {
   return <button type="button" onClick={onOpen} className={`flex w-full items-center gap-2.5 border-t border-[#f1eff8] px-2 py-2 text-left first:border-t-0 ${r.me ? 'rounded-xl bg-[#fffaf0]' : ''}`}>
@@ -34,12 +34,12 @@ function Room({ p, onClose }: { p: Profile; onClose: () => void }) {
       <div className={`relative flex h-48 items-end justify-center ${SCENE[p.background] || SCENE.default}`}>
         <SceneArt id={p.background} />
         <MedalLayer spots={p.decor} editing={false} onMove={() => undefined} />
-        <div className="relative z-10 mb-2"><PetCharacter character={p.character} stage={petStage(p.level)} clothing={p.clothing} accessory={p.accessories} aura={p.aura} size={96} /></div>
+        <div className="relative z-10 mb-2"><PetCharacter character={p.character} stage={petStage(p.level)} clothing={p.clothing} accessory={p.accessories} aura={p.aura} gear={p.gear} size={96} /></div>
         <button type="button" onClick={onClose} aria-label="닫기" className="absolute right-2 top-2 z-20 rounded-full bg-white/90 p-1 text-slate-500"><X size={16} aria-hidden="true" /></button>
       </div>
       <div className="px-4 pb-4 pt-3">
         <b className="block text-base font-black text-[#26215c]">{p.label}{p.pass && <span className="ml-1 inline-flex align-middle"><PassMark plan={p.pass} /></span>}{p.me && <span className="ml-1 rounded bg-[#ef9f27] px-1 text-[10px] font-bold text-white">나</span>}</b>
-        <span className="text-xs text-slate-500">{p.guild} · Lv.{p.level}{p.job ? ` · ${PET_JOBS[p.job]?.label || ''}` : ''}</span>
+        <span className="text-xs text-slate-500">{p.guild} · Lv.{p.level}{p.job ? ` · ${PET_JOBS[p.job]?.label || ''}` : ''}{p.gear?.full != null ? ` · ${GEAR_SET_SHORT[p.gear.full]} 세트 6/6` : ''}</span>
         <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">{[`탑 ${p.best}층`, `원정대 별 ${p.stars}`, `금메달 ${p.medals}`].map(t => <span key={t} className="rounded-lg border border-[#e4e0f5] px-2 py-0.5 text-[#3c3489]">{t}</span>)}</div>
       </div>
     </section>

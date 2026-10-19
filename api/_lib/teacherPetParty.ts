@@ -5,6 +5,7 @@ import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
 import {PET_GUILD, PET_PARTIES, inactiveDays, memberNames, partyName, normalizeGuild, progressOf, shownGuild, shownNickname, updateMemberNames, warnName, weekOf, type GuildProfile, type Party} from './petParty.js';
 import {PET_STATES, currentPet, publicPetState, rollDay, type ServerPetState} from './pet.js';
 import {PET_EXPEDITIONS, initialExpedition, publicExpedition} from './petExpedition.js';
+import {petGearView} from '../../src/lib/petCatalog.js';
 
 // 원정대 파티 for teachers: a teacher sees the whole team of their own student (students of the same academy by name,
 // others by 원정대 이름·별칭 only); the admin sees every 원정대 이름 and 모험가 별칭 and can warn one (the student must then
@@ -87,7 +88,7 @@ export async function readStudentPet(db: any, actor: any, id: unknown, now = Dat
   // 공부 보상 already received: lesson attendance and completed assignments (counts only).
   const rewards = Object.values(s.rewarded || {}).flat();
   return {pet: {
-    ...view, pets: view.pets.map(p => ({slot: p.slot, character: p.character, name: p.name, level: p.level, xp: p.xp, energy: p.energy, maxEnergy: p.maxEnergy, clothing: p.clothing, accessories: p.accessories, job: p.job || null, job2: p.job2 || null})),
+    ...view, pets: view.pets.map(p => ({slot: p.slot, character: p.character, name: p.name, level: p.level, xp: p.xp, energy: p.energy, maxEnergy: p.maxEnergy, clothing: p.clothing, accessories: p.accessories, job: p.job || null, job2: p.job2 || null, gear: petGearView(p)})),
     nickname: guild ? shownGuild(guild) || (guild.nickname ? shownNickname(guild) : '') : '',
     // Each pet has its own map (a new pet starts again from the first stage).
     expeditions: Object.fromEntries(s.pets.map(p => { const x = publicExpedition(expState, p.level, p.slot); return [p.slot, {current: x.current, allCleared: x.allCleared, currentNeedsLevel: x.currentNeedsLevel, totalStars: x.totalStars, maxStars: x.maxStars, chapters: x.chapters.map(c => ({id: c.id, title: c.title}))}]; })),

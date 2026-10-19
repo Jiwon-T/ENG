@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { PET_TOWER, TOWER_ENHANCE, TOWER_EVENTS, petStage, towerGearFor, wornAccessories, type PetCharacterType, type PetJob } from '../../lib/petCatalog';
+import { PET_TOWER, TOWER_ENHANCE, TOWER_EVENTS, petGearView, petStage, towerGearFor, wornAccessories, type PetCharacterType, type PetJob } from '../../lib/petCatalog';
 import { PetCharacter } from './PetCharacters';
 import { TowerMonster } from './TowerMonster';
 import { Hall, TowerGearIcon } from './TowerHall';
@@ -104,7 +104,7 @@ function Sleeping({ busy, pet, color, send, title }: { busy: boolean; pet: PetLo
         <span className="absolute bottom-[30px] right-0 rounded-md bg-[#3b6d11] px-1.5 py-0.5 text-[11px] font-bold text-white">출구 →</span>
         <button type="button" disabled={busy || done.current} aria-label="펫을 길을 따라 천천히 끌어서 출구로" onPointerDown={e => { if (done.current) return; (e.currentTarget.parentElement as HTMLElement).setPointerCapture(e.pointerId); const now = performance.now(); if (!start.current) start.current = now; samples.current.push([Math.round(now - start.current), Math.round(p * 1000) / 1000]); last.current = { p, t: now }; setState('drag'); }}
           className="absolute -translate-x-1/2 cursor-grab touch-none active:cursor-grabbing" style={{ left: `${pathX(p)}%`, bottom: bottomAt(p) - 30 }}>
-          <PetCharacter character={pet.character as PetCharacterType} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet as any)} size={58} />
+          <PetCharacter character={pet.character as PetCharacterType} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet as any)} gear={petGearView(pet as any)} size={58} />
         </button>
       </div>
     </Hall>

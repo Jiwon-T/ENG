@@ -126,7 +126,8 @@ const mage = {
 
 const SNOW = (color: string) => [[20, 30, 0], [100, 24, .9], [30, 60, 1.6], [96, 66, .4], [60, 8, 2.2]].map(([x, y, d]) => `<path class="pg-fall" style="animation-delay:${d}s" d="M${x} ${y} v4 M${x - 2} ${y + 2} h4" stroke="${color}" stroke-width="1"/>`).join('');
 /** A full 6-piece set: a soft glow behind, and from 얼음 성채 the snow (마도사: violet snow and stars going round). */
-export function gearSetBack(full: number) { return `<circle class="pg-pulse" cx="60" cy="80" r="52" fill="${TIERS[full].trim}" opacity=".18"/>`; }
+// the animation sets the circle's own opacity, so the wrapper keeps it soft
+export function gearSetBack(full: number) { return `<g opacity=".2"><circle class="pg-pulse" cx="60" cy="80" r="52" fill="${TIERS[full].trim}"/></g>`; }
 export function gearSetFront(full: number) {
   const stars = full === 5 ? star(18, 30, 3, '#facc15') + star(104, 22, 2.4, '#c084fc') + star(16, 80, 2, '#c084fc') : '';
   if (full === 4) return SNOW('#bae6fd');

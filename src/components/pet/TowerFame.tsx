@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { PetService } from '../../lib/petService';
-import { PET_JOBS, accessorySlot, petStage, towerGearFor, type PetJob, type TowerGearSlot } from '../../lib/petCatalog';
+import { PET_JOBS, accessorySlot, petStage, towerGearFor, type PetGearView, type PetJob, type TowerGearSlot } from '../../lib/petCatalog';
 import { PetCharacter } from './PetCharacters';
 import { SCENE, SceneArt } from './PetScenes';
 import { TowerGearIcon } from './TowerHall';
@@ -10,7 +10,7 @@ import { TowerGearIcon } from './TowerHall';
 // shows the 원정대 nickname and the pet as it won: outfit, room background, tower gear (the weapon in its hand).
 // A boss's name shows only to students who have beaten it ('???' before — the 도감 keeps monsters a mystery).
 // Teachers can switch on '선생님 포함' to see the records with the teachers' wins too (students never see those).
-interface HallPet { name: string; character: string; level: number; clothing: string | null; accessories: string[]; background: string; job: PetJob | null; gear: { slot: TowerGearSlot; id: string; level: number }[] }
+interface HallPet { name: string; character: string; level: number; clothing: string | null; accessories: string[]; background: string; job: PetJob | null; gear: { slot: TowerGearSlot; id: string; level: number }[]; look?: PetGearView | null }
 interface HallRecord { nickname: string; teacher?: boolean; pet: HallPet; attacks: number; at: number; me: boolean }
 interface HallFloor { floor: number; /** null until the viewer has beaten this floor */ boss: string | null; first: HallRecord | null; fewest: HallRecord | null }
 interface Hall { teacherView: boolean; withTeachers: boolean; floors: HallFloor[] }
@@ -26,7 +26,7 @@ function Record({ label, r }: { label: string; r: HallRecord | null }) {
     <span className="text-[11px] font-bold text-slate-500">{label}</span>
     <div className={`relative mt-1 flex h-28 items-end justify-center overflow-hidden rounded-xl ${SCENE[p.background] || SCENE.default} ${r.me ? 'ring-2 ring-[#ef9f27]' : ''}`}>
       <SceneArt id={p.background} />
-      <div className="relative"><PetCharacter character={p.character} stage={petStage(p.level)} clothing={p.clothing} accessory={look} size={74} /></div>
+      <div className="relative"><PetCharacter character={p.character} stage={petStage(p.level)} clothing={p.clothing} accessory={look} gear={p.look} size={74} /></div>
       {r.me && <span className="absolute left-1.5 top-1.5 rounded-md bg-[#ef9f27] px-1 text-[10px] font-black text-white">나</span>}
     </div>
     <b className="mt-1 truncate text-xs font-black text-[#26215c]">{r.teacher && r.nickname !== '선생님' && <span className="mr-1 rounded bg-[#3c3489] px-1 text-[10px] font-bold text-white">선생님</span>}{r.nickname}</b>

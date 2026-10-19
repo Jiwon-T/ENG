@@ -4,7 +4,7 @@
 // 원정대 names, 모험가 별칭 and pets (never real names, even from the same academy); teachers see more on their own screens.
 // Names: one 원정대 이름 per student and one 모험가 별칭 per pet, free text an admin can warn (then it must change).
 import {seoulDay, type ServerPetState, currentPet} from './pet.js';
-import {PET_PARTY, wornAccessories} from '../../src/lib/petCatalog.js';
+import {PET_PARTY, petGearView, wornAccessories, type PetGearView} from '../../src/lib/petCatalog.js';
 
 export const PET_GUILD = 'petGuild', PET_PARTIES = 'petParties';
 /** One document per name in use (by its normalized form) listing who uses it: `uid` for a 원정대 이름, `uid:slot` for a 별칭.
@@ -20,7 +20,7 @@ export interface GuildProfile {
 }
 export interface PartyResult { week: string; party: string; progress: number; reward: number; counted: boolean }
 /** Party snapshots: `accessories` (each place); snapshots saved before carry a single `accessory`. */
-export interface PetLook { character: string; name: string; level: number; clothing: string | null; accessories?: string[]; accessory?: string | null; slot?: number }
+export interface PetLook { character: string; name: string; level: number; clothing: string | null; accessories?: string[]; accessory?: string | null; slot?: number; /** 장비 as shown (👁 applied) */ gear?: PetGearView | null }
 /** `nickname`: what members saved before 원정대 이름·별칭 kept; now `guild` and the 별칭 of each pet (shown for the pet in `pet`). */
 export interface PartyMember { uid: string; nickname: string; guild?: string; aliases?: Record<string, string>; pet: PetLook; joinedDay: string; lastActiveDay: string | null; count: number; words: string[]; status: 'active' | 'left' | 'kicked' }
 export interface Party { id: string; week: string; name: string; boss: string; size: number; phrases: string[]; createdAt: number; hp: number; hpMax: number; members: PartyMember[]; votes: Record<string, string[]>; settled: boolean; results?: Record<string, number> }
@@ -78,7 +78,7 @@ export const shownAliases = (g: GuildProfile | undefined | null) => Object.fromE
 /** '원정대 이름 · 모험가 별칭' (whichever is set). */
 export const adventurerLabel = (guild: string, alias: string) => [guild, alias].filter(Boolean).join(' · ');
 
-export const petLook = (s: ServerPetState): PetLook => { const p = currentPet(s); return {character: p.character, name: p.name, level: p.level, clothing: p.clothing ?? null, accessories: wornAccessories(p), slot: p.slot}; };
+export const petLook = (s: ServerPetState): PetLook => { const p = currentPet(s); return {character: p.character, name: p.name, level: p.level, clothing: p.clothing ?? null, accessories: wornAccessories(p), slot: p.slot, gear: petGearView(p)}; };
 /** A weekly team is a '파티' (원정대 is the student's own name now); teams made before still say '원정대'. */
 export const partyName = (name: string) => name.replace(/ 원정대$/, ' 파티');
 export const activeMembers = (p: Party) => p.members.filter(m => m.status === 'active');

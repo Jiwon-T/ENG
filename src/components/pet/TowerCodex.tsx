@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
-import { TOWER_ZONES, petStage, wornAccessories, type PetElement, type TowerMonsterKind } from '../../lib/petCatalog';
+import { TOWER_ZONES, petGearView, petStage, wornAccessories, type PetElement, type TowerMonsterKind } from '../../lib/petCatalog';
 import type { PetState } from '../../lib/petService';
 import { PetCharacter } from './PetCharacters';
 import { TowerMonster } from './TowerMonster';
@@ -21,7 +21,7 @@ export const ElementBadge = ({ e, label = '' }: { e: PetElement; label?: string 
 /** A monster's picture: the big boss drawings, the dragon, the pet's own shadow, or the small monster art. `size` is the boss size. */
 export function MonsterArt({ kind, boss, color, size, pet }: { kind: TowerMonsterKind; boss: boolean; color?: number | null; size: number; pet: Pet }) {
   const small = Math.round(size * 0.57);
-  if (kind === 'shadow') return <span className="block" style={{ filter: 'brightness(0)', opacity: 0.8 }}><PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet)} size={small} /></span>;
+  if (kind === 'shadow') return <span className="block" style={{ filter: 'brightness(0)', opacity: 0.8 }}><PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet)} gear={petGearView(pet as any)} size={small} /></span>;
   if (kind === 'gatekeeper') return <TowerBossGolem size={size} />;
   if (kind === 'dragon') return <TowerDragon color={color ?? 0} asleep={false} size={size} />;
   if (kind === 'frost_dragon') return <TowerBossFrostDragon size={size} />;

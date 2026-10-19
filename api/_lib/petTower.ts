@@ -8,7 +8,7 @@ import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
 import {awardCapped, currentPet, type ServerPet, type ServerPetState} from './pet.js';
 import {meaningsOverlap, randomDocId} from './petWordFeed.js';
-import { TOWER_DECOR, PET_JOB3, PET_JOB3_RULE, job3For, TOWER_ZONES, BRANCH_PASSIVE, TOWER_GEAR, TOWER_SKILL_RULES, TOWER_WEAKNESS, critChance, jobSkills, skillLevel, towerSkill,PET_TOWER, TOWER_CHESTS, TOWER_ENHANCE, TOWER_EVENTS, towerGear, towerGearFor, towerHit, towerMonster, towerStats, towerTaken, gearLookOf, GEAR_DROP, TOWER_GEAR_SLOTS, floorGearTier, setGearId, type TowerEvent, type TowerGear, type TowerGearSlot, type TowerMonsterKind} from '../../src/lib/petCatalog.js';
+import { TOWER_DECOR, PET_JOB3, PET_JOB3_RULE, job3For, TOWER_ZONES, BRANCH_PASSIVE, TOWER_GEAR, TOWER_SKILL_RULES, TOWER_WEAKNESS, critChance, jobSkills, skillLevel, towerSkill,PET_TOWER, TOWER_CHESTS, TOWER_ENHANCE, TOWER_EVENTS, towerGear, towerGearFor, towerHit, towerMonster, towerStats, towerTaken, gearLookOf, petGearView, type PetGearLook, GEAR_DROP, TOWER_GEAR_SLOTS, floorGearTier, setGearId, type TowerEvent, type TowerGear, type TowerGearSlot, type TowerMonsterKind} from '../../src/lib/petCatalog.js';
 import {gradeOf} from '../../src/lib/schoolGrade.js';
 
 export const PET_TOWERS = 'petTowers';
@@ -51,12 +51,15 @@ function syncJobWeapons(tp: TowerPet, pet: ServerPet, s: ServerPetState) {
 }
 /** Each pet keeps how its worn gear looks (the home, the ranking and the party draw it without the tower). */
 export function syncGearLooks(t: TowerState, s: ServerPetState) {
-  for (const pet of s.pets) {
-    const tp = t.pets?.[String(pet.slot)]; if (!tp) continue;
-    const equip = Object.fromEntries(Object.entries(tp.equip || {}).filter(([, id]) => { const g = towerGear(String(id)); return g && (!g.job || g.job === pet.job) && (!g.job2 || g.job2 === pet.job2) && (!g.job3 || g.job3 === pet.job3); }));
-    pet.gear = gearLookOf(equip);
-  }
+  for (const pet of s.pets) { const tp = t.pets?.[String(pet.slot)]; if (tp) pet.gear = gearLookOf(usableEquip(pet, tp)); }
 }
+/** Worn gear this pet can use (a job weapon of another job is left out). */
+const usableEquip = (pet: ServerPet, tp: TowerPet) => Object.fromEntries(Object.entries(tp.equip || {}).filter(([, id]) => { const g = towerGear(String(id)); return g && (!g.job || g.job === pet.job) && (!g.job2 || g.job2 === pet.job2) && (!g.job3 || g.job3 === pet.job3); }));
+/** How the pet's gear looks: what it keeps, or (before its first tower visit since the gear came) worked out from the tower
+ *  for this answer only, never saved. */
+export const gearLookFor = (pet: ServerPet, tp?: TowerPet | null): PetGearLook | null => pet.gear ?? (tp ? gearLookOf(usableEquip(pet, tp)) : null);
+/** What other screens draw (ranking, party, 명예의 전당): the pet's 👁 setting already applied. */
+export const gearViewFor = (pet: ServerPet, tp?: TowerPet | null) => petGearView({...pet, gear: gearLookFor(pet, tp)});
 export const petTowerStats = (pet: ServerPet, tp: TowerPet) => towerStats(pet.level, worn(tp, pet), tp.levels || {});
 const shuffle = <T,>(list: T[], rand: () => number) => { const a = [...list]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 /** A repeatable random series from a text (the door layout of one pet's floor). */

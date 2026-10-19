@@ -208,7 +208,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
 
         {(many || canAdopt) && <div role="tablist" aria-label="내 펫" className="-mx-1 mb-2 flex gap-2 overflow-x-auto px-1 pb-1">
           {state.pets.map(p => <button key={p.slot} type="button" role="tab" aria-selected={p.slot === pet.slot} disabled={busy} onClick={() => void switchTo(p.slot)} className="flex w-14 flex-none flex-col items-center text-[11px] font-bold text-[#8b2f40]">
-            <span className={`flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-[#fdf6f7] ${p.slot === pet.slot ? 'border-2 border-[#d26272]' : 'border border-[#f3e6e8]'}`}><PetCharacter character={p.character} stage={petStage(p.level)} accessory={wornAccessories(p)} portrait size={44} /></span>
+            <span className={`flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-[#fdf6f7] ${p.slot === pet.slot ? 'border-2 border-[#d26272]' : 'border border-[#f3e6e8]'}`}><PetCharacter character={p.character} stage={petStage(p.level)} accessory={wornAccessories(p)} gear={petGearView(p)} portrait size={44} /></span>
             <span className="mt-0.5 max-w-full truncate">{p.name}</span><span className="font-medium text-slate-500">Lv.{p.level}</span>
           </button>)}
           {canAdopt && <button type="button" onClick={openAdopt} className="relative flex w-14 flex-none flex-col items-center text-[11px] font-bold text-[#d26272]">

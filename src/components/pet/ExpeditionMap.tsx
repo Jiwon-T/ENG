@@ -3,7 +3,7 @@ import { ChevronLeft, Lock, Check } from 'lucide-react';
 import { PetCharacter } from './PetCharacters';
 import WordFeed, { type FeedRunView } from './WordFeed';
 import { askConfirm } from '../teacher/ConfirmDialog';
-import { PET_EXPEDITION, PET_JOB2, PET_JOB_GUIDE, PET_JOBS, PET_WORD_FEED, STAGE_GAME_LABEL, petItem, petStage, stageGame, stageHasSound, wornAccessories, type PetJob, type PetJob2, petAura } from '../../lib/petCatalog';
+import { PET_EXPEDITION, PET_JOB2, PET_JOB_GUIDE, PET_JOBS, PET_WORD_FEED, STAGE_GAME_LABEL, petItem, petStage, stageGame, stageHasSound, wornAccessories, petGearView, type PetJob, type PetJob2, petAura } from '../../lib/petCatalog';
 import { speechRecognitionClass } from '../../lib/sentenceGame';
 import { QuietPrompt } from '../sentence/SentenceGame';
 import type { PetResponse, PetState } from '../../lib/petService';
@@ -98,7 +98,7 @@ export default function ExpeditionMap({ state, send, onClose, onGuild, initial }
               {s.boss ? '👑' : s.unlocked ? i + 1 : <Lock size={14} aria-hidden="true" />}
               {s.stars > 0 && <span className="absolute -bottom-3 text-[10px] tracking-tighter text-[#f2b84b]" aria-hidden="true">{'★'.repeat(s.stars)}</span>}
             </button>; })}
-          {chapter.stages.some(s => s.id === exp.current) && (() => { const [x, y] = SPOTS[chapter.stages.findIndex(s => s.id === exp.current)]; return <span className="pointer-events-none absolute" style={{ left: `calc(${x}% + 18px)`, top: `calc(${y}% - 30px)` }}><PetCharacter aura={petAura(pet)} character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet)} size={44} /></span>; })()}
+          {chapter.stages.some(s => s.id === exp.current) && (() => { const [x, y] = SPOTS[chapter.stages.findIndex(s => s.id === exp.current)]; return <span className="pointer-events-none absolute" style={{ left: `calc(${x}% + 18px)`, top: `calc(${y}% - 30px)` }}><PetCharacter aura={petAura(pet)} character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet)} gear={petGearView(pet)} size={44} /></span>; })()}
         </div>
         <p className="mt-2 text-center text-[11px] font-bold text-[#8b2f40]">✨ {PET_JOB_GUIDE}</p>
         <div className="mt-1 flex justify-between text-xs font-bold text-[#8b2f40]"><span>★ {chapterStars} / {chapter.stages.length * 3}</span><span>{chapter.rewarded ? `${rewardText(chapter)} 받음 ✓` : `${petItem(chapter.reward)?.icon} ${rewardText(chapter)}까지 ${left}스테이지`}</span></div>

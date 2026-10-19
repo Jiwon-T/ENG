@@ -5,9 +5,9 @@
 import {FieldPath} from 'firebase-admin/firestore';
 import {PET_STATES, rollDay, type ServerPet, type ServerPetState} from './pet.js';
 import {PET_GUILD, shownAlias, shownGuild, type GuildProfile} from './petParty.js';
-import {PET_TOWERS, climber, type TowerState} from './petTower.js';
+import {PET_TOWERS, climber, gearViewFor, type TowerState} from './petTower.js';
 import {PET_EXPEDITIONS, type ExpeditionState} from './petExpedition.js';
-import {petAura, wornAccessories, type PetJob} from '../../src/lib/petCatalog.js';
+import {petAura, wornAccessories, type PetGearView, type PetJob} from '../../src/lib/petCatalog.js';
 import {activePlan} from '../../src/lib/aiPlans.js';
 import {seoulDay} from './pet.js';
 
@@ -17,7 +17,8 @@ export const RANKING_TTL = 10 * 60_000, RANKING_TOP = 50;
 export const RANKING_STALE_OK = 6 * 3_600_000;
 export const NO_GUILD = '이름 없는 원정대';
 export interface RankPet { uid: string; slot: number; alias: string; guild: string; name: string; character: string; level: number; clothing: string | null; accessories: string[]; job: PetJob | null; best: number; stars: number; teacher: boolean;
-  /** looks only: the 3차 전직 aura, and the pass in force when the snapshot was built */ aura?: 'light' | 'dark' | null; pass?: 'pet' | 'premium' | null }
+  /** looks only: the 3차 전직 aura, and the pass in force when the snapshot was built */ aura?: 'light' | 'dark' | null; pass?: 'pet' | 'premium' | null;
+  /** 장비 as shown (👁 applied); null: none or hidden */ gear?: PetGearView | null }
 export interface RankSnapshot { builtAt: number; pets: RankPet[]; /** a rebuild in progress until then (others keep the last snapshot) */ buildingUntil?: number }
 
 /** Every document of a collection, 500 at a time (nothing is cut off however many students there are). */
@@ -49,7 +50,7 @@ export async function buildRankings(db: any, now: number): Promise<RankSnapshot>
     for (const p of s.pets.filter((x: ServerPet) => x.chosen)) pets.push({
       uid, slot: p.slot, alias: shownAlias(g, p.slot) || (g?.nickname && !g.aliases && p.slot === s.currentPetSlot ? g.nickname : ''), guild: shownGuild(g), name: p.name, character: p.character, level: p.level,
       clothing: p.clothing ?? null, accessories: wornAccessories(p), job: p.job || null, best: Number(t?.pets?.[String(p.slot)]?.best) || 0, stars: petStars(expeditions.get(uid), p.slot), teacher: teachers.has(uid),
-      aura: petAura(p), pass: plan === 'free' ? null : plan,
+      aura: petAura(p), pass: plan === 'free' ? null : plan, gear: gearViewFor(p, t?.pets?.[String(p.slot)]),
     });
   }
   return {builtAt: now, pets};
@@ -79,7 +80,7 @@ export async function rankingSnapshot(db: any, now: number, maxAge = RANKING_TTL
 type Row = {key: number[]; index: number; uid: string};
 /** 1, 2, 2, 4: equal keys share a place. */
 const placed = <T extends Row>(rows: T[]) => { rows.sort((a, b) => { for (let i = 0; i < a.key.length; i++) if (a.key[i] !== b.key[i]) return b.key[i] - a.key[i]; return a.index - b.index; }); let rank = 0; return rows.map((r, i) => ({...r, rank: i && r.key.every((k, j) => k === rows[i - 1].key[j]) ? rank : (rank = i + 1)})); };
-const look = (p: RankPet) => ({character: p.character, level: p.level, clothing: p.clothing, accessories: p.accessories, aura: p.aura ?? null});
+const look = (p: RankPet) => ({character: p.character, level: p.level, clothing: p.clothing, accessories: p.accessories, aura: p.aura ?? null, gear: p.gear ?? null});
 
 /** The rows of one ranking as `viewer` sees it: the top 50 and their own places (kept even when lower). */
 function rankRows(snap: RankSnapshot, viewer: string, kind: 'pet' | 'guild', withTeachers: boolean) {
@@ -130,9 +131,9 @@ export async function readRankProfile(db: any, viewer: string, atInput: unknown,
   if (Number(atInput) !== snap.builtAt || !p) throw Error('RANK_STALE');
   const shown = rankRows(snap, viewer, kind, withTeachers);
   if (![...shown.rows, ...shown.mine].some(r => r.id === id)) throw Error('RANK_STALE');
-  const raw = (await db.collection(PET_STATES).doc(p.uid).get()).data();
+  const [raw, tower] = await Promise.all([db.collection(PET_STATES).doc(p.uid).get().then((d: any) => d.data()), db.collection(PET_TOWERS).doc(p.uid).get().then((d: any) => d.data() as TowerState | undefined)]);
   const s = raw ? rollDay(raw, now) as ServerPetState : null, pet = s?.pets.find(x => x.slot === p.slot);
   const background = s?.background || 'default';
   return {label: p.alias || p.name, guild: p.guild || NO_GUILD, name: p.name, character: pet?.character || p.character, level: pet?.level || p.level, job: pet?.job || p.job,
-    clothing: pet ? pet.clothing ?? null : p.clothing, accessories: pet ? wornAccessories(pet) : p.accessories, aura: pet ? petAura(pet) : p.aura ?? null, pass: p.pass ?? null, background, decor: s?.decor?.[background] || [], medals: (s?.medals || []).length, best: p.best, stars: p.stars, me: p.uid === viewer};
+    clothing: pet ? pet.clothing ?? null : p.clothing, accessories: pet ? wornAccessories(pet) : p.accessories, aura: pet ? petAura(pet) : p.aura ?? null, gear: pet ? gearViewFor(pet, tower?.pets?.[String(pet.slot)]) : p.gear ?? null, pass: p.pass ?? null, background, decor: s?.decor?.[background] || [], medals: (s?.medals || []).length, best: p.best, stars: p.stars, me: p.uid === viewer};
 }

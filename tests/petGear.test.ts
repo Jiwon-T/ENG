@@ -94,3 +94,15 @@ test('원정대 ★3: the first ★3 on a stage gives its chapter set piece, kep
   currentPet(s).gearInbox = ['set_0_helmet']; syncGearInbox(t, s);
   assert.equal(towerPet(t, 1).stones, 1);
 });
+
+test('다른 화면의 장비: worked out from the tower when the pet has none kept yet (never saved), with 👁 applied', async () => {
+  const {gearLookFor, gearViewFor} = await import('../api/_lib/petTower.js');
+  const s = initialPetState(NOW), t = initialTower(NOW), pet = currentPet(s); s.pets[0].chosen = true; openEntranceChest(t, s);
+  assert.equal(pet.gear, undefined);
+  assert.deepEqual(gearLookFor(pet, towerPet(t, 1)), {look: {weapon: 0}, full: null});
+  assert.equal(pet.gear, undefined, 'not saved');
+  assert.equal(gearLookFor(pet, null), null);
+  assert.equal(gearViewFor(pet, towerPet(t, 1))!.style, 'knight');
+  pet.gearShow = false;
+  assert.equal(gearViewFor(pet, towerPet(t, 1)), null);
+});

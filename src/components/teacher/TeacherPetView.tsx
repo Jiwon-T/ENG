@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { PetCharacter } from '../pet/PetCharacters';
 import { SCENE, STARS, SceneArt } from '../pet/PetScenes';
-import { ACCESSORY_SLOTS, PET_JOB2, PET_JOBS, petJobLabel, PET_MAX_LEVEL, petItem, petStageLabel, petStage, wornAccessories, xpNeeded, type PetJob, type PetJob2 } from '../../lib/petCatalog';
+import { ACCESSORY_SLOTS, PET_JOB2, PET_JOBS, petJobLabel, PET_MAX_LEVEL, petItem, petStageLabel, petStage, wornAccessories, xpNeeded, type PetJob, type PetJob2, type PetGearView } from '../../lib/petCatalog';
 import WorkspaceDialog from './WorkspaceDialog';
 
 // 펫 보기 (선생님방 › 학생 관리): the student's pet screen as the student sees it — the room, the pet, level, energy,
 // points, wardrobe and expedition — but read only. Own students for a teacher, the academy for a principal, all for the admin.
-interface PetSlot { slot: number; character: string; name: string; level: number; xp: number; energy: number; maxEnergy: number; clothing: string | null; accessories?: Record<string, string>; job?: PetJob | null; job2?: PetJob2 | null }
+interface PetSlot { slot: number; character: string; name: string; level: number; xp: number; energy: number; maxEnergy: number; clothing: string | null; accessories?: Record<string, string>; job?: PetJob | null; job2?: PetJob2 | null; gear?: PetGearView | null }
 interface PetView {
   points: number; inventory: string[]; background: string; currentPetSlot: number; pets: PetSlot[]; today: { studyPoints: number; studyCap: number };
   nickname: string; rewards: { attendance: number; assignment: number };
@@ -29,13 +29,13 @@ export default function TeacherPetView({ studentKey, name, request, onClose }: {
         const owned = view.inventory.map(id => petItem(id)).filter(Boolean) as NonNullable<ReturnType<typeof petItem>>[];
         const worn = new Set([pet.clothing, ...wornAccessories(pet), view.background].filter(Boolean) as string[]);
         return <div className="space-y-3 text-[#5e1e2a]">
-          {view.pets.length > 1 && <div role="tablist" aria-label="펫" className="flex gap-2 overflow-x-auto">{view.pets.map(p => <button key={p.slot} type="button" role="tab" aria-selected={p.slot === pet.slot} onClick={() => setSlot(p.slot)} className={`flex flex-none flex-col items-center rounded-2xl border px-2 py-1 text-[11px] font-bold ${p.slot === pet.slot ? 'border-[#d26272] bg-[#fef2f3]' : 'border-[#f3e6e8] bg-white'}`}><span className="h-9 w-9 overflow-hidden"><PetCharacter character={p.character} stage={petStage(p.level)} portrait size={36} /></span>{p.name}</button>)}</div>}
+          {view.pets.length > 1 && <div role="tablist" aria-label="펫" className="flex gap-2 overflow-x-auto">{view.pets.map(p => <button key={p.slot} type="button" role="tab" aria-selected={p.slot === pet.slot} onClick={() => setSlot(p.slot)} className={`flex flex-none flex-col items-center rounded-2xl border px-2 py-1 text-[11px] font-bold ${p.slot === pet.slot ? 'border-[#d26272] bg-[#fef2f3]' : 'border-[#f3e6e8] bg-white'}`}><span className="h-9 w-9 overflow-hidden"><PetCharacter character={p.character} stage={petStage(p.level)} accessory={wornAccessories(p)} gear={p.gear} portrait size={36} /></span>{p.name}</button>)}</div>}
           <section aria-label="펫" className="overflow-hidden rounded-3xl border border-[#f3e6e8]">
             <div className={`relative flex min-h-[210px] flex-col items-center justify-end px-4 pb-4 pt-5 ${SCENE[view.background] || SCENE.default}`}>
               <SceneArt id={view.background} />
               {view.background === 'star_room' && STARS.map((s, i) => <span key={i} aria-hidden="true" className="absolute rounded-full bg-white" style={{ top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size }} />)}
               <span className="absolute right-3 top-3 z-20 flex items-center gap-1 rounded-full border border-[#f3d5da] bg-white px-2.5 py-1 text-xs font-bold text-[#8b2f40]"><span className="h-2 w-2 rounded-full bg-[#e07a87]" aria-hidden="true" />{won(view.points)}P</span>
-              <span className="relative z-10"><PetCharacter character={pet.character} stage={stage} clothing={pet.clothing} accessory={wornAccessories(pet)} /></span>
+              <span className="relative z-10"><PetCharacter character={pet.character} stage={stage} clothing={pet.clothing} accessory={wornAccessories(pet)} gear={pet.gear} /></span>
             </div>
             <div className="border-t border-[#f3e6e8] bg-white px-4 py-3">
               <div className="flex flex-wrap items-center justify-center gap-2">

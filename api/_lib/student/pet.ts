@@ -19,7 +19,7 @@ import { PET_GAMES, answerRun, buildRun, initialGameState, loadFeedSource, publi
 import { PET_GUILD, PET_NAMES, PET_PARTIES, addContribution, nameDocId, partyName, boardCard, checkNickname, createParty, initialGuild, joinParty, leaveParty, norm, normalizeGuild, petLook, publicParty, rankingRow, setAlias, setGuildName, settleParty, shownAlias, shownGuild, updateMemberNames, voteKick, weekOf, type GuildProfile, type Party } from '../petParty.js';
 import { readTowerHall, recordTowerHall } from '../petTowerHall.js';
 import { PET_RANKINGS, myPetRank, readRankProfile, readRankings, refreshRankings } from '../petRanking.js';
-import { PET_TOWERS, syncTowerDecor, syncGearLooks, syncGearInbox, takeJob3, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
+import { PET_TOWERS, syncTowerDecor, syncGearLooks, syncGearInbox, gearLookFor, takeJob3, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
 import { couponStudentKey, couponView, placeDecor, readCoupon, readCouponView, requestCoupon } from '../petCoupon.js';
 import { PET_EXPEDITIONS, chooseJob, chooseJob2, finishStage, initialExpedition, levelOk, petProgress, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
 
@@ -289,6 +289,8 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
         couponStudentKey(db, uid).catch(() => null).then(key => readCouponView(db, uid, s, Boolean(key))),
         readPetTalk(db, uid, currentPet(s).slot, now).catch(() => null)]);
       const pending = pendingStudyRewards(s, reports, now);
+      // 장비 모습 not kept yet (gear from before it was kept): worked out from the tower for this answer only
+      if (s.pets.some(p => p.gear === undefined)) { const t = (await db.collection(PET_TOWERS).doc(uid).get()).data() as TowerState | undefined; for (const p of s.pets) if (p.gear === undefined) p.gear = gearLookFor(p, t?.pets?.[String(p.slot)]); }
       return sendJson(res, 200, {ok: true, state: await shownState(s), saved: snap.exists, pendingRewards: pending.length,
         run: publicRun(g.data()?.run || null), aiTalk, expedition: publicExpedition(e.exists ? e.data() : initialExpedition(now), currentPet(s).level, currentPet(s).slot), coupon});
     }

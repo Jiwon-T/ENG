@@ -272,7 +272,9 @@ const SIZE: Record<PetStage, number> = { baby: 84, child: 100, teen: 116, adult:
 const HELMET_Y: Record<string, number> = { unicorn: -6, hodu: -3 };
 
 export const PetCharacter = ({ character, stage, clothing, accessory, background, className = '', portrait, size: fixedSize, aura, gear }: CharacterProps & { character: string; aura?: 'light' | 'dark' | null }) => {
-  const on = gear && Object.keys(gear.look).length ? gear : null, covers = (s: 'helmet' | 'armor' | 'weapon') => on?.look[s] != null;
+  // Small faces (portrait): only the helmet, under the head things worn (a friend's 소품 always shows); no set glow.
+  const face = portrait && gear?.look.helmet != null ? { ...gear, look: { helmet: gear.look.helmet }, full: null } : null;
+  const on = !portrait && gear && Object.keys(gear.look).length ? gear : null, covers = (s: 'helmet' | 'armor' | 'weapon') => on?.look[s] != null;
   const hidden = (id: string) => { const at = accessorySlot(id); return (at === 'head' && covers('helmet')) || (at === 'neck' && covers('armor')) || (at === 'hand' && covers('weapon')); };
   const worn = (Array.isArray(accessory) ? accessory : accessory ? [accessory] : []).filter(Boolean).filter(id => !hidden(String(id))) as string[];
   const look = LOOKS[character] || LOOKS.molang, outfit = clothing && !covers('armor') ? OUTFITS[clothing] : undefined, [fill, stroke, belly] = look.body;
@@ -283,7 +285,7 @@ export const PetCharacter = ({ character, stage, clothing, accessory, background
     {outfit?.back}{look.tail}
     <ellipse cx="47" cy="121" rx="8" ry="5" fill={fill} stroke={stroke} /><ellipse cx="73" cy="121" rx="8" ry="5" fill={fill} stroke={stroke} />
     <path d={BODY} fill={fill} stroke={stroke} />{belly && <ellipse cx="60" cy="104" rx="13" ry="10" fill={belly} />}{arms(fill, stroke)}
-    {outfit?.front}{worn.filter(id => NECK.has(id)).map(id => <React.Fragment key={id}><Accessory id={id} look={look} /></React.Fragment>)}{look.front}{look.head}{!covers('helmet') && outfit?.top?.(look)}{worn.filter(id => !NECK.has(id) && !WEAPONS[id]).map(id => <React.Fragment key={id}><Accessory id={id} look={look} /></React.Fragment>)}
+    {outfit?.front}{worn.filter(id => NECK.has(id)).map(id => <React.Fragment key={id}><Accessory id={id} look={look} /></React.Fragment>)}{look.front}{look.head}{!covers('helmet') && !face && outfit?.top?.(look)}{face && <g dangerouslySetInnerHTML={{ __html: gearArt(face.style, face.look, HELMET_Y[character] || 0) }} />}{worn.filter(id => !NECK.has(id) && !WEAPONS[id]).map(id => <React.Fragment key={id}><Accessory id={id} look={look} /></React.Fragment>)}
     {worn.filter(id => WEAPONS[id]).map(id => <React.Fragment key={id}>{WEAPONS[id]}</React.Fragment>)}
     {on && <g dangerouslySetInnerHTML={{ __html: gearArt(on.style, on.look, HELMET_Y[character] || 0) + (on.full != null ? gearSetFront(on.full) : '') }} />}
     {stage === 'master' && <><Sparkle x={16} y={30} s={1} /><Sparkle x={104} y={44} s={0.8} /><Sparkle x={100} y={14} s={0.6} /></>}
