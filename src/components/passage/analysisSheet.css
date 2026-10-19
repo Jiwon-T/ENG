@@ -10,8 +10,8 @@
 .as-row { display: flex; flex-wrap: nowrap; align-items: flex-start; }
 .as-num { flex: none; width: 4.5mm; font-size: 9pt; line-height: 4.2mm; font-weight: 700; color: #993556; }
 .as-chunk { display: inline-flex; flex-direction: column; white-space: nowrap; }
-.as-en { font-size: 9pt; line-height: 4.2mm; }
-.as-ko { font-size: 7.5pt; line-height: 3.5mm; color: #72243e; }
+.as-en { font-size: 9pt; line-height: 4.2mm; min-height: 4.2mm; }
+.as-ko { font-size: 7.5pt; line-height: 3.5mm; min-height: 3.5mm; color: #72243e; }
 .as-slash { color: #d4537e; margin: 0 1mm; font-size: 9pt; line-height: 4.2mm; }
 .as-flow { font-size: 9pt; line-height: 4.6mm; padding-left: 4.5mm; text-indent: -4.5mm; }
 .as-link { background: #fbeaf0; color: #72243e; border-radius: 1px; }

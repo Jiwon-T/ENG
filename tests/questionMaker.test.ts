@@ -242,3 +242,24 @@ test('지문 분석 › 어법 출제 포인트: sure forms with the wrong one a
   assert.deepEqual(starts.flat().filter(p => /^(that|what)$/i.test(p.word)), [], 'a sentence-start That/What or one after a comma is not a that/what place');
   assert.match(h[0][0].why, /접속사·관계사로 쓰였다면/);
 });
+
+test('어휘 선택: five words found in order, one swapped for its opposite at a place the app picks; the passage comes back with the fix', () => {
+  const sentences = splitPassage('Many people believe that talent decides success. However, practice matters more than we think. Effort can shape ability. Without work, gifts rarely grow. So we should value learning.');
+  const data = { words: ['believe', 'more', 'shape', 'rarely', 'value'], opposites: ['doubt', 'less', 'limit', 'often', 'ignore'], reasons: ['a', 'b', 'c', 'd', 'e'] };
+  const places = new Set<number>();
+  for (const r of [0.01, 0.3, 0.5, 0.7, 0.99]) {
+    const q = buildAiQuestion('vocab', sentences, data, () => r)!;
+    assert.ok(q, 'made');
+    assert.deepEqual(checkQuestion(q, sentences), []);
+    assert.equal((q.passage!.match(/[①-⑤]\{[^}]*\}/g) || []).length, 5);
+    places.add(q.answer as number);
+    assert.ok(q.passage!.includes(`${CIRCLED[(q.answer as number) - 1]}{${data.opposites[(q.answer as number) - 1]}}`), 'the swapped word is underlined at the answer');
+  }
+  assert.equal(places.size, 5, 'the answer can be any of the five');
+  assert.equal(buildAiQuestion('vocab', sentences, { ...data, words: ['more', 'believe', 'shape', 'rarely', 'value'] }), null, 'words out of order');
+  assert.equal(buildAiQuestion('vocab', sentences, { ...data, opposites: ['believe', 'less', 'limit', 'often', 'ignore'] }), null, 'an opposite equal to the word');
+  assert.equal(buildAiQuestion('vocab', sentences, { ...data, words: ['believe', 'more', 'shape', 'rarely', 'nothing'] }), null, 'a word not in the passage');
+  assert.equal(buildAiQuestion('vocab', sentences, { ...data, opposites: ['do not', 'less', 'limit', 'often', 'ignore'] }), null, 'one word only');
+  const caps = buildAiQuestion('vocab', splitPassage('However, it works. Effort can shape ability. Without work, gifts rarely grow. So we value it. That is all.'), { words: ['However', 'shape', 'rarely', 'value', 'all'], opposites: ['therefore', 'limit', 'often', 'ignore', 'none'], reasons: [] }, () => 0)!;
+  assert.ok(caps.passage!.startsWith('①{Therefore},'), 'a capitalised word keeps its capital');
+});

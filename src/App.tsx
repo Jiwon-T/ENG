@@ -1,4 +1,3 @@
-import AiThinking, { addThought } from './components/AiThinking';
 import { studentReportCache } from './lib/studentReportCache';
 import React, { useState, useEffect, Suspense, lazy, Component } from 'react';
 import { Analytics } from '@vercel/analytics/react';
@@ -14,7 +13,6 @@ import { lastSignedOut, loadLogin, rememberSignedIn } from './lib/authHint';
 import { NibTile } from './components/RosyLogo';
 import { PassBadge } from './components/PassBadge';
 import { PetService, type PetSummary } from './lib/petService';
-import type { AnalysisResult, QuestionType } from './lib/gemini';
 
 function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
   return (
@@ -165,15 +163,6 @@ export default function App() {
   const [assumeSignedOut, setAssumeSignedOut] = useState(lastSignedOut);
   const [currentView, setCurrentView] = useState<View>('home');
   const [isMobile, setIsMobile] = useState(false);
-  const [text, setText] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [generateQuestions, setGenerateQuestions] = useState(false);
-  const [selectedQuestionTypes, setSelectedQuestionTypes] = useState<QuestionType[]>([]);
-  // "AI가 생각하는 중": the model's thought summaries while the analyzer or generator works; calls left this month.
-  const [thoughts, setThoughts] = useState<string[]>([]);
-  const [aiLeft, setAiLeft] = useState<number | null>(null);
   const [resumeTarget, setResumeTarget] = useState<RecentLearning | null>(null);
   const [pendingAssignmentCount, setPendingAssignmentCount] = useState<number | null>(null);
   const [hasNewAssignment, setHasNewAssignment] = useState(false);
@@ -325,36 +314,8 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleAnalyze = async (shouldGenerate: boolean, questionsOnly: boolean = false) => {
-    if (!text.trim()) return;
-    
-    setLoading(true);
-    setError(null);
-    setThoughts([]);
-    setResult(null); // Clear previous result
-    try {
-      const { analyzeEnglishText } = await import('./lib/gemini');
-      const analysis = await analyzeEnglishText(text, shouldGenerate, selectedQuestionTypes, questionsOnly, piece => setThoughts(list => addThought(list, piece)), setAiLeft);
-      setResult(analysis);
-      setCurrentView(questionsOnly ? 'generator' : 'analyzer');
-      
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || '분석 중 오류가 발생했습니다. 다시 시도해주세요.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const reset = () => {
-    setResult(null);
-    setText('');
-    setError(null);
-  };
-
   const goHome = () => {
     setCurrentView('home');
-    reset();
   };
 
   // 0. 학부모 고정 주소 (/:slug) 접근 시: 학생 로그인 없이 학부모 화면 서빙

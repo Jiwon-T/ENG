@@ -5,8 +5,8 @@
 // Server-imported: keep relative imports with .js.
 import { splitPassage, splitToken, tokenize } from './workbook.js';
 
-export type AppQuestionType = 'order' | 'insert' | 'grammar' | 'choice';
-export type AiQuestionType = 'blank' | 'irrelevant' | 'summary' | 'title' | 'topic' | 'gist' | 'claim' | 'consistency';
+export type AppQuestionType = 'order' | 'insert' | 'grammar' | 'choice' | 'correct';
+export type AiQuestionType = 'blank' | 'irrelevant' | 'summary' | 'title' | 'topic' | 'gist' | 'claim' | 'consistency' | 'vocab' | 'compose';
 /** 'workbook': 빈칸 워크북, made before 어법 선택 took its place (the 워크북 menu makes blanks); old sets still show. */
 export type QuestionType = AppQuestionType | AiQuestionType | 'workbook';
 export const QUESTION_TYPES: { id: QuestionType; label: string; by: 'app' | 'ai'; minSentences: number }[] = [
@@ -14,6 +14,7 @@ export const QUESTION_TYPES: { id: QuestionType; label: string; by: 'app' | 'ai'
   { id: 'insert', label: '문장 삽입', by: 'app', minSentences: 6 },
   { id: 'grammar', label: '어법 수정', by: 'app', minSentences: 3 },
   { id: 'choice', label: '어법 선택', by: 'app', minSentences: 3 },
+  { id: 'vocab', label: '어휘 선택', by: 'ai', minSentences: 4 },
   { id: 'blank', label: '빈칸 추론', by: 'ai', minSentences: 3 },
   { id: 'irrelevant', label: '무관한 문장', by: 'ai', minSentences: 5 },
   { id: 'summary', label: '요약문 완성', by: 'ai', minSentences: 3 },
@@ -22,11 +23,21 @@ export const QUESTION_TYPES: { id: QuestionType; label: string; by: 'app' | 'ai'
   { id: 'gist', label: '요지', by: 'ai', minSentences: 3 },
   { id: 'claim', label: '주장', by: 'ai', minSentences: 3 },
   { id: 'consistency', label: '내용 일치', by: 'ai', minSentences: 3 },
+  // 서술형: written answers (어법 고치기 graded by the words; 조건 영작 by the sentence, else checked by the AI at 채점)
+  { id: 'correct', label: '서술형 어법', by: 'app', minSentences: 3 },
+  { id: 'compose', label: '서술형 영작', by: 'ai', minSentences: 3 },
 ];
 export const APP_TYPES = QUESTION_TYPES.filter(t => t.by === 'app').map(t => t.id as AppQuestionType);
 export const AI_TYPES = QUESTION_TYPES.filter(t => t.by === 'ai').map(t => t.id as AiQuestionType);
 /** Types per 만들기, all kinds together (fewer at once keeps each one good). */
 export const MAX_TYPES = 3;
+/** 서술형 types: the answer is written, not chosen. */
+export const WRITTEN_TYPES: string[] = ['correct', 'compose'];
+export const LETTERS5 = ['ⓐ', 'ⓑ', 'ⓒ', 'ⓓ', 'ⓔ'];
+/** A written answer compared leniently: case, spaces and end marks do not matter. */
+export const sameWriting = (a: string, b: string) => { const f = (s: string) => String(s || '').toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim(); return f(a) !== '' && f(a) === f(b); };
+/** 고치기: the types whose five choices and answer a teacher may rewrite (the others' answers come from the passage). */
+export const OPTION_EDIT_TYPES: string[] = ['blank', 'summary', 'title', 'topic', 'gist', 'claim', 'consistency'];
 export const typeLabel = (id: string) => QUESTION_TYPES.find(t => t.id === id)?.label || (id === 'workbook' ? '빈칸 워크북' : id);
 
 export const CIRCLED = ['①', '②', '③', '④', '⑤'];
@@ -247,6 +258,26 @@ export function grammarQuestion(sentences: string[], rand: Rand = Math.random, e
     explanation: `${CIRCLED[answer - 1]} '${target.wrong}' → '${target.word}': ${target.why}` };
 }
 
+/** 서술형 어법 고치기: five underlined parts ⓐ–ⓔ, two of them wrong (apart from each other); the answer is each wrong
+ *  one's letter with the right word ('ⓐ matters'), in letter order. */
+export function correctQuestion(sentences: string[], rand: Rand = Math.random, extra: Slot[] = []): MadeQuestion | null {
+  const tokens = sentences.flatMap(tokenize), slots = grammarSlots(tokens, extra), wrongable = [...slots.filter(x => x.wrong)].sort(() => rand() - 0.5);
+  const targets = wrongable.slice(0, 1);
+  for (const sl of wrongable.slice(1)) if (targets.length < 2 && Math.abs(sl.at - targets[0].at) > 2) targets.push(sl);
+  if (slots.length < 5 || targets.length < 2) return null;
+  const chosen = [...targets];
+  for (const sl of [...slots].sort(() => rand() - 0.5)) { if (chosen.length >= 5) break; if (chosen.every(c => Math.abs(c.at - sl.at) > 2)) chosen.push(sl); }
+  if (chosen.length < 5) return null;
+  chosen.sort((a, b) => a.at - b.at);
+  const passage = tokens.map((t, i) => {
+    const k = chosen.findIndex(c => c.at === i); if (k < 0) return t;
+    const { lead, core, trail } = splitToken(t); return `${lead}${LETTERS5[k]}{${targets.includes(chosen[k]) ? chosen[k].wrong : core}}${trail}`;
+  }).join(' ');
+  const wrong = chosen.map((c, k) => ({ c, k })).filter(x => targets.includes(x.c));
+  return { id: 'correct', type: 'correct', prompt: '다음 글의 밑줄 친 ⓐ~ⓔ 중 어법상 틀린 것 2개를 찾아 기호를 쓰고 바르게 고쳐 쓰시오.', passage,
+    answer: wrong.map(x => `${LETTERS5[x.k]} ${x.c.word}`), explanation: wrong.map(x => `${LETTERS5[x.k]} '${x.c.wrong}' → '${x.c.word}': ${x.c.why}`).join('\n') };
+}
+
 /** 어법 선택: the usual 고등학교 워크북 form — pairs like ⓐ[is / are] spread over the passage (one per sentence and a half,
  *  3–12); the original word is always the right one, its order in the pair is random. */
 export function choiceQuestion(sentences: string[], rand: Rand = Math.random, extra: Slot[] = []): MadeQuestion | null {
@@ -273,12 +304,44 @@ const PROMPTS: Record<AiQuestionType, string> = {
   title: '다음 글의 제목으로 가장 적절한 것은?', topic: '다음 글의 주제로 가장 적절한 것은?',
   gist: '다음 글의 요지로 가장 적절한 것은?', claim: '다음 글에서 필자가 주장하는 바로 가장 적절한 것은?',
   consistency: '다음 글의 내용과 일치하지 않는 것은?',
+  vocab: '다음 글의 밑줄 친 부분 중, 문맥상 낱말의 쓰임이 적절하지 않은 것은?',
+  compose: '다음 우리말과 같은 뜻이 되도록 <조건>에 맞게 영작하시오.',
 };
 const clean = (v: unknown, n = 300) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const fiveDistinct = (options: string[]) => options.length === 5 && options.every(Boolean) && new Set(options.map(o => o.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ''))).size === 5;
 /** An AI-helped question from the AI's parts (`data`): the app puts the answer at a random number and checks it. */
 export function buildAiQuestion(type: AiQuestionType, sentences: string[], data: any, rand: Rand = Math.random): MadeQuestion | null {
   const text = sentences.join(' '), why = clean(data?.explanation, 400), wrongs = (Array.isArray(data?.wrong) ? data.wrong : []).map((w: unknown) => clean(w, 160)).slice(0, 4);
+  if (type === 'compose') {
+    // 조건 영작: the AI picks a sentence of the passage, writes its Korean and names 2–3 of its words; the app checks them
+    // and sets the word count from the sentence itself. The answer is that sentence.
+    const sentence = sentences[Number(data?.index)], ko = clean(data?.ko, 300), cores = sentence ? tokenize(sentence).map(t => splitToken(t).core) : [];
+    const words = (Array.isArray(data?.words) ? data.words : []).map((w: unknown) => clean(w, 30)).filter(Boolean).slice(0, 3);
+    if (!sentence || !ko || words.length < 2) return null;
+    const used = words.map((w: string) => cores.find(c => c.toLowerCase() === w.toLowerCase()));
+    if (used.some((w: string | undefined) => !w) || new Set(used.map((w: string) => w.toLowerCase())).size !== used.length || cores.length < 5 || cores.length > 25) return null;
+    // the Korean in the box, then the conditions one a line (shown in that order everywhere: box, then paragraphs)
+    return { id: type, type, prompt: PROMPTS.compose, box: ko, paragraphs: [{ label: '<조건>', text: `1. 다음 낱말을 모두 그대로 쓸 것: ${used.join(', ')}` }, { label: '', text: `2. ${cores.length}단어로 쓸 것` }],
+      answer: [sentence], explanation: why || '지문의 문장 그대로예요.' };
+  }
+  if (type === 'vocab') {
+    // 어휘 선택: the AI names five words of the passage (in order) with an opposite for each; the app finds them, picks
+    // which one is swapped for its opposite (so the answer's place is the app's), and underlines all five.
+    const words = (Array.isArray(data?.words) ? data.words : []).map((w: unknown) => clean(w, 40)), opposites = (Array.isArray(data?.opposites) ? data.opposites : []).map((w: unknown) => clean(w, 40));
+    const reasons = (Array.isArray(data?.reasons) ? data.reasons : []).map((w: unknown) => clean(w, 200));
+    const oneWord = /^[A-Za-z][A-Za-z'-]*$/;
+    if (words.length !== 5 || opposites.length !== 5 || !words.every((w: string) => oneWord.test(w)) || !opposites.every((w: string, k: number) => oneWord.test(w) && w.toLowerCase() !== words[k].toLowerCase())) return null;
+    const tokens = sentences.flatMap(tokenize), at: number[] = [];
+    for (const w of words) {
+      const from = at.length ? at[at.length - 1] + 2 : 0, i = tokens.findIndex((t, k) => k >= from && splitToken(t).core.toLowerCase() === w.toLowerCase());
+      if (i < 0) return null;
+      at.push(i);
+    }
+    const k = Math.floor(rand() * 5), core = splitToken(tokens[at[k]]).core;
+    const swap = /^[A-Z]/.test(core) ? opposites[k][0].toUpperCase() + opposites[k].slice(1) : opposites[k].toLowerCase();
+    const passage = tokens.map((t, i) => { const j = at.indexOf(i); if (j < 0) return t; const s = splitToken(t); return `${s.lead}${CIRCLED[j]}{${j === k ? swap : s.core}}${s.trail}`; }).join(' ');
+    return { id: type, type, prompt: PROMPTS.vocab, passage, answer: k + 1, fix: core, explanation: `${CIRCLED[k]} '${swap}' → '${core}': ${reasons[k] || why || '문맥상 원래 낱말이 알맞아요.'}` };
+  }
   if (type === 'blank') {
     const phrase = clean(data?.phrase, 160);
     if (!phrase || text.split(phrase).length !== 2 || wrongs.length !== 4) return null;
@@ -329,7 +392,17 @@ export function checkQuestion(q: MadeQuestion, sentences: string[]): string[] {
     if (!right) issues.push('정답 번호가 범위를 벗어나요');
     else { const text = right.split('-').map(l => q.paragraphs?.find(p => p.label === l)?.text || '').join(' ');
       if (flat(`${q.box} ${text}`) !== original) issues.push('정답 순서로 이으면 원문과 달라요'); }
-  } else if (q.type === 'grammar') {
+  } else if (q.type === 'correct') {
+    const fixes = new Map((q.answer as string[]).map(a => [a.slice(0, 1), a.slice(2)])), marks = String(q.passage || '').match(/[ⓐ-ⓔ]\{[^}]*\}/g) || [];
+    if (marks.length !== 5 || !fixes.size) issues.push('밑줄이 다섯 곳이 아니에요');
+    const back = flat(String(q.passage || '').replace(/([ⓐ-ⓔ])\{([^}]*)\}/g, (_, m, w) => fixes.get(m) ?? w));
+    if (back !== original) issues.push('틀린 곳을 고치면 원문과 달라요');
+  } else if (q.type === 'compose') {
+    const answer = (q.answer as string[])[0] || '';
+    if (!sentences.includes(answer)) issues.push('정답이 지문의 문장이 아니에요');
+    const named = ((q.paragraphs || []).map(x => x.text).join(' ').match(/그대로 쓸 것: ([^,\s]+(?:, [^,\s]+)*)/)?.[1] || '').split(', ').filter(Boolean);
+    if (named.length < 2 || named.some(w => !tokenize(answer).some(t => splitToken(t).core === w))) issues.push('조건의 낱말이 정답 문장에 없어요');
+  } else if (q.type === 'grammar' || q.type === 'vocab') {
     const n = Number(q.answer), marks = String(q.passage || '').match(/[①-⑤]\{[^}]*\}/g) || [];
     if (marks.length !== 5 || !CIRCLED[n - 1]) issues.push('밑줄이 다섯 곳이 아니에요');
     const back = flat(String(q.passage || '').replace(/([①-⑤])\{([^}]*)\}/g, (_, m, w) => (m === CIRCLED[n - 1] ? q.fix || '' : w)));
@@ -357,7 +430,7 @@ export function makeAppQuestions(text: string, types: AppQuestionType[], rand: R
   for (const type of types) {
     const info = QUESTION_TYPES.find(t => t.id === type)!;
     if (sentences.length < info.minSentences) { skipped.push({ type, reason: `${info.minSentences}문장 이상인 지문만 만들 수 있어요` }); continue; }
-    const q = type === 'choice' ? choiceQuestion(sentences, rand, reviewed) : type === 'order' ? orderQuestion(sentences, rand) : type === 'grammar' ? grammarQuestion(sentences, rand, reviewed) : insertQuestion(sentences, rand);
+    const q = type === 'choice' ? choiceQuestion(sentences, rand, reviewed) : type === 'order' ? orderQuestion(sentences, rand) : type === 'grammar' ? grammarQuestion(sentences, rand, reviewed) : type === 'correct' ? correctQuestion(sentences, rand, reviewed) : insertQuestion(sentences, rand);
     const issues = q ? checkQuestion(q, sentences) : ['만들 수 없는 지문이에요'];
     if (!q || issues.length) { skipped.push({ type, reason: issues[0] }); continue; }
     questions.push(q);

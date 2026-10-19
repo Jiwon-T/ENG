@@ -183,25 +183,6 @@ export async function resetAiMonthly(db: any, actor: any, input: any, now = Date
     return {uid, reset: true};
 }
 
-/**
- * The same call, streamed: Gemini's thought summaries are passed to `onThought` as they come (the 지문 분석기 and the
- * 변형문제 생성기 show them while the student waits); the answer text is returned at the end.
- */
-export async function generateAiStream(request: any, feature: AiFeature, onThought: (text: string) => void) {
-    const config = {...(request.config || {}), thinkingConfig: {...(request.config?.thinkingConfig || {}), includeThoughts: true}};
-    const stream = await (await aiClient()).models.generateContentStream({model: AI_MODEL, ...request, config});
-    let text = '', usage: any = null;
-    for await (const chunk of stream) {
-        for (const part of chunk.candidates?.[0]?.content?.parts || []) {
-            if (!part.text) continue;
-            if (part.thought) onThought(part.text); else text += part.text;
-        }
-        if (chunk.usageMetadata) usage = chunk.usageMetadata;
-    }
-    await recordUsage(feature, usage);
-    return text;
-}
-
 /** 관리자 설정 › AI 사용량 › 패스: people with a pass (current or ended), newest first. */
 export async function readAiPasses(db: any, actor: any, now = Date.now()) {
     if (!actor?.admin || actor.academyId !== 'main') throw Error('FORBIDDEN');

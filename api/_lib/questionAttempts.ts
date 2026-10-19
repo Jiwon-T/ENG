@@ -4,14 +4,16 @@
 // A person's own sets, and sets a teacher gave (questionAssignments; points when graded). The attempt id is fixed per
 // person and set or assignment, so a resent submission returns the result already recorded instead of a second one.
 import { createHash } from 'node:crypto';
-import { CIRCLED, typeLabel, type MadeQuestion } from '../../src/lib/questionMaker.js';
+import { CIRCLED, LETTERS5, sameWriting, typeLabel, type MadeQuestion } from '../../src/lib/questionMaker.js';
+import { aiErrorCode, guardAiBurst } from './aiModel.js';
 import { QUESTION_SETS } from './questionSets.js';
 import { QUESTION_ASSIGNMENTS } from './questionAssignments.js';
 import { PET_STATES, awardCapped, petSummary, rollDay, type ServerPetState } from './pet.js';
 import type { PassageActor } from './passage.js';
 
 export const QUESTION_ATTEMPTS = 'questionAttempts';
-export const GRADING_VERSION = 1;
+/** 2: 서술형 (written answers; 조건 영작 checked by the AI when not the passage's sentence word for word). */
+export const GRADING_VERSION = 2;
 /** A visit ends after this long without a save; the next save starts a new one. At most this many visits are kept (older
  *  ones are folded into a count and a total). */
 export const ATTEMPT_SESSION = { gapMs: 30 * 60_000, keep: 100 };
@@ -23,13 +25,23 @@ export const attemptId = (uid: string, setId: string) => createHash('sha256').up
 const pairsOf = (q: MadeQuestion) => [...String(q.passage || '').matchAll(PAIRS)].map(m => [m[1], m[2]]);
 /** What a student sees before grading: no answer, explanation or fix. */
 export function solveView(q: MadeQuestion, index: number) {
-  return { index, type: q.type, label: typeLabel(q.type), prompt: q.prompt, box: q.box, passage: q.passage, paragraphs: q.paragraphs, options: q.options, pairs: q.type === 'choice' ? pairsOf(q).length : undefined };
+  return { index, type: q.type, label: typeLabel(q.type), prompt: q.prompt, box: q.box, passage: q.passage, paragraphs: q.paragraphs, options: q.options, pairs: q.type === 'choice' ? pairsOf(q).length : undefined,
+    // 서술형: how many fixes to write (어법 고치기), or one sentence (조건 영작) — the count only, never the words
+    ...(q.type === 'correct' ? { fixes: (q.answer as string[]).length } : q.type === 'compose' ? { write: true } : {}) };
 }
 /** Solvable on screen: every type with choices (the old 빈칸 워크북 needs written answers, so not those). */
 const solvable = (q: MadeQuestion) => q.type !== 'workbook';
 
-/** A given answer, checked against what the question allows: a choice 1–5, or for 어법 선택 one word of each pair. */
+/** A given answer, checked against what the question allows: a choice 1–5, or for 어법 선택 one word of each pair; for
+ *  서술형 어법 each fix as 'ⓐ word' (blank while unfinished), for 서술형 영작 one sentence. */
 function cleanAnswer(q: MadeQuestion, value: unknown): number | string[] | null {
+  if (q.type === 'correct') {
+    const list = Array.isArray(value) ? value : [], n = (q.answer as string[]).length;
+    if (list.length !== n) return null;
+    const out = list.map(v => clip(v, 80));
+    return out.every(v => v === '' || (LETTERS5.includes(v.slice(0, 1)) && v[1] === ' ')) ? out : null;
+  }
+  if (q.type === 'compose') { const list = Array.isArray(value) ? value : []; return list.length === 1 ? [clip(list[0], 400)] : null; }
   if (q.type === 'choice') {
     const pairs = pairsOf(q), list = Array.isArray(value) ? value : [];
     if (list.length !== pairs.length) return null;
@@ -52,7 +64,19 @@ function cleanAnswers(questions: MadeQuestion[], input: unknown) {
   return out;
 }
 /** One question graded: a 어법 선택 question is right only with every pair right (the pairs are shown one by one). */
-function grade(q: MadeQuestion, given: number | string[] | undefined) {
+function grade(q: MadeQuestion, given: number | string[] | undefined, judged?: { ok: boolean; reason: string; by: 'ai' | 'none' }) {
+  if (q.type === 'correct') {
+    // each wrong part found (its letter) and fixed (the word, leniently); right only with every fix right
+    const mine = (Array.isArray(given) ? given : []).filter(Boolean);
+    const pairs = (q.answer as string[]).map(right => { const g = mine.find(m => m.slice(0, 1) === right.slice(0, 1)) || '';
+      return { label: right.slice(0, 1), right: right.slice(2), given: g.slice(2), ok: Boolean(g) && sameWriting(g.slice(2), right.slice(2)) }; });
+    return { ok: pairs.every(x => x.ok) && mine.length === pairs.length, right: q.answer as string[], given: mine, pairs };
+  }
+  if (q.type === 'compose') {
+    const right = (q.answer as string[])[0], mine = (Array.isArray(given) ? given[0] : '') || '';
+    if (sameWriting(mine, right)) return { ok: true, right: [right], given: [mine], check: { by: 'same', reason: '' } };
+    return { ok: Boolean(judged?.ok), right: [right], given: [mine], check: judged ? { by: judged.by, reason: judged.reason } : { by: 'none', reason: '' } };
+  }
   if (q.type === 'choice') {
     const right = q.answer as string[], mine = Array.isArray(given) ? given : [];
     const pairs = right.map((w, k) => ({ right: w, given: mine[k] || '', ok: mine[k] === w }));
@@ -110,8 +134,10 @@ export async function openAttempt(db: any, a: PassageActor, input: any, now = Da
     if (old?.status === 'submitted') return old;
     await stillGiven(tx, s, a.uid);
     const touched = touchSessions(old?.sessions || [], old?.folded || { count: 0, ms: 0 }, now);
-    // a set that grew (더 만들기) since: the unfinished try moves to the new version, its answers kept (questions only added)
-    const next = old ? { ...old, ...touched, setVersion: s.version, updatedAt: now }
+    // a set that grew (더 만들기) since: the unfinished try moves to the new version, its answers kept; a question made
+    // again or fixed since (its rev is newer than the try's version) loses its answer
+    const keep = (i: string) => !(Number((s.questions[Number(i)] as any)?.rev) > Number(old?.setVersion || 0));
+    const next = old ? { ...old, ...touched, answers: Object.fromEntries(Object.entries(old.answers || {}).filter(([i]) => keep(i))), setVersion: s.version, updatedAt: now }
       : { id: ref.id, uid: a.uid, kind: s.kind, ...(s.kind === 'assigned' ? { assignmentId: s.id } : { setId: s.id }), title: s.title, dueAt: s.dueAt, setVersion: s.version, status: 'draft', answers: {}, ...touched, createdAt: now, updatedAt: now };
     tx.set(ref, next);
     return next;
@@ -143,8 +169,82 @@ export function questionReward(correct: number, total: number, late: boolean) {
 /** 채점: graded once by the server from the answers sent (all must be given); the questions and answers it used are kept
  *  with the result, and for a set a teacher gave the points are paid in the same transaction (once: `reward` says what
  *  was paid). Sent again: the result already recorded comes back unchanged. */
-export async function submitAttempt(db: any, a: PassageActor, input: any, now = Date.now()) {
+/** 서술형 영작 answers that are not the passage's sentence word for word, checked by the AI in one call: the meaning and
+ *  the conditions. If it can't be asked, the answer counts as wrong and says it was not checked (the teacher sees it). */
+export function composeCheckRequest(items: { id: string; ko: string; box: string; model: string; answer: string }[]) {
+  const S = { type: 'STRING' } as const;
+  return {
+    contents: [{ role: 'user', parts: [{ text: JSON.stringify(items) }] }],
+    config: {
+      systemInstruction: '너는 한국 고등학교 영어 서술형 채점 선생님이야. 각 항목은 우리말(ko), 조건(box), 모범 답안(model), 학생 답(answer)이야. 학생 답이 우리말 뜻과 같고, 조건(쓸 낱말, 단어 수)을 모두 지키고, 문법이 맞으면 ok=true. 모범 답안과 표현이 달라도 뜻·조건·문법이 맞으면 ok=true. 철자·문법 오류가 있거나 조건을 어기면 ok=false. reason은 한국어 한 문장(무엇이 맞고 틀렸는지). id는 그대로.',
+      responseMimeType: 'application/json',
+      responseSchema: { type: 'OBJECT', properties: { checks: { type: 'ARRAY', items: { type: 'OBJECT', properties: { id: S, ok: { type: 'BOOLEAN' }, reason: S }, required: ['id', 'ok', 'reason'] } } }, required: ['checks'] },
+      temperature: 0, maxOutputTokens: 4096, thinkingConfig: { thinkingLevel: 'LOW' },
+    },
+  };
+}
+type Judged = { ok: boolean; reason: string; by: 'ai' | 'none' };
+/** What a 서술형 영작 verdict was given for: the Korean, the conditions and the model answer. */
+export const questionSig = (q: MadeQuestion) => createHash('sha256').update(JSON.stringify([q.box, q.paragraphs, q.answer])).digest('hex').slice(0, 16);
+/** While one request has the AI checking a draft, another sent at the same time waits (asked to press again). */
+export const COMPOSE_LOCK_MS = 60_000;
+/** Every question has its answer (a 어법 선택 or 서술형 어법 one with every part filled). */
+const missingAnswer = (questions: MadeQuestion[], answers: Record<string, number | string[]>) => questions.some((q, index) => {
+  if (!solvable(q)) return false;
+  const v = answers[String(index)]; return v === undefined || (Array.isArray(v) && v.some(w => !w));
+});
+/** Asks only for answers not already checked by the AI (`cache`: index → the answer it saw and its verdict); the short-time
+ *  guard comes first when it will be asked. A failed check is not kept (it may be asked again, within the guard). */
+async function checkCompose(questions: MadeQuestion[], answers: Record<string, number | string[]>, cache: Record<string, Judged & { answer: string; sig?: string }>, ask: (items: { id: string; ko: string; box: string; model: string; answer: string }[]) => Promise<any>) {
+  const out = new Map<number, Judged>(), fresh: Record<string, Judged & { answer: string; sig: string }> = {};
+  const items = questions.map((q, index) => ({ q, index, answer: Array.isArray(answers[String(index)]) ? (answers[String(index)] as string[])[0] : '' }))
+    .filter(({ q, answer }) => q.type === 'compose' && !sameWriting(answer, (q.answer as string[])[0]));
+  // a kept verdict counts only for this very answer to this very question (a question fixed since has another `sig`)
+  const todo = items.filter(({ q, index, answer }) => { const c = cache[String(index)]; if (c?.by === 'ai' && c.answer === answer && c.sig === questionSig(q)) { out.set(index, { ok: c.ok, reason: c.reason, by: 'ai' }); return false; } return true; });
+  if (todo.length) {
+    try {
+      const checks = (await ask(todo.map(({ q, index, answer }) => ({ id: `q${index}`, ko: String(q.box || ''), box: (q.paragraphs || []).map(x => x.text).join(' / '), model: (q.answer as string[])[0], answer }))))?.checks;
+      for (const { q, index, answer } of todo) { const c = (Array.isArray(checks) ? checks : []).find((x: any) => x?.id === `q${index}`); if (c) { const j: Judged = { ok: c.ok === true, reason: clip(c.reason, 200), by: 'ai' }; out.set(index, j); fresh[String(index)] = { ...j, answer, sig: questionSig(q) }; } }
+    } catch (error: any) { if (error?.message === 'AI_TOO_FAST' || error?.message === 'ATTEMPT_CHECKING') throw error; console.warn('COMPOSE_CHECK_FAILED', { code: aiErrorCode(error) }); } // the code only, never the answers
+  }
+  for (const { index } of items) if (!out.has(index)) out.set(index, { ok: false, reason: '자동 확인을 하지 못했어요. 선생님께 확인받아 주세요.', by: 'none' });
+  return { judged: out, fresh };
+}
+
+export async function submitAttempt(db: any, a: PassageActor, input: any, now = Date.now(), generate?: (request: any) => Promise<string>) {
   const s = await sourceOf(db, a, input), answers = cleanAnswers(s.questions, input?.answers), ref = refOf(db, s.key);
+  // 서술형 영작 checked before the transaction, and only for a submission that can be graded: open, complete, on the
+  // current version (the same checks the transaction makes again). An already graded try skips it; an answer the AI has
+  // seen (kept on the draft) is not asked again; asking at all goes through the short-time guard.
+  const before = (await ref.get()).data();
+  let judged = new Map<number, Judged>();
+  if (before?.status !== 'submitted') {
+    if (!before) throw Error('ATTEMPT_NOT_OPEN');
+    if (before.setVersion !== s.version) throw Error('ATTEMPT_STALE');
+    if (missingAnswer(s.questions, answers)) throw Error('ATTEMPT_INCOMPLETE');
+    // Asking claims the draft first (composeLock, in a transaction): a second request at the same time stops there
+    // instead of asking the AI about the same answers. The claim ends with the verdicts written, or on failure.
+    let claimed = false;
+    const finish = (fresh: Record<string, unknown>) => db.runTransaction(async (tx: any) => {
+      const cur = (await tx.get(ref)).data();
+      if (cur && cur.status !== 'submitted') tx.set(ref, { ...cur, composeChecks: { ...(cur.composeChecks || {}), ...fresh }, composeLock: null });
+    });
+    const checked = await checkCompose(s.questions, answers, before.composeChecks || {}, async items => {
+      await db.runTransaction(async (tx: any) => {
+        const cur = (await tx.get(ref)).data();
+        if (!cur || cur.status === 'submitted') throw Error('ATTEMPT_CHECKING');
+        if (Number(cur.composeLock?.until) > now) throw Error('ATTEMPT_CHECKING');
+        tx.set(ref, { ...cur, composeLock: { until: now + COMPOSE_LOCK_MS } });
+      });
+      claimed = true;
+      if (!a.admin) await guardAiBurst(db, a.uid, now);
+      if (!generate) throw Error('AI_FAILED');
+      return JSON.parse(await generate(composeCheckRequest(items)));
+    }).catch(async (error: any) => { if (claimed) await finish({}).catch(() => undefined); throw error; });
+    judged = checked.judged;
+    // the verdicts kept on the draft (read again: a save meanwhile is not lost), the claim given back
+    if (claimed) await finish(checked.fresh);
+  }
   const petRef = db.collection(PET_STATES).doc(a.uid), userRef = db.collection('users').doc(a.uid), paying = s.kind === 'assigned';
   const attempt = await db.runTransaction(async (tx: any) => {
     // every read first (the pet too), then the writes
@@ -157,9 +257,8 @@ export async function submitAttempt(db: any, a: PassageActor, input: any, now = 
     // the set read again here: grown (더 만들기) since it was first read = open it again, never graded on the old count
     if (old.setVersion !== s.version || (s.setRef && (!cur || (cur.version || cur.createdAt) !== s.version))) throw Error('ATTEMPT_STALE');
     const questions = s.questions, graded = questions.map((q, index) => ({ q, index })).filter(x => solvable(x.q));
-    const missing = graded.some(({ q, index }) => { const v = answers[String(index)]; return v === undefined || (Array.isArray(v) && v.some(w => !w)); });
-    if (missing) throw Error('ATTEMPT_INCOMPLETE');
-    const results = graded.map(({ q, index }) => ({ index, type: q.type, ...grade(q, answers[String(index)]) }));
+    if (missingAnswer(questions, answers)) throw Error('ATTEMPT_INCOMPLETE');
+    const results = graded.map(({ q, index }) => ({ index, type: q.type, ...grade(q, answers[String(index)], judged.get(index)) }));
     const score = { correct: results.filter(r => r.ok).length, total: results.length };
     let reward: any = null;
     if (paying) {

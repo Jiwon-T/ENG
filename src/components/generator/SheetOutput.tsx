@@ -21,6 +21,8 @@ function SheetPages({ title, items, footer }: { title: string; items: SheetQuest
         {it.q.paragraphs?.map(p => <p key={p.label} className="mt-1"><b className="mr-1">{p.label}</b>{p.text}</p>)}
         {it.q.passage && <p className="mt-1.5 whitespace-pre-wrap"><Marked text={it.q.passage} /></p>}
         {it.q.options && <ol className="mt-1.5 pl-3">{it.q.options.map((o, i) => <li key={i}>{CIRCLED[i]} {o}</li>)}</ol>}
+        {it.q.type === 'correct' && (it.q.answer as string[]).map((_, k) => <p key={k} className="mt-1.5">(&nbsp;&nbsp;&nbsp;&nbsp;) ______________ → ______________</p>)}
+        {it.q.type === 'compose' && <div className="mt-5 border-b border-slate-500" aria-hidden="true" />}
       </div>)}
     </div></PrintPage>)}
     {keyPages.map((list, k) => <PrintPage key={`a${k}`} title={`${title} · 정답 · 해설`} number={++number} footer={footer}>

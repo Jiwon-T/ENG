@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Plus, Scissors, Sparkles, Trash2, Merge, Upload, RefreshCw, Download, ClipboardPaste } from 'lucide-react';
+import { lazy, Suspense, useMemo, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, Plus, Scissors, Sparkles, Trash2, Merge, Upload, RefreshCw, Download, ClipboardPaste, FileQuestion } from 'lucide-react';
 import {
   WORKBOOK_LIMITS, aiReviewKey, applyAiTranslations, applyTranslations, arrangeLine, blankedText, buildWorkbook, checkWorkbook, passageKey, safeFileName, sentenceId, splitExcerpts, splitPassage, toggleBlank,
   type WorkbookBuild, type WorkbookHistory, type WorkbookSentence,
@@ -9,6 +9,9 @@ import { AiWorking, workbookTranslate } from './workbookAi';
 import { FooterSetting } from '../print/PrintSheet';
 import SampleModal, { SampleButton } from '../SampleModal';
 import { sampleWorkbook } from '../../lib/samples';
+import { PASSAGE_LIMITS } from '../../lib/passageTools';
+
+const QuestionGenerator = lazy(() => import('../generator/QuestionGenerator'));
 
 /** 샘플 보기: the 워크북 of the example passage, Part 1 빈칸 · Part 2 배열 · 정답, as in the 미리보기. */
 function WorkbookSample({ onClose }: { onClose: () => void }) {
@@ -41,6 +44,8 @@ export default function WorkbookMaker({ request }: { request: Request }) {
   // The build already downloaded (and remembered): downloading it again saves nothing new.
   const savedBuild = useRef<WorkbookBuild | null>(null);
   const [view, setView] = useState<'part1' | 'part2' | 'key'>('part1'), [sample, setSample] = useState(false);
+  // 이 지문으로 변형 문제 만들기: the generator opens here with the sentences already pasted (워크북 stays as it is)
+  const [making, setMaking] = useState(false);
   const [busy, setBusy] = useState(''), [message, setMessage] = useState(''), [pasteOpen, setPasteOpen] = useState(false), [pasteText, setPasteText] = useState(''), [overwrite, setOverwrite] = useState(false);
   const caret = useRef<Record<string, number>>({});
   // AI translations can't be checked by code for pairing (same count, wrong order): the teacher confirms before the file.
@@ -114,6 +119,8 @@ export default function WorkbookMaker({ request }: { request: Request }) {
   });
 
   const steps: [Step, string][] = [[1, '지문 입력'], [2, '문장·해석 확인'], [3, '미리보기·다운로드']];
+  const passage = sentences.map(s => s.text.trim()).filter(Boolean).join(' ');
+  if (making) return <Suspense fallback={<p className="py-10 text-center text-sm text-slate-400">불러오는 중…</p>}><QuestionGenerator initialText={passage} backLabel="워크북으로" onBack={() => setMaking(false)} /></Suspense>;
   return <section className="space-y-3" aria-label="워크북 만들기">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <span className="flex items-center gap-2"><h2 className="text-lg font-black text-[#5e1e2a]">워크북 만들기</h2><SampleButton onClick={() => setSample(true)} /></span>{sample && <WorkbookSample onClose={() => setSample(false)} />}
@@ -181,6 +188,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
       </ol>
       {aiCount > 0 && <label className="flex items-center justify-end gap-1.5 text-xs text-[#8b2f40]"><input type="checkbox" checked={reviewed} onChange={e => setReviewedKey(e.target.checked ? currentReviewKey : '')} />AI 해석 {aiCount}개가 각 문장과 맞는지 확인했어요 (정답 탭에서 문장과 해석을 함께 볼 수 있어요)</label>}
       <div className="flex flex-wrap justify-end gap-2">
+        <button type="button" className={`${quiet} sm:mr-auto`} onClick={() => setMaking(true)} title={passage.length > PASSAGE_LIMITS.textChars ? `변형 문제는 ${PASSAGE_LIMITS.textChars.toLocaleString('ko-KR')}자까지만 들어가요` : undefined}><FileQuestion size={13} aria-hidden="true" />이 지문으로 변형 문제 만들기 →</button>
         <button type="button" className={quiet} disabled={!!busy} onClick={() => void generate(true)}><RefreshCw size={13} aria-hidden="true" />다시 섞기</button>
         <button type="button" className={`${primary} inline-flex items-center gap-1`} disabled={!!busy || issues.length > 0 || (aiCount > 0 && !reviewed)} onClick={() => void download()}><Download size={15} aria-hidden="true" />{busy === 'docx' ? '만드는 중…' : 'Word 다운로드'}</button>
       </div>

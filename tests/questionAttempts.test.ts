@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { registrationFirestore } from './helpers/registrationFirestore.ts';
 import { passageActor, resetWordIndex } from '../api/_lib/passage.ts';
 import { bundleQuestionSets, makeQuestionSet } from '../api/_lib/questionSets.ts';
-import { ATTEMPT_SESSION, attemptId, openAttempt, saveAttempt, submitAttempt, touchSessions } from '../api/_lib/questionAttempts.ts';
+import { ATTEMPT_SESSION, GRADING_VERSION, attemptId, openAttempt, saveAttempt, submitAttempt, touchSessions } from '../api/_lib/questionAttempts.ts';
 
 const NOW = Date.parse('2026-10-18T10:00:00Z');
 const TEXT = 'Many people believe that talent is something we are born with. However, research shows that practice matters more than we think. For example, musicians who practiced for ten thousand hours performed best. This suggests that effort can shape ability. Of course, natural gifts still play a role. But without steady work, those gifts rarely grow. Therefore, we should value the process of learning. In the end, persistence is what turns potential into skill.';
@@ -72,7 +72,7 @@ test('변형 문제 풀기: 채점 once by the server; all answers needed; resen
   assert.deepEqual([again.score, again.submittedAt], [{ correct: 2, total: 3 }, NOW + 5000], 'resent: the first result, not new answers');
   await assert.rejects(saveAttempt(f.db, kid, { setId: set.id, answers: { 0: 1 } }, NOW), /ATTEMPT_SUBMITTED/);
   const row = f.rows.get(`questionAttempts/${attemptId('kid', set.id)}`);
-  assert.deepEqual([row.gradingVersion, row.questions.length, row.setVersion], [1, 3, set.createdAt], 'the questions graded are kept with the result');
+  assert.deepEqual([row.gradingVersion, row.questions.length, row.setVersion], [GRADING_VERSION, 3, set.createdAt], 'the questions graded are kept with the result');
   // a submitted set opens on its result
   assert.equal(((await openAttempt(f.db, kid, { setId: set.id }, NOW + 1e7)) as any).attempt.score.correct, 2);
 });

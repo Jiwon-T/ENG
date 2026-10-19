@@ -7,7 +7,7 @@
 import type { Passage } from './passageApi';
 import { grammarHighlights } from './questionMaker';
 import { linkRuns, passageLevel, structureFlow, type LinkKind, type PassageLevel } from './passageLevel';
-import type { Orientation } from './printFrame';
+import { DOCX_BODY, TWIPS_PER_MM, type Orientation } from './printFrame';
 
 export type SheetKind = 'analysis' | 'practice';
 export interface SheetOptions {
@@ -19,7 +19,8 @@ export const DEFAULT_SHEET_OPTIONS: SheetOptions = { kind: 'analysis', orientati
 export const SHEET_KIND_LABEL: Record<SheetKind, string> = { analysis: '지문 분석지', practice: '해석 연습' };
 
 export interface SheetRun { text: string; kind?: LinkKind }
-export interface SheetChunk { runs: SheetRun[]; ko: string; width: number }
+/** One 직독직해 piece. `slash`: a / follows it (not after the last piece, nor inside a piece split to fit a row). */
+export interface SheetChunk { runs: SheetRun[]; ko: string; width: number; slash?: boolean }
 export interface SheetLine {
   index: number; rows: SheetChunk[][]; notes: string[]; essay: boolean; full: string;
   /** 해석 연습: lines to write on */
@@ -37,13 +38,21 @@ export interface SheetLayout {
 
 /* ------------------------------------------------------------------ measuring (mm) */
 
-// The page body (measured in the printed frame) and the type sizes the printed sheet uses (analysisSheet.css .as-*), as
-// millimetres; a 0.96 safety margin is kept so a slightly wider font never pushes a sentence off its page.
+// The page body and the type sizes the printed sheet uses (analysisSheet.css .as-*), as millimetres; a 0.96 safety
+// margin is kept so a slightly wider font never pushes a sentence off its page. The width is the narrower of print
+// (269 / 182 mm in the printed frame) and Word (its wider margins leave about 262 / 175 mm), so both break lines and
+// pages at the same places; on paper the sheet just keeps a few mm spare on the right.
 const PT = 0.3528, SAFE = 0.96;
 export const SHEET_TYPE = { en: 9, ko: 7.5, note: 7.5, panel: 8 }; // pt
 const ROW_EN = 4.2, ROW_KO = 3.5, NOTE = 3.4, FULL = 3.6, WRITE = 8.5, GAP = 2.4, TITLE = 15;
-const GEOMETRY: Record<Orientation, { body: number; height: number }> = { landscape: { body: 269, height: 167 }, portrait: { body: 182, height: 254 } };
-const PANEL_SHARE = 1 / 2.85, COLUMN_GAP = 7;
+const narrower = (print: number, o: Orientation) => Math.min(print, Math.floor(DOCX_BODY[o] / TWIPS_PER_MM * 10) / 10);
+const GEOMETRY: Record<Orientation, { body: number; height: number }> = { landscape: { body: narrower(269, 'landscape'), height: 167 }, portrait: { body: narrower(182, 'portrait'), height: 254 } };
+export const PANEL_SHARE = 1 / 2.85, COLUMN_GAP = 7;
+/** The widths (mm) the sentences are laid out in: page 1 next to the 요점 정리, and a column of a two-column page. */
+export function sheetWidths(orientation: Orientation) {
+  const body = GEOMETRY[orientation].body, panel = (body - COLUMN_GAP) * PANEL_SHARE;
+  return { body, panel, first: body - COLUMN_GAP - panel, column: (body - COLUMN_GAP) / 2 };
+}
 /** Width in mm of a text at a type size (Korean full width, capitals wider, spaces narrow). */
 export function textWidth(text: string, pt: number) {
   let em = 0;
@@ -51,7 +60,36 @@ export function textWidth(text: string, pt: number) {
   return em * pt * PT;
 }
 const linesOf = (text: string, pt: number, width: number) => text ? Math.max(1, Math.ceil(textWidth(text, pt) / width)) : 0;
-/** Pieces into rows that fit `width` (a piece wider than the row gets a row of its own). */
+const PIECE_PAD = 4.5;
+/** A piece wider than a row, cut into parts that fit: the English by words, its Korean into as many parts by words
+ *  (balanced), so print and Word never have to squeeze or re-wrap a piece. Only a single word wider than the row
+ *  (not met in real passages) is left as it is. */
+export function splitPiece(c: SheetChunk, width: number): SheetChunk[] {
+  if (c.width <= width) return [c];
+  const room = width - PIECE_PAD, words = c.runs.flatMap(r => r.text.split(' ').filter(Boolean).map(text => ({ text, kind: r.kind })));
+  const ko = c.ko.split(' ').filter(Boolean);
+  // words into n parts of about equal width (cut where the running width passes each n-th of the total)
+  const balance = <T,>(list: T[], n: number, w: (x: T) => number) => {
+    const total = list.reduce((t, x) => t + w(x), 0), out: T[][] = Array.from({ length: n }, () => []);
+    let used = 0;
+    for (const x of list) { out[Math.min(n - 1, Math.floor(((used + w(x) / 2) / Math.max(total, 1e-6)) * n))].push(x); used += w(x); }
+    return out;
+  };
+  const enW = (x: { text: string }) => textWidth(`${x.text} `, SHEET_TYPE.en), koW = (x: string) => textWidth(`${x} `, SHEET_TYPE.ko);
+  let n = Math.max(2, Math.ceil(Math.max(textWidth(c.runs.map(r => r.text).join(' '), SHEET_TYPE.en), textWidth(c.ko, SHEET_TYPE.ko)) / room));
+  for (;; n++) {
+    // both languages over the same n parts, each on its own: when one runs out (a short English with a long
+    // Korean), the remaining parts carry only the other
+    const en = balance<(typeof words)[number]>(words, n, enW), kos = balance(ko, n, koW);
+    const parts = en.map((part, k) => {
+      const runs = part.reduce<SheetRun[]>((out, w) => { const last = out[out.length - 1]; if (last && last.kind === w.kind) last.text += ` ${w.text}`; else out.push({ text: w.text, ...(w.kind ? { kind: w.kind } : {}) }); return out; }, []);
+      const koText = kos[k].join(' ');
+      return { runs, ko: koText, width: Math.max(textWidth(runs.map(r => r.text).join(' '), SHEET_TYPE.en), textWidth(koText, SHEET_TYPE.ko)) + PIECE_PAD };
+    }).filter(x => x.runs.length || x.ko);
+    if (parts.every(x => x.width <= width) || n >= Math.max(words.length, ko.length)) return parts; // one word a part: as narrow as it gets
+  }
+}
+/** Pieces into rows that fit `width` (a piece wider than the row is first cut to fit, see splitPiece). */
 export function packRows(chunks: SheetChunk[], width: number) {
   const rows: SheetChunk[][] = [];
   let used = 0;
@@ -63,7 +101,9 @@ export function packRows(chunks: SheetChunk[], width: number) {
 }
 
 function lineFor(base: Omit<SheetLine, 'rows' | 'write' | 'height'> & { chunks: SheetChunk[] }, o: SheetOptions, width: number): SheetLine {
-  const rows = packRows(base.chunks, width - 5), practice = o.kind === 'practice', withKo = !practice && o.meaning && base.chunks.some(c => c.ko);
+  // a / after each piece except the last; parts of one split piece are joined without it
+  const chunks = base.chunks.flatMap((c, i) => splitPiece(c, width - 5).map((part, k, all) => ({ ...part, slash: k === all.length - 1 && i < base.chunks.length - 1 })));
+  const rows = packRows(chunks, width - 5), practice = o.kind === 'practice', withKo = !practice && o.meaning && base.chunks.some(c => c.ko);
   const write = practice ? Math.max(1, rows.length) : 0;
   const height = rows.length * (ROW_EN + (withKo ? ROW_KO : 0)) + base.notes.reduce((n, t) => n + linesOf(t, SHEET_TYPE.note, width - 5) * NOTE, 0)
     + linesOf(base.full, SHEET_TYPE.ko, width - 5) * FULL + write * WRITE + GAP;
@@ -102,16 +142,16 @@ function panelFor(p: Passage, o: SheetOptions, width: number, room: number): She
 /** The whole sheet for a passage: what goes on each page, measured the same way for print and Word. */
 export function layoutSheet(p: Passage, o: SheetOptions): SheetLayout {
   const g = GEOMETRY[o.orientation], room1 = (g.height - TITLE) * SAFE, room = g.height * SAFE;
-  const panelWidth = (g.body - COLUMN_GAP) * PANEL_SHARE, columnWidth = (g.body - COLUMN_GAP) / 2;
+  const { panel: panelWidth, column: columnWidth, first: besidePanel } = sheetWidths(o.orientation);
   const panel = panelFor(p, o, panelWidth, room1);
-  const firstWidth = panel ? g.body - COLUMN_GAP - panelWidth : columnWidth;
+  const firstWidth = panel ? besidePanel : columnWidth;
   const marks = o.kind === 'analysis' && o.grammar ? grammarHighlights(p.sentences) : [];
   const bases = p.sentences.map((s, i) => {
     const reading = p.parts.reading?.sentences[i], pieces = reading ? reading.chunks.map(c => c.en) : p.hints[i] || [s];
     const kos = reading ? reading.chunks.map(c => c.ko) : pieces.map(() => '');
     const showKo = o.kind === 'analysis' && o.meaning;
     const chunks = linkRuns(s, pieces).map((runs, k) => { const en = runs.map(r => r.text).join(' '), ko = showKo ? kos[k] || '' : '';
-      return { runs, ko, width: Math.max(textWidth(en, SHEET_TYPE.en), textWidth(ko, SHEET_TYPE.ko)) + 4.5 }; });
+      return { runs, ko, width: Math.max(textWidth(en, SHEET_TYPE.en), textWidth(ko, SHEET_TYPE.ko)) + PIECE_PAD }; });
     const notes: string[] = [];
     if (o.kind === 'analysis' && o.grammar) {
       for (const h of (marks[i] || []).filter(h => h.kind === 'sure').slice(0, 2)) notes.push(`${h.word} (✖ ${h.wrong}) — ${h.why}`);

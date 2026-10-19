@@ -58,7 +58,7 @@ export async function makeQuestionSet(db: any, a: PassageActor, input: any, now 
   if (sentences.length > PASSAGE_LIMITS.sentences) throw Error('PASSAGE_TOO_LONG');
   // 어법 places that need the context go to the AI for a yes/no in the same call (none when it can't be asked).
   // Only for an 어법 type this passage is long enough for (no AI use for one that can't be made anyway).
-  const grammarTypes = appTypes.filter(t => (t === 'grammar' || t === 'choice') && sentences.length >= QUESTION_TYPES.find(x => x.id === t)!.minSentences);
+  const grammarTypes = appTypes.filter(t => (t === 'grammar' || t === 'choice' || t === 'correct') && sentences.length >= QUESTION_TYPES.find(x => x.id === t)!.minSentences);
   const review = generate && grammarTypes.length ? reviewCandidates(sentences, rand) : [];
   const skipped: { type: string; reason: string }[] = [];
   const aiReady = aiTypes.filter(type => {

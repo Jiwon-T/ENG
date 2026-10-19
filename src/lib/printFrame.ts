@@ -53,6 +53,9 @@ function logo() {
   return logoBytes;
 }
 const A4 = { width: 11906, height: 16838 }; // twips, portrait (docx turns it for landscape)
+/** Word's page margins and the text width they leave (twips), for layouts that must fit Word as well as print. */
+export const DOCX_MARGIN = 1000, TWIPS_PER_MM = 56.7;
+export const DOCX_BODY: Record<Orientation, number> = { landscape: A4.height - 2 * DOCX_MARGIN, portrait: A4.width - 2 * DOCX_MARGIN };
 
 /** A group of paragraphs that starts on a new page; `columns`: 2 for an exam-style two-column page (Word flows them). */
 export type FrameSection = (Paragraph | Table)[] | { children: (Paragraph | Table)[]; columns?: number };
@@ -68,7 +71,7 @@ export async function frameDocx(info: { title: string; subtitle?: string; orient
   const foot = new Footer({ children: [new Paragraph({ tabStops: [rightTab], border: { top: { style: BorderStyle.SINGLE, size: 4, color: 'DDD3D6', space: 4 } }, children: [
     docxRun(footer, { size: 16, color: '9A8A8F' }), new TextRun({ children: ['\t', PageNumber.CURRENT], font: docxFont, size: 16, color: '9A8A8F' }),
   ] })] });
-  const page = { size: { ...A4, orientation: info.orientation === 'landscape' ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT }, margin: { top: 1000, bottom: 1000, left: 1000, right: 1000, header: 500, footer: 500 } };
+  const page = { size: { ...A4, orientation: info.orientation === 'landscape' ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT }, margin: { top: DOCX_MARGIN, bottom: DOCX_MARGIN, left: DOCX_MARGIN, right: DOCX_MARGIN, header: 500, footer: 500 } };
   const doc = new Document({
     creator: APP_NAME, title: info.title,
     styles: { default: { document: { run: { font: docxFont, size: 21 } } } },

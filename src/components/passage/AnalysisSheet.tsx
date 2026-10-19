@@ -21,8 +21,8 @@ function Line({ line, meaning }: { key?: number; line: SheetLine; meaning: boole
   return <div className={`as-line${line.write ? ' as-practice' : ''}`}>
     {meaning ? line.rows.map((row, r) => <div key={r} className="as-row" style={r ? { paddingLeft: '4.5mm' } : undefined}>
       {r === 0 && <span className="as-num">{line.index + 1}</span>}
-      {row.map((c, k) => <span key={k} className="as-row"><span className="as-chunk"><span className="as-en"><Runs runs={c.runs} />{r === last && k === row.length - 1 && essay}</span><span className="as-ko">{c.ko}</span></span>{(k < row.length - 1 || r < last) && <span className="as-slash">/</span>}</span>)}
-    </div>) : <p className="as-flow"><span className="as-num" style={{ display: 'inline-block', textIndent: 0 }}>{line.index + 1}</span>{line.rows.flat().map((c, k) => <span key={k}>{k > 0 && <span className="as-slash">/</span>}<Runs runs={c.runs} /></span>)}{essay}</p>}
+      {row.map((c, k) => <span key={k} className="as-row"><span className="as-chunk"><span className="as-en"><Runs runs={c.runs} />{r === last && k === row.length - 1 && essay}</span><span className="as-ko">{c.ko}</span></span>{c.slash && <span className="as-slash">/</span>}</span>)}
+    </div>) : <p className="as-flow"><span className="as-num" style={{ display: 'inline-block', textIndent: 0 }}>{line.index + 1}</span>{line.rows.flat().map((c, k, all) => <span key={k}>{k > 0 && (all[k - 1].slash ? <span className="as-slash">/</span> : ' ')}<Runs runs={c.runs} /></span>)}{essay}</p>}
     {line.notes.map((n, k) => <p key={k} className="as-note">· {n}</p>)}
     {line.full && <p className="as-full">{line.full}</p>}
     {Array.from({ length: line.write }, (_, k) => <div key={k} className="as-write" />)}

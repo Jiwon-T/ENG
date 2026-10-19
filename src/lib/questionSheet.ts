@@ -2,7 +2,7 @@
 // columns like an exam paper (a question never cut in two), the answers with explanations last in one column.
 // The Word file uses the common frame (logo, title, footer, page numbers: printFrame).
 import { BorderStyle, Paragraph, TextRun } from 'docx';
-import { CIRCLED, typeLabel, type MadeQuestion } from './questionMaker';
+import { CIRCLED, WRITTEN_TYPES, typeLabel, type MadeQuestion } from './questionMaker';
 import { docxFont, docxRun, frameDocx } from './printFrame';
 
 export interface SheetQuestion { n: number; q: MadeQuestion; setTitle: string }
@@ -32,12 +32,13 @@ export function packQuestions(items: SheetQuestion[], budget = PAGE_BUDGET) {
 }
 /** The answer as written in the key. */
 export function answerText(q: MadeQuestion) {
+  if (WRITTEN_TYPES.includes(q.type)) return (q.answer as string[]).join(', '); // 서술형: 'ⓐ matters, ⓒ grow' or the sentence
   if (Array.isArray(q.answer)) return q.answer.map((w, k) => `${LETTERS[k] || k + 1} ${w}`).join('  ');
   return CIRCLED[q.answer - 1] || String(q.answer);
 }
-/** The passage in parts: plain text, and the numbered underlined bits of 어법 수정 (`①{word}`). */
+/** The passage in parts: plain text, and the numbered underlined bits (`①{word}` 어법 수정 · 어휘 선택, `ⓐ{word}` 서술형 어법). */
 export function passageParts(text: string): { text: string; mark?: string; under?: boolean }[] {
-  const out: { text: string; mark?: string; under?: boolean }[] = [], parts = text.split(/([①-⑤])\{([^}]*)\}/);
+  const out: { text: string; mark?: string; under?: boolean }[] = [], parts = text.split(/([①-⑤ⓐ-ⓔ])\{([^}]*)\}/);
   for (let i = 0; i < parts.length; i++) {
     if (i % 3 === 0) { if (parts[i]) out.push({ text: parts[i] }); }
     else if (i % 3 === 1) { out.push({ text: parts[i], mark: parts[i] }); out.push({ text: parts[i + 1], under: true }); i++; }
@@ -59,6 +60,9 @@ function questionParagraphs(it: SheetQuestion): Paragraph[] {
   for (const para of q.paragraphs || []) out.push(p([docxRun(`${para.label} `, { bold: true, size: 19 }), docxRun(para.text, { size: 19 })], { after: 60, keepNext: true }));
   if (q.passage) out.push(p(passageParts(q.passage).map(x => new TextRun({ text: x.text, font: docxFont, size: 19, underline: x.under ? {} : undefined })), { after: 80, keepNext: Boolean(q.options) }));
   (q.options || []).forEach((o, k, all) => out.push(p([docxRun(`${CIRCLED[k]} ${o}`, { size: 19 })], { after: 10, indent: 160, keepNext: k < all.length - 1 })));
+  // 서술형: lines to write on
+  if (q.type === 'correct') (q.answer as string[]).forEach(() => out.push(p([docxRun('(      )  ____________________  →  ____________________', { size: 19 })], { before: 60, after: 20 })));
+  if (q.type === 'compose') out.push(new Paragraph({ spacing: { before: 280, after: 60 }, border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: '888888', space: 1 } }, children: [docxRun(' ', { size: 19 })] }));
   return out;
 }
 /** The 문제지 as a Word file: the questions in two flowing columns, then the answers and explanations (one column). */

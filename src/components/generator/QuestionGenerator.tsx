@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowLeft, FileQuestion } from 'lucide-react';
 import InfoTip from '../InfoTip';
 import { passageCall, shortDate, type PassageRow } from '../../lib/passageApi';
@@ -7,8 +7,9 @@ import QuestionSolve, { Marked } from './QuestionSolve';
 import AssignPanel, { MyAssignments } from './AssignPanel';
 import SheetOutput from './SheetOutput';
 import { sheetQuestions } from '../../lib/questionSheet';
-import { CIRCLED, MAX_TYPES, QUESTION_TYPES, typeLabel, type MadeQuestion, type QuestionType } from '../../lib/questionMaker';
+import { CIRCLED, MAX_TYPES, QUESTION_TYPES, WRITTEN_TYPES, typeLabel, type MadeQuestion, type QuestionType } from '../../lib/questionMaker';
 import SampleModal, { SampleButton } from '../SampleModal';
+import QuestionTools from './QuestionTools';
 import { sampleQuestions } from '../../lib/samples';
 
 // 변형 문제 만들기 (Beta): a pasted passage or one from the 지문 보관함 → questions. The app-made types (순서 배열·문장
@@ -22,14 +23,22 @@ const chip = (on: boolean, off = false) => `rounded-full border px-3 py-1 text-x
 
 const isAi = (id: QuestionType) => QUESTION_TYPES.find(t => t.id === id)?.by === 'ai';
 
-function Question({ q, n, showAnswer }: { key?: string; q: MadeQuestion; n: number; showAnswer: boolean }) {
+/** 서술형: where the answer is written (blank lines, as on the printed sheet). */
+function WriteLines({ q }: { q: MadeQuestion }) {
+  if (q.type === 'correct') return <div className="mt-2 space-y-1 text-sm text-slate-500">{(q.answer as string[]).map((_, k) => <p key={k}>(&nbsp;&nbsp;&nbsp;) ____________ → ____________</p>)}</div>;
+  if (q.type === 'compose') return <div className="mt-3 h-6 border-b border-slate-400" aria-hidden="true" />;
+  return null;
+}
+/** `tools`: 다시 만들기 · 고치기 (one's own set), at the top right. */
+function Question({ q, n, showAnswer, tools }: { key?: string; q: MadeQuestion; n: number; showAnswer: boolean; tools?: ReactNode }) {
   return <section className="break-inside-avoid rounded-2xl border border-[#f3e6e8] bg-white p-4">
-    <p className="text-sm font-bold text-[#5e1e2a]">{n}. {q.prompt} <span className="ml-1 whitespace-nowrap rounded-md bg-[#fef2f3] px-1.5 text-[10px] font-bold text-[#8b2f40] print:hidden">{typeLabel(q.type)}</span></p>
+    <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1"><p className="min-w-0 flex-1 text-sm font-bold text-[#5e1e2a]">{n}. {q.prompt} <span className="ml-1 whitespace-nowrap rounded-md bg-[#fef2f3] px-1.5 text-[10px] font-bold text-[#8b2f40] print:hidden">{typeLabel(q.type)}</span></p>{tools}</div>
     {q.box && <p className="mt-2 rounded-lg border border-slate-400 px-3 py-2 text-sm leading-relaxed">{q.box}</p>}
     {q.paragraphs?.map(p => <p key={p.label} className="mt-2 text-sm leading-relaxed"><b className="mr-1">{p.label}</b>{p.text}</p>)}
     {q.passage && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed"><Marked text={q.passage} /></p>}
     {q.options && <ol className="mt-2 grid gap-0.5 text-sm">{q.options.map((o, i) => <li key={i}>{CIRCLED[i]} {o}</li>)}</ol>}
-    {showAnswer && <p className="mt-3 whitespace-pre-line rounded-lg bg-[#f7f6fd] px-3 py-2 text-xs text-[#3c3489]"><b className="mr-1">정답</b>{Array.isArray(q.answer) ? '' : CIRCLED[q.answer - 1]} {q.explanation}</p>}
+    <WriteLines q={q} />
+    {showAnswer && <p className="mt-3 whitespace-pre-line rounded-lg bg-[#f7f6fd] px-3 py-2 text-xs text-[#3c3489]"><b className="mr-1">정답</b>{WRITTEN_TYPES.includes(q.type) ? `${(q.answer as string[]).join(', ')}\n` : Array.isArray(q.answer) ? '' : CIRCLED[q.answer - 1]} {q.explanation}</p>}
   </section>;
 }
 
@@ -51,10 +60,11 @@ function GeneratorSample({ types, onToggle, onClose }: { types: QuestionType[]; 
   </SampleModal>;
 }
 
-/** `initialTypes`: the types to start with (연습 유형 추천; up to 3), else 순서 배열 · 문장 삽입. */
-export default function QuestionGenerator({ initialPassage, initialTypes, onBack }: { initialPassage?: { id: string; title: string; first?: string } | null; initialTypes?: QuestionType[]; onBack?: () => void }) {
+/** `initialTypes`: the types to start with (연습 유형 추천; up to 3), else 순서 배열 · 문장 삽입. `initialText`: a passage
+ *  to start with in 붙여 넣기 (from 워크북 만들기; cut to the passage limit); `backLabel`: the back link's words. */
+export default function QuestionGenerator({ initialPassage, initialTypes, initialText, onBack, backLabel = '지문으로' }: { initialPassage?: { id: string; title: string; first?: string } | null; initialTypes?: QuestionType[]; initialText?: string; onBack?: () => void; backLabel?: string }) {
   const [source, setSource] = useState<'paste' | 'library'>(initialPassage ? 'library' : 'paste');
-  const [text, setText] = useState(''), [picked, setPicked] = useState(initialPassage || null);
+  const [text, setText] = useState(() => (initialText || '').slice(0, PASSAGE_LIMITS.textChars)), [picked, setPicked] = useState(initialPassage || null);
   const [rows, setRows] = useState<PassageRow[] | null>(null), [types, setTypes] = useState<QuestionType[]>(() => initialTypes?.length ? initialTypes.slice(0, MAX_TYPES) : ['order', 'insert']);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(''), [left, setLeft] = useState<number | null>(null);
   const [set, setSet] = useState<QuestionSet | null>(null), [skipped, setSkipped] = useState<{ type: QuestionType; reason: string }[]>([]), [answers, setAnswers] = useState(false);
@@ -104,7 +114,7 @@ export default function QuestionGenerator({ initialPassage, initialTypes, onBack
   if (set && solving) return <QuestionSolve setId={set.id} onBack={() => setSolving(false)} />;
   if (set) return <div className="mx-auto max-w-3xl px-4 pb-10 pt-4 md:px-6 md:pt-8">
     <div className="mb-3 flex flex-wrap items-center gap-2 print:hidden">
-      <button type="button" onClick={() => setSet(null)} className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-700"><ArrowLeft size={14} aria-hidden="true" />다시 만들기</button>
+      <button type="button" onClick={() => setSet(null)} className="inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-700"><ArrowLeft size={14} aria-hidden="true" />새로 만들기</button>
       <span className="ml-auto flex gap-1.5">
         {canAssign && set.questions.some(q => q.type !== 'workbook') && <button type="button" onClick={() => setAssigning(a => !a)} className="rounded-lg border border-[#d26272] px-2.5 py-1 text-xs font-bold text-[#8b2f40]">내주기</button>}
         {set.questions.some(q => q.type !== 'workbook') && <button type="button" onClick={() => setSolving(true)} className="rounded-lg bg-[#d26272] px-2.5 py-1 text-xs font-bold text-white">풀어 보기</button>}
@@ -129,11 +139,12 @@ export default function QuestionGenerator({ initialPassage, initialTypes, onBack
     {set.kind === 'bundle' && set.sources && <p className="mb-1 text-[11px] text-slate-500 print:hidden">합본 · {set.sources.map(x => `${x.title} (${x.count})`).join(' + ')}</p>}
     <p className="mb-3 text-[11px] text-slate-400 print:hidden">{shortDate(set.createdAt)} · {set.questions.length}문제{left !== null ? ` · 이번 달 ${left}번 더 만들 수 있어요` : ''}</p>
     {skipped.length > 0 && <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 print:hidden">{skipped.map(s => `${typeLabel(s.type)}: ${s.reason}`).join(' · ')}</p>}
-    <div className="space-y-3">{set.questions.map((q, i) => <Question key={q.id + i} q={q} n={i + 1} showAnswer={answers} />)}</div>
+    <div className="space-y-3">{set.questions.map((q, i) => <Question key={`${q.id}${i}${(q as any).rev || ''}`} q={q} n={i + 1} showAnswer={answers}
+      tools={q.type !== 'workbook' && <QuestionTools<QuestionSet> q={q} setId={set.id} index={i} bundle={set.kind === 'bundle'} onChanged={(next, l) => { setSet(next); if (l !== null) setLeft(l); setMessage(`${i + 1}번 문제를 바꿨어요.`); }} />} />)}</div>
   </div>;
 
   return <div className="mx-auto max-w-3xl px-4 pb-10 pt-4 md:px-6 md:pt-8">
-    {onBack && <button type="button" onClick={onBack} className="mb-2 inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-700"><ArrowLeft size={14} aria-hidden="true" />지문으로</button>}
+    {onBack && <button type="button" onClick={onBack} className="mb-2 inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-700"><ArrowLeft size={14} aria-hidden="true" />{backLabel}</button>}
     <div className="rounded-2xl border border-[#f3e6e8] bg-white p-4 md:p-5">
       <div className="mb-3 flex items-center gap-2"><FileQuestion size={18} className="text-[#8b2f40]" aria-hidden="true" /><b className="text-base text-[#5e1e2a]">변형 문제 만들기 <span className="text-[11px] font-medium text-slate-400">Beta</span></b>
         <InfoTip label="변형 문제 만들기 설명 보기">지문을 붙여 넣거나 지문 보관함에서 고르면 문제를 만들어요. 모든 문제는 원문과 맞는지 확인한 뒤 보여 줘요. 문제 유형은 한 번에 3개까지 고를 수 있어요. 만들기 한 번에 이번 달 횟수가 한 번 들어요(패스면 더 많이).</InfoTip></div>

@@ -44,6 +44,8 @@ export const SAMPLE_AI: Record<AiQuestionType, any> = {
   gist: { answer: '꾸준한 노력이 타고난 재능보다 실력을 키우는 데 더 중요하다.', wrong: ['재능은 타고나므로 노력으로 바꿀 수 없다.', '음악가는 어릴 때부터 훈련을 시작해야 한다.', '연습 시간보다 휴식 시간이 더 중요하다.', '재능 있는 사람만 끝까지 배울 수 있다.'], explanation: '연구와 예시를 들어 노력이 능력을 만든다고 말하고 있어요.' },
   claim: { answer: '배우는 과정을 소중히 여기고 꾸준히 노력해야 한다.', wrong: ['재능을 일찍 찾아 그 분야에만 집중해야 한다.', '결과보다 타고난 능력을 먼저 따져야 한다.', '연습은 짧게 하고 쉬는 시간을 늘려야 한다.', '음악가의 연습 방법을 그대로 따라야 한다.'], explanation: 'Therefore 이후 문장에서 배우는 과정을 소중히 여겨야 한다고 주장해요.' },
   consistency: { truths: ['많은 사람들은 재능이 타고난다고 믿는다.', '연구는 연습이 생각보다 중요하다고 말한다.', '타고난 재능도 여전히 역할을 한다.', '끈기가 잠재력을 실력으로 바꾼다.'], lie: '만 시간 연습한 음악가들은 오히려 실력이 떨어졌다.', explanation: '만 시간 연습한 음악가들이 가장 좋은 연주를 했다고 했으므로, 실력이 떨어졌다는 내용은 글과 맞지 않아요.' },
+  vocab: { words: ['believe', 'more', 'shape', 'rarely', 'value'], opposites: ['doubt', 'less', 'limit', 'often', 'ignore'], reasons: ['많은 사람들이 재능을 타고난다고 믿는 통념을 소개해요.', '연습이 생각보다 더 중요하다는 것이 연구 결과예요.', '노력이 능력을 만들 수 있다는 결론이에요.', '꾸준한 노력 없이는 재능이 좀처럼 자라지 않아요.', '그래서 배우는 과정을 소중히 여겨야 해요.'] },
+  compose: { index: 7, ko: '결국 끈기가 잠재력을 실력으로 바꾸는 것이다.', words: ['what', 'turns', 'into'], explanation: 'what이 이끄는 명사절(~하는 것)이 보어로 쓰였고, turn A into B는 A를 B로 바꾸다예요.' },
 };
 
 /** One sample question per type (null when the maker could not make it, which the tests rule out). */

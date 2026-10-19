@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
-import { DEFAULT_SHEET_OPTIONS, layoutSheet, packRows, sheetAvailability, textWidth } from '../src/lib/analysisSheet.ts';
+import { DEFAULT_SHEET_OPTIONS, layoutSheet, packRows, sheetAvailability, sheetWidths, splitPiece, textWidth } from '../src/lib/analysisSheet.ts';
+import { DOCX_BODY, TWIPS_PER_MM } from '../src/lib/printFrame.ts';
 import { analysisSheetDocx } from '../src/lib/analysisSheetDocx.ts';
 import { samplePassage } from '../src/lib/samples.ts';
 import { chunkHints } from '../src/lib/passageTools.ts';
@@ -79,4 +80,65 @@ test('분석지 Word: the same pages, with the pieces and their Korean, the pane
   assert.equal((longXml.match(/<w:sectPr/g) || []).length, long.pages.length, 'one Word section (page) per laid-out page');
   const practice = await (await JSZip.loadAsync(await (await analysisSheetDocx(layoutSheet(samplePassage(), { ...DEFAULT_SHEET_OPTIONS, kind: 'practice' }))).arrayBuffer())).file('word/document.xml')!.async('string');
   assert.ok(practice.includes('해석 연습') && !practice.includes('많은 사람들은 믿는다'));
+});
+
+test('분석지 widths fit Word as well as print: no row (even of one piece) wider than the Word text area (nothing squeezed or re-wrapped)', () => {
+  for (const orientation of ['landscape', 'portrait'] as const) {
+    const w = sheetWidths(orientation);
+    assert.ok(w.body * TWIPS_PER_MM <= DOCX_BODY[orientation], `${orientation}: layout body within Word's margins`);
+    assert.ok(w.body <= (orientation === 'landscape' ? 269 : 182), `${orientation}: and within the printed frame`);
+    for (const kind of ['analysis', 'practice'] as const) {
+      const layout = layoutSheet(longPassage(), { ...DEFAULT_SHEET_OPTIONS, orientation, kind });
+      for (const page of layout.pages) {
+        const width = page.first && layout.panel ? w.first : w.column;
+        for (const line of page.columns.flat()) for (const row of line.rows)
+          assert.ok(row.reduce((n, c) => n + c.width, 0) <= width - 5, `${orientation} ${kind}: sentence ${line.index + 1} row fits`);
+      }
+    }
+  }
+});
+
+test('분석지: a piece wider than its row is cut into parts that fit (no / inside it), English and Korean kept whole and in order', async () => {
+  const p: any = samplePassage();
+  const longEn = 'that musicians who practiced for ten thousand hours in quiet rooms every single day without any rest performed far better than those who did not';
+  const longKo = '조용한 방에서 매일 하루도 쉬지 않고 만 시간 동안 연습한 음악가들이 그렇게 하지 않은 사람들보다 훨씬 더 잘 연주했다는 것을 보여 주는 아주 긴 해석';
+  p.sentences[1] = `However, research shows ${longEn}.`; p.hints[1] = chunkHints(p.sentences[1]);
+  p.parts.reading.sentences[1] = { chunks: [{ en: 'However, research shows', ko: '하지만 연구는 보여 준다' }, { en: `${longEn}.`, ko: longKo }], ko: '' };
+  for (const orientation of ['landscape', 'portrait'] as const) {
+    const w = sheetWidths(orientation), layout = layoutSheet(p, { ...DEFAULT_SHEET_OPTIONS, orientation });
+    const line = layout.pages.flatMap(pg => pg.columns.flat()).find(l => l.index === 1)!, pieces = line.rows.flat();
+    assert.ok(pieces.length > 2, `${orientation}: the long piece was cut`);
+    for (const row of line.rows) assert.ok(row.reduce((n, c) => n + c.width, 0) <= w.first - 5, `${orientation}: every row fits`);
+    assert.equal(pieces.slice(1).map(c => c.runs.map(r => r.text).join(' ')).join(' '), `${longEn}.`, 'the English comes back whole');
+    assert.equal(pieces.slice(1).map(c => c.ko).join(' '), longKo, 'the Korean comes back whole');
+    assert.deepEqual(pieces.map(c => Boolean(c.slash)), [true, ...pieces.slice(1).map(() => false)], 'a / after the first piece only');
+  }
+  // a Korean much longer than its English is cut too
+  const parts = splitPiece({ runs: [{ text: 'a b c d e f' }], ko: longKo, width: 300 }, 60);
+  assert.ok(parts.length > 1 && parts.every(c => c.width <= 60) && parts.map(c => c.ko).join(' ') === longKo);
+  const xml = await (await JSZip.loadAsync(await (await analysisSheetDocx(layoutSheet(p, DEFAULT_SHEET_OPTIONS))).arrayBuffer())).file('word/document.xml')!.async('string');
+  assert.ok(xml.includes('quiet rooms') && xml.includes('만 시간 동안'));
+});
+
+test('분석지: a short English piece with a very long Korean is cut by the Korean (parts may carry only Korean), every part fits', () => {
+  const longKo = '조용한 방에서 매일 하루도 쉬지 않고 만 시간 동안 연습한 음악가들이 그렇게 하지 않은 사람들보다 훨씬 더 잘 연주했다는 것을 보여 주는 아주아주 긴 해석이에요';
+  for (const en of ['Indeed,', 'In short, they won.']) {
+    const parts = splitPiece({ runs: [{ text: en, kind: '결론' }], ko: longKo, width: 300 }, 45);
+    assert.ok(parts.length > en.split(' ').length, `${en}: more parts than English words`);
+    assert.ok(parts.every(c => c.width <= 45), `${en}: every part fits`);
+    assert.equal(parts.map(c => c.ko).filter(Boolean).join(' '), longKo, `${en}: the Korean comes back whole`);
+    assert.equal(parts.flatMap(c => c.runs.map(r => r.text)).join(' '), en, `${en}: the English comes back whole`);
+    assert.ok(parts.flatMap(c => c.runs).every(r => r.kind === '결론'), 'the linking-word mark stays');
+  }
+  // in a real layout: sentence 2 is 'Indeed,' with that long translation
+  const p: any = samplePassage();
+  p.sentences[1] = 'Indeed, research shows that practice matters more than we think.'; p.hints[1] = chunkHints(p.sentences[1]);
+  p.parts.reading.sentences[1] = { chunks: [{ en: 'Indeed,', ko: longKo + ' ' + longKo }, { en: 'research shows that practice matters more than we think.', ko: '연구는 보여 준다' }], ko: '' };
+  for (const orientation of ['landscape', 'portrait'] as const) {
+    const w = sheetWidths(orientation), line = layoutSheet(p, { ...DEFAULT_SHEET_OPTIONS, orientation }).pages.flatMap(pg => pg.columns.flat()).find(l => l.index === 1)!;
+    for (const row of line.rows) assert.ok(row.reduce((n, c) => n + c.width, 0) <= w.first - 5, `${orientation}: every row fits`);
+    const pieces = line.rows.flat(), cut = pieces.slice(0, -1);
+    assert.ok(cut.some(c => !c.runs.length && c.ko), `${orientation}: some parts carry only Korean`);
+    assert.deepEqual(pieces.map(c => Boolean(c.slash)), [...cut.map((_, k) => k === cut.length - 1), false], `${orientation}: one / after the cut piece`);
+  }
 });
