@@ -28,7 +28,7 @@ import {confirmLessonPublish} from './lessonPublishConfirm';
 import {removeGridSelection} from '../../lib/workspaceRecords';
 import {useWorkspaceNotice} from '../../lib/useWorkspaceNotice';
 import type {WorkspaceAction} from '../../lib/workspaceOperations';
-import { matchingSavedLesson, applyCommonLesson, gridCanSubmit, gridScore, newGridLesson, processLessonRows } from '../../lib/teacherLessonGrid';
+import { matchingSavedLesson, newerSavedLesson, applyCommonLesson, gridCanSubmit, gridScore, newGridLesson, processLessonRows } from '../../lib/teacherLessonGrid';
 import {useLeaveProtection} from '../../lib/leaveProtection';
 import LessonSaveStatus from './LessonSaveStatus';
 interface Props {
@@ -131,6 +131,24 @@ export default function TeacherLessonGrid({ headingActions,data, busy, request, 
     // Ctrl/⌘+Enter: publish the open student after the same confirm as the single editor.
     gridPublish.current=editorOpen&&active?()=>{const row=rows[activeStudent];if(!row||row.pending||row.loading||isRecordBusy(row.id)||!gridCanSubmit(row))return;void publishRow(row);}:null;
     const rowDirty=(r:any)=>r.savedData?JSON.stringify(r.data)!==JSON.stringify(r.savedData):Boolean(r.touched?.length);
+    // A student's lesson saved elsewhere meanwhile (한 학생 작성, another device): a row with nothing typed takes the newer
+    // save; a row with typing keeps it and is told to check first (its save would be refused as out of date).
+    useEffect(()=>{
+        const drafts=data.drafts||[];if(!drafts.length)return;
+        const patches=new Map<string,any>();
+        for(const r of latest.current.rows){
+            if(r.pending||r.loading||pendingRows.current.has(r.id))continue;
+            const newer=newerSavedLesson({id:r.id,revision:r.revision,saved:Boolean(r.savedData),data:r.data},drafts,data.uid);
+            if(!newer)continue;
+            patches.set(r.id,rowDirty(r)?{error:'다른 화면에서 이 학생 일지가 먼저 저장됐어요. 상태 확인 후 저장해 주세요.'}
+                :{id:newer.id,revision:newer.revision,stage:newer.stage,data:structuredClone(newer.data),savedData:structuredClone(newer.data),touched:[],error:undefined});
+        }
+        if(!patches.size)return;
+        setRows(previous=>previous.map(r=>patches.has(r.id)&&!pendingRows.current.has(r.id)?{...r,...patches.get(r.id)}:r));
+        // a new row that took up the saved lesson now goes by its id
+        setChecked(previous=>previous.map(id=>patches.get(id)?.id||id));
+    // rows that were saving are looked at again once their save ends (`waiting` changes)
+    },[data.drafts,active,rows.filter(r=>r.pending||r.loading).map(r=>r.id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
     function chooseGroup(event:TodayLesson){
         setClassId('');setSubject(event.subject);setDate(event.date);setStart(event.start);setEnd(event.end);
         void addStudents(event.students,{subject:event.subject,date:event.date,start:event.start,end:event.end,event},false);

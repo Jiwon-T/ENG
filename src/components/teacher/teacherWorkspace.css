@@ -1144,3 +1144,13 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 .lesson-preview-tabs>button{flex:1;padding:5px 8px;border:0;border-radius:9px;background:none;color:#64748b;font-size:12px;font-weight:700;cursor:pointer}
 .lesson-preview-tabs>button[aria-selected=true]{background:#fff;color:#8b2f40;box-shadow:0 1px 4px #0f172a14}
 .lesson-preview-grid.is-four{grid-template-columns:repeat(4,minmax(0,1fr))}
+
+/* 수업 일지 한 화면에: the 수업·자습 cards take their own height (no stretched gap under the 수업 presets); '+ 자습 시간'
+   sits on the 자습 preset row when there is room; each 출결·평가 label carries its tag beside it (one line a row). */
+.teacher-workspace :is(.lesson-editor-panel,.lesson-grid) .lesson-time-block,.teacher-workspace .lesson-form-layout .lesson-time-block,.teacher-workspace .lesson-time-block:has(>.lesson-audience-line){grid-auto-rows:auto}
+@container lesson-input (min-width:481px){
+.teacher-workspace .lesson-chip-label{flex-direction:row;align-items:center;justify-content:flex-start;gap:3px;white-space:nowrap}
+.teacher-workspace .lesson-chip-label .audience-tag{margin:0}
+.teacher-workspace .lesson-chip-field,.teacher-workspace .lesson-grid .lesson-chip-field,.teacher-workspace .lesson-form-layout .lesson-chip-field{grid-template-columns:78px minmax(0,1fr)}
+}
+@container lesson-schedule (min-width:500px){.teacher-workspace .lesson-study-more:not(:has(.lesson-study-piece)){margin-top:-32px;justify-items:end;pointer-events:none}.teacher-workspace .lesson-study-more:not(:has(.lesson-study-piece)) .lesson-study-add{pointer-events:auto}}

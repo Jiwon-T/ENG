@@ -79,7 +79,7 @@ import './reviewRedesign.css';
 import './scheduleWorkspace.css';
 import TeacherReportReview, { UNSAVED_EVALUATION_MESSAGE } from './TeacherReportReview';
 import TeacherLessonGrid from './TeacherLessonGrid';
-import {matchingSavedLesson,openTodayLesson} from '../../lib/teacherLessonGrid';
+import {matchingSavedLesson,newerSavedLesson,openTodayLesson} from '../../lib/teacherLessonGrid';
 import TeacherScheduleEditor from './TeacherScheduleEditor';
 import {useLeaveProtection} from '../../lib/leaveProtection';
 import {autoOpenDone,markAutoOpenDone} from '../../lib/autoOpenGuard';
@@ -262,7 +262,7 @@ export default function TeacherWorkspace({ onNavigate, initialTab }: {
             setSavedLookup(null);
             if(opened.kind==='saved'){saved=opened.record;if(opened.add)setData((old:any)=>({...old,drafts:[opened.record,...(old.drafts||[]).filter((r:any)=>r.id!==opened.record.id)]}));}
         }
-        if(saved){setLesson(compactLessonInput({...emptyLesson(),...saved.data}));setDraftId(saved.id);setRevision(saved.revision);setAutoLoading(false);loadSessionHistory(saved.data);return;}
+        if(saved){const shown=compactLessonInput({...emptyLesson(),...saved.data});loadedLesson.current=JSON.stringify(shown);setLesson(shown);setDraftId(saved.id);setRevision(saved.revision);setAutoLoading(false);loadSessionHistory(saved.data);return;}
         setAutoLoading(true);
         try{const previous=await request('previous-lesson',{studentKey,subject:seed.subject,date:seed.date});
             if(version===autoVersion.current){sessionHistory.current=previous.data.sessionRecords||[];setLesson((current:any)=>{const filled=applyPreviousLesson(current,seed,previous.data,touched);return Array.isArray(previous.data.sessionRecords)?autoSessionNumbers(filled,sessionHistory.current,touched).data:filled;});}
@@ -277,7 +277,7 @@ export default function TeacherWorkspace({ onNavigate, initialTab }: {
     const [,setHistoryTick]=useState(0);
     // When they arrive, the automatic rounds are counted again (a 자습 turned on meanwhile); rounds typed by hand stay.
     function loadSessionHistory(baseline:any){const version=autoVersion.current,{studentKey,subject,date}=baseline||{};if(!studentKey||!subject||!date)return;void request('previous-lesson',{studentKey,subject,date}).then((p:any)=>{if(version!==autoVersion.current||!sameLessonTarget(latestLesson.current,{studentKey,subject,date}))return; /* the date (or student) changed meanwhile: these are not its earlier lessons */const history=p?.data?.sessionRecords||[];sessionHistory.current=history;setLesson((d:any)=>sameLessonTarget(d,{studentKey,subject,date})?editedSessionNumbers(d,baseline,autoTouches.current,history):d);setHistoryTick(n=>n+1);}).catch(()=>{/* hints only; the lesson stays usable */});}
-    function openDraft(d: any) { setSavedLookup(null);autoTouches.current=new Set();sessionHistory.current=[];autoVersion.current++;setAutoLoading(false); setData((old:any)=>({...old,drafts:[d,...old.drafts.filter((r:any)=>r.id!==d.id)]}));setLesson(compactLessonInput({ ...emptyLesson(), ...d.data })); setDraftId(d.id); setRevision(d.revision); setLessonMode('single'); setLessonDialogOpen(true); loadSessionHistory(d.data); }
+    function openDraft(d: any) { setSavedLookup(null);autoTouches.current=new Set();sessionHistory.current=[];autoVersion.current++;setAutoLoading(false); setData((old:any)=>({...old,drafts:[d,...old.drafts.filter((r:any)=>r.id!==d.id)]}));const shown=compactLessonInput({ ...emptyLesson(), ...d.data });loadedLesson.current=JSON.stringify(shown);setLesson(shown); setDraftId(d.id); setRevision(d.revision); setLessonMode('single'); setLessonDialogOpen(true); loadSessionHistory(d.data); }
     const students = data?.students || [];
     // 이달의 장학 쿠폰 badges on the student list (admin): loaded with the list.
     const loadCoupons=async()=>{const r=await request('read:pet-coupons');setCouponRows(r.coupons||[]);};
@@ -309,6 +309,20 @@ export default function TeacherWorkspace({ onNavigate, initialTab }: {
     const savedDrafts=draftList.records;
     const draftPages=draftList.pages,currentDraftPage=draftList.page;
     const currentDraft = data?.drafts?.find((d: any) => d.id === draftId);
+    // The same lesson saved elsewhere meanwhile (여러 학생 작성, another device): the editor follows the newer save when
+    // nothing was typed here since it was loaded; otherwise it keeps the typing and says so (saving then asks to check,
+    // never overwriting quietly). A new lesson the 여러 학생 editor saved for the same student and time is taken up the same way.
+    const loadedLesson=useRef(''),savingLesson=useRef(false),[savedTurn,setSavedTurn]=useState(0);
+    useEffect(()=>{
+        if(savingLesson.current||autoLoading||!data?.drafts||!lesson.studentKey)return;
+        const typed=JSON.stringify(lesson)!==loadedLesson.current&&Boolean(autoTouches.current.size);
+        const newer=newerSavedLesson({id:draftId,revision,saved:Boolean(draftId&&revision!==undefined),data:lesson},data.drafts,data.uid);
+        if(!newer)return;
+        if(typed){setMessage('다른 화면에서 이 일지가 먼저 저장됐어요. 저장하기 전에 저장한 기록을 확인해 주세요.');return;}
+        const shown=compactLessonInput({...emptyLesson(),...newer.data});loadedLesson.current=JSON.stringify(shown);autoTouches.current=new Set();
+        setLesson(shown);setDraftId(newer.id);setRevision(newer.revision);setMessage('다른 화면에서 저장한 내용으로 바꿨어요.');
+    // looked at again after this editor's own save (`revision`) or loading ends, which it skipped meanwhile
+    },[data?.drafts,lessonMode,revision,autoLoading,savedTurn]); // eslint-disable-line react-hooks/exhaustive-deps
     async function deleteCurrentLesson(){
         if(!currentDraft)return;
         const target=currentDraft,version=autoVersion.current;
@@ -325,18 +339,19 @@ export default function TeacherWorkspace({ onNavigate, initialTab }: {
     const latestLessonJob=[...jobs].reverse().find(job=>job.keys.includes('lesson-editor:'+autoVersion.current)||Boolean(draftId&&job.keys.includes('lesson-record:'+draftId)));
     async function submitSingleLesson(mode:'save'|'publish'){
         if(mode==='publish'&&!await confirmLessonPublish(lesson,students.find((s:any)=>s.studentKey===lesson.studentKey)?.studentDisplayName||'학생'))return;
-        const token=autoVersion.current;
+        const token=autoVersion.current;savingLesson.current=true;
         try{
             const outcome=await submitLesson({mode,id:draftId||newLessonId.current,revision,data:lesson,record:currentDraft,request,onSaved:saved=>{
                 if(token!==autoVersion.current)return;
-                setSavedPulse({id:saved.id,at:Date.now()});setDraftId(saved.id);setRevision(saved.record?.revision);if(saved.record)setLesson(compactLessonInput(saved.record.data));setMessage('앱에 저장했습니다.');
+                setSavedPulse({id:saved.id,at:Date.now()});setDraftId(saved.id);setRevision(saved.record?.revision);if(saved.record){const shown=compactLessonInput(saved.record.data);loadedLesson.current=JSON.stringify(shown);setLesson(shown);}setMessage('앱에 저장했습니다.');
             }});
             if(mode==='publish'&&token===autoVersion.current)setMessage(outcome.warning||(data?.lessonAppMode?'학생·학부모 리포트에 반영했습니다.':'학생·학부모 리포트에 반영했습니다.'));
             return outcome;
-        }finally{await refresh();}
+        }finally{savingLesson.current=false;setSavedTurn(n=>n+1);await refresh();}
     }
     const workspaceHistory = <>{import.meta.env.DEV&&<WorkspaceRequestMetrics/>}{jobs.length?<>{jobs.map(job=><p key={job.id}>{job.label} · {job.status==='running'?'처리 중':job.status==='done'?'요청 처리 완료':'실패'}{job.error&&' · '+job.error}{job.note&&' · '+job.note}</p>)}</>:<p>이번 화면의 작업 내역이 없습니다.</p>}</>;
-    const modeSwitch = <LessonModeSwitch value={lessonMode} onChange={setLessonMode}/>;
+    // Leaving the single editor with unsaved typing asks first (as moving to another lesson does), so nothing is lost.
+    const modeSwitch = <LessonModeSwitch value={lessonMode} onChange={next=>{if(next===lessonMode)return;if(lessonMode==='single')guarded(()=>setLessonMode(next));else setLessonMode(next);}}/>;
     // Input changed since this lesson was opened or saved (same rule as closing 수업 작성).
     const lessonDirty=Boolean(autoTouches.current.size)&&JSON.stringify(lesson)!==JSON.stringify(currentDraft?.data);
     useLeaveProtection(lessonDirty||scheduleDirty);

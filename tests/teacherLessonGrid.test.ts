@@ -58,3 +58,14 @@ test('blank lesson contents cannot be published while partial drafts remain save
  assert.equal(calls.length,0);assert.match(updates[0].error,/수업 내용/);
  assert.equal((await processLessonRows([row],'save',async action=>{calls.push(action);return {};},()=>{})).succeeded,1);
 });
+
+test('같은 일지가 다른 화면에서 저장됐을 때: a higher revision of the same record, or the saved lesson of the same student and time for one not saved yet', async () => {
+  const { newerSavedLesson } = await import('../src/lib/teacherLessonGrid.ts');
+  const data = { studentKey: 'k', subject: '영어', date: '2026-10-19', start: '14:00', end: '15:20' };
+  const saved = { id: 'd1', ownerUid: 'me', revision: 4, stage: 'draft', data };
+  assert.equal(newerSavedLesson({ id: 'd1', revision: 3, saved: true, data }, [saved], 'me'), saved, 'saved again elsewhere');
+  assert.equal(newerSavedLesson({ id: 'd1', revision: 4, saved: true, data }, [saved], 'me'), null, 'up to date');
+  assert.equal(newerSavedLesson({ id: 'new1', saved: false, data }, [saved], 'me'), saved, 'not saved here: the one saved for the same student and time');
+  assert.equal(newerSavedLesson({ id: 'new1', saved: false, data: { ...data, start: '16:00' } }, [saved], 'me'), null);
+  assert.equal(newerSavedLesson({ id: 'd1', revision: 3, saved: true, data }, [{ ...saved, ownerUid: 'other', id: 'x' }], 'me'), null);
+});

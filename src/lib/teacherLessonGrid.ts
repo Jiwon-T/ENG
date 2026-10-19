@@ -13,6 +13,13 @@ export function matchingSavedLesson(records:readonly any[],input:any,ownerUid:st
  return records.filter(r=>r.ownerUid===ownerUid&&!r.archived&&!r.deleteRequested&&r.stage!=='new'&&r.data&&['studentKey','subject','date','start',...(matchEnd?['end']:[]),...(input.classSession==='없음'?['classSession','selfStudyStart']:[])].every(key=>r.data[key]===input[key]))
  .sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0)||Number(b.revision||0)-Number(a.revision||0))[0];
 }
+/** A lesson saved elsewhere since this editor took it (a higher revision of the same record), or — for one not saved
+ *  here yet — the saved lesson of the same student and time. Null when this one is up to date. */
+export function newerSavedLesson(current:{id?:string|null;revision?:number;saved:boolean;data:any},records:readonly any[],ownerUid:string){
+ const same=current.id?records.find(r=>r.id===current.id):null;
+ if(same)return current.saved&&Number(same.revision)>Number(current.revision||0)?same:null;
+ return current.saved?null:matchingSavedLesson(records,current.data,ownerUid,true)||null;
+}
 export function gridCanPublish(row: {
     revision?: number;
     stage?: string;
