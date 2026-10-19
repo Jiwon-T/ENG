@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { PetCharacter } from './PetCharacters';
+import PassMark from './PassMark';
 import { SCENE, SceneArt } from './PetScenes';
 import { MedalLayer } from './PetCoupon';
 import AdventureNames, { type NamesView } from './AdventureNames';
@@ -9,19 +10,19 @@ import { PET_JOBS, petStage, type PetJob } from '../../lib/petCatalog';
 // 순위: 모험가 (each pet) and 원정대 (each student), every academy together, by 원정대 이름·모험가 별칭 only. A row opens that
 // pet's room (outfit, background, 금메달) to look at. Teachers can switch their own pets in ('선생님 포함').
 type Send = (action: string, payload?: Record<string, unknown>) => Promise<any>;
-interface Look { character: string; level: number; clothing: string | null; accessories: string[] }
-interface RankRow { rank: number; id: number; label: string; sub: string; job: PetJob | null; value: number; stars: number; looks: Look[]; teacher: boolean; me: boolean }
+interface Look { character: string; level: number; clothing: string | null; accessories: string[]; aura?: 'light' | 'dark' | null }
+interface RankRow { rank: number; id: number; label: string; sub: string; job: PetJob | null; pass?: 'pet' | 'premium' | null; value: number; stars: number; looks: Look[]; teacher: boolean; me: boolean }
 interface Ranking { at: number; kind: 'pet' | 'guild'; teacherView: boolean; withTeachers: boolean; total: number; rows: RankRow[]; mine: RankRow[] }
-interface Profile { label: string; guild: string; name: string; character: string; level: number; job: PetJob | null; clothing: string | null; accessories: string[]; background: string; decor: { id: string; x: number; y: number }[]; medals: number; best: number; stars: number; me: boolean }
+interface Profile { label: string; guild: string; name: string; character: string; level: number; job: PetJob | null; aura?: 'light' | 'dark' | null; pass?: 'pet' | 'premium' | null; clothing: string | null; accessories: string[]; background: string; decor: { id: string; x: number; y: number }[]; medals: number; best: number; stars: number; me: boolean }
 
 const MEDAL = ['#ef9f27', '#b4b2a9', '#d85a30'];
-const Portrait = ({ look, size = 30 }: { key?: number; look: Look; size?: number }) => <span className="inline-flex flex-none items-center justify-center overflow-hidden rounded-full border border-[#e4e0f5] bg-[#f7f6fd]" style={{ width: size, height: size }}><PetCharacter character={look.character} stage={petStage(look.level)} clothing={look.clothing} accessory={look.accessories} portrait size={size - 2} /></span>;
+const Portrait = ({ look, size = 30 }: { key?: number; look: Look; size?: number }) => <span className="inline-flex flex-none items-center justify-center overflow-hidden rounded-full border border-[#e4e0f5] bg-[#f7f6fd]" style={{ width: size, height: size }}><PetCharacter character={look.character} stage={petStage(look.level)} clothing={look.clothing} accessory={look.accessories} aura={look.aura} portrait size={size - 2} /></span>;
 
 function Row({ r, onOpen }: { key?: string; r: RankRow; onOpen: () => void }) {
   return <button type="button" onClick={onOpen} className={`flex w-full items-center gap-2.5 border-t border-[#f1eff8] px-2 py-2 text-left first:border-t-0 ${r.me ? 'rounded-xl bg-[#fffaf0]' : ''}`}>
     <span className="w-6 flex-none text-center text-sm font-black" style={{ color: r.rank <= 3 ? MEDAL[r.rank - 1] : '#94a3b8' }}>{r.rank}</span>
     <span className="flex flex-none -space-x-2">{r.looks.map((l, i) => <Portrait key={i} look={l} />)}</span>
-    <span className="min-w-0 flex-1"><b className="block truncate text-sm font-black text-[#26215c]">{r.label}{r.me && <span className="ml-1 rounded bg-[#ef9f27] px-1 text-[10px] font-bold text-white">나</span>}{r.teacher && <span className="ml-1 rounded bg-[#3c3489] px-1 text-[10px] font-bold text-white">선생님</span>}</b>
+    <span className="min-w-0 flex-1"><b className="block truncate text-sm font-black text-[#26215c]">{r.label}{r.pass && <span className="ml-1 inline-flex align-middle"><PassMark plan={r.pass} /></span>}{r.me && <span className="ml-1 rounded bg-[#ef9f27] px-1 text-[10px] font-bold text-white">나</span>}{r.teacher && <span className="ml-1 rounded bg-[#3c3489] px-1 text-[10px] font-bold text-white">선생님</span>}</b>
       <span className="block truncate text-[11px] text-slate-500">{r.sub}{r.job ? ` · ${PET_JOBS[r.job]?.label || ''}` : ''}</span></span>
     <span className="flex-none text-right"><b className="block text-sm font-black text-[#3c3489]">{r.value}층</b><span className="text-[10px] text-[#854f0b]">★ {r.stars}</span></span>
   </button>;
@@ -33,11 +34,11 @@ function Room({ p, onClose }: { p: Profile; onClose: () => void }) {
       <div className={`relative flex h-48 items-end justify-center ${SCENE[p.background] || SCENE.default}`}>
         <SceneArt id={p.background} />
         <MedalLayer spots={p.decor} editing={false} onMove={() => undefined} />
-        <div className="relative z-10 mb-2"><PetCharacter character={p.character} stage={petStage(p.level)} clothing={p.clothing} accessory={p.accessories} size={96} /></div>
+        <div className="relative z-10 mb-2"><PetCharacter character={p.character} stage={petStage(p.level)} clothing={p.clothing} accessory={p.accessories} aura={p.aura} size={96} /></div>
         <button type="button" onClick={onClose} aria-label="닫기" className="absolute right-2 top-2 z-20 rounded-full bg-white/90 p-1 text-slate-500"><X size={16} aria-hidden="true" /></button>
       </div>
       <div className="px-4 pb-4 pt-3">
-        <b className="block text-base font-black text-[#26215c]">{p.label}{p.me && <span className="ml-1 rounded bg-[#ef9f27] px-1 text-[10px] font-bold text-white">나</span>}</b>
+        <b className="block text-base font-black text-[#26215c]">{p.label}{p.pass && <span className="ml-1 inline-flex align-middle"><PassMark plan={p.pass} /></span>}{p.me && <span className="ml-1 rounded bg-[#ef9f27] px-1 text-[10px] font-bold text-white">나</span>}</b>
         <span className="text-xs text-slate-500">{p.guild} · Lv.{p.level}{p.job ? ` · ${PET_JOBS[p.job]?.label || ''}` : ''}</span>
         <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">{[`탑 ${p.best}층`, `원정대 별 ${p.stars}`, `금메달 ${p.medals}`].map(t => <span key={t} className="rounded-lg border border-[#e4e0f5] px-2 py-0.5 text-[#3c3489]">{t}</span>)}</div>
       </div>
@@ -49,7 +50,24 @@ function Room({ p, onClose }: { p: Profile; onClose: () => void }) {
 export default function PetRanking({ send, onClose, withTeachers = false }: { send: Send; onClose: () => void; withTeachers?: boolean }) {
   const [kind, setKind] = useState<'pet' | 'guild'>('pet'), [teachers, setTeachers] = useState(withTeachers);
   const [ranking, setRanking] = useState<Ranking | null>(null), [notice, setNotice] = useState(''), [profile, setProfile] = useState<Profile | null>(null), [names, setNames] = useState<NamesView | null>(null);
-  const load = () => { setNotice(''); send('rank-board', { kind, teachers }).then(r => setRanking(r.ranking)).catch(e => setNotice(e?.message || '순위를 불러오지 못했어요.')); };
+  // Each view read is kept, so switching 모험가 · 원정대 back shows at once. A ranking older than 10 minutes is shown
+  // straight away; the rebuild is asked for after it, and the list is read again when that is done.
+  // `refreshAt`: when the last rebuild was asked for (another try only after 30 s, whether it failed or the rebuild lock
+  // returned the same snapshot), so a stale answer never asks again and again.
+  const cache = useRef(new Map<string, Ranking>()), refreshAt = useRef(0), shown = useRef(''), retry = useRef<number>();
+  useEffect(() => () => window.clearTimeout(retry.current), []);
+  const load = () => {
+    setNotice(''); const key = `${kind}:${teachers}`, kept = cache.current.get(key); shown.current = key; setRanking(kept || null);
+    send('rank-board', { kind, teachers }).then(r => {
+      cache.current.set(key, r.ranking); if (shown.current === key) setRanking(r.ranking); // a late answer for a view left is only kept
+      if (r.ranking?.stale && Date.now() - refreshAt.current > 30_000) {
+        refreshAt.current = Date.now();
+        // rebuilt: read again; not yet (failed, or another request holds the rebuild): try once more in 30 s
+        const again = () => { window.clearTimeout(retry.current); retry.current = window.setTimeout(() => { if (shown.current === key) load(); }, 31_000); };
+        send('rank-refresh').then(x => { if (x?.at && x.at !== r.ranking.at) { cache.current.clear(); return send('rank-board', { kind, teachers }).then(y => { cache.current.set(key, y.ranking); if (shown.current === key) setRanking(y.ranking); }); } again(); }).catch(again);
+      }
+    }).catch(e => setNotice(e?.message || '순위를 불러오지 못했어요.'));
+  };
   useEffect(load, [kind, teachers]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = (r: RankRow) => send('rank-profile', { at: ranking?.at, id: r.id, kind, teachers }).then(x => setProfile(x.profile)).catch(e => { setNotice(e?.message || '잠시 후 다시 해 주세요.'); if (e?.code === 'RANK_STALE') load(); });
   const openNames = () => send('guild-state').then(r => setNames(r.guild?.names || null)).catch(e => setNotice(e?.message || '잠시 후 다시 해 주세요.'));

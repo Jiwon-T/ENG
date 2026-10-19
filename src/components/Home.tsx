@@ -9,7 +9,8 @@ import RosyLogo from './RosyLogo';
 import { PassBadge, PetPointsChip, RankChip } from './PassBadge';
 import { AssignedQuestionRow } from './generator/AssignedQuestions';
 import { PetService, type PetSummary } from '../lib/petService';
-const PetRanking = lazy(() => import('./pet/PetRanking'));
+const loadPetRanking = () => import('./pet/PetRanking');
+const PetRanking = lazy(loadPetRanking);
 
 interface HomeProps {
   studentLinked?: boolean;
@@ -36,6 +37,9 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
   const recent = userUid ? readRecentLearning(userUid) : null;
   const [nextSchedule, setNextSchedule] = useState<{ uid: string; schedule: StudentScheduleDTO | null } | null>(null);
   const [lessonPending, setLessonPending] = useState<{ uid: string; count: number } | null>(null);
+  // The rank chip is there: the ranking sheet's code is fetched while the home screen idles, so a tap opens it at once.
+  const hasRankChip = Boolean(petSummary && 'rank' in petSummary);
+  useEffect(() => { if (!hasRankChip) return; const t = window.setTimeout(() => void loadPetRanking().catch(() => undefined), 1500); return () => window.clearTimeout(t); }, [hasRankChip]);
   useEffect(() => {
     let live = true;
     if (!userUid || isEducator || auth.currentUser?.uid !== userUid) return;

@@ -3,6 +3,7 @@
 // word (right = hit). The monster's turn: answer the meaning before the deadline to block. Clearing a floor saves it;
 // a fallen pet tries the same floor again; running away empties 기운 (탈진).
 import {FieldPath} from 'firebase-admin/firestore';
+import { orderPieces, shuffledOrder } from '../../src/lib/sentenceGame.js';
 import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
 import {awardCapped, currentPet, type ServerPet, type ServerPetState} from './pet.js';
@@ -14,8 +15,10 @@ export const PET_TOWERS = 'petTowers';
 export const PET_TOWER_SETTINGS = 'petTowerSettings';
 /** A word in play; `b`: the wordbook it came from (the tower mixes up to three books). */
 interface PoolWord { w: string; m: string; b?: string }
-interface TowerPool { words: PoolWord[]; wordbookId: string; wordbookTitle: string; books?: {id: string; title: string}[] }
-interface TowerQuestion { kind: 'attack' | 'defend' | 'riddle' | 'trap'; word: string; meaning: string; choices: string[]; answer: number; issuedAt: number; deadline: number | null; book?: string }
+/** A sentence for the skills' 문장 배열 (the grade's 문장 세트, as in 원정대). */
+export interface TowerSentence { wordbookId: string; text: string; chunked: string; meaning: string }
+interface TowerPool { words: PoolWord[]; wordbookId: string; wordbookTitle: string; books?: {id: string; title: string}[]; sentences?: TowerSentence[] }
+interface TowerQuestion { kind: 'attack' | 'defend' | 'riddle' | 'trap'; word: string; meaning: string; choices: string[]; answer: number; issuedAt: number; deadline: number | null; book?: string; /** a skill's 문장 배열: the pieces, shuffled (`word` is the sentence) */ order?: string[] }
 interface TowerWrong { word: string; meaning: string; userChoice: string; correctAnswer: string; choices: string[]; quizSentence: string; wordbookId?: string }
 export interface TowerRun {
   id: string; floor: number; monster: {kind: TowerMonsterKind; name: string; boss: boolean; hp: number; max: number; atk: number; def: number; color?: number};
@@ -24,6 +27,7 @@ export interface TowerRun {
   /** Extra prize for winning (길 잃은 요정 fought: two potions). */ bonus?: {potions?: number};
   /** The skill the pending attack question casts; 방패 막기 up for the monster's next attack. */ skill?: string | null; shield?: boolean;
   /** 그믐 저주 has cut the monster's 공격 (once a battle). */ weakened?: boolean;
+  /** Skills ask 문장 배열 from these (none: a word question as before); `ns` the next one. */ sentences?: TowerSentence[]; ns?: number;
 }
 /** A door's event that isn't a battle (yet): the 상인's stock, a riddle or trap question, the fairy's choice. */
 export interface TowerEventState { id: string; floor: number; door: number; type: Exclude<TowerEvent, 'monster' | 'mirror' | 'treasure'>; q: TowerQuestion | null; stock: {stone: number; potion: number}; pool: TowerPool; wrongs: TowerWrong[]; startedAt: number; /** 잠든 드래곤's look */ color?: number }
@@ -115,6 +119,19 @@ function question(pool: PoolWord[], index: number, kind: TowerQuestion['kind'], 
   const seconds = kind === 'defend' ? PET_TOWER.defendSeconds : kind === 'trap' ? PET_TOWER.trapSeconds : 0;
   return {kind, word: target.w, meaning: target.m, choices, answer: choices.indexOf(right), issuedAt: now, deadline: seconds ? now + seconds * 1000 : null, ...(target.b ? {book: target.b} : {})};
 }
+/** A skill's question: put the sentence's pieces in order (its meaning shown); false when there is no sentence to ask. */
+function askSentence(run: TowerRun, now: number, rand: () => number) {
+  const list = run.sentences || [];
+  for (let tries = 0; tries < list.length; tries++) {
+    const x = list[(run.ns || 0) % list.length]; run.ns = (run.ns || 0) + 1;
+    const pieces = orderPieces({word: x.text, chunked: x.chunked, meaning: x.meaning});
+    if (pieces.length < 3) continue;
+    run.q = {kind: 'attack', word: x.text, meaning: x.meaning, choices: [], answer: -1, issuedAt: now, deadline: null, order: shuffledOrder(pieces, rand).map(i => pieces[i])};
+    run.asked += 1; run.phase = 'attack'; return true;
+  }
+  return false;
+}
+const sameSentence = (a: string, b: string) => { const n = (t: string) => t.toLowerCase().replace(/[^a-z0-9']+/g, ' ').trim(); return n(a) === n(b); };
 function ask(run: TowerRun, kind: 'attack' | 'defend', now: number, rand: () => number) {
   run.q = question(run.pool, run.next, kind, now, rand); run.next += 1; run.asked += 1; run.phase = kind;
 }
@@ -124,7 +141,8 @@ function battle(tp: TowerPet, pet: ServerPet, pool: TowerPool, m: Foe, floor: nu
   const st = petTowerStats(pet, tp);
   tp.run = {id: randomDocId(rand), floor, monster: {kind: m.kind, name: m.name, boss: m.boss, hp: m.hp, max: m.hp, atk: m.atk, def: m.def, ...(m.color !== undefined ? {color: m.color} : {})},
     hp: Math.max(1, Math.round(st.hp * hpShare)), maxHp: st.hp, mp: st.mp, maxMp: st.mp, phase: 'act', q: null, attacks: 0, right: 0, asked: 0, wrongs: [],
-    pool: shuffle(pool.words, rand), next: 0, wordbookId: pool.wordbookId, wordbookTitle: pool.wordbookTitle, startedAt: now, ...(pool.books ? {books: pool.books} : {})};
+    pool: shuffle(pool.words, rand), next: 0, wordbookId: pool.wordbookId, wordbookTitle: pool.wordbookTitle, startedAt: now, ...(pool.books ? {books: pool.books} : {}),
+    ...(pool.sentences?.length ? {sentences: shuffle(pool.sentences, rand).slice(0, 12), ns: 0} : {})};
   return tp.run;
 }
 /** 거울방: the pet's own shadow, a little weaker than the pet. */
@@ -224,7 +242,8 @@ export function towerAct(t: TowerState, s: ServerPetState, action: unknown, now:
     const k = towerSkill(String(skillInput || ''));
     if (!k || !jobSkills(pet).some(x => x.id === k.id) || pet.level < k.level) throw Error('TOWER_SKILL_NOT_LEARNED');
     if (run.mp < k.mp) throw Error('TOWER_NO_MP');
-    if (k.kind === 'attack') { run.skill = k.id; ask(run, 'attack', now, rand); return {phase: run.phase, skill: k.id}; }
+    // an attack skill asks 문장 배열 (a word question when there is no sentence)
+    if (k.kind === 'attack') { run.skill = k.id; if (!askSentence(run, now, rand)) ask(run, 'attack', now, rand); return {phase: run.phase, skill: k.id}; }
     run.mp -= k.mp; run.skill = null;
     if (k.kind === 'block') { run.shield = true; ask(run, 'defend', now, rand); return {phase: run.phase, skill: k.id, shield: true}; }
     const heal = Math.round(run.maxHp * TOWER_SKILL_RULES.heal * (k.power || 1) * (pet.job2 === 'white_mage' ? TOWER_SKILL_RULES.blessing : 1));
@@ -247,10 +266,11 @@ export function towerAnswer(t: TowerState, s: ServerPetState, runId: unknown, ch
   const pet = currentPet(s), tp = towerPet(t, pet.slot), run = tp.run;
   if (!run || run.id !== runId || !run.q) throw Error('TOWER_NO_RUN');
   const q = run.q, choice = Number(choiceInput), late = q.deadline !== null && now > q.deadline + 1500;
-  const correct = !late && choice === q.answer;
-  const out: any = {kind: q.kind, correct, late, answer: q.answer, word: q.word, meaning: q.meaning};
+  // 문장 배열: the pieces in order, sent as the sentence (one try in a battle)
+  const correct = !late && (q.order ? typeof choiceInput === 'string' && sameSentence(choiceInput, q.word) : choice === q.answer);
+  const out: any = {kind: q.kind, correct, late, answer: q.answer, word: q.word, meaning: q.meaning, ...(q.order ? {sentence: q.word} : {})};
   if (correct) { run.right += 1; run.mp = Math.min(run.maxMp, run.mp + 2); }
-  else run.wrongs.push(wrongOf(q, choice, late));
+  else if (!q.order) run.wrongs.push(wrongOf(q, choice, late)); // missed words go to 오답 복습 (sentences are not words)
   run.q = null;
   const st = petTowerStats(pet, tp);
   if (q.kind === 'attack') {
@@ -377,7 +397,7 @@ export function publicTower(t: TowerState, s: ServerPetState, now: number) {
   const weakKnown = (kind: string) => (t.weakFound || []).includes(kind) ? TOWER_WEAKNESS[kind as TowerMonsterKind] || null : null;
   const skills = pet.job ? jobSkills(pet).map(k => ({id: k.id, name: k.name, kind: k.kind, element: k.element || null, mp: k.mp, power: k.power || null, learnAt: k.level, level: skillLevel(k, pet.level), text: k.text || null,
     crit: k.element ? critChance(pet.level, skillLevel(k, pet.level), worn(tp, pet), tp.levels || {}) : 0})) : [];
-  const pq = (q: TowerQuestion | null) => q && {kind: q.kind, prompt: q.kind === 'defend' || q.kind === 'trap' ? q.word : q.meaning, choices: q.choices, msLeft: q.deadline === null ? null : Math.max(0, q.deadline - now)};
+  const pq = (q: TowerQuestion | null) => q && {kind: q.kind, prompt: q.kind === 'defend' || q.kind === 'trap' ? q.word : q.meaning, choices: q.choices, msLeft: q.deadline === null ? null : Math.max(0, q.deadline - now), ...(q.order ? {order: q.order} : {})};
   return {
     skills, passive: pet.job2 ? BRANCH_PASSIVE[pet.job2] : null, job: pet.job || null, job2: pet.job2 || null, job3: pet.job3 || null, job3Ready: job3Ready(pet, tp),
     floor: tp.floor, best: tp.best, top: PET_TOWER.floors, gear: tp.gear, equip: tp.equip, levels: tp.levels || {}, chests: tp.chests, potions: tp.potions, stones: tp.stones || 0, stats: petTowerStats(pet, tp),

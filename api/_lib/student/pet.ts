@@ -18,7 +18,7 @@ import { loadSentencesFor } from '../petSentences.js';
 import { PET_GAMES, answerRun, buildRun, initialGameState, loadFeedSource, publicRun, rollGameDay, runSummary, type FeedSentence, type FeedSource, type PetGameState } from '../petWordFeed.js';
 import { PET_GUILD, PET_NAMES, PET_PARTIES, addContribution, nameDocId, partyName, boardCard, checkNickname, createParty, initialGuild, joinParty, leaveParty, norm, normalizeGuild, petLook, publicParty, rankingRow, setAlias, setGuildName, settleParty, shownAlias, shownGuild, updateMemberNames, voteKick, weekOf, type GuildProfile, type Party } from '../petParty.js';
 import { readTowerHall, recordTowerHall } from '../petTowerHall.js';
-import { PET_RANKINGS, myPetRank, readRankProfile, readRankings } from '../petRanking.js';
+import { PET_RANKINGS, myPetRank, readRankProfile, readRankings, refreshRankings } from '../petRanking.js';
 import { PET_TOWERS, syncTowerDecor, takeJob3, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
 import { couponStudentKey, couponView, placeDecor, readCoupon, requestCoupon } from '../petCoupon.js';
 import { PET_EXPEDITIONS, chooseJob, chooseJob2, finishStage, initialExpedition, levelOk, petProgress, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
@@ -366,8 +366,10 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       if (action === 'tower-start') {
         // The words are read before the transaction (only when a new battle starts).
         const [p, t] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection(PET_TOWERS).doc(uid).get()]);
-        const slot = p.exists ? currentPet(rollDay(p.data(), now)).slot : 1, tpNow = t.exists ? towerPet(t.data(), slot) : null, live = tpNow?.run || tpNow?.event;
-        const pool = live ? null : await (deps.towerPool || loadTowerPool)(db, uid);
+        const me = p.exists ? currentPet(rollDay(p.data(), now)) : null, slot = me ? me.slot : 1, tpNow = t.exists ? towerPet(t.data(), slot) : null, live = tpNow?.run || tpNow?.event;
+        // a pet with a job (skills) also gets sentences: its skills ask 문장 배열
+        const [words, sentences] = live ? [null, []] : await Promise.all([(deps.towerPool || loadTowerPool)(db, uid), me?.job ? (deps.sentences || loadSentencesFor)(db, uid).catch(() => []) : Promise.resolve([])]);
+        const pool = words && {...words, sentences};
         return towerDone(await changeTower(db, uid, now, (s, tw) => { const tp = towerPet(tw, currentPet(s).slot); if (tp.run || tp.event) return {resumed: true}; if (!pool) throw Error('TOWER_NO_RUN'); return openTowerDoor(tw, s, uid, pool, now, Math.random, body.door, undefined, body.requestId); }));
       }
       if (action === 'tower-act') return towerDone(await changeTower(db, uid, now, (s, t) => towerAct(t, s, body.move, now, Math.random, body.skill)));
@@ -385,6 +387,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     }
     // 순위 (모험가·원정대) and one pet's room from it.
     if (action === 'rank-board') return sendJson(res, 200, {ok: true, ranking: await readRankings(db, uid, body.kind, body.teachers, now)});
+    if (action === 'rank-refresh') return sendJson(res, 200, {ok: true, ...await refreshRankings(db, now)});
     if (action === 'rank-profile') return sendJson(res, 200, {ok: true, profile: await readRankProfile(db, uid, body.at, body.id, body.kind, body.teachers, now)});
     if (action.startsWith('guild-') || action.startsWith('party-')) return handleGuild(action, body, db, uid, now, res, fail);
     if (action === 'rename') return done(await change(db, uid, now, s => renamePet(s, String(body.name || ''))));

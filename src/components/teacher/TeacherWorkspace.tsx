@@ -1,5 +1,6 @@
 import LessonRestorePanel from './LessonRestorePanel';
 import WorkspaceSkeleton from './WorkspaceSkeleton';
+import {TeacherCertInbox} from './TeacherStudyCerts';
 const WorkbookMaker = lazy(() => import('./WorkbookMaker'));
 import {PetCouponDialog,type PetCouponRow} from './PetCouponPanel';
 import StudentMasterPanel from './StudentMasterPanel';
@@ -368,6 +369,8 @@ export default function TeacherWorkspace({ onNavigate, initialTab }: {
     return <div className={`teacher-workspace max-w-6xl mx-auto px-4 py-5 md:p-8 ${tab==='lesson'?'lesson-writing':''} ${tab==='schedule'?'schedule-active':''}`}>
   <WorkspaceNavigation tab={tab} onTab={next=>{if(tab==='students'&&studentAttemptRef.current)studentAttemptRef.current(()=>setTab(next));else setTab(next);}} admin={data?.admin} principal={data?.principal} date={today()} history={workspaceHistory}/>
   {/* 중단 예약: from the day the planned date comes until it is decided, every visit shows this on any tab. */}
+  {/* 인증 요청 모아 보기: students' own study waiting for a check (their teachers, the principal and the admin) */}
+  {data&&<TeacherCertInbox/>}
   {(data?.admin||data?.principal)&&dueStops>0&&!(tab==='students'&&studentView==='students'&&!managementStudentKey)&&<div className="stop-banner" role="status"><span>중단 예정일이 지난 학생 <b>{dueStops}</b>명 · 중단할지 정해 주세요</span><button type="button" className="small-button" onClick={()=>{const go=()=>{setTab('students');setStudentView('students');setManagementStudentKey('');};if(tab==='students'&&studentAttemptRef.current)studentAttemptRef.current(go);else go();}}>확인하기</button></div>}
 
   {sectionLoading&&data&&<p role="status" className="text-sm text-slate-500 mb-3">자료를 불러오는 중…</p>}{message && <WorkspaceToast message={message} onClose={dismissMessage}/>}{jobs.some(job=>job.status==='running')&&<p role="status" className="workspace-job-status">처리 중: {jobs.filter(job=>job.status==='running').map(job=>job.label).join(' · ')} · 다른 기록을 작업할 수 있습니다.</p>}

@@ -11,6 +11,7 @@ import SampleModal, { SampleButton } from '../SampleModal';
 import { sampleWorkbook } from '../../lib/samples';
 import { PASSAGE_LIMITS } from '../../lib/passageTools';
 import CertRequest from '../student/CertRequest';
+import { workbookRef } from '../../lib/studyCert';
 
 const QuestionGenerator = lazy(() => import('../generator/QuestionGenerator'));
 
@@ -114,7 +115,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
     if (savedBuild.current === build) return setMessage('같은 워크북을 다시 내려받았어요. 다른 빈칸·배열이 필요하면 다시 섞기를 눌러 주세요.');
     // Remember these blanks and orders, so the next workbook from the same passage picks different ones.
     await request('workbook-save', { key: build.key, title: title.slice(0, 120), blanks: build.blanks.map(b => b.blanks), orders: build.arrange.map(a => a.order) });
-    savedBuild.current = build; setSavedKey(build.key);
+    savedBuild.current = build; setSavedKey(workbookRef(build.key, build.blanks.map(b => b.blanks)));
     setHistory(h => ({ blanks: [...h.blanks, build.blanks.map(b => b.blanks)], orders: [...h.orders, build.arrange.map(a => a.order)] }));
     setMessage('내려받았어요. 이 지문으로 다음에 만들거나 다시 섞기를 누르면 이번과 다른 빈칸·배열이 나와요.');
   });
@@ -194,7 +195,8 @@ export default function WorkbookMaker({ request }: { request: Request }) {
         <button type="button" className={`${primary} inline-flex items-center gap-1`} disabled={!!busy || issues.length > 0 || (aiCount > 0 && !reviewed)} onClick={() => void download()}><Download size={15} aria-hidden="true" />{busy === 'docx' ? '만드는 중…' : 'Word 다운로드'}</button>
       </div>
       {/* 학생: a workbook made (its Word file taken) can be checked by the teacher once done on paper */}
-      {(savedKey === build.key || history.blanks.length > 0) && <CertRequest kind="workbook" refId={build.key} />}
+      {/* this very workbook (these blanks), once its Word file was taken; other blanks of the same passage are another */}
+      {savedKey === workbookRef(build.key, build.blanks.map(b => b.blanks)) && <CertRequest kind="workbook" refId={savedKey} />}
     </div>}
   </section>;
 }

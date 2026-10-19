@@ -10,7 +10,7 @@ import { ELEMENT_COLOR, ElementBadge, MonsterArt, TowerCodex, type TowerCodexVie
 
 // 채움의 탑: the gate, the lone chest on floor 1, three doors on every floor, then the turn-based battle — the monster above, the pet
 // below (as in the old handheld RPGs), a message box and the word question. The server decides every result.
-interface TowerQ { kind: 'attack' | 'defend'; prompt: string; choices: string[]; msLeft: number | null }
+interface TowerQ { kind: 'attack' | 'defend'; prompt: string; choices: string[]; msLeft: number | null; /** a skill's 문장 배열: the pieces, shuffled */ order?: string[] | null }
 /** A skill as the server shows it: `level` 0 = not learned yet (learned at `learnAt`); `crit` = 크리티컬 확률 % on a weakness. */
 export interface TowerSkillView { id: string; name: string; kind: 'attack' | 'block' | 'heal'; element: PetElement | null; mp: number; power: number | null; learnAt: number; level: number; crit: number; text?: string | null }
 export interface TowerInfo {
@@ -26,7 +26,7 @@ const Bar = ({ value, max, color }: { value: number; max: number; color: string 
 export default function TowerView({ state, onState, onClose }: { state: PetState; onState: (s: PetState) => void; onClose: () => void }) {
   const pet = state.pets.find(p => p.slot === state.currentPetSlot) || state.pets[0];
   const [tower, setTower] = useState<TowerInfo | null>(null), [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
-  const [message, setMessage] = useState(''), [feedback, setFeedback] = useState<{ q: TowerQ; picked: number; answer: number } | null>(null);
+  const [message, setMessage] = useState(''), [feedback, setFeedback] = useState<{ q: TowerQ; picked: number; answer: number } | null>(null), [placed, setPlaced] = useState<number[]>([]);
   const [ending, setEnding] = useState<any>(null), [fleeAsk, setFleeAsk] = useState(false), [loot, setLoot] = useState<any>(null), [entered, setEntered] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false), [fx, setFx] = useState<Fx | null>(null);
   // The last battle picture stays up while the final answer's feedback shows (the server has already ended the battle).
@@ -52,19 +52,20 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
     return () => window.clearTimeout(id);
   }, [run?.id, run?.q?.prompt, run?.q?.kind, feedback]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const answer = async (choice: number) => {
+  useEffect(() => { setPlaced([]); }, [run?.id, run?.q?.prompt]);
+  const answer = async (choice: number | string) => {
     if (!run?.q || busy || feedback) return;
     const shown = run.q, monster = run.monster.name, r = await send('tower-answer', { runId: run.id, choice });
     if (!r?.result) return;
-    const x = r.result;
+    const x = r.result, right = x.sentence || shown.choices[x.answer];
     if (x.won || x.lost) setFrozen({ ...run, q: null, monster: { ...run.monster, hp: x.won ? 0 : run.monster.hp }, hp: x.lost ? 0 : Math.max(0, run.hp - (x.taken || 0)) });
-    setFeedback({ q: shown, picked: choice, answer: x.answer });
+    setFeedback({ q: shown, picked: typeof choice === 'number' ? choice : -1, answer: x.answer });
     const skillName = x.skill ? tower?.skills?.find(k => k.id === x.skill)?.name : null, drained = `${x.drained ? ` (체력 +${x.drained})` : ''}${x.hits === 2 ? ' 두 번 베었어요!' : ''}${x.shieldUp ? ' 다음 공격도 막아요!' : ''}${x.weakened ? ' 적의 공격이 약해졌어요!' : ''}`;
     setMessage(x.kind === 'attack'
       ? (x.crit ? `크리티컬! ${pet.name}의 ${skillName}! ${monster}에게 ${x.damage} 피해!${drained}`
         : x.correct ? `${pet.name}의 ${skillName || '때리기'}! ${monster}에게 ${x.damage} 피해!${drained}`
-        : x.glancing ? `${skillName}이(가) 스쳤어요! ${x.damage} 피해 · 정답은 '${shown.choices[x.answer]}'`
-        : `빗나갔어요! 정답은 '${shown.choices[x.answer]}'`)
+        : x.glancing ? `${skillName}이(가) 스쳤어요! ${x.damage} 피해 · 정답은 '${right}'`
+        : `빗나갔어요! 정답은 '${right}'`)
       : x.shield ? `방패로 막았어요! ${x.taken}만 다쳤어요.${x.correct ? '' : ` · 정답은 '${shown.choices[x.answer]}'`}`
       : x.correct ? `막았어요! ${x.taken}만 다쳤어요.` : `${x.late ? '시간 초과! ' : ''}${monster}의 공격! ${x.taken} 피해 · 정답은 '${shown.choices[x.answer]}'`);
     setFx({ key: Date.now(), amount: x.kind === 'attack' ? x.damage : x.taken, element: x.element || null, found: x.weakFound ? { name: x.weakFound.name, element: x.weakFound.element } : null,
@@ -133,12 +134,17 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
           </div>
           <div className="space-y-2 bg-white p-3">
             <p role="status" aria-live="polite" className="min-h-[44px] rounded-xl border-2 border-[#26215c] px-3 py-2 text-sm font-medium text-[#26215c]">
-              {message || (q ? (q.kind === 'attack' ? <>이 뜻의 영어 단어는? <b className="font-black">“{q.prompt}”</b></> : <>{run.monster.name}의 공격! 막으려면 뜻을 골라요 <b className="font-black">{q.prompt}</b></>) : '무엇을 할까요?')}
+              {message || (q ? (q.order ? <>이 뜻이 되게 문장을 맞춰요 <b className="font-black">“{q.prompt}”</b></> : q.kind === 'attack' ? <>이 뜻의 영어 단어는? <b className="font-black">“{q.prompt}”</b></> : <>{run.monster.name}의 공격! 막으려면 뜻을 골라요 <b className="font-black">{q.prompt}</b></>) : '무엇을 할까요?')}
             </p>
             {q ? <>
               {q.kind === 'defend' && defendMs !== null && <div key={`${run.id}:${q.prompt}`} className="h-1.5 overflow-hidden rounded-full bg-[#fcebeb]" aria-label={`남은 시간 ${Math.ceil(defendMs / 1000)}초`}><div className="h-full rounded-full bg-[#e24b4a]" style={{ width: `${(defendMs / (PET_TOWER.defendSeconds * 1000)) * 100}%`, animation: `tw-drain ${defendMs}ms linear forwards` }} /></div>}
-              <div className="grid grid-cols-2 gap-2">{q.choices.map((c, i) => { const fb = feedback, isAnswer = fb && i === fb.answer, isWrong = fb && i === fb.picked && fb.picked !== fb.answer;
-                return <button key={i} type="button" disabled={busy || Boolean(fb)} onClick={() => void answer(i)} className={`min-h-[44px] rounded-xl border px-2 py-2 text-sm font-bold transition-colors ${isAnswer ? 'border-[#639922] bg-[#eaf3de] text-[#27500a]' : isWrong ? 'border-[#e24b4a] bg-[#fcebeb] text-[#791f1f]' : 'border-[#d6d2ee] bg-white text-[#26215c] hover:bg-[#f5f4fd]'}`}>{c}</button>; })}</div>
+              {q.order ? <div className="space-y-2">
+                <p className="min-h-[40px] rounded-xl border border-dashed border-[#d6d2ee] bg-[#f5f4fd] px-3 py-2 text-sm font-bold text-[#26215c]" aria-label="맞춘 문장">{placed.length ? placed.map(i => q.order![i]).join(' ') : <span className="font-medium text-slate-400">조각을 순서대로 눌러요</span>}</p>
+                <div className="flex flex-wrap gap-1.5">{q.order.map((piece, i) => <button key={i} type="button" disabled={busy || Boolean(feedback) || placed.includes(i)} onClick={() => setPlaced(list => [...list, i])} className="rounded-lg border border-[#d6d2ee] bg-white px-2.5 py-1.5 text-sm font-bold text-[#26215c] disabled:opacity-30">{piece}</button>)}</div>
+                <div className="flex justify-end gap-1.5"><button type="button" disabled={busy || Boolean(feedback) || !placed.length} onClick={() => setPlaced(list => list.slice(0, -1))} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-500 disabled:opacity-40">하나 빼기</button><button type="button" disabled={busy || Boolean(feedback) || placed.length !== q.order.length} onClick={() => void answer(placed.map(i => q.order![i]).join(' '))} className="rounded-lg bg-[#534ab7] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">공격!</button></div>
+              </div>
+              : <div className="grid grid-cols-2 gap-2">{q.choices.map((c, i) => { const fb = feedback, isAnswer = fb && i === fb.answer, isWrong = fb && i === fb.picked && fb.picked !== fb.answer;
+                return <button key={i} type="button" disabled={busy || Boolean(fb)} onClick={() => void answer(i)} className={`min-h-[44px] rounded-xl border px-2 py-2 text-sm font-bold transition-colors ${isAnswer ? 'border-[#639922] bg-[#eaf3de] text-[#27500a]' : isWrong ? 'border-[#e24b4a] bg-[#fcebeb] text-[#791f1f]' : 'border-[#d6d2ee] bg-white text-[#26215c] hover:bg-[#f5f4fd]'}`}>{c}</button>; })}</div>}
             </> : fleeAsk ? <div className="flex items-center gap-2 rounded-xl bg-[#fcebeb] px-3 py-2 text-xs text-[#791f1f]"><span className="flex-1">도망치면 기운을 모두 써서 탈진해요. 이 층은 다음에 다시 도전할 수 있어요.</span><button type="button" onClick={() => setFleeAsk(false)} className="rounded-lg border border-[#f7c1c1] bg-white px-2.5 py-1 font-bold">취소</button><button type="button" disabled={busy} onClick={() => void act('flee')} className="rounded-lg bg-[#e24b4a] px-2.5 py-1 font-bold text-white">도망</button></div>
             : skillsOpen ? <div className="rounded-xl border border-[#e4e0f5] p-2">
               <div className="mb-1.5 flex items-center justify-between text-xs"><b className="font-black text-[#26215c]">스킬{tower.passive ? ` · ${tower.passive.name}(${tower.passive.text})` : ''}</b><button type="button" onClick={() => setSkillsOpen(false)} className="px-1 text-slate-400">닫기</button></div>

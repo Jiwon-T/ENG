@@ -49,9 +49,11 @@ test('순위: 모험가 by tower floor → stars → level; 원정대 by summed 
   // only a pet on the rows this viewer was shown opens: a's second pet is not a 원정대 row
   assert.equal((await call('c', {action: 'rank-profile', at: g.at, id: r.rows[3].id, kind: 'guild'}, f)).error, 'RANK_STALE');
   assert.equal((await call('c', {action: 'rank-profile', at: g.at, id: g.rows[0].id, kind: 'guild'}, f)).profile.label, '용감한 검객');
-  // the snapshot is reused for 10 minutes, then rebuilt
+  // the snapshot is reused for 10 minutes; after that the sheet shows it at once (stale) and asks for the rebuild
   student(f, 'd', [[5, 40, 0]], '새친구', ['번개']);
   assert.notEqual((await call('c', {action: 'rank-board', kind: 'pet'}, f, NOW + 60_000)).ranking.rows[0].label, '번개');
+  assert.equal((await call('c', {action: 'rank-board', kind: 'pet'}, f, NOW + 11 * 60_000)).ranking.stale, true);
+  await call('c', {action: 'rank-refresh'}, f, NOW + 11 * 60_000);
   assert.equal((await call('c', {action: 'rank-board', kind: 'pet'}, f, NOW + 11 * 60_000)).ranking.rows[0].label, '번개');
   // the home chip doesn't wait for a rebuild: an hour-old snapshot is used as it is (the sheet rebuilds after 10 minutes)
   const before = f.rows.get('petRankings/current').builtAt;
@@ -68,6 +70,7 @@ test('순위: while one request rebuilds, others get the last snapshot (no secon
   student(f, 'a', [[30, 12, 20]], '반짝별', ['용감한 검객']);
   f.rows.set('petRankings/current', {builtAt: NOW - 20 * 60_000, buildingUntil: NOW + 30_000, pets: []});
   assert.equal((await call('a', {action: 'rank-board', kind: 'pet'}, f)).ranking.total, 0, 'the old (empty) snapshot while another rebuilds');
+  await call('a', {action: 'rank-refresh'}, f, NOW + 60_000);
   assert.equal((await call('a', {action: 'rank-board', kind: 'pet'}, f, NOW + 60_000)).ranking.total, 1, 'the lock ran out: rebuilt');
   // a cold start (no snapshot yet) while another request builds: 'being made', not a second full read
   f.rows.set('petRankings/current', {buildingUntil: NOW + 30_000});
@@ -76,4 +79,30 @@ test('순위: while one request rebuilds, others get the last snapshot (no secon
   await handlePet({method: 'GET', url: '/api/student/pet?summary=1', headers: {authorization: 'Bearer t'}} as any, res, {verify: async () => ({uid: 'a'}), db: () => f.db, generate: async () => '{}', now: () => NOW} as any);
   assert.equal('rank' in res.out, false, 'the home chip waits for the next visit');
   assert.deepEqual(f.rows.get('petRankings/current'), {buildingUntil: NOW + 30_000}, 'nothing rebuilt');
+});
+
+test('순위 꾸미기: the 3차 전직 aura on the pet and the pass badge (only a pass in force) on rows and the room', async () => {
+  const f = registrationFirestore();
+  student(f, 'a', [[160, 50, 20]], '반짝별', ['천공']); student(f, 'b', [[40, 12, 20]], '구름빵', ['새벽']); student(f, 'c', [[30, 5, 5]]);
+  const s = f.rows.get('petStates/a'); s.pets[0].job = 'swordsman'; s.pets[0].job2 = 'paladin'; s.pets[0].job3 = 'sky_knight'; f.rows.set('petStates/a', s);
+  f.rows.set('aiPasses/a', {plan: 'premium', until: '2026-12-31'}); f.rows.set('aiPasses/b', {plan: 'pet', until: '2026-10-01'}); // b's pass has ended
+  const r = (await call('c', {action: 'rank-board', kind: 'pet'}, f)).ranking;
+  assert.deepEqual(r.rows.map((x: any) => [x.label, x.pass, x.looks[0].aura]), [['천공', 'premium', 'light'], ['새벽', null, null], ['c펫1', null, null]]);
+  const prof = (await call('c', {action: 'rank-profile', at: r.at, id: r.rows[0].id}, f)).profile;
+  assert.deepEqual([prof.aura, prof.pass], ['light', 'premium']);
+});
+
+test('순위표 속도: an older snapshot (over 10 minutes) is shown at once with stale; rank-refresh rebuilds it', async () => {
+  const f = registrationFirestore();
+  student(f, 'a', [[30, 12, 20]], '반짝별', ['검객']); student(f, 'c', [[20, 5, 5]]);
+  const first = (await call('c', {action: 'rank-board', kind: 'pet'}, f)).ranking;
+  assert.equal(first.stale, false);
+  student(f, 'b', [[40, 30, 20]], '구름빵', ['새벽']); // a new student after the snapshot
+  const later = NOW + 11 * 60_000;
+  const shown = (await call('c', {action: 'rank-board', kind: 'pet'}, f, later)).ranking;
+  assert.deepEqual([shown.stale, shown.at, shown.rows.length], [true, first.at, 2], 'the old one, without waiting for a rebuild');
+  const refreshed = await call('c', {action: 'rank-refresh'}, f, later);
+  assert.equal(refreshed.at, later);
+  const again = (await call('c', {action: 'rank-board', kind: 'pet'}, f, later)).ranking;
+  assert.deepEqual([again.stale, again.rows.length, again.rows[0].label], [false, 3, '새벽']);
 });

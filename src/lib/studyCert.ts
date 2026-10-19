@@ -15,6 +15,15 @@ export const CERT_RULES = {
   /** A photo (optional): a JPEG data URL, shrunk on the phone first. */
   photoChars: 700_000,
 } as const;
+/** A 워크북's blanks (each sentence's word positions) as a short code: the same passage with other blanks is another
+ *  workbook to check, the same blanks again is not. FNV-1a, so the screen and the server agree without a library. */
+export function workbookSig(blanks: number[][]) {
+  let h = 0x811c9dc5;
+  for (const ch of blanks.map(r => r.join(',')).join('|')) { h ^= ch.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(36);
+}
+/** The 워크북 request's ref: the passage key and its blanks' code. */
+export const workbookRef = (key: string, blanks: number[][]) => `${key}-${workbookSig(blanks)}`;
 export const CERT_KIND_LABEL: Record<CertKind, string> = { workbook: '워크북', reading: '지문 분석지', questions: '직접 만든 변형 문제' };
 /** The grades a teacher can give each kind (the last one is always 다시 해 오기 / 아직이에요). */
 export const CERT_GRADES: Record<CertKind, { grade: CertGrade; label: string }[]> = {
