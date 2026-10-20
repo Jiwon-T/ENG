@@ -477,7 +477,7 @@ export const towerTaken = (atk: number, def: number, blocked: boolean) => blocke
 /** What can wait behind a door (not a boss floor). Each pet's floor has its own fixed set (the same on a retry, different
  *  for other students); `weight`: how often. */
 export type TowerEvent = 'monster' | 'treasure' | 'merchant' | 'mirror' | 'riddle' | 'sleeping' | 'trap' | 'fairy'
-  /** 쉬어 가기 놀이 (api/_lib/towerGames), opening zone by zone */ | 'mimic' | 'fortune' | 'lilypad' | 'mushroom' | 'echo' | 'crystal' | 'maze' | 'scale' | 'jars' | 'icelock' | 'icepath' | 'runes' | 'scroll' | 'potions' | 'lavapath' | 'lavarun';
+  /** 쉬어 가기 놀이 (api/_lib/towerGames), opening zone by zone */ | 'mimic' | 'fortune' | 'lilypad' | 'mushroom' | 'echo' | 'crystal' | 'maze' | 'scale' | 'jars' | 'icelock' | 'icepath' | 'runes' | 'scroll' | 'potions' | 'lavapath' | 'lavarun' | 'shells' | 'bubbles' | 'windpath' | 'blanks' | 'oneline' | 'stars';
 /** A 쉬어 가기 놀이 lost: the pet starts its next battle with one of these (then it wears off). */
 /** What a debuff does (`TOWER_DEBUFF_RULES`): def −방어, atk −공격, hp 체력이 줄어든 채, mp MP 절반, block 첫 막기 문제가 짧게,
  *  dot 화상·독 3턴. Each game names its own (젖음, 손이 꽁꽁, 엉덩방아…). */
@@ -497,6 +497,12 @@ export const TOWER_DEBUFFS = {
   tummy: debuff('🤢', '배탈', 'dot', '이상한 물약에 배탈이 난 채 시작 (3턴)', '독'),
   burned: debuff('🔥', '화상', 'dot', '발을 데어 화상 입은 채 시작 (3턴)', '화상'),
   scorched: debuff('🥵', '그을림', 'def', '열기에 그을려 방어 -15%'),
+  clamped: debuff('🐚', '조개에 물림', 'atk', '손가락이 얼얼해 공격 -10%'),
+  breathless: debuff('🫧', '숨이 참', 'mp', '물속에서 숨이 차 MP 절반으로 시작'),
+  gust: debuff('🌪️', '바람에 휘청', 'def', '어지러워 방어 -15%'),
+  shocked: debuff('⚡', '감전', 'hp', '찌릿! 체력 -10%로 시작'),
+  tangled: debuff('🌀', '머리가 빙글', 'block', '선이 꼬여 어질어질, 첫 막기 문제는 4초'),
+  starstruck: debuff('✨', '별빛에 눈부심', 'atk', '눈이 부셔 공격 -10%'),
 } as const satisfies Record<string, { icon: string; name: string; effect: DebuffEffect; text: string; dot?: '화상' | '독' }>;
 export type TowerDebuff = keyof typeof TOWER_DEBUFFS;
 /** `stack`: lost games in a row pile up (the newest ones kept) and all hit the next battle; the same kind counts each time. */
@@ -517,6 +523,9 @@ export const TOWER_EVENTS: Record<TowerEvent, { name: string; icon: string; weig
   runes: { name: '룬 따라 하기', icon: '🎵', weight: 4, from: 41 }, scroll: { name: '주문서 완성', icon: '📜', weight: 4, from: 41 },
   potions: { name: '물약 섞기', icon: '🧪', weight: 4, from: 45 }, lavapath: { name: '용암 돌다리 기억', icon: '🔥', weight: 4, from: 51 },
   lavarun: { name: '용암 탈출', icon: '🌋', weight: 4, from: 51 },
+  shells: { name: '진주 조개 섞기', icon: '🐚', weight: 4, from: 61 }, bubbles: { name: '진주 거품', icon: '🫧', weight: 4, from: 61 },
+  windpath: { name: '바람길 비행', icon: '🌬️', weight: 4, from: 71 }, blanks: { name: '번개 빈칸', icon: '⚡', weight: 4, from: 71 },
+  oneline: { name: '한붓 별 그리기', icon: '⭐', weight: 4, from: 81 }, stars: { name: '별자리 잇기', icon: '✨', weight: 4, from: 81 },
 };
 /** 장비 강화 at the 상인: +1 … +5. A failure only uses up the 강화석 (the gear never breaks). */
 export const TOWER_ENHANCE_STEP = 2;

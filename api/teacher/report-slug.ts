@@ -11,7 +11,7 @@ import {
   type StudentReportMapping,
   type StoredNotionStudentMapping,
 } from '../_lib/reportSchemas.js';
-import { lookupStudentIdentity, migrateStudentMapping } from '../_lib/studentIdentity.js';
+import { lookupGuardianPhone, lookupStudentIdentity, migrateStudentMapping } from '../_lib/studentIdentity.js';
 import { hashStudentKey } from '../_lib/security.js';
 import { getFirebaseAdmin } from '../_lib/firebaseAdmin.js';
 
@@ -52,8 +52,10 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
           .get();
 
         const activeDocument = snap.docs.find(doc => doc.data().active === true);
+        // the admin sees the guardian phone, to open the report with its last 4 digits before sending the address
+        const guardianPhone = await lookupGuardianPhone(db, studentKey).catch(() => '');
         if (!activeDocument) {
-          return sendJson(res, 200, { ok: true, reportSlug: null });
+          return sendJson(res, 200, { ok: true, reportSlug: null, guardianPhone });
         }
 
         const current = activeDocument.data() as StoredReportSlug;
@@ -63,6 +65,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
           active: current.active,
           reportUrl: `/${current.reportSlug}`,
           shortUrl: `/${current.reportSlug}`,
+          guardianPhone,
         });
       } catch (e: any) {
         return sendJson(res, 500, { ok: false, error: 'DATASTORE_UNAVAILABLE' });

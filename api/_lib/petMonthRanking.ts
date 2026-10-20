@@ -12,7 +12,8 @@ import {displayName, owedPoints} from './petCoupon.js';
 import {RANKING_STALE_OK, RANKING_TTL, cachedSnapshot, docsOf} from './petRanking.js';
 import {PET_COUPON, petAura, wornAccessories, type PetGearView} from '../../src/lib/petCatalog.js';
 import {keepsNameHidden, maskedName} from '../../src/lib/rankNames.js';
-export {keepsNameHidden, maskedName};
+import {shownName, studentRealName} from './realNames.js';
+export {keepsNameHidden, maskedName, studentRealName};
 
 /** 순위 닉네임 by student key: {nickname, realNameOk, by, at}, written by the admin, the principal or the student's teacher. */
 export const PET_RANK_NAMES = 'petRankNames';
@@ -21,15 +22,6 @@ export type MonthRankBy = 'alias' | 'pet' | 'nick' | 'name';
 export interface MonthRankLook { character: string; level: number; clothing: string | null; accessories: string[]; aura: 'light' | 'dark' | null; gear: PetGearView | null }
 export interface MonthRankRow { uid: string | null; earned: number; label: string; by: MonthRankBy; guild: string; look: MonthRankLook | null }
 export interface MonthRankSnapshot { builtAt: number; month: string; rows: MonthRankRow[]; buildingUntil?: number }
-
-/** The real name of the student linked to `uid` ('' for anyone else), to ask before a name that holds it is set. */
-export async function studentRealName(db: any, uid: string) {
-  const user = (await db.collection('users').doc(uid).get()).data();
-  if (user?.role !== 'student' || typeof user.notionStudentKey !== 'string') return '';
-  try { return await displayName(db, uuid(user.notionStudentKey)); } catch { return ''; }
-}
-/** A name that holds the real name and was agreed to (the normalized names in `agreed`) counts as hidden. */
-const shownName = (x: unknown, real: string, agreed: string[] = []) => { const v = String(x ?? '').trim(); return v && (keepsNameHidden(v, real) || agreed.includes(norm(v))) ? v : ''; };
 
 /** Every active student with their name for the ranking and this month's points (nothing else is kept). */
 export async function buildMonthRanking(db: any, now: number): Promise<MonthRankSnapshot> {
@@ -42,7 +34,7 @@ export async function buildMonthRanking(db: any, now: number): Promise<MonthRank
     const pet = o.hadPet ? o.all.pets.find(p => p.slot === o.all.currentPetSlot && p.chosen) || null : null;
     if (pet && o.uid) {
       const [g, t] = await Promise.all([db.collection(PET_GUILD).doc(o.uid).get().then((d: any) => d.data() as GuildProfile | undefined), db.collection(PET_TOWERS).doc(o.uid).get().then((d: any) => d.data() as TowerState | undefined)]);
-      const agreed = g?.realNameOk || [], alias = shownName(shownAlias(g, pet.slot), real, agreed), petName = shownName(pet.name, real), guild = shownName(shownGuild(g), real, agreed);
+      const agreed = g?.realNameOk || [], alias = shownName(shownAlias(g, pet.slot), real, agreed), petName = shownName(pet.name, real, pet.realNameOk ? [norm(pet.name)] : []), guild = shownName(shownGuild(g), real, agreed);
       return {uid: o.uid, earned, label: alias || nick || petName || maskedName(real), by: alias ? 'alias' : nick ? 'nick' : petName ? 'pet' : 'name', guild,
         look: {character: pet.character, level: pet.level, clothing: pet.clothing ?? null, accessories: wornAccessories(pet), aura: petAura(pet), gear: gearViewFor(pet, t?.pets?.[String(pet.slot)]) ?? null}};
     }

@@ -1,6 +1,7 @@
 // 펫 on the server: the whole pet state lives in petStates/{uid} and every change goes through here, so points, XP,
 // purchases and the daily caps cannot be edited from the browser. users/{uid}.petStats keeps a small summary for the
 // teacher screens. The AI talk uses fixed instructions written here; the student's text is only ever passed as data.
+import {keepsNameHidden} from '../../src/lib/rankNames.js';
 import {
   PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_CHARACTERS, PET_DAILY_STUDY_POINTS, PET_ENERGY_ITEMS_PER_DAY, PET_FRIEND_LEVEL, PET_MAX_ENERGY, PET_MAX_LEVEL, PET_MAX_PETS, PET_REVIVES_PER_DAY,
   PET_ATTITUDE_REWARD, PET_COUPON, PET_LATE_REWARD, PET_REWARD_WINDOW_DAYS, LESSON_REWARD_FROM, LESSON_REWARD_LOCK_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob, type PetGearLook} from '../../src/lib/petCatalog.js';
@@ -10,7 +11,7 @@ export interface ServerPhrase { original: string; remembered: string; learnedAtL
 /** Each pet wears its own outfit; the shop items (inventory), points and the room are shared. */
 /** `accessories`: one per place (머리·눈·목·손). `accessory`: what older saves kept (one item), moved into its place on load.
  *  `job`: 1차 전직, chosen once on 5장 설산; `job2`: 2차 전직 (light or dark branch), chosen once on 7장 꿈의 정원. */
-export interface ServerPet { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: ServerPhrase[]; clothing: string | null; accessories: Partial<Record<AccessorySlot, string>>; accessory?: string | null; job?: PetJob | null; job2?: PetJob2 | null; /** 3차 전직 (「별의 시험」, Lv.150 + 탑 50층) */ job3?: PetJob3 | null;
+export interface ServerPet { slot: number; character: string; name: string; /** the student said yes to a name holding their real name */ realNameOk?: boolean; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: ServerPhrase[]; clothing: string | null; accessories: Partial<Record<AccessorySlot, string>>; accessory?: string | null; job?: PetJob | null; job2?: PetJob2 | null; /** 3차 전직 (「별의 시험」, Lv.150 + 탑 50층) */ job3?: PetJob3 | null;
   /** 장비 모양 (the worn tower gear, copied on each tower change), 👁 (false: the outfit only), the look before a job (검사 or 마법사) */
   gear?: PetGearLook | null; gearShow?: boolean; gearStyle?: PetJob | null;
   /** 장비 세트 pieces from 원정대 ★3, moved into the pet's tower gear on its next tower visit */ gearInbox?: string[] }
@@ -222,7 +223,16 @@ export function adoptPet(s: ServerPetState, character: string) {
 }
 /** The main pet (gets the XP, talks, wears the outfit on screen). */
 export function switchPet(s: ServerPetState, slot: number) { if (!s.pets.some(p => p.slot === slot)) throw Error('PET_BAD_SLOT'); s.currentPetSlot = slot; }
-export function renamePet(s: ServerPetState, name: string) { const clean = cleanText(name, 12); if (!clean) throw Error('PET_BAD_NAME'); currentPet(s).name = clean; }
+/** A name holding the student's real name (`real`) is kept only when they said yes (`agreed`, asked on the screen first):
+ *  otherwise nothing changes and the answer says why. The yes is kept on the pet for that name. */
+export function renamePet(s: ServerPetState, name: string, real = '', agreed = false) {
+  const clean = cleanText(name, 12); if (!clean) throw Error('PET_BAD_NAME');
+  const exposes = !keepsNameHidden(clean, real);
+  if (exposes && !agreed) return {needsConfirm: 'real-name' as const, name: clean};
+  const pet = currentPet(s); pet.name = clean;
+  if (exposes) pet.realNameOk = true; else delete pet.realNameOk;
+  return {name: clean};
+}
 /** 👁 장비 보이기 (false: the outfit only) and, before the 1차 전직, which look the gear takes (검사 or 마법사; stats stay the same). */
 export function setGearShow(s: ServerPetState, show: unknown, style: unknown) {
   const pet = currentPet(s);

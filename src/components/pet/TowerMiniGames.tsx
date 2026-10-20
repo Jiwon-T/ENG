@@ -365,6 +365,193 @@ function Lavarun({ title, game, busy, send }: { title: string; game: { started: 
   </div>;
 }
 
+/** 진주 조개 섞기: the pearl is shown under a shell, then two places trade shells six times, faster and faster; pick where
+ *  the pearl went. */
+const SHELL_X = [16, 50, 84];
+function Shells({ title, game, busy, send }: { title: string; game: { shells: number; start: number; swaps: [number, number][]; ms: number[]; peekMs: number }; busy: boolean; send: Send }) {
+  // place[k]: where shell k stands now; the pearl is under the shell that started at `start`
+  const [place, setPlace] = useState(() => Array.from({ length: game.shells }, (_, k) => k)), [phase, setPhase] = useState<'peek' | 'mix' | 'pick'>('peek'), [turn, setTurn] = useState(-1), [picked, setPicked] = useState<number | null>(null);
+  useEffect(() => {
+    const timers: number[] = []; let at = game.peekMs;
+    timers.push(window.setTimeout(() => setPhase('mix'), game.peekMs));
+    game.swaps.forEach(([a, b], i) => {
+      timers.push(window.setTimeout(() => { setTurn(i); setPlace(p => p.map(x => x === a ? b : x === b ? a : x)); }, at));
+      at += game.ms[i];
+    });
+    timers.push(window.setTimeout(() => setPhase('pick'), at));
+    return () => timers.forEach(t => window.clearTimeout(t));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const pick = (k: number) => { if (busy || phase !== 'pick' || picked !== null) return; setPicked(k); window.setTimeout(() => void send('pick', { shell: place[k] }), 400); };
+  const ms = turn >= 0 ? game.ms[turn] : 300;
+  return <div className="space-y-2">
+    <Hall caption={`${title} · ${phase === 'peek' ? '진주가 든 조개를 잘 봐요…' : phase === 'mix' ? `섞는 중… (${turn + 1}/${game.swaps.length})` : '진주는 어느 조개에? 골라요'}`}>
+      <div className="absolute inset-x-0 top-0 bottom-16 bg-[#0c4a6e]">{[20, 55, 80].map((x, i) => <span key={x} className="bx-rise absolute h-2 w-2 rounded-full border border-[#bae6fd]" style={{ left: `${x}%`, bottom: '10%', animationDelay: `${i * .9}s` }} aria-hidden="true" />)}</div>
+      {place.map((p, k) => {
+        const lifted = phase === 'peek' || (picked === k);
+        return <button key={k} type="button" disabled={busy || phase !== 'pick' || picked !== null} onClick={() => pick(k)} aria-label={`${p + 1}번 자리 조개`}
+          className="absolute bottom-[96px] -translate-x-1/2 disabled:cursor-default" style={{ left: `${SHELL_X[p]}%`, transition: `left ${Math.max(200, ms - 60)}ms ease-in-out` }}>
+          {k === game.start && phase === 'peek' && <span className="absolute bottom-0 left-1/2 h-5 w-5 -translate-x-1/2 rounded-full border border-[#e2e8f0] bg-white shadow-[0_0_10px_#fff]" aria-hidden="true" />}
+          <svg viewBox="0 0 64 44" width="70" aria-hidden="true" style={{ transform: lifted ? 'translateY(-26px)' : 'none', transition: 'transform 300ms' }}><path d="M4 40 Q32 -14 60 40 Z" fill="#fbcfe8" stroke="#9d174d" strokeWidth="1.8" />{[14, 23, 32, 41, 50].map(x => <path key={x} d={`M32 40 L${x} ${x === 32 ? 6 : 14}`} stroke="#be185d" strokeWidth="1.1" />)}<rect x="22" y="38" width="20" height="5" rx="2" fill="#f9a8d4" stroke="#9d174d" /></svg>
+        </button>;
+      })}
+    </Hall>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">진주를 찾으면 강화석과 물약. 빈 조개를 고르면 🐚 조개에 물림(다음 전투 공격 -10%). 이 층은 지나가요.</p>
+  </div>;
+}
+
+/** 진주 거품: a meaning; four word bubbles rise — pop the right one before they float away. Three of four right win. */
+function Bubbles({ title, game, busy, send }: { title: string; game: { step: number; steps: number; need: number; right: number; riseMs: number; prompt: string; choices: string[]; last?: boolean }; busy: boolean; send: Send }) {
+  const done = useRef(-1), retry = useRef(0);
+  // One move per meaning; a failed request (or no answer) unlocks the meaning so it can be popped again, and a failed
+  // `gone` is sent again a moment later.
+  const move = (name: 'pop' | 'gone', input?: Record<string, unknown>) => {
+    const step = game.step; done.current = step;
+    const unlock = () => { if (done.current !== step) return; done.current = step - 1; if (name === 'gone') retry.current = window.setTimeout(() => { if (done.current < step) move('gone'); }, 2000); };
+    send(name, input).then(r => { if (!r) unlock(); }, unlock);
+  };
+  // the bubbles floated away: a miss for this meaning (once)
+  useEffect(() => { const step = game.step, t = window.setTimeout(() => { if (done.current < step) move('gone'); }, game.riseMs + 500); return () => { window.clearTimeout(t); window.clearTimeout(retry.current); }; }, [game.step]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pop = (i: number) => { if (busy || done.current >= game.step) return; move('pop', { choice: i }); };
+  return <div className="space-y-2">
+    <Hall caption={`${title} · ${game.step + 1}/${game.steps} · 맞힘 ${game.right} (필요 ${game.need})`}>
+      <div className="absolute inset-x-0 top-0 bottom-16 overflow-hidden bg-[#075985]">
+        <div className="absolute inset-x-4 top-3 z-10 rounded-xl bg-white/95 px-3 py-1.5 text-center text-xs text-[#26215c]">뜻: <b className="text-sm font-black">{game.prompt}</b>{game.last !== undefined && <span className={`ml-2 font-bold ${game.last ? 'text-[#15803d]' : 'text-[#b91c1c]'}`}>{game.last ? '정답!' : '아쉬워요'}</span>}</div>
+        {game.choices.map((w, i) => <button key={`${game.step}-${i}`} type="button" disabled={busy} onClick={() => pop(i)} className="bubble-rise absolute flex h-[68px] w-[68px] items-center justify-center rounded-full border-2 border-[#e0f2fe] bg-[#e0f2fe]/25 px-1 text-[11px] font-black leading-tight text-white"
+          style={{ left: `${4 + i * 24}%`, animation: `bubble-rise ${game.riseMs}ms linear ${i * 180}ms forwards` }}><span className="break-all">{w}</span></button>)}
+      </div>
+      <style>{'@keyframes bubble-rise{from{top:105%}to{top:-30%}}@media (prefers-reduced-motion:reduce){.bubble-rise{animation:none!important;top:45%}}'}</style>
+    </Hall>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">4번 중 3번 맞히면 강화석 2개. 2번 놓치면 🫧 숨이 참(다음 전투 MP 절반). 틀린 단어는 오답 복습으로.</p>
+  </div>;
+}
+
+/** 바람길 비행: tap to rise (the pet falls between taps) and fly through five cloud rings coming from the right. */
+const WIND = { speed: 150, gravity: 620, lift: 250, gap: 84, petX: 64 };
+function Windpath({ title, game, busy, send }: { title: string; game: { rings: number[]; spacingMs: number }; busy: boolean; send: Send }) {
+  const box = useRef<HTMLDivElement>(null), run = useRef({ y: 0, vy: 0, t0: 0, last: 0, passed: 0, over: false }), [, draw] = useState(0), [phase, setPhase] = useState<'ready' | 'fly' | 'done'>('ready');
+  const size = () => ({ w: box.current?.clientWidth || 340, h: box.current?.clientHeight || 260 });
+  const ringX = (i: number, t: number) => size().w + 20 - ((t - i * game.spacingMs) / 1000) * WIND.speed;
+  // The flight is over once; its result is sent, and sent again from the button when the request fails (or gets no answer).
+  const [unsent, setUnsent] = useState(false);
+  const report = () => { setUnsent(false); send('fly', { passed: run.current.passed }).then(r => { if (!r) setUnsent(true); }, () => setUnsent(true)); };
+  const finish = () => { const r = run.current; if (r.over) return; r.over = true; setPhase('done'); window.setTimeout(report, 600); };
+  useEffect(() => {
+    if (phase !== 'fly') return;
+    let raf = 0;
+    const tick = (now: number) => {
+      const r = run.current, { h } = size(), dt = Math.min(0.05, (now - r.last) / 1000); r.last = now;
+      r.vy += WIND.gravity * dt; r.y = Math.max(14, Math.min(h - 14, r.y + r.vy * dt));
+      const t = now - r.t0, i = r.passed, x = ringX(i, t);
+      if (i < game.rings.length && x <= WIND.petX) {
+        if (Math.abs(r.y - game.rings[i] * h) <= WIND.gap / 2) r.passed += 1; else { draw(n => n + 1); return finish(); }
+        if (r.passed === game.rings.length) { draw(n => n + 1); return finish(); }
+      }
+      draw(n => n + 1); raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tap = () => {
+    if (busy || phase === 'done') return;
+    const r = run.current;
+    if (phase === 'ready') { const now = performance.now(); r.y = size().h / 2; r.vy = 0; r.t0 = now; r.last = now; setPhase('fly'); }
+    r.vy = -WIND.lift;
+  };
+  const r = run.current, t = phase === 'ready' ? 0 : performance.now() - r.t0, { h } = size();
+  return <div className="space-y-2">
+    <Hall caption={`${title} · ${phase === 'ready' ? '누를 때마다 날아올라요. 구름 고리 5개를 통과해요' : `고리 ${r.passed}/${game.rings.length}`}`}>
+      <div ref={box} onPointerDown={tap} className="absolute inset-x-0 top-0 bottom-16 cursor-pointer touch-none overflow-hidden bg-[#7dd3fc]">
+        {[15, 45, 75].map((x, i) => <span key={x} className="absolute h-6 w-16 rounded-full bg-white/60" style={{ left: `${x}%`, top: `${20 + i * 25}%` }} aria-hidden="true" />)}
+        {phase !== 'ready' && game.rings.map((y, i) => { const x = ringX(i, t); return i >= r.passed - 1 && x > -40 && x < size().w + 40 ? <div key={i} aria-hidden="true" className={`absolute w-5 rounded-full border-4 ${i < r.passed ? 'border-[#4ade80]' : 'border-white'} bg-white/10`} style={{ left: x - 10, top: y * h - WIND.gap / 2, height: WIND.gap }} /> : null; })}
+        <span className="absolute text-3xl" style={{ left: WIND.petX - 18, top: (phase === 'ready' ? h / 2 : r.y) - 18 }} aria-hidden="true">{phase === 'done' && r.passed < game.rings.length ? '😵' : '🕊️'}</span>
+        {phase === 'ready' && <span className="absolute inset-x-0 top-1/3 text-center text-sm font-black text-[#0c4a6e]">눌러서 출발!</span>}
+      </div>
+    </Hall>
+    <button type="button" disabled={busy || phase === 'done'} onPointerDown={e => { e.preventDefault(); tap(); }} className="w-full rounded-xl bg-[#38bdf8] py-3 text-sm font-black text-[#0c4a6e] disabled:opacity-50">날아올라! 🌬️</button>
+    {unsent && <button type="button" disabled={busy} onClick={report} className="w-full rounded-xl border-2 border-[#38bdf8] bg-white py-2 text-sm font-black text-[#0c4a6e] disabled:opacity-50">결과 다시 보내기 (고리 {run.current.passed}/{game.rings.length})</button>}
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">고리 5개를 모두 지나면 강화석과 물약. 고리를 놓치면 🌪️ 바람에 휘청(다음 전투 방어 -15%). 이 층은 지나가요.</p>
+  </div>;
+}
+
+/** 번개 빈칸: a meaning and a word with letters gone; fill the blanks from the letter tiles. Two of three right win. */
+function Blanks({ title, game, busy, send }: { title: string; game: { step: number; steps: number; need: number; right: number; meaning: string; pattern: (string | null)[]; tiles: string[]; last?: { ok: boolean; word: string } }; busy: boolean; send: Send }) {
+  const [used, setUsed] = useState<number[]>([]), blanks = game.pattern.filter(c => c === null).length;
+  useEffect(() => setUsed([]), [game.step]);
+  const fill = (i: number) => { if (busy || used.includes(i) || used.length >= blanks) return; setUsed([...used, i]); };
+  let k = 0;
+  return <div className="space-y-2">
+    <Hall caption={`${title} · ${game.step + 1}/${game.steps} · 맞힘 ${game.right} (필요 ${game.need})`}>
+      <div className="absolute inset-x-0 top-0 bottom-16 bg-[#1e1b4b]">{[18, 62].map((x, i) => <span key={x} className="pg-pulse absolute text-2xl" style={{ left: `${x}%`, top: `${8 + i * 6}%`, animationDelay: `${i * .6}s` }} aria-hidden="true">⚡</span>)}</div>
+      <div className="absolute inset-x-4 top-12 flex flex-col items-center gap-3">
+        <p className="rounded-xl bg-white/95 px-3 py-1.5 text-center text-xs text-[#26215c]">뜻: <b className="text-sm font-black">{game.meaning}</b>{game.last && <span className={`ml-2 font-bold ${game.last.ok ? 'text-[#15803d]' : 'text-[#b91c1c]'}`}>{game.last.ok ? '정답!' : `아쉬워요 (${game.last.word})`}</span>}</p>
+        <div className="flex flex-wrap justify-center gap-1">{game.pattern.map((c, i) => { const v = c ?? game.tiles[used[k++]] ?? ''; return <span key={i} className={`flex h-9 w-7 items-center justify-center rounded-md text-lg font-black ${c === null ? 'border-2 border-dashed border-[#fde047] bg-white/10 text-[#fde047]' : 'bg-white text-[#1e1b4b]'}`}>{v}</span>; })}</div>
+      </div>
+    </Hall>
+    <div className="flex flex-wrap justify-center gap-1.5">{game.tiles.map((t, i) => <button key={`${game.step}-${i}`} type="button" disabled={busy || used.includes(i)} onClick={() => fill(i)} className="h-10 w-10 rounded-xl border border-[#d6d2ee] bg-white text-base font-black text-[#26215c] disabled:opacity-30">{t}</button>)}</div>
+    <div className="flex gap-2">
+      <button type="button" disabled={busy || !used.length} onClick={() => setUsed(used.slice(0, -1))} className="flex-1 rounded-xl border border-[#d6d2ee] bg-white py-2 text-sm font-bold text-[#26215c] disabled:opacity-40">지우기</button>
+      <button type="button" disabled={busy || used.length !== blanks} onClick={() => void send('fill', { letters: used.map(i => game.tiles[i]) })} className="flex-1 rounded-xl bg-[#facc15] py-2 text-sm font-black text-[#422006] disabled:opacity-40">완성! ⚡</button>
+    </div>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">3단어 중 2개를 완성하면 강화석 2개. 2개를 틀리면 ⚡ 감전(다음 전투 체력 -10%). 틀린 단어는 오답 복습으로.</p>
+  </div>;
+}
+
+/** 한붓 별 그리기: tap star after star along the lines — each line once, all of them. Stuck (no line left from the star) is
+ *  a try; two tries. */
+const lineKey = (a: number, b: number) => a < b ? `${a}-${b}` : `${b}-${a}`;
+function Oneline({ title, game, busy, send }: { title: string; game: { name: string; nodes: number[][]; edges: number[][]; triesLeft: number; wrong?: boolean }; busy: boolean; send: Send }) {
+  const [path, setPath] = useState<number[]>([]), sent = useRef(false);
+  useEffect(() => { setPath([]); sent.current = false; }, [game.triesLeft]);
+  const lines = new Set(game.edges.map(([a, b]) => lineKey(a, b))), used = new Set(path.slice(1).map((v, i) => lineKey(path[i], v)));
+  const at = path[path.length - 1], open = (n: number) => at !== undefined && lines.has(lineKey(at, n)) && !used.has(lineKey(at, n));
+  const tap = (n: number) => {
+    if (busy || sent.current || (path.length && !open(n))) return;
+    const next = [...path, n], done = new Set(next.slice(1).map((v, i) => lineKey(next[i], v)));
+    setPath(next);
+    const stuck = !game.nodes.some((_, k) => lines.has(lineKey(n, k)) && !done.has(lineKey(n, k)));
+    // a failed request (or no answer) lets the stroke be drawn again
+    if (next.length > 1 && (done.size === lines.size || stuck)) { sent.current = true; const again = () => { sent.current = false; setPath([]); }; window.setTimeout(() => { send('draw', { path: next }).then(r => { if (!r) again(); }, again); }, 500); }
+  };
+  return <div className="space-y-2">
+    <Hall caption={`${title} · '${game.name}' · ${path.length ? `선 ${used.size}/${lines.size}` : '아무 별에서나 시작해요'}${game.wrong ? ' · 막혔어요! 한 번 더' : ''} (기회 ${game.triesLeft})`}>
+      <div className="absolute inset-x-0 top-0 bottom-16 bg-[#1e1b4b]">{[12, 30, 70, 88].map((x, i) => <span key={x} className="absolute h-0.5 w-0.5 rounded-full bg-white/70" style={{ left: `${x}%`, top: `${10 + i * 19}%` }} aria-hidden="true" />)}
+        <svg viewBox="-8 -4 116 104" className="absolute inset-x-8 inset-y-2 h-[calc(100%-16px)] w-[calc(100%-64px)]">
+          {game.edges.map(([a, b]) => { const k = lineKey(a, b), on = used.has(k); return <line key={k} x1={game.nodes[a][0]} y1={game.nodes[a][1]} x2={game.nodes[b][0]} y2={game.nodes[b][1]} stroke={on ? '#fde047' : '#6366f1'} strokeWidth={on ? 3.2 : 1.6} strokeDasharray={on ? undefined : '3 3'} strokeLinecap="round" />; })}
+          {game.nodes.map(([x, y], n) => <g key={n} role="button" aria-label={`${n + 1}번 별`} tabIndex={0} onClick={() => tap(n)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') tap(n); }} className="cursor-pointer">
+            <circle cx={x} cy={y} r="9" fill="transparent" />
+            <path d={`M${x} ${y - 6} L${x + 1.8} ${y - 1.8} ${x + 6} ${y - 1.8} ${x + 2.6} ${y + 1} ${x + 3.8} ${y + 5.6} ${x} ${y + 3} ${x - 3.8} ${y + 5.6} ${x - 2.6} ${y + 1} ${x - 6} ${y - 1.8} ${x - 1.8} ${y - 1.8}Z`} fill={n === at ? '#fde047' : open(n) || !path.length ? '#fef9c3' : '#a5b4fc'} stroke="#facc15" strokeWidth="0.8" />
+          </g>)}
+        </svg>
+      </div>
+    </Hall>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">같은 선을 두 번 지나지 않고 모든 선을 한 번에! 그리면 강화석 2개. 두 번 막히면 🌀 머리가 빙글(다음 전투 첫 막기 4초). 이 층은 지나가요.</p>
+  </div>;
+}
+
+/** 별자리 잇기: a meaning; the letters of its word are stars (two don't belong). Join them in the word's order. */
+function Stars({ title, game, busy, send }: { title: string; game: { step: number; steps: number; need: number; right: number; meaning: string; length: number; stars: { c: string; x: number; y: number }[]; last?: { ok: boolean; word: string } }; busy: boolean; send: Send }) {
+  const [picked, setPicked] = useState<number[]>([]), sent = useRef(-1);
+  useEffect(() => setPicked([]), [game.step]);
+  const tap = (i: number) => {
+    if (busy || picked.includes(i) || sent.current === game.step) return;
+    const next = [...picked, i]; setPicked(next);
+    // a failed request (or no answer) lets the word be joined again
+    if (next.length === game.length) { const step = game.step; sent.current = step; const again = () => { if (sent.current === step) { sent.current = -1; setPicked([]); } }; window.setTimeout(() => { send('trace', { stars: next }).then(r => { if (!r) again(); }, again); }, 400); }
+  };
+  return <div className="space-y-2">
+    <Hall caption={`${title} · ${game.step + 1}/${game.steps} · 맞힘 ${game.right} (필요 ${game.need}) · ${picked.map(i => game.stars[i].c).join('') || '철자 순서대로 별을 이어요'}`}>
+      <div className="absolute inset-x-0 top-0 bottom-16 bg-[#0f172a]">
+        <p className="absolute inset-x-4 top-2 z-10 rounded-xl bg-white/95 px-3 py-1 text-center text-xs text-[#26215c]">뜻: <b className="text-sm font-black">{game.meaning}</b> <span className="text-slate-400">({game.length}글자)</span>{game.last && <span className={`ml-2 font-bold ${game.last.ok ? 'text-[#15803d]' : 'text-[#b91c1c]'}`}>{game.last.ok ? '정답!' : `아쉬워요 (${game.last.word})`}</span>}</p>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-x-2 top-10 bottom-1 h-[calc(100%-44px)] w-[calc(100%-16px)]" aria-hidden="true">{picked.slice(1).map((v, k) => { const a = game.stars[picked[k]], b = game.stars[v]; return <line key={k} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#fde047" strokeWidth="0.8" vectorEffect="non-scaling-stroke" />; })}</svg>
+        <div className="absolute inset-x-2 top-10 bottom-1">{game.stars.map((st, i) => { const on = picked.includes(i); return <button key={`${game.step}-${i}`} type="button" disabled={busy || on} onClick={() => tap(i)} className="absolute flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center" style={{ left: `${st.x}%`, top: `${st.y}%` }}>
+          <span className={`text-lg leading-none ${on ? 'text-[#fde047]' : 'text-white'}`} aria-hidden="true">★</span><span className={`text-xs font-black ${on ? 'text-[#fde047]' : 'text-[#c7d2fe]'}`}>{st.c}</span></button>; })}</div>
+      </div>
+    </Hall>
+    <button type="button" disabled={busy || !picked.length || sent.current === game.step} onClick={() => setPicked(picked.slice(0, -1))} className="w-full rounded-xl border border-[#d6d2ee] bg-white py-2 text-sm font-bold text-[#26215c] disabled:opacity-40">하나 지우기</button>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">3개 중 2개를 이으면 강화석 2개. 2개를 틀리면 ✨ 별빛에 눈부심(다음 전투 공격 -10%). 틀린 단어는 오답 복습으로.</p>
+  </div>;
+}
+
 export function MiniGameScreen({ view, busy, send }: { view: MiniGameView; busy: boolean; send: Send }) {
   if (view.type === 'mimic') return <Mimic title={view.title} game={view.game} busy={busy} send={send} />;
   if (view.type === 'fortune') return <Fortune title={view.title} busy={busy} send={send} />;
@@ -382,5 +569,11 @@ export function MiniGameScreen({ view, busy, send }: { view: MiniGameView; busy:
   if (view.type === 'potions') return <Potions title={view.title} game={view.game} busy={busy} send={send} />;
   if (view.type === 'lavapath') return <Lavapath title={view.title} game={view.game} busy={busy} send={send} />;
   if (view.type === 'lavarun') return <Lavarun title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'shells') return <Shells title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'bubbles') return <Bubbles title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'windpath') return <Windpath title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'blanks') return <Blanks title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'oneline') return <Oneline title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'stars') return <Stars title={view.title} game={view.game} busy={busy} send={send} />;
   return null;
 }

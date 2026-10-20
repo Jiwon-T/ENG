@@ -308,3 +308,114 @@ test('Codex 반영: 용암 탈출 time-out ends the game; 용암 돌다리 stops
   const turn = () => { towerAct(f.t, f.s, 'attack', NOW, rand); towerAnswer(f.t, f.s, run.id, run.q!.answer, NOW, rand); const ms = run.q!.deadline! - NOW; towerAnswer(f.t, f.s, run.id, run.q!.answer, NOW, rand); return ms; };
   assert.deepEqual([turn(), turn(), turn()], [4000, 4000, 8000]);
 });
+
+test('🐚 진주 조개 섞기 (61층~): the pearl shown, six swaps of two places; the right shell gives 강화석 + 물약, an empty one is 🐚 조개에 물림', async () => {
+  const {shellsEnd, SHELLS} = await import('../api/_lib/towerGames.js');
+  assert.deepEqual([shellsEnd(0, [[0, 1], [1, 2]]), shellsEnd(0, [[0, 1], [1, 2], [0, 2]]), shellsEnd(2, [[0, 1]])], [2, 0, 2], 'the pearl follows its place');
+  const g = atGame('shells', 62), {start, swaps} = g.ev.game, pearl = shellsEnd(start, swaps);
+  assert.deepEqual(g.view().game, {shells: 3, start, swaps, ms: [...SHELLS.ms], peekMs: SHELLS.peekMs});
+  assert.equal(swaps.length, 6); assert.ok(swaps.every(([a, b]: number[]) => a !== b && a >= 0 && b < 3));
+  const after = NOW + SHELLS.peekMs + SHELLS.ms.reduce((a, b) => a + b, 0);
+  assert.throws(() => g.play('pick', {shell: pearl}, NOW + 1000), /PET_BAD_ACTION/, 'not before the swaps could be watched');
+  const won = g.play('pick', {shell: pearl}, after); assert.deepEqual([won.game.success, won.stone, won.potions], [true, 1, 1]);
+  const h = atGame('shells', 62), p = shellsEnd(h.ev.game.start, h.ev.game.swaps);
+  const lost = h.play('pick', {shell: (p + 1) % 3}, after); assert.deepEqual([lost.game.success, lost.game.debuff, lost.game.reveal], [false, 'clamped', {pearl: p}]);
+  assert.ok(!new Set(Array.from({length: 300}, (_, i) => towerLayout(`u${i}`, 1, 60)).flat()).has('shells'), 'not before floor 61');
+});
+
+test('🫧 진주 거품 (61층~): four meanings, four word bubbles each; three popped right give 강화석 2; bubbles gone count as missed (오답 복습), two misses are 🫧 숨이 참', () => {
+  const g = atGame('bubbles', 62), qs = g.ev.game.qs;
+  assert.deepEqual(g.view().game, {step: 0, steps: 4, need: 3, right: 0, riseMs: 7000, prompt: qs[0].meaning, choices: qs[0].choices});
+  assert.equal(g.play('gone', {}, NOW + 7000).game.last, false, 'floated away: a miss');
+  for (let i = 1; i < 3; i++) assert.equal(g.play('pop', {choice: qs[i].answer}, NOW + 7000 + i * 1000).game.right, i);
+  const won = g.play('pop', {choice: qs[3].answer}, NOW + 10_000);
+  assert.deepEqual([won.game.success, won.stone, won.end.right, won.end.wrongs.length], [true, 2, 3, 1]);
+  const h = atGame('bubbles', 62), q = h.ev.game.qs;
+  h.play('pop', {choice: (q[0].answer + 1) % 4}, NOW + 500);
+  const lost = h.play('gone', {}, NOW + 7500); assert.deepEqual([lost.game.success, lost.game.debuff, lost.end.wrongs.length], [false, 'breathless', 2]);
+  assert.throws(() => atGame('bubbles', 62).play('pop', {choice: 9}), /PET_BAD_ACTION/);
+});
+test('🫧 진주 거품: the server keeps when each meaning began — `gone` too soon is refused, a pop after the bubbles floated away is a miss', () => {
+  const g = atGame('bubbles', 62), qs = g.ev.game.qs;
+  assert.throws(() => g.play('gone', {}, NOW + 1000), /PET_BAD_ACTION/, 'the bubbles are still rising');
+  assert.equal(g.play('pop', {choice: qs[0].answer}, NOW + 9000).game.last, false, 'right word, but popped after they were gone');
+  assert.throws(() => g.play('gone', {}, NOW + 9000 + 2000), /PET_BAD_ACTION/, 'the next meaning starts from that move');
+  assert.equal(g.play('pop', {choice: qs[1].answer}, NOW + 9000 + 6000).game.right, 1, 'in time');
+});
+test('🫧 진주 거품 screen: a failed pop or gone unlocks that meaning again (a failed gone is sent again)', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../src/components/pet/TowerMiniGames.tsx', import.meta.url), 'utf8');
+  assert.match(src, /send\(name, input\)\.then\(r => \{ if \(!r\) unlock\(\); \}, unlock\);/);
+  assert.match(src, /done\.current = step - 1; if \(name === 'gone'\) retry\.current = window\.setTimeout/);
+});
+
+test('🌬️ 바람길 비행 (71층~): five ring heights from the server; all five (in a believable time) give 강화석 + 물약, a missed ring is 🌪️ 바람에 휘청', async () => {
+  const {WINDPATH} = await import('../api/_lib/towerGames.js');
+  const g = atGame('windpath', 72), rings = g.ev.game.rings;
+  assert.deepEqual(g.view().game, {rings, spacingMs: WINDPATH.spacingMs});
+  assert.ok(rings.length === 5 && rings.every((y: number) => y >= 0.25 && y <= 0.75));
+  assert.throws(() => g.play('fly', {passed: 5}, NOW + 2000), /PET_BAD_ACTION/, 'too fast to be a flight');
+  const won = g.play('fly', {passed: 5}, NOW + WINDPATH.minMs); assert.deepEqual([won.game.success, won.stone, won.potions], [true, 1, 1]);
+  const lost = atGame('windpath', 72).play('fly', {passed: 2}, NOW + 3000); assert.deepEqual([lost.game.success, lost.game.debuff], [false, 'gust']);
+  assert.ok(!new Set(Array.from({length: 300}, (_, i) => towerLayout(`u${i}`, 1, 70)).flat()).has('windpath'), 'not before floor 71');
+});
+
+test('⚡ 번개 빈칸 (71층~): three words with letters gone and letter tiles (the missing ones among them); two right give 강화석 2, two wrong are ⚡ 감전', () => {
+  const g = atGame('blanks', 72), ws = g.ev.game.words;
+  const missing = (w: any) => w.blanks.map((i: number) => String(w.q.word).toLowerCase()[i]);
+  const v = g.view().game; assert.deepEqual([v.step, v.steps, v.need, v.meaning, v.tiles], [0, 3, 2, ws[0].q.meaning, ws[0].tiles]);
+  assert.equal(v.pattern.filter((c: string | null) => c === null).length, ws[0].blanks.length);
+  for (const w of ws) { assert.ok(w.blanks.length >= 1 && w.blanks.length <= 3); for (const c of missing(w)) assert.ok(w.tiles.includes(c), 'the missing letters are on the tiles'); }
+  assert.throws(() => g.play('fill', {letters: ['a', 'b', 'c', 'd']}), /PET_BAD_ACTION/, 'as many letters as blanks');
+  const wrong = missing(ws[0]).map((c: string) => c === 'z' ? 'y' : 'z');
+  const first = g.play('fill', {letters: wrong}).game; assert.deepEqual([first.last, first.right], [{ok: false, word: ws[0].q.word}, 0]);
+  g.play('fill', {letters: missing(ws[1])});
+  const won = g.play('fill', {letters: missing(ws[2])}); assert.deepEqual([won.game.success, won.stone, won.end.right, won.end.wrongs.length], [true, 2, 2, 1]);
+  const h = atGame('blanks', 72), hw = h.ev.game.words, bad = (w: any) => missing(w).map((c: string) => c === 'z' ? 'y' : 'z');
+  h.play('fill', {letters: bad(hw[0])});
+  const lost = h.play('fill', {letters: bad(hw[1])}); assert.deepEqual([lost.game.success, lost.game.debuff], [false, 'shocked']);
+});
+
+test('⭐ 한붓 별 그리기 (81층~): every figure can be drawn in one stroke; a full stroke gives 강화석 2, a stuck one is a try, two are 🌀 머리가 빙글', async () => {
+  const {ONELINE, strokeDone} = await import('../api/_lib/towerGames.js');
+  // each figure has a stroke (a search over the lines finds one)
+  const strokeOf = (shape: number) => {
+    const s = ONELINE.shapes[shape], go = (path: number[], used: Set<string>): number[] | null => {
+      if (used.size === s.edges.length) return path;
+      for (const [a, b] of s.edges) { const at = path[path.length - 1], k = `${Math.min(a, b)}-${Math.max(a, b)}`; if (used.has(k) || (a !== at && b !== at)) continue;
+        const r = go([...path, a === at ? b : a], new Set([...used, k])); if (r) return r; }
+      return null;
+    };
+    for (let n = 0; n < s.nodes.length; n++) { const r = go([n], new Set()); if (r) return r; }
+    return null;
+  };
+  ONELINE.shapes.forEach((_, i) => { const st = strokeOf(i); assert.ok(st && strokeDone(i, st), `figure ${i} can be drawn`); });
+  const g = atGame('oneline', 82), shape = g.ev.game.shape, s = ONELINE.shapes[shape];
+  assert.deepEqual(g.view().game, {name: s.name, nodes: s.nodes, edges: s.edges, triesLeft: 2});
+  const once = g.play('draw', {path: [s.edges[0][0], s.edges[0][1]]}).game; assert.deepEqual([once.wrong, once.triesLeft], [true, 1]);
+  const won = g.play('draw', {path: strokeOf(shape)}); assert.deepEqual([won.game.success, won.stone], [true, 2]);
+  const h = atGame('oneline', 82), hs = ONELINE.shapes[h.ev.game.shape], half = [hs.edges[0][0], hs.edges[0][1]];
+  h.play('draw', {path: half}); const lost = h.play('draw', {path: half}); assert.deepEqual([lost.game.success, lost.game.debuff], [false, 'tangled']);
+  assert.throws(() => atGame('oneline', 82).play('draw', {path: [99]}), /PET_BAD_ACTION/);
+  assert.ok(!new Set(Array.from({length: 300}, (_, i) => towerLayout(`u${i}`, 1, 80)).flat()).has('oneline'), 'not before floor 81');
+});
+
+test('✨ 별자리 잇기 (81층~): a word\u2019s letters as stars (two more that don\u2019t belong); joined in order right twice give 강화석 2, two wrong are ✨ 별빛에 눈부심', () => {
+  const g = atGame('stars', 82), ws = g.ev.game.words;
+  const order = (w: any) => { const left = w.stars.map((_: any, i: number) => i); return [...w.word].map((c: string) => { const k = left.findIndex((i: number) => w.stars[i].c === c); return left.splice(k, 1)[0]; }); };
+  const v = g.view().game; assert.deepEqual([v.step, v.steps, v.need, v.meaning, v.length, v.stars], [0, 3, 2, ws[0].q.meaning, ws[0].word.length, ws[0].stars]);
+  for (const w of ws) assert.equal(w.stars.length, w.word.length + 2);
+  assert.throws(() => g.play('trace', {stars: [0]}), /PET_BAD_ACTION/, 'as many stars as letters');
+  const wrong = (w: any) => { const o = order(w); return [...o.slice(1), o[0]]; };
+  const first = g.play('trace', {stars: wrong(ws[0])}).game;
+  assert.deepEqual([first.right, first.last.word], [0, ws[0].q.word]);
+  g.play('trace', {stars: order(ws[1])});
+  const won = g.play('trace', {stars: order(ws[2])}); assert.deepEqual([won.game.success, won.stone, won.end.right], [true, 2, 2]);
+  const h = atGame('stars', 82), hw = h.ev.game.words;
+  h.play('trace', {stars: [...order(hw[0])].reverse()});
+  const lost = h.play('trace', {stars: [...order(hw[1])].reverse()}); assert.deepEqual([lost.game.success, lost.game.debuff], [false, 'starstruck']);
+});
+test('🌬️ 바람길 screen: a failed result (or no answer) shows 결과 다시 보내기, which sends the same flight again', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../src/components/pet/TowerMiniGames.tsx', import.meta.url), 'utf8');
+  assert.match(src, /send\('fly', \{ passed: run\.current\.passed \}\)\.then\(r => \{ if \(!r\) setUnsent\(true\); \}, \(\) => setUnsent\(true\)\);/);
+  assert.match(src, /\{unsent && <button type="button" disabled=\{busy\} onClick=\{report\}[^>]*>결과 다시 보내기/);
+});

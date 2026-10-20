@@ -2,7 +2,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import type { StoredNotionStudentMapping } from './reportSchemas.js';
 import { generateInternalStudentId, hashStudentKey } from './security.js';
 import { normalizeNotionPageId, isNotionPageId } from './notionPageId.js';
-import {coreActive,coreStudentIdentity} from './academyCore.js';
+import {coreActive,coreStudentIdentity,coreStudentPage} from './academyCore.js';
 
 /** Read-only bridge for previously linked accounts. Never claims an account. */
 export async function readStudentMapping(db: Firestore, key: string): Promise<StoredNotionStudentMapping | null> {
@@ -29,6 +29,13 @@ export async function resolveStudentPageId(db: Firestore, key: string): Promise<
 export async function lookupStudentIdentity(db: Firestore, key: string, requireGuardianContact = true) {
   if(!await coreActive(db,{academyId:'main'}))throw Error('CORE_NOT_READY');
   return coreStudentIdentity(db,await resolveStudentPageId(db,key),requireGuardianContact);
+}
+
+/** The guardian phone (digits only, '' when none), for the admin's parent-address card. */
+export async function lookupGuardianPhone(db: Firestore, key: string) {
+  if(!await coreActive(db,{academyId:'main'}))throw Error('CORE_NOT_READY');
+  const page=await coreStudentPage(db,await resolveStudentPageId(db,key));
+  return String(page.properties['보호자연락처']?.phone_number||'').replace(/\D/g,'');
 }
 
 /**

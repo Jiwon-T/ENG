@@ -4,7 +4,9 @@
 // Teachers' pets are left out; a teacher may switch them on for their own view.
 import {FieldPath} from 'firebase-admin/firestore';
 import {PET_STATES, rollDay, type ServerPet, type ServerPetState} from './pet.js';
-import {PET_GUILD, shownAlias, shownGuild, type GuildProfile} from './petParty.js';
+import {PET_GUILD, norm, shownAlias, shownGuild, type GuildProfile} from './petParty.js';
+import {shownName, studentRealName} from './realNames.js';
+import {maskedName} from '../../src/lib/rankNames.js';
 import {PET_TOWERS, climber, gearViewFor, type TowerState} from './petTower.js';
 import {PET_EXPEDITIONS, type ExpeditionState} from './petExpedition.js';
 import {petAura, wornAccessories, type PetGearView, type PetJob} from '../../src/lib/petCatalog.js';
@@ -45,10 +47,15 @@ export async function buildRankings(db: any, now: number): Promise<RankSnapshot>
   const [states, towers, expeditions, guilds, teachers, passes] = await Promise.all([docsOf(db, PET_STATES), docsOf(db, PET_TOWERS), docsOf(db, PET_EXPEDITIONS), docsOf(db, PET_GUILD), teacherUids(db), docsOf(db, 'aiPasses')]);
   const today = seoulDay(now);
   const pets: RankPet[] = [];
+  // a 별칭, 원정대 이름 or pet name holding the student's real name shows only when they said yes to it (else the next name,
+  // the pet's family-name-only label, or no 원정대 이름)
+  const reals = new Map<string, string>(await Promise.all([...states.keys()].filter(uid => !teachers.has(uid)).map(async uid => [uid, await studentRealName(db, uid).catch(() => '')] as [string, string])));
   for (const [uid, raw] of states) {
     const s = rollDay(raw, now) as ServerPetState, t = towers.get(uid) as TowerState | undefined, g = guilds.get(uid) as GuildProfile | undefined, plan = activePlan(passes.get(uid) as any, today);
+    const real = reals.get(uid) || '', agreed = g?.realNameOk || [];
     for (const p of s.pets.filter((x: ServerPet) => x.chosen)) pets.push({
-      uid, slot: p.slot, alias: shownAlias(g, p.slot) || (g?.nickname && !g.aliases && p.slot === s.currentPetSlot ? g.nickname : ''), guild: shownGuild(g), name: p.name, character: p.character, level: p.level,
+      uid, slot: p.slot, alias: shownName(shownAlias(g, p.slot) || (g?.nickname && !g.aliases && p.slot === s.currentPetSlot ? g.nickname : ''), real, agreed), guild: shownName(shownGuild(g), real, agreed),
+      name: shownName(p.name, real, p.realNameOk ? [norm(p.name)] : []) || maskedName(real), character: p.character, level: p.level,
       clothing: p.clothing ?? null, accessories: wornAccessories(p), job: p.job || null, best: Number(t?.pets?.[String(p.slot)]?.best) || 0, stars: petStars(expeditions.get(uid), p.slot), teacher: teachers.has(uid),
       aura: petAura(p), pass: plan === 'free' ? null : plan, gear: gearViewFor(p, t?.pets?.[String(p.slot)]),
     });

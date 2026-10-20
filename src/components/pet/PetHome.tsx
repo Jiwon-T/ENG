@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { askConfirm } from '../teacher/ConfirmDialog';
 import { createPortal } from 'react-dom';
 import PassMark from './PassMark';
 import { motion, AnimatePresence } from 'motion/react';
@@ -156,7 +157,10 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   const buyTried = async () => { if (!tried) return; const r = await act('buy', { itemId: tried.id, wear: true }); if (r) { setTrial(null); say(`${tried.name} 구매 완료! 바로 입혀 줬어요`); } };
   const wearTried = async () => { if (!tried) return; if (!worn(tried)) await act('equip', { itemId: tried.id }); setTrial(null); };
   const petIt = async () => { const r = await act('pet'); if (r) { const id = Date.now(); setHearts(h => [...h, id]); window.setTimeout(() => setHearts(h => h.filter(x => x !== id)), 900); } };
-  const rename = async () => { const name = newName.trim(); setEditing(false); if (!name || name === pet.name) return; const r = await act('rename', { name }); if (r) setSpeech(stage === 'baby' ? '좋아!' : `${name}! 마음에 들어!`); };
+  // a name holding the student's real name is asked first (it may show on the rankings); nothing changes until the yes
+  const rename = async () => { const name = newName.trim(); setEditing(false); if (!name || name === pet.name) return; let r = await act('rename', { name });
+    if (r?.result?.needsConfirm === 'real-name') { if (!await askConfirm({ title: '실명을 입력하셨어요', message: '순위표에 드러날 수 있는데 그대로 진행하시겠어요?', confirmText: '그대로 하기' })) return; r = await act('rename', { name, realName: true }); }
+    if (r && !r.result?.needsConfirm) setSpeech(stage === 'baby' ? '좋아!' : `${name}! 마음에 들어!`); };
   const teach = async (e: React.FormEvent) => { e.preventDefault(); const t = text.trim(); if (!t) return; const r = await act('teach', { text: t }); if (r) { setText(''); setSpeech(r.result?.reply || ''); say('말을 배웠어요!'); } };
   const talk = async (e: React.FormEvent) => { e.preventDefault(); const t = text.trim(); if (!t) return; const history = chat.slice(-6); setChat(c => [...c, { role: 'user', text: t }]); setText(''); const r = await act('chat', { text: t, history }); const reply = r?.result?.reply; setChat(c => [...c, { role: 'model', text: reply || '대화가 잠깐 끊겼어요…' }]); if (reply) setSpeech(reply); };
   const canAdopt = state.pets.length < Math.min(state.unlockedSlots, PET_MAX_PETS), many = state.pets.length > 1;

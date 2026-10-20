@@ -65,6 +65,9 @@ async function autoClaimStudy(db: any, uid: string, now: number, reportsIn?: any
   // the points that came in (shown as +N); a lowered 평가 shows in the 포인트 내역
   return Math.max(0, (await change(db, uid, now, s => { const ledger = structuredClone(s.ledger || []); const net = claimStudyRewards(s, pendingStudyRewards(s, reports, now)).points + settleLessons(s, reports, now); noteInbox(s, ledger); return net; })).result as number);
 }
+/** A name shown in the rankings changed (별칭, 원정대 이름, pet name): both snapshots are made again on their next look, so
+ *  an old name (a real name no longer agreed to) is not shown to others. */
+const staleRankings = (db: any) => Promise.all(['current', MONTH_RANK_DOC].map(id => db.collection(PET_RANKINGS).doc(id).set({builtAt: 0}, {merge: true})));
 /** Read → change → save in one transaction (users.petStats follows). The change throws a PET_* code to refuse. */
 async function change(db: any, uid: string, now: number, apply: (s: ServerPetState, exists: boolean) => any) {
   const ref = db.collection(PET_STATES).doc(uid), userRef = db.collection('users').doc(uid);
@@ -190,8 +193,7 @@ async function handleGuild(action: string, body: any, db: any, uid: string, now:
         if (oldRef && oldSnap?.exists) tx.set(oldRef, {owners: (oldSnap.data()?.owners || []).filter((o: string) => o !== owner)});
         if (p && ref) { updateMemberNames(p, uid, g, s ? currentPet(s).slot : undefined); tx.set(ref, p); }
       });
-      await db.collection(PET_RANKINGS).doc('current').set({builtAt: 0}, {merge: true}); // the ranking shows the new name on its next look
-      await db.collection(PET_RANKINGS).doc(MONTH_RANK_DOC).set({builtAt: 0}, {merge: true});
+      await staleRankings(db); // the rankings show the new name on their next look
       return sendJson(res, 200, await view());
     }
     if (action === 'guild-board' || action === 'guild-ranking') {
@@ -390,7 +392,11 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     if (action === 'rank-refresh') return sendJson(res, 200, {ok: true, ...(body.kind === 'month' ? {at: (await monthRankingSnapshot(db, now)).builtAt} : await refreshRankings(db, now))});
     if (action === 'rank-profile') return sendJson(res, 200, {ok: true, profile: await readRankProfile(db, uid, body.at, body.id, body.kind, body.teachers, now)});
     if (action.startsWith('guild-') || action.startsWith('party-')) return handleGuild(action, body, db, uid, now, res, fail);
-    if (action === 'rename') return done(await change(db, uid, now, s => renamePet(s, String(body.name || ''))));
+    if (action === 'rename') {
+      const real = await studentRealName(db, uid).catch(() => ''), out = await change(db, uid, now, s => renamePet(s, String(body.name || ''), real, body.realName === true));
+      await staleRankings(db); // the old name (and a real name no longer agreed to) leaves the rankings
+      return done(out);
+    }
     if (action === 'pet') return done(await change(db, uid, now, s => petThePet(s)));
     if (action === 'gear-show') return done(await change(db, uid, now, s => setGearShow(s, body.show, body.style)));
 

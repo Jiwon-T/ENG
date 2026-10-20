@@ -85,6 +85,10 @@ test('실명 이름: asked first (NAME_REAL); said yes, the name is kept for the
   assert.equal(yes.out.guild?.names.pets[0].alias, '하늘이', JSON.stringify(yes.out).slice(0, 300));
   assert.deepEqual(f.rows.get('petGuild/b').realNameOk, ['하늘이']);
   assert.equal((await call({action: 'guild-name', name: '별빛 원정대'})).status, 200, 'a name without it is not asked');
+  // a pet renamed (the real name's yes taken back): both ranking snapshots are made again, so the old name leaves them
+  f.rows.set('petRankings/current', {builtAt: OCT22, pets: []}); f.rows.set('petRankings/month', {builtAt: OCT22, rows: []});
+  assert.equal((await call({action: 'rename', name: '구름빵'})).status, 200);
+  assert.deepEqual([f.rows.get('petRankings/current').builtAt, f.rows.get('petRankings/month').builtAt], [0, 0]);
   f.rows.set(`petRankNames/${C}`, {nickname: '구름이', by: 'teacher', at: OCT22, realNameOk: true});
   const snap = await buildMonthRanking(f.db, OCT22);
   assert.deepEqual([snap.rows.find(r => r.uid === 'b')!.label, snap.rows.find(r => r.by === 'nick')!.label], ['하늘이', '구름이']);
@@ -110,4 +114,19 @@ test('순위 닉네임 (선생님): the admin, the principal or the student\'s t
   assert.equal(f.rows.get(`petRankNames/${A}`).nickname, '', 'empty clears it');
   assert.deepEqual(Object.keys((await listRankNames(f.db, admin)).names), [C]);
   assert.equal(f.rows.get('petRankings/month').builtAt, 0, 'the ranking is made again on its next look');
+});
+
+test('실명 이름 everywhere: a pet name is asked first too; the 모험가·원정대 rankings show a real name only when agreed to', async () => {
+  const {renamePet} = await import('../api/_lib/pet.js');
+  const {buildRankings} = await import('../api/_lib/petRanking.js');
+  const s = initialPetState(OCT22); s.pets[0].chosen = true; s.pets[0].name = '몽실이';
+  assert.deepEqual(renamePet(s, '하늘이', '박하늘'), {needsConfirm: 'real-name', name: '하늘이'});
+  assert.equal(s.pets[0].name, '몽실이', 'nothing changes before the yes');
+  assert.deepEqual([renamePet(s, '하늘이', '박하늘', true), s.pets[0].realNameOk], [{name: '하늘이'}, true]);
+  assert.deepEqual([renamePet(s, '구름이', '박하늘'), s.pets[0].realNameOk], [{name: '구름이'}, undefined], 'another name: the yes is not carried over');
+  const f = await academy();
+  const g = f.rows.get('petGuild/b'); g.aliases = {[s.pets[0].slot]: '하늘짱'}; g.guildName = '하늘 원정대'; g.realNameOk = ['하늘짱']; f.rows.set('petGuild/b', g);
+  const st = pet(f); st.pets[0].name = '박하늘펫'; f.rows.set('petStates/b', st);
+  const p = (await buildRankings(f.db, OCT22)).pets.find(x => x.uid === 'b')!;
+  assert.deepEqual([p.alias, p.guild, p.name], ['하늘짱', '', '박**'], 'the agreed 별칭 stays; the 원정대 이름 and pet name are hidden');
 });

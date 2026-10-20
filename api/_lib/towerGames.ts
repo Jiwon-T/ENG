@@ -3,8 +3,48 @@
 // (a mimic takes a potion). Each game: its start (`initGame`), what the browser sees (`publicGame`), and its moves (`playGame`).
 import type {TowerDebuff, TowerEvent} from '../../src/lib/petCatalog.js';
 
-export type MiniGame = Extract<TowerEvent, 'mimic' | 'fortune' | 'lilypad' | 'mushroom' | 'echo' | 'crystal' | 'maze' | 'scale' | 'jars' | 'icelock' | 'icepath' | 'runes' | 'scroll' | 'potions' | 'lavapath' | 'lavarun'>;
-export const MINI_GAMES = new Set<TowerEvent>(['mimic', 'fortune', 'lilypad', 'mushroom', 'echo', 'crystal', 'maze', 'scale', 'jars', 'icelock', 'icepath', 'runes', 'scroll', 'potions', 'lavapath', 'lavarun']);
+export type MiniGame = Extract<TowerEvent, 'mimic' | 'fortune' | 'lilypad' | 'mushroom' | 'echo' | 'crystal' | 'maze' | 'scale' | 'jars' | 'icelock' | 'icepath' | 'runes' | 'scroll' | 'potions' | 'lavapath' | 'lavarun' | 'shells' | 'bubbles' | 'windpath' | 'blanks' | 'oneline' | 'stars'>;
+export const MINI_GAMES = new Set<TowerEvent>(['mimic', 'fortune', 'lilypad', 'mushroom', 'echo', 'crystal', 'maze', 'scale', 'jars', 'icelock', 'icepath', 'runes', 'scroll', 'potions', 'lavapath', 'lavarun', 'shells', 'bubbles', 'windpath', 'blanks', 'oneline', 'stars']);
+/** 진주 조개 섞기: the pearl is shown under one of three shells, then the shells swap six times, faster and faster (the
+ *  browser plays the swaps the server chose: two places trade shells); pick the shell with the pearl. A pick before the
+ *  swaps could have been watched is refused. */
+export const SHELLS = {count: 3, peekMs: 1500, ms: [800, 700, 600, 500, 420, 360]} as const;
+const SHELLS_MIN_MS = SHELLS.peekMs + SHELLS.ms.reduce((a, b) => a + b, 0);
+interface ShellsState { start: number; swaps: [number, number][] }
+/** Where the pearl ends: the place it started, moved by each swap of two places. */
+export const shellsEnd = (start: number, swaps: [number, number][]) => swaps.reduce((at, [a, b]) => at === a ? b : at === b ? a : at, start);
+/** 진주 거품: four meanings; for each, four word bubbles rise — pop the right one before they float away (`gone`: a miss);
+ *  three right win. The server keeps when each meaning began (`stepAt`): a pop after the bubbles are gone is a miss,
+ *  and `gone` before they could have floated away is refused. */
+export const BUBBLES = {steps: 4, need: 3, riseMs: 7000, graceMs: 1500} as const;
+interface BubblesState { qs: any[]; step: number; right: number; stepAt?: number }
+/** 바람길 비행: tap to rise through five cloud rings (heights from the server, 0 = top … 1 = bottom of the sky); the
+ *  timing runs in the browser, the server only checks a full flight took a believable time. */
+export const WINDPATH = {rings: 5, spacingMs: 1800, minMs: 8000} as const;
+/** 번개 빈칸: three words, each with 1–3 letters gone (shown with the meaning); fill them from letter tiles (the missing
+ *  ones and three more). Two right win. */
+export const BLANKS = {steps: 3, need: 2, decoys: 3} as const;
+interface BlanksWord { q: any; blanks: number[]; tiles: string[] }
+interface BlanksState { words: BlanksWord[]; step: number; right: number }
+/** 한붓 별 그리기: a figure of stars (points 0–100) and lines that can be drawn in one stroke; tap star after star along
+ *  the lines, each line once, all of them. Two tries (a stroke that gets stuck is one). */
+export const ONELINE = {tries: 2, shapes: [
+  {name: '별빛 집', nodes: [[20, 90], [80, 90], [20, 45], [80, 45], [50, 10]], edges: [[0, 1], [0, 2], [1, 3], [2, 3], [0, 3], [1, 2], [2, 4], [3, 4]]},
+  {name: '오각 별', nodes: [[50, 6], [92, 38], [76, 90], [24, 90], [8, 38]], edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 0], [0, 2], [2, 4], [4, 1], [1, 3], [3, 0]]},
+  {name: '삼각 별', nodes: [[50, 8], [92, 88], [8, 88], [71, 48], [50, 88], [29, 48]], edges: [[0, 3], [3, 1], [1, 4], [4, 2], [2, 5], [5, 0], [3, 4], [4, 5], [5, 3]]},
+]} as const;
+interface OnelineState { shape: number; tries: number }
+/** A stroke (star numbers) that follows the lines of `shape`, each line once, every line. */
+export function strokeDone(shape: number, path: number[]) {
+  const s = ONELINE.shapes[shape], key = (a: number, b: number) => a < b ? `${a}-${b}` : `${b}-${a}`, lines = new Set(s.edges.map(([a, b]) => key(a, b))), used = new Set<string>();
+  for (let i = 1; i < path.length; i++) { const k = key(path[i - 1], path[i]); if (!lines.has(k) || used.has(k)) return false; used.add(k); }
+  return used.size === lines.size;
+}
+/** 별자리 잇기: a meaning and the letters of its word as stars (two more stars that don't belong); join the stars in the
+ *  word's order. Two of three right win. */
+export const STARS = {steps: 3, need: 2, decoys: 2} as const;
+interface StarsWord { q: any; word: string; stars: {c: string; x: number; y: number}[] }
+interface StarsState { words: StarsWord[]; step: number; right: number }
 /** 용암 탈출: five meanings → words before the lava rises (20 seconds from the start, the server's clock); four right to escape. */
 export const LAVARUN = {steps: 5, need: 4, ms: 20_000, graceMs: 1500} as const;
 interface LavarunState { qs: any[]; step: number; right: number; deadline: number | null }
@@ -93,6 +133,29 @@ function three(q: any, rand: () => number) {
 }
 
 export function initGame(type: MiniGame, rand: () => number, words?: GameWords): any {
+  if (type === 'oneline') return {shape: Math.floor(rand() * ONELINE.shapes.length), tries: 0} satisfies OnelineState;
+  if (type === 'stars') return {words: Array.from({length: STARS.steps}, () => {
+    let q = words!.ask('attack'); for (let k = 0; k < 6 && !/^[a-z]{3,8}$/i.test(q.word); k++) q = words!.ask('attack');
+    const word = String(q.word).toLowerCase().replace(/[^a-z]/g, '').slice(0, 10) || 'star', letters = [...word, ...Array.from({length: STARS.decoys}, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(rand() * 26)])];
+    // spread out: a few tries for each star to keep away from the others
+    const stars: {c: string; x: number; y: number}[] = [];
+    for (const c of letters) { let best = {x: 50, y: 50}, far = -1; for (let t = 0; t < 12; t++) { const p = {x: 8 + Math.round(rand() * 84), y: 10 + Math.round(rand() * 76)}, d = Math.min(999, ...stars.map(o => Math.hypot(o.x - p.x, o.y - p.y))); if (d > far) { far = d; best = p; } } stars.push({c, ...best}); }
+    for (let i = stars.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [stars[i], stars[j]] = [stars[j], stars[i]]; }
+    return {q, word, stars};
+  }), step: 0, right: 0} satisfies StarsState;
+  if (type === 'windpath') return {rings: Array.from({length: WINDPATH.rings}, () => Math.round((0.25 + rand() * 0.5) * 100) / 100)};
+  if (type === 'blanks') return {words: Array.from({length: BLANKS.steps}, () => {
+    let q = words!.ask('attack'); for (let k = 0; k < 6 && !/^[a-z]{3,12}$/i.test(q.word); k++) q = words!.ask('attack');
+    const word = String(q.word).toLowerCase(), letters = [...word.matchAll(/[a-z]/g)].map(m => m.index!);
+    const count = Math.min(letters.length - 1, word.length >= 7 ? 3 : word.length >= 4 ? 2 : 1), blanks: number[] = [];
+    while (blanks.length < Math.max(1, count)) { const i = letters[Math.floor(rand() * letters.length)]; if (!blanks.includes(i)) blanks.push(i); }
+    blanks.sort((a, b) => a - b);
+    const tiles = [...blanks.map(i => word[i]), ...Array.from({length: BLANKS.decoys}, () => 'abcdefghijklmnopqrstuvwxyz'[Math.floor(rand() * 26)])];
+    for (let i = tiles.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [tiles[i], tiles[j]] = [tiles[j], tiles[i]]; }
+    return {q, blanks, tiles};
+  }), step: 0, right: 0} satisfies BlanksState;
+  if (type === 'shells') return {start: Math.floor(rand() * SHELLS.count), swaps: SHELLS.ms.map(() => { const a = Math.floor(rand() * SHELLS.count); return [a, (a + 1 + Math.floor(rand() * (SHELLS.count - 1))) % SHELLS.count] as [number, number]; })} satisfies ShellsState;
+  if (type === 'bubbles') return {qs: Array.from({length: BUBBLES.steps}, () => words!.ask('attack')), step: 0, right: 0} satisfies BubblesState;
   if (type === 'lavarun') return {qs: Array.from({length: LAVARUN.steps}, () => words!.ask('attack')), step: 0, right: 0, deadline: null} satisfies LavarunState;
   if (type === 'lavapath') return {path: Array.from({length: LAVAPATH.rows}, () => Math.floor(rand() * LAVAPATH.cols))};
   if (type === 'potions') { const a = Math.floor(rand() * BREWS.length), b = (a + 1 + Math.floor(rand() * (BREWS.length - 1))) % BREWS.length; return {targets: [a, b], round: 0} satisfies PotionsState; }
@@ -157,6 +220,15 @@ export function initGame(type: MiniGame, rand: () => number, words?: GameWords):
 }
 
 export function publicGame(type: MiniGame, game: any, now = Date.now()) {
+  if (type === 'oneline') { const g = game as OnelineState, s = ONELINE.shapes[g.shape]; return {name: s.name, nodes: s.nodes, edges: s.edges, triesLeft: ONELINE.tries - g.tries}; }
+  if (type === 'stars') { const g = game as StarsState, w = g.words[g.step]; return {step: g.step, steps: STARS.steps, need: STARS.need, right: g.right, meaning: w.q.meaning, length: w.word.length, stars: w.stars}; }
+  if (type === 'windpath') return {rings: game.rings, spacingMs: WINDPATH.spacingMs};
+  if (type === 'blanks') {
+    const g = game as BlanksState, w = g.words[g.step], word = String(w.q.word).toLowerCase();
+    return {step: g.step, steps: BLANKS.steps, need: BLANKS.need, right: g.right, meaning: w.q.meaning, pattern: [...word].map((c, i) => w.blanks.includes(i) ? null : c), tiles: w.tiles};
+  }
+  if (type === 'shells') { const g = game as ShellsState; return {shells: SHELLS.count, start: g.start, swaps: g.swaps, ms: SHELLS.ms, peekMs: SHELLS.peekMs}; }
+  if (type === 'bubbles') { const g = game as BubblesState, q = g.qs[g.step]; return {step: g.step, steps: BUBBLES.steps, need: BUBBLES.need, right: g.right, riseMs: BUBBLES.riseMs, prompt: q.meaning, choices: q.choices}; }
   if (type === 'lavarun') {
     const g = game as LavarunState, q = g.deadline === null ? null : g.qs[g.step];
     return {started: g.deadline !== null, step: g.step, steps: LAVARUN.steps, need: LAVARUN.need, right: g.right, ms: LAVARUN.ms, msLeft: g.deadline === null ? null : Math.max(0, g.deadline - now), ...(q ? {prompt: q.meaning, choices: q.choices} : {})};
@@ -181,6 +253,58 @@ export function publicGame(type: MiniGame, game: any, now = Date.now()) {
 /** `missed`: a word answered wrong (it goes to 오답 복습). */
 export type GameMove = ({over: GameResult} | {next: any}) & {missed?: {q: any; choice: number}};
 export function playGame(type: MiniGame, game: any, move: unknown, input: any, playedMs = Infinity, now = Date.now()): GameMove {
+  if (type === 'oneline' && move === 'draw') {
+    const g = game as OnelineState, s = ONELINE.shapes[g.shape], path = Array.isArray(input?.path) ? input.path.map(Number) : null;
+    if (!path || path.length < 1 || path.length > s.edges.length + 1 || path.some((i: number) => !Number.isInteger(i) || i < 0 || i >= s.nodes.length) || g.tries >= ONELINE.tries) throw Error('PET_BAD_ACTION');
+    if (strokeDone(g.shape, path)) return {over: {success: true, stone: 2, text: `한 번에 '${s.name}'을 그렸어요! 별빛이 모여 강화석 2개가 됐어요`}};
+    g.tries += 1;
+    if (g.tries < ONELINE.tries) return {next: {...publicGame(type, g), wrong: true}};
+    return {over: {success: false, debuff: 'tangled', text: '선이 엉켜 버렸어요. 머리가 빙글빙글 돌아요'}};
+  }
+  if (type === 'stars' && move === 'trace') {
+    const g = game as StarsState, w = g.words[g.step], picked = Array.isArray(input?.stars) ? input.stars.map(Number) : null;
+    if (!w || !picked || picked.length !== w.word.length || new Set(picked).size !== picked.length || picked.some((i: number) => !Number.isInteger(i) || i < 0 || i >= w.stars.length)) throw Error('PET_BAD_ACTION');
+    const missed = picked.map((i: number) => w.stars[i].c).join('') !== w.word ? {q: w.q, choice: -1} : undefined;
+    if (!missed) g.right += 1; g.step += 1;
+    if (g.step >= STARS.steps && g.right >= STARS.need) return {over: {success: true, stone: 2, right: g.right, asked: g.step, text: `별자리 ${g.right}개를 이었어요! 밤하늘에서 강화석 2개가 떨어졌어요`}, missed};
+    if (g.right + (STARS.steps - g.step) < STARS.need) return {over: {success: false, debuff: 'starstruck', right: g.right, asked: g.step, reveal: {word: w.q.word}, text: `'${w.q.word}' 별자리였어요. 별빛에 눈이 부셔요`}, missed};
+    return {next: {...publicGame(type, g), last: {ok: !missed, word: w.q.word}}, missed};
+  }
+  if (type === 'windpath' && move === 'fly') {
+    const passed = Math.max(0, Math.min(WINDPATH.rings, Math.floor(Number(input?.passed)) || 0));
+    if (passed === WINDPATH.rings && playedMs < WINDPATH.minMs) throw Error('PET_BAD_ACTION');
+    return passed === WINDPATH.rings ? {over: {success: true, stone: 1, potions: 1, text: '구름 고리 다섯 개를 모두 통과했어요! 바람 끝에서 강화석과 물약을 주웠어요'}}
+      : {over: {success: false, debuff: 'gust', text: `휘잉! 고리 ${passed}개를 지나고 돌풍에 휘청였어요`}};
+  }
+  if (type === 'blanks' && move === 'fill') {
+    const g = game as BlanksState, w = g.words[g.step], letters = Array.isArray(input?.letters) ? input.letters.map((x: unknown) => String(x).toLowerCase()) : null;
+    if (!w || !letters || letters.length !== w.blanks.length || letters.some((x: string) => !/^[a-z]$/.test(x))) throw Error('PET_BAD_ACTION');
+    const word = String(w.q.word).toLowerCase(), made = [...word].map((c, i) => { const k = w.blanks.indexOf(i); return k >= 0 ? letters[k] : c; }).join('');
+    const missed = made !== word ? {q: w.q, choice: -1} : undefined;
+    if (!missed) g.right += 1; g.step += 1;
+    if (g.step >= BLANKS.steps && g.right >= BLANKS.need) return {over: {success: true, stone: 2, right: g.right, asked: g.step, text: `번개처럼 ${g.right}/${BLANKS.steps} 단어를 완성했어요! 번개 구름에서 강화석 2개가 떨어졌어요`}, missed};
+    if (g.right + (BLANKS.steps - g.step) < BLANKS.need) return {over: {success: false, debuff: 'shocked', right: g.right, asked: g.step, reveal: {word: w.q.word}, text: `'${w.q.word}'였어요. 빈칸을 놓쳐 번개에 찌릿!`}, missed};
+    return {next: {...publicGame(type, g), last: {ok: !missed, word: w.q.word}}, missed};
+  }
+  if (type === 'shells' && move === 'pick') {
+    const g = game as ShellsState, shell = Math.floor(Number(input?.shell)); if (!(shell >= 0 && shell < SHELLS.count) || playedMs < SHELLS_MIN_MS) throw Error('PET_BAD_ACTION');
+    const pearl = shellsEnd(g.start, g.swaps);
+    return shell === pearl ? {over: {success: true, stone: 1, potions: 1, reveal: {pearl}, text: '진주를 찾았어요! 조개가 고맙다며 강화석과 물약을 내줬어요'}}
+      : {over: {success: false, debuff: 'clamped', reveal: {pearl}, text: `진주는 ${pearl + 1}번 조개에 있었어요. 빈 조개가 덥석! 손가락을 물렸어요`}};
+  }
+  if (type === 'bubbles' && (move === 'pop' || move === 'gone')) {
+    const g = game as BubblesState, q = g.qs[g.step], picked = move === 'gone' ? -1 : Math.floor(Number(input?.choice));
+    if (!q || (move === 'pop' && !(picked >= 0 && picked < q.choices.length))) throw Error('PET_BAD_ACTION');
+    // The first meaning began with the floor (now - playedMs); each next one when the last move was taken.
+    const since = now - (g.stepAt ?? now - playedMs);
+    if (move === 'gone' && since < BUBBLES.riseMs - BUBBLES.graceMs) throw Error('PET_BAD_ACTION');
+    const choice = move === 'pop' && since > BUBBLES.riseMs + BUBBLES.graceMs ? -1 : picked; // popped after they floated away: a miss
+    const missed = choice !== q.answer ? {q, choice} : undefined;
+    if (!missed) g.right += 1; g.step += 1; g.stepAt = now;
+    if (g.step >= BUBBLES.steps && g.right >= BUBBLES.need) return {over: {success: true, stone: 2, right: g.right, asked: g.step, text: `${g.right}/${BUBBLES.steps} 거품을 터뜨렸어요! 거품 속에서 강화석 2개가 나왔어요`}, missed};
+    if (g.right + (BUBBLES.steps - g.step) < BUBBLES.need) return {over: {success: false, debuff: 'breathless', right: g.right, asked: g.step, reveal: {answer: q.choices[q.answer]}, text: `거품을 ${BUBBLES.steps - BUBBLES.need + 1}개 놓쳤어요. 물속에서 숨이 차올라요`}, missed};
+    return {next: {...publicGame(type, g), last: !missed}, missed};
+  }
   if (type === 'lavarun' && move === 'start') { const g = game as LavarunState; if (g.deadline !== null) throw Error('PET_BAD_ACTION'); g.deadline = now + LAVARUN.ms; return {next: publicGame(type, g, now)}; }
   if (type === 'lavarun' && move === 'timeout') {
     const g = game as LavarunState; if (g.deadline === null || now < g.deadline - LAVARUN.graceMs) throw Error('PET_BAD_ACTION');
