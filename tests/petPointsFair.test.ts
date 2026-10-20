@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {enrol} from './helpers/enrolled.js';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
 import {initialPetState} from '../api/_lib/pet.js';
 
@@ -11,7 +12,7 @@ test('이번 달 포인트: every active student, with or without the app, at th
   const {hashStudentKey} = await import('../api/_lib/security.js');
   const f = registrationFirestore();
   // A: no app account at all; B: linked, has a pet, one lesson not settled yet
-  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'}); f.rows.set(`academyStudentMemberships/${B}`, {academyId: 'main'});
+  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'}); enrol(f, A); f.rows.set(`academyStudentMemberships/${B}`, {academyId: 'main'}); enrol(f, B);
   f.rows.set(`notionStudentMappings/${hashStudentKey(A)}`, {studentKey: A, notionStudentPageId: A, internalStudentId: 'int-a', studentDisplayName: '앱없는 학생', sourceMode: 'firestore'});
   f.rows.set(`notionStudentMappings/${hashStudentKey(B)}`, {studentKey: B, notionStudentPageId: B, internalStudentId: 'int-b', studentDisplayName: '앱있는 학생', sourceMode: 'firestore', firebaseUid: 'b'});
   f.rows.set('users/b', {role: 'student', notionStudentKey: B});
@@ -27,13 +28,16 @@ test('이번 달 포인트: every active student, with or without the app, at th
   assert.equal(by['앱없는 학생'].ledger.some((x: any) => x.label === '지난 수업 보상'), true, 'the 내역 shows what the gauge is made of');
   assert.equal(f.rows.has('petStates/a'), false, 'nothing is saved');
   assert.equal(f.rows.get('petStates/b').points, 100);
+  enrol(f, B, '중단');
+  const left: any = await listPetPoints(f.db, {admin: true, academyId: 'main'}, OCT22);
+  assert.deepEqual(left.students.map((s: any) => s.name), ['앱없는 학생'], 'a 중단 student is left out of the list');
 });
 
 test('오프라인 신청: the admin asks for a student who reached the coupon — without the app (record only) or linked (as in the app, with the medal)', async () => {
   const {listPetPoints, requestCouponOffline, listCoupons} = await import('../api/_lib/petCoupon.js');
   const {hashStudentKey} = await import('../api/_lib/security.js');
   const f = registrationFirestore();
-  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'}); f.rows.set(`academyStudentMemberships/${B}`, {academyId: 'main'});
+  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'}); enrol(f, A); f.rows.set(`academyStudentMemberships/${B}`, {academyId: 'main'}); enrol(f, B);
   f.rows.set(`notionStudentMappings/${hashStudentKey(A)}`, {studentKey: A, notionStudentPageId: A, internalStudentId: 'int-a', studentDisplayName: '앱없는 학생', sourceMode: 'firestore'});
   f.rows.set(`notionStudentMappings/${hashStudentKey(B)}`, {studentKey: B, notionStudentPageId: B, internalStudentId: 'int-b', studentDisplayName: '앱있는 학생', sourceMode: 'firestore', firebaseUid: 'b'});
   f.rows.set('users/b', {role: 'student', notionStudentKey: B});

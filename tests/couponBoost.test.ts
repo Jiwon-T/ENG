@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {enrol} from './helpers/enrolled.js';
 import {applyCouponExtras, couponExtras, earnPoints, initialPetState, monthEarned, type CouponRow} from '../api/_lib/pet.js';
 
 const OCT22 = Date.parse('2026-10-22T05:00:00Z');
@@ -66,7 +67,7 @@ test('쿠폰 자격: under 80% 숙제 제출률 no coupon can be asked for (the 
   const {listPetPoints, requestCouponOffline} = await import('../api/_lib/petCoupon.js');
   const {hashStudentKey} = await import('../api/_lib/security.js');
   const B = '22222222-2222-4222-8222-222222222222', f = registrationFirestore(), admin = {admin: true, academyId: 'main', uid: 'adm'};
-  f.rows.set(`academyStudentMemberships/${B}`, {academyId: 'main'});
+  f.rows.set(`academyStudentMemberships/${B}`, {academyId: 'main'}); enrol(f, B);
   f.rows.set(`notionStudentMappings/${hashStudentKey(B)}`, {studentKey: B, notionStudentPageId: B, internalStudentId: 'int-b', studentDisplayName: '학생', sourceMode: 'firestore', firebaseUid: 'b'});
   f.rows.set('users/b', {role: 'student', notionStudentKey: B});
   const pet = initialPetState(OCT22); pet.earned = {month: '2026-10', points: 10_000}; pet.earnedBy = {'2026-10': 10_000}; f.rows.set('petStates/b', pet);

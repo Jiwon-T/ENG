@@ -21,8 +21,8 @@ export function TowerEventScreen({ event, busy, points, stones, potions, gear, l
     <Hall caption={title}><div className="absolute inset-x-0 top-14 flex justify-center tower-float"><TowerMonster kind="fairy" size={110} /></div></Hall>
     <Box>“도와주세요… 길을 잃었어요. 출구까지 데려다주실래요?”</Box>
     <div className="grid grid-cols-2 gap-2 text-xs font-bold">
-      <button type="button" disabled={busy} onClick={() => void send('save')} className="rounded-xl bg-[#e1f5ee] px-2 py-3 text-[#085041]">구해 주기<span className="block font-medium">물약 1개</span></button>
-      <button type="button" disabled={busy} onClick={() => void send('fight')} className="rounded-xl bg-[#fcebeb] px-2 py-3 text-[#791f1f]">수상해! 싸우기<span className="block font-medium">이기면 물약 2개</span></button>
+      <button type="button" disabled={busy} onClick={() => void send('save')} className="rounded-xl bg-[#e1f5ee] px-2 py-3 text-[#085041]">구해 주기<span className="block font-medium">착한 요정일지도…</span></button>
+      <button type="button" disabled={busy} onClick={() => void send('fight')} className="rounded-xl bg-[#fcebeb] px-2 py-3 text-[#791f1f]">수상해! 싸우기</button>
     </div>
   </div>;
   if (event.type === 'riddle' || event.type === 'trap') return <Question {...{ event, busy, send, title }} />;

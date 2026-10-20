@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {enrol} from './helpers/enrolled.js';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
 import {claimStudyRewards, initialPetState, pendingStudyRewards, rollDay} from '../api/_lib/pet.js';
 
@@ -38,7 +39,7 @@ test('숙제 칩: a student without the app gets a September 숙제 chip with no
   const {listPetPoints} = await import('../api/_lib/petCoupon.js');
   const {hashStudentKey} = await import('../api/_lib/security.js');
   const f = registrationFirestore();
-  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'});
+  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'}); enrol(f, A);
   f.rows.set(`notionStudentMappings/${hashStudentKey(A)}`, {studentKey: A, notionStudentPageId: A, internalStudentId: 'int-a', studentDisplayName: '학생', sourceMode: 'firestore'});
   f.rows.set('lessonReports/a1', {internalStudentId: 'int-a', reportIdentity: 'a1', lessonDateStart: '2026-09-28T14:00:00+09:00', attendance: '', attitude: '', homework: '최상', test: ''});
   const out: any = await listPetPoints(f.db, {admin: true, academyId: 'main'}, OCT22);

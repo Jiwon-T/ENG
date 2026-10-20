@@ -3,8 +3,21 @@
 // (a mimic takes a potion). Each game: its start (`initGame`), what the browser sees (`publicGame`), and its moves (`playGame`).
 import type {TowerDebuff, TowerEvent} from '../../src/lib/petCatalog.js';
 
-export type MiniGame = Extract<TowerEvent, 'mimic' | 'fortune' | 'lilypad' | 'mushroom' | 'echo' | 'crystal' | 'maze' | 'scale' | 'jars' | 'icelock' | 'icepath' | 'runes' | 'scroll' | 'potions' | 'lavapath' | 'lavarun' | 'shells' | 'bubbles' | 'windpath' | 'blanks' | 'oneline' | 'stars'>;
-export const MINI_GAMES = new Set<TowerEvent>(['mimic', 'fortune', 'lilypad', 'mushroom', 'echo', 'crystal', 'maze', 'scale', 'jars', 'icelock', 'icepath', 'runes', 'scroll', 'potions', 'lavapath', 'lavarun', 'shells', 'bubbles', 'windpath', 'blanks', 'oneline', 'stars']);
+export type MiniGame = Extract<TowerEvent, 'mimic' | 'fortune' | 'lilypad' | 'mushroom' | 'echo' | 'crystal' | 'maze' | 'scale' | 'jars' | 'icelock' | 'icepath' | 'runes' | 'scroll' | 'potions' | 'lavapath' | 'lavarun' | 'shells' | 'bubbles' | 'windpath' | 'blanks' | 'oneline' | 'stars' | 'hoard' | 'trial'>;
+export const MINI_GAMES = new Set<TowerEvent>(['mimic', 'fortune', 'lilypad', 'mushroom', 'echo', 'crystal', 'maze', 'scale', 'jars', 'icelock', 'icepath', 'runes', 'scroll', 'potions', 'lavapath', 'lavarun', 'shells', 'bubbles', 'windpath', 'blanks', 'oneline', 'stars', 'hoard', 'trial']);
+/** 용의 보물 더미: a dragon asleep on its gold; take coins one at a time and leave when you like. The more taken, the likelier
+ *  it wakes (the server rolled at which coin), and then every coin is lost. Holding coins, it may stir: usually the sign the
+ *  next coin wakes it, sometimes not (a hunch, like the mimic's breath). */
+export const HOARD = {max: 8, wake: [0.06, 0.12, 0.18, 0.25, 0.32, 0.4, 0.48, 0.56], stirIfWaking: 0.7, stirElse: 0.15} as const;
+interface HoardState { wake: number | null; stir: boolean[]; coins: number }
+/** What the coins taken out are worth. */
+export const hoardPrize = (coins: number): {stone?: number; potions?: number} => coins >= 7 ? {stone: 2, potions: 1} : coins >= 5 ? {stone: 1, potions: 1} : coins >= 3 ? {stone: 1} : coins >= 1 ? {potions: 1} : {};
+/** 용왕의 시험: five gates — 뜻 (a meaning → its word), 듣기 (a word heard → its meaning), 철자 (the word's letters, shuffled),
+ *  단어 (a word → its meaning), 문장 (a sentence's pieces in order; a wordbook with no sentences: a word's letters). One try
+ *  each; four right pass. */
+export const TRIAL = {gates: ['meaning', 'listen', 'spell', 'word', 'sentence'], need: 4} as const;
+type TrialGate = {kind: 'meaning' | 'listen' | 'word'; q: any} | {kind: 'spell'; q: any; letters: string[]} | {kind: 'sentence'; text: string; meaning: string; pieces: string[]; sentence: boolean; q?: any};
+interface TrialState { gates: TrialGate[]; step: number; right: number }
 /** 진주 조개 섞기: the pearl is shown under one of three shells, then the shells swap six times, faster and faster (the
  *  browser plays the swaps the server chose: two places trade shells); pick the shell with the pearl. A pick before the
  *  swaps could have been watched is refused. */
@@ -133,6 +146,23 @@ function three(q: any, rand: () => number) {
 }
 
 export function initGame(type: MiniGame, rand: () => number, words?: GameWords): any {
+  if (type === 'hoard') {
+    const at = HOARD.wake.findIndex(p => rand() < p), wake = at < 0 ? null : at + 1;
+    return {wake, stir: Array.from({length: HOARD.max}, (_, i) => rand() < (wake === i + 1 ? HOARD.stirIfWaking : HOARD.stirElse)), coins: 0} satisfies HoardState;
+  }
+  if (type === 'trial') {
+    const mix = (list: string[], join: string) => { const out = [...list]; for (let t = 0; t < 5 && out.join(join) === list.join(join); t++) for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; } return out; };
+    const plain = () => { let q = words!.ask('attack'); for (let k = 0; k < 6 && !/^[a-z]{3,10}$/i.test(q.word); k++) q = words!.ask('attack'); return q; };
+    const gates = TRIAL.gates.map((kind): TrialGate => {
+      if (kind === 'spell') { const q = plain(); return {kind, q, letters: mix(q.word.toLowerCase().split(''), '')}; }
+      if (kind === 'sentence') {
+        const line = words!.sentence?.() || null; if (line) return {kind, text: line.text, meaning: line.meaning, pieces: mix([...line.pieces], ' '), sentence: true};
+        const q = plain(); return {kind, text: q.word, meaning: q.meaning, pieces: mix(q.word.toLowerCase().split(''), ''), sentence: false, q};
+      }
+      return {kind, q: words!.ask(kind === 'meaning' ? 'attack' : 'defend')};
+    });
+    return {gates, step: 0, right: 0} satisfies TrialState;
+  }
   if (type === 'oneline') return {shape: Math.floor(rand() * ONELINE.shapes.length), tries: 0} satisfies OnelineState;
   if (type === 'stars') return {words: Array.from({length: STARS.steps}, () => {
     let q = words!.ask('attack'); for (let k = 0; k < 6 && !/^[a-z]{3,8}$/i.test(q.word); k++) q = words!.ask('attack');
@@ -220,6 +250,14 @@ export function initGame(type: MiniGame, rand: () => number, words?: GameWords):
 }
 
 export function publicGame(type: MiniGame, game: any, now = Date.now()) {
+  // what the coins are worth stays a surprise until the result (a game of nerve)
+  if (type === 'hoard') { const g = game as HoardState; return {coins: g.coins, max: HOARD.max, stir: g.coins > 0 && g.stir[g.coins]}; }
+  if (type === 'trial') {
+    const g = game as TrialState, gate = g.gates[g.step], base = {step: g.step, steps: g.gates.length, need: TRIAL.need, right: g.right, kind: gate.kind};
+    if (gate.kind === 'spell') return {...base, meaning: gate.q.meaning, letters: gate.letters};
+    if (gate.kind === 'sentence') return {...base, meaning: gate.meaning, pieces: gate.pieces, sentence: gate.sentence};
+    return {...base, ...(gate.kind === 'meaning' ? {prompt: gate.q.meaning} : {word: gate.q.word}), choices: gate.q.choices};
+  }
   if (type === 'oneline') { const g = game as OnelineState, s = ONELINE.shapes[g.shape]; return {name: s.name, nodes: s.nodes, edges: s.edges, triesLeft: ONELINE.tries - g.tries}; }
   if (type === 'stars') { const g = game as StarsState, w = g.words[g.step]; return {step: g.step, steps: STARS.steps, need: STARS.need, right: g.right, meaning: w.q.meaning, length: w.word.length, stars: w.stars}; }
   if (type === 'windpath') return {rings: game.rings, spacingMs: WINDPATH.spacingMs};
@@ -253,6 +291,35 @@ export function publicGame(type: MiniGame, game: any, now = Date.now()) {
 /** `missed`: a word answered wrong (it goes to 오답 복습). */
 export type GameMove = ({over: GameResult} | {next: any}) & {missed?: {q: any; choice: number}};
 export function playGame(type: MiniGame, game: any, move: unknown, input: any, playedMs = Infinity, now = Date.now()): GameMove {
+  if (type === 'hoard' && (move === 'grab' || move === 'stop')) {
+    const g = game as HoardState;
+    if (move === 'grab') {
+      if (g.coins >= HOARD.max) throw Error('PET_BAD_ACTION');
+      g.coins += 1;
+      if (g.coins === g.wake) return {over: {success: false, debuff: 'roared', reveal: {coins: g.coins, wake: g.wake}, text: `${g.coins}번째 금화에서 용이 깼어요! 금화를 모두 떨어뜨리고 쫓겨났어요`}};
+      if (g.coins < HOARD.max) return {next: publicGame(type, g)};
+    }
+    // left with the coins (or took the last one)
+    const prize = hoardPrize(g.coins), got = [prize.stone ? `강화석 ${prize.stone}개` : '', prize.potions ? `물약 ${prize.potions}개` : ''].filter(Boolean).join('와 ');
+    return {over: {success: true, ...prize, reveal: {coins: g.coins, wake: g.wake}, text: g.coins ? `금화 ${g.coins}개를 들고 살금살금 빠져나왔어요! ${got}로 바꿨어요` : '금화는 그대로 두고 살금살금 지나갔어요'}};
+  }
+  if (type === 'trial' && move === 'gate') {
+    const g = game as TrialState, gate = g.gates[g.step]; if (!gate) throw Error('PET_BAD_ACTION');
+    let ok: boolean, answer: string, missed: GameMove['missed'];
+    if (gate.kind === 'spell' || gate.kind === 'sentence') {
+      const text = String(input?.text || '').trim(); if (!text || text.length > 300) throw Error('PET_BAD_ACTION');
+      answer = gate.kind === 'spell' ? gate.q.word : gate.text; ok = gate.kind === 'spell' ? text.toLowerCase() === answer.toLowerCase() : sameLine(text, answer);
+      if (!ok && gate.q) missed = {q: gate.q, choice: -1};
+    } else {
+      const choice = Math.floor(Number(input?.choice)); if (!(choice >= 0 && choice < gate.q.choices.length)) throw Error('PET_BAD_ACTION');
+      ok = choice === gate.q.answer; answer = gate.q.choices[gate.q.answer]; if (!ok) missed = {q: gate.q, choice};
+    }
+    if (ok) g.right += 1; g.step += 1;
+    const steps = g.gates.length;
+    if (g.step >= steps && g.right >= TRIAL.need) return {over: {success: true, stone: 3, potions: 1, right: g.right, asked: g.step, text: `다섯 관문 중 ${g.right}개를 넘었어요! 용왕이 인정하며 강화석 3개와 물약을 내렸어요`}, missed};
+    if (g.right + (steps - g.step) < TRIAL.need) return {over: {success: false, debuff: 'awed', right: g.right, asked: g.step, reveal: {answer}, text: `'${answer}'였어요. 관문 두 개를 놓쳐 용왕의 위엄에 움츠러들었어요`}, missed};
+    return {next: {...publicGame(type, g), last: {ok, answer}}, missed};
+  }
   if (type === 'oneline' && move === 'draw') {
     const g = game as OnelineState, s = ONELINE.shapes[g.shape], path = Array.isArray(input?.path) ? input.path.map(Number) : null;
     if (!path || path.length < 1 || path.length > s.edges.length + 1 || path.some((i: number) => !Number.isInteger(i) || i < 0 || i >= s.nodes.length) || g.tries >= ONELINE.tries) throw Error('PET_BAD_ACTION');

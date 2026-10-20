@@ -127,6 +127,11 @@ export async function displayName(db: any, key: string) {
   const fromRow = row?.kind === 'students' && row.academyId === 'main' ? row.fields?.summaryOverride?.studentDisplayName : null;
   return String(fromRow || (await readStudentMapping(db, key))?.studentDisplayName || '학생').slice(0, 40);
 }
+/** The student's 등록상태 in the academy directory ('등록' · '대기' · '중단'; '' with no record). */
+export async function enrollmentOf(db: any, key: string) {
+  const row = (await db.collection(DIRECTORY_ROWS).doc(directoryRowKey('students', key)).get()).data(), p = row?.fields?.properties;
+  return String(p?.['등록상태']?.status?.name || p?.['등록상태']?.select?.name || '');
+}
 /** Every coupon (newest month first) with the student's name and current points. */
 export async function listCoupons(db: any, actor: any) {
   admin(actor);
@@ -152,7 +157,9 @@ export async function listPetPoints(db: any, actor: any, now = Date.now()) {
   const keys = members.docs.filter((d: any) => !d.data().disabled).map((d: any) => { try { return uuid(d.id); } catch { return ''; } }).filter((k: string) => k && (whole || mine.has(k)));
   const byKey = new Map<string, PetCoupon[]>();
   for (const c of coupons.docs.map((x: any) => x.data() as PetCoupon)) byKey.set(c.studentKey, [...(byKey.get(c.studentKey) || []), c]);
+  // only students 등록 now (대기 · 중단 are left out of the list)
   const students = (await Promise.all(keys.map(async (key: string) => {
+    if (await enrollmentOf(db, key) !== '등록') return null;
     const o = await owedPoints(db, key, now); if (!o) return null;
     const earned = monthEarned(o.all);
     return {key, name: await displayName(db, key), points: Number(o.all.points || 0), earned, requested: asked.has(key),

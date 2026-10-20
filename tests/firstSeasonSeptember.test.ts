@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {enrol} from './helpers/enrolled.js';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
 import {earnPoints, earnedIn, initialPetState, monthEarned, rollDay, takePoints} from '../api/_lib/pet.js';
 import {countsForMonth} from '../src/lib/petCatalog.js';
@@ -33,7 +34,7 @@ test('첫 시즌: a student without the app gets a late-September lesson in Octo
   const {listPetPoints} = await import('../api/_lib/petCoupon.js');
   const {hashStudentKey} = await import('../api/_lib/security.js');
   const f = registrationFirestore();
-  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'});
+  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'}); enrol(f, A);
   f.rows.set(`notionStudentMappings/${hashStudentKey(A)}`, {studentKey: A, notionStudentPageId: A, internalStudentId: 'int-a', studentDisplayName: '학생', sourceMode: 'firestore'});
   // within the last 30 days, so not a 지난 수업 보상: before, it counted for September
   f.rows.set('lessonReports/a1', {internalStudentId: 'int-a', reportIdentity: 'a1', lessonDateStart: '2026-09-28T14:00:00+09:00', attendance: '출석', attitude: '', homework: '', test: ''});

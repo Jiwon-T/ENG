@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {enrol} from './helpers/enrolled.js';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
 import {awardStudy, earnedIn, initialPetState, monthEarned, rollDay, settleLessonReward} from '../api/_lib/pet.js';
 import {couponView, requestCoupon} from '../api/_lib/petCoupon.js';
@@ -39,7 +40,7 @@ test('관리자 › 이번 달 포인트: linked, active students with points he
   const A = '11111111-1111-4111-8111-111111111111', B = '22222222-2222-4222-8222-222222222222', C = '33333333-3333-4333-8333-333333333333';
   for (const [uid, key, name] of [['a', A, '김하늘'], ['b', B, '박서준'], ['c', C, '그만둔 학생']]) {
     f.rows.set(`users/${uid}`, {role: 'student', notionStudentKey: key});
-    f.rows.set(`academyStudentMemberships/${key}`, {academyId: 'main', disabled: uid === 'c'});
+    f.rows.set(`academyStudentMemberships/${key}`, {academyId: 'main', disabled: uid === 'c'}); enrol(f, key);
     f.rows.set(`notionStudentMappings/${hashStudentKey(key)}`, {studentKey: key, notionStudentPageId: key, internalStudentId: `int-${uid}`, studentDisplayName: name, sourceMode: 'firestore', firebaseUid: uid});
   }
   const s = initialPetState(OCT31); s.earned = {month: '2026-10', points: 0}; awardStudy(s, 'vocab-test', 5); f.rows.set('petStates/a', s);
@@ -54,7 +55,7 @@ test('관리자 › 이번 달 포인트: an old account still holding a student
   const {hashStudentKey} = await import('../api/_lib/security.js');
   const f = registrationFirestore(), A = '11111111-1111-4111-8111-111111111111';
   f.rows.set('users/old', {role: 'student', notionStudentKey: A}); f.rows.set('users/new', {role: 'student', notionStudentKey: A});
-  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'});
+  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'}); enrol(f, A);
   f.rows.set(`notionStudentMappings/${hashStudentKey(A)}`, {studentKey: A, notionStudentPageId: A, internalStudentId: 'int-1', studentDisplayName: '김하늘', sourceMode: 'firestore', firebaseUid: 'new'});
   const out: any = await listPetPoints(f.db, {admin: true, academyId: 'main'}, OCT31);
   assert.equal(out.students.length, 1);
@@ -79,7 +80,7 @@ test('학생 관리 › 장학 쿠폰: a teacher sees the students they have; th
   const {hashStudentKey} = await import('../api/_lib/security.js');
   const f = registrationFirestore(), A = '11111111-1111-4111-8111-111111111111', B = '22222222-2222-4222-8222-222222222222';
   for (const [uid, key, name] of [['a', A, '김하늘'], ['b', B, '박서준']]) {
-    f.rows.set(`users/${uid}`, {role: 'student', notionStudentKey: key}); f.rows.set(`academyStudentMemberships/${key}`, {academyId: 'main'});
+    f.rows.set(`users/${uid}`, {role: 'student', notionStudentKey: key}); f.rows.set(`academyStudentMemberships/${key}`, {academyId: 'main'}); enrol(f, key);
     f.rows.set(`notionStudentMappings/${hashStudentKey(key)}`, {studentKey: key, notionStudentPageId: key, internalStudentId: `int-${uid}`, studentDisplayName: name, sourceMode: 'firestore', firebaseUid: uid});
   }
   const names = async (actor: any) => ((await listPetPoints(f.db, actor, OCT31)) as any).students.map((s: any) => s.name).sort();

@@ -486,7 +486,7 @@ export const towerTaken = (atk: number, def: number, blocked: boolean) => blocke
 /** What can wait behind a door (not a boss floor). Each pet's floor has its own fixed set (the same on a retry, different
  *  for other students); `weight`: how often. */
 export type TowerEvent = 'monster' | 'treasure' | 'merchant' | 'mirror' | 'riddle' | 'sleeping' | 'trap' | 'fairy'
-  /** 쉬어 가기 놀이 (api/_lib/towerGames), opening zone by zone */ | 'mimic' | 'fortune' | 'lilypad' | 'mushroom' | 'echo' | 'crystal' | 'maze' | 'scale' | 'jars' | 'icelock' | 'icepath' | 'runes' | 'scroll' | 'potions' | 'lavapath' | 'lavarun' | 'shells' | 'bubbles' | 'windpath' | 'blanks' | 'oneline' | 'stars';
+  /** 쉬어 가기 놀이 (api/_lib/towerGames), opening zone by zone */ | 'mimic' | 'fortune' | 'lilypad' | 'mushroom' | 'echo' | 'crystal' | 'maze' | 'scale' | 'jars' | 'icelock' | 'icepath' | 'runes' | 'scroll' | 'potions' | 'lavapath' | 'lavarun' | 'shells' | 'bubbles' | 'windpath' | 'blanks' | 'oneline' | 'stars' | 'hoard' | 'trial';
 /** A 쉬어 가기 놀이 lost: the pet starts its next battle with one of these (then it wears off). */
 /** What a debuff does (`TOWER_DEBUFF_RULES`): def −방어, atk −공격, hp 체력이 줄어든 채, mp MP 절반, block 첫 막기 문제가 짧게,
  *  dot 화상·독 3턴. Each game names its own (젖음, 손이 꽁꽁, 엉덩방아…). */
@@ -512,6 +512,8 @@ export const TOWER_DEBUFFS = {
   shocked: debuff('⚡', '감전', 'hp', '찌릿! 체력 -10%로 시작'),
   tangled: debuff('🌀', '머리가 빙글', 'block', '선이 꼬여 어질어질, 첫 막기 문제는 4초'),
   starstruck: debuff('✨', '별빛에 눈부심', 'atk', '눈이 부셔 공격 -10%'),
+  roared: debuff('🐲', '용에게 쫓김', 'hp', '깨어난 용에게 쫓겨 체력 -10%로 시작'),
+  awed: debuff('👑', '용왕의 위엄', 'def', '위엄에 움츠러들어 방어 -15%'),
 } as const satisfies Record<string, { icon: string; name: string; effect: DebuffEffect; text: string; dot?: '화상' | '독' }>;
 export type TowerDebuff = keyof typeof TOWER_DEBUFFS;
 /** `stack`: lost games in a row pile up (the newest ones kept) and all hit the next battle; the same kind counts each time. */
@@ -535,6 +537,7 @@ export const TOWER_EVENTS: Record<TowerEvent, { name: string; icon: string; weig
   shells: { name: '진주 조개 섞기', icon: '🐚', weight: 4, from: 61 }, bubbles: { name: '진주 거품', icon: '🫧', weight: 4, from: 61 },
   windpath: { name: '바람길 비행', icon: '🌬️', weight: 4, from: 71 }, blanks: { name: '번개 빈칸', icon: '⚡', weight: 4, from: 71 },
   oneline: { name: '한붓 별 그리기', icon: '⭐', weight: 4, from: 81 }, stars: { name: '별자리 잇기', icon: '✨', weight: 4, from: 81 },
+  hoard: { name: '용의 보물 더미', icon: '💰', weight: 4, from: 91 }, trial: { name: '용왕의 시험', icon: '🐉', weight: 4, from: 91 },
 };
 /** 장비 강화 at the 상인: +1 … +5. A failure only uses up the 강화석 (the gear never breaks). */
 export const TOWER_ENHANCE_STEP = 2;

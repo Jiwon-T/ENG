@@ -11,6 +11,7 @@
  *
  * Safety: a dry run by default (counts only, names masked). `--apply` writes the lessonBackfill docs — run it only after
  * the user approved the dry run. Nothing else is touched (no 일지, no report, no points: those come at the next settling).
+ * A doc already there is left as it is, except a 태도 given since (then only its attitude and studied are set).
  *
  *   node --env-file=<env> --import tsx scripts/import-lesson-backfill.ts <rows.json> [--apply]
  */
@@ -53,13 +54,18 @@ for (const r of rows) {
   const id = 'nb' + createHash('sha256').update([mapping.internalStudentId, r.date, r.lessonTime].join('|')).digest('hex').slice(0, 30);
   out.push({id, data: {internalStudentId: mapping.internalStudentId, studentKey: key, date: `${r.date}T12:00:00+09:00`, lessonTime: String(r.lessonTime || ''), subject: '영어', attendance: attendanceOf(r), ...(attitudeOf(r) ? {attitude: attitudeOf(r), studied: r.selfStudy === 'Yes'} : {}), source: 'notion-2026-09', createdAt: now}});
 }
-const existing = new Set((await Promise.all(out.map(o => db.collection(LESSON_BACKFILL).doc(o.id).get()))).filter((d: any) => d.exists).map((d: any) => d.id));
+const snaps = await Promise.all(out.map(o => db.collection(LESSON_BACKFILL).doc(o.id).get()));
+const existing = new Set(snaps.filter((d: any) => d.exists).map((d: any) => d.id));
+// docs already there that now have a 태도 they lack (or another one)
+const toUpdate = out.filter((o, i) => snaps[i].exists && o.data.attitude && (snaps[i].data()?.attitude !== o.data.attitude || Boolean(snaps[i].data()?.studied) !== Boolean(o.data.studied)));
 const byAttendance = out.reduce((a: any, o) => (a[o.data.attendance] = (a[o.data.attendance] || 0) + 1, a), {});
 const perStudent = [...new Set(out.map(o => o.data.studentKey))].map(k => ({lessons: out.filter(o => o.data.studentKey === k).length}));
-console.log(JSON.stringify({mode: apply ? 'apply' : 'dry-run', rows: rows.length, toWrite: out.length - existing.size, alreadyThere: existing.size, students: perStudent.length, unmatched: [...unmatched], byAttendance, withAttitude: out.filter(o => o.data.attitude).length}, null, 1));
+console.log(JSON.stringify({mode: apply ? 'apply' : 'dry-run', rows: rows.length, toWrite: out.length - existing.size, alreadyThere: existing.size, students: perStudent.length, unmatched: [...unmatched], byAttendance, withAttitude: out.filter(o => o.data.attitude).length, toUpdate: toUpdate.length}, null, 1));
 if (apply) {
   let written = 0;
   for (const o of out) if (!existing.has(o.id)) { await db.collection(LESSON_BACKFILL).doc(o.id).set(o.data); written++; }
-  console.log(JSON.stringify({written}));
+  let updated = 0;
+  for (const o of toUpdate) { await db.collection(LESSON_BACKFILL).doc(o.id).update({attitude: o.data.attitude, studied: o.data.studied, updatedAt: now}); updated++; }
+  console.log(JSON.stringify({written, updated}));
 }
 process.exit(0);

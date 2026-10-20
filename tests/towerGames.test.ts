@@ -419,3 +419,36 @@ test('🌬️ 바람길 screen: a failed result (or no answer) shows 결과 다�
   assert.match(src, /send\('fly', \{ passed: run\.current\.passed \}\)\.then\(r => \{ if \(!r\) setUnsent\(true\); \}, \(\) => setUnsent\(true\)\);/);
   assert.match(src, /\{unsent && <button type="button" disabled=\{busy\} onClick=\{report\}[^>]*>결과 다시 보내기/);
 });
+
+test('💰 용의 보물 더미 (91층~): coins one at a time, worth more the more taken; the dragon wakes at the coin the server rolled and every coin is lost', async () => {
+  const {HOARD, hoardPrize} = await import('../api/_lib/towerGames.js');
+  assert.deepEqual([1, 3, 5, 7, 8].map(hoardPrize), [{potions: 1}, {stone: 1}, {stone: 1, potions: 1}, {stone: 2, potions: 1}, {stone: 2, potions: 1}]);
+  let woke: any = null, kept: any = null;
+  for (let seed = 1; seed < 400 && !(woke && kept); seed++) { const g = atGame('hoard', 92, seeded(seed)); if (g.ev.game.wake && g.ev.game.wake >= 3) woke ||= g; else if (g.ev.game.wake === null || g.ev.game.wake > 4) kept ||= g; }
+  const v = woke.view().game; assert.deepEqual(v, {coins: 0, max: HOARD.max, stir: false}, 'the browser never sees when it wakes, nor what the coins are worth');
+  for (let i = 1; i < woke.ev.game.wake; i++) assert.equal(woke.play('grab').game.coins, i);
+  const lost = woke.play('grab'); assert.deepEqual([lost.game.success, lost.game.debuff, lost.stone || 0, lost.potions || 0], [false, 'roared', 0, 0]);
+  kept.play('grab'); kept.play('grab'); kept.play('grab'); const stones = kept.tp.stones || 0;
+  const won = kept.play('stop'); assert.deepEqual([won.game.success, won.stone, kept.tp.stones], [true, 1, stones + 1]);
+  const all = atGame('hoard', 92); all.ev.game.wake = null; for (let i = 1; i < HOARD.max; i++) all.play('grab');
+  const top = all.play('grab'); assert.deepEqual([top.game.success, top.stone, top.potions], [true, 2, 1], 'the last coin leaves with them');
+  const none = atGame('hoard', 92); assert.equal(none.play('stop').game.success, true, 'leaving with nothing passes the floor');
+  assert.ok(!new Set(Array.from({length: 300}, (_, i) => towerLayout(`u${i}`, 1, 90)).flat()).has('hoard'), 'not before floor 91');
+});
+
+test('🐉 용왕의 시험 (91층~): five gates (뜻 · 듣기 · 철자 · 단어 · 문장), one try each; four right give 강화석 3 + 물약, two missed are 👑 용왕의 위엄', () => {
+  const right = (g: any) => { const gate = g.ev.game.gates[g.ev.game.step]; return gate.kind === 'spell' ? {text: gate.q.word} : gate.kind === 'sentence' ? {text: gate.text} : {choice: gate.q.answer}; };
+  const wrong = (g: any) => { const gate = g.ev.game.gates[g.ev.game.step]; return gate.kind === 'spell' || gate.kind === 'sentence' ? {text: 'zzz'} : {choice: (gate.q.answer + 1) % gate.q.choices.length}; };
+  const g = atGame('trial', 93), gates = g.ev.game.gates;
+  assert.deepEqual(gates.map((x: any) => x.kind), ['meaning', 'listen', 'spell', 'word', 'sentence']);
+  const v = g.view().game; assert.deepEqual([v.step, v.steps, v.need, v.kind, v.prompt, v.choices], [0, 5, 4, 'meaning', gates[0].q.meaning, gates[0].q.choices]);
+  assert.equal(JSON.stringify(v).includes(`"answer"`), false, 'no answer in what the browser sees');
+  assert.equal(gates[4].sentence, false, 'no sentences: a word\u2019s letters');
+  const missed = g.play('gate', wrong(g)); assert.deepEqual([missed.game.right, missed.game.last.ok], [0, false]);
+  assert.equal(g.view().game.kind, 'listen'); assert.equal(g.view().game.word, gates[1].q.word);
+  g.play('gate', right(g)); g.play('gate', right(g)); g.play('gate', right(g));
+  const won = g.play('gate', right(g)); assert.deepEqual([won.game.success, won.stone, won.potions, won.end.right], [true, 3, 1, 4]);
+  const h = atGame('trial', 93); h.play('gate', wrong(h));
+  const lost = h.play('gate', wrong(h)); assert.deepEqual([lost.game.success, lost.game.debuff, lost.end.asked], [false, 'awed', 2]);
+  assert.throws(() => atGame('trial', 93).play('gate', {choice: 9}), /PET_BAD_ACTION/);
+});

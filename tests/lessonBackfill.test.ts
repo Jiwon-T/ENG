@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {enrol} from './helpers/enrolled.js';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
 
 const OCT22 = Date.parse('2026-10-22T05:00:00Z');
@@ -10,7 +11,7 @@ test('계산 전용 수업 기록: counted with the lessons for 지난 수업 �
   const {lessonRows} = await import('../api/_lib/lessonRewardRows.js');
   const {hashStudentKey} = await import('../api/_lib/security.js');
   const f = registrationFirestore();
-  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'});
+  f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'}); enrol(f, A);
   f.rows.set(`notionStudentMappings/${hashStudentKey(A)}`, {studentKey: A, notionStudentPageId: A, internalStudentId: 'int-a', studentDisplayName: '학생', sourceMode: 'firestore'});
   const back = (id: string, date: string, attendance: string) => f.rows.set(`lessonBackfill/${id}`, {internalStudentId: 'int-a', date: `${date}T16:20:00+09:00`, lessonTime: '4:20-5:40', attendance, source: 'notion-2026-09'});
   ['01', '02', '03', '04', '05', '08', '09'].forEach((d, i) => back(`b${i}`, `2026-09-${d}`, i === 1 ? '지각' : '출석'));

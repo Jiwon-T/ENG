@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Hall } from './TowerHall';
 import { ListenButton } from './StageQuestion';
+import { TowerDragon } from './TowerCharacters';
 
 // 채움의 탑 쉬어 가기 놀이 (문 뒤 이벤트): the browser side of api/_lib/towerGames. The server keeps the secrets and judges;
 // these screens show what it sends (`game`) and send the moves.
@@ -23,7 +24,7 @@ function Mimic({ title, game, busy, send }: { title: string; game: { chests: num
       })}</div>
       <p className="absolute inset-x-0 top-[150px] text-center text-[11px] text-[#e7e5e4]">자세히 보면… 하나는 숨을 쉬는 것 같기도 해요</p>
     </Hall>
-    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">진짜 상자면 강화석, 미믹이면 물약 하나를 뺏겨요. 어느 쪽이든 이 층은 지나가요.</p>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">진짜 보물상자일까, 미믹일까? 어느 쪽이든 이 층은 지나가요.</p>
   </div>;
 }
 
@@ -36,7 +37,7 @@ function Fortune({ title, busy, send }: { title: string; busy: boolean; send: Se
         <svg viewBox="0 0 44 64" width="62" aria-hidden="true"><rect x="2" y="2" width="40" height="60" rx="6" fill="#3b0764" stroke="#fde68a" strokeWidth="2" /><rect x="7" y="7" width="30" height="50" rx="4" fill="none" stroke="#a78bfa" strokeWidth="1" /><path d="M22 18 l3 7 7 1 -5 5 1 7 -6 -3 -6 3 1 -7 -5 -5 7 -1z" fill="#fde68a" /><circle className="bx-eye" style={{ animationDelay: `${i * .5}s` }} cx="22" cy="46" r="3" fill="#c4b5fd" /></svg>
       </button>)}</div>
     </Hall>
-    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">🌟 행운: 강화석 2개 · 🌙 보통: 물약 1개 · 🌑 불운: 다음 전투 체력 -10%. 어느 카드든 이 층은 지나가요.</p>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">🌟 행운, 🌙 보통, 🌑 불운… 어떤 카드가 기다릴까요? 어느 카드든 이 층은 지나가요.</p>
   </div>;
 }
 
@@ -62,7 +63,7 @@ function Lilypad({ title, busy, send }: { title: string; busy: boolean; send: Se
       <style>{'@keyframes lily-drift{from{left:0}to{left:calc(100% - 64px)}}@media (prefers-reduced-motion:reduce){.lily-drift{animation-duration:3000ms!important}}'}</style>
     </Hall>
     <button type="button" disabled={busy || splash || made === 3} onClick={jump} className="w-full rounded-xl bg-[#4ade80] py-3 text-sm font-black text-[#14532d] disabled:opacity-50">점프!</button>
-    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">세 번 건너면 물약 하나. 빠지면 💧 물에 젖은 채(방어 -15%) 다음 전투를 시작해요. 이 층은 지나가요.</p>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">세 번 건너면 건너편에 뭔가 떨어져 있대요. 빠지면… 풍덩! 이 층은 지나가요.</p>
   </div>;
 }
 
@@ -395,7 +396,7 @@ function Shells({ title, game, busy, send }: { title: string; game: { shells: nu
         </button>;
       })}
     </Hall>
-    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">진주를 찾으면 강화석과 물약. 빈 조개를 고르면 🐚 조개에 물림(다음 전투 공격 -10%). 이 층은 지나가요.</p>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">진주를 찾으면 조개가 고마워할지도 몰라요. 빈 조개는… 조심해요! 이 층은 지나가요.</p>
   </div>;
 }
 
@@ -469,7 +470,7 @@ function Windpath({ title, game, busy, send }: { title: string; game: { rings: n
     </Hall>
     <button type="button" disabled={busy || phase === 'done'} onPointerDown={e => { e.preventDefault(); tap(); }} className="w-full rounded-xl bg-[#38bdf8] py-3 text-sm font-black text-[#0c4a6e] disabled:opacity-50">날아올라! 🌬️</button>
     {unsent && <button type="button" disabled={busy} onClick={report} className="w-full rounded-xl border-2 border-[#38bdf8] bg-white py-2 text-sm font-black text-[#0c4a6e] disabled:opacity-50">결과 다시 보내기 (고리 {run.current.passed}/{game.rings.length})</button>}
-    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">고리 5개를 모두 지나면 강화석과 물약. 고리를 놓치면 🌪️ 바람에 휘청(다음 전투 방어 -15%). 이 층은 지나가요.</p>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">고리 5개를 모두 지나면 바람 끝에서 무언가 반짝여요. 놓치면… 돌풍이 불어와요! 이 층은 지나가요.</p>
   </div>;
 }
 
@@ -552,6 +553,61 @@ function Stars({ title, game, busy, send }: { title: string; game: { step: numbe
   </div>;
 }
 
+/** 용의 보물 더미: a dragon asleep on its gold. Take coins one at a time, and leave before it wakes (if it wakes, every coin
+ *  is lost). It may stir — a hunch that the next coin wakes it. */
+function Hoard({ title, game, busy, send }: { title: string; game: { coins: number; max: number; stir: boolean }; busy: boolean; send: Send }) {
+  const sent = useRef(-1);
+  // one move per coin; a failed request (or no answer) lets it be sent again
+  const move = (name: 'grab' | 'stop') => { if (busy || sent.current === game.coins) return; const at = game.coins; sent.current = at; const again = () => { if (sent.current === at) sent.current = -1; }; send(name).then(r => { if (!r) again(); }, again); };
+  return <div className="space-y-2">
+    <Hall caption={`${title} · 들고 있는 금화 ${game.coins}/${game.max} · ${game.stir ? '용이 뒤척여요…!' : '쿨쿨 깊이 자요'}`}>
+      <div className="absolute inset-x-0 top-0 bottom-16 bg-[#292524]">
+        <div className={`absolute left-1/2 top-2 -translate-x-1/2 ${game.stir ? 'dx-bob' : ''}`}><TowerDragon color={2} size={170} /></div>
+        {game.stir && <span className="pg-pulse absolute left-[62%] top-3 text-xl" aria-hidden="true">💢</span>}
+        <svg viewBox="0 0 200 40" className="absolute inset-x-6 bottom-12" aria-hidden="true">{Array.from({ length: 18 }, (_, i) => <ellipse key={i} cx={20 + (i * 37) % 160} cy={30 - Math.floor(i / 6) * 7} rx="9" ry="4" fill="#facc15" stroke="#a16207" strokeWidth="1" opacity={i < 18 - game.coins * 2 ? 1 : .25} />)}</svg>
+        <div className="absolute inset-x-0 bottom-2 flex justify-center gap-1" aria-label={`들고 있는 금화 ${game.coins}개`}>{Array.from({ length: game.max }, (_, i) => <span key={i} className={`h-5 w-5 rounded-full border-2 ${i < game.coins ? 'border-[#a16207] bg-[#facc15]' : 'border-white/20'}`} />)}</div>
+      </div>
+    </Hall>
+    <div className="grid grid-cols-2 gap-2 text-sm font-black">
+      <button type="button" disabled={busy || game.coins >= game.max} onClick={() => move('grab')} className="rounded-xl bg-[#facc15] py-3 text-[#422006] disabled:opacity-50">하나 더 집기 💰</button>
+      <button type="button" disabled={busy} onClick={() => move('stop')} className="rounded-xl border-2 border-[#a16207] bg-white py-3 text-[#713f12] disabled:opacity-50">들고 나가기 🚪</button>
+    </div>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">많이 들고 나올수록 보물이 커져요. 하지만 용이 깨면… 모두 잃어요. 이 층은 지나가요.</p>
+  </div>;
+}
+
+/** 용왕의 시험: five gates — 뜻, 듣기, 철자, 단어, 문장. One try each; four right pass. */
+const GATE_NAME: Record<string, string> = { meaning: '뜻 → 단어', listen: '듣기', spell: '철자', word: '단어 → 뜻', sentence: '문장' };
+function Trial({ title, game, busy, send }: { title: string; game: { step: number; steps: number; need: number; right: number; kind: string; prompt?: string; word?: string; choices?: string[]; meaning?: string; letters?: string[]; pieces?: string[]; sentence?: boolean; last?: { ok: boolean; answer: string } }; busy: boolean; send: Send }) {
+  const [picked, setPicked] = useState<number[]>([]), sent = useRef(-1);
+  useEffect(() => setPicked([]), [game.step]);
+  // one answer per gate; a failed request (or no answer) lets it be answered again
+  const answer = (input: Record<string, unknown>) => { if (busy || sent.current === game.step) return; const step = game.step; sent.current = step; const again = () => { if (sent.current === step) sent.current = -1; }; send('gate', input).then(r => { if (!r) again(); }, again); };
+  const tiles = game.kind === 'spell' ? game.letters! : game.kind === 'sentence' ? game.pieces! : [], joiner = game.kind === 'sentence' && game.sentence ? ' ' : '', made = picked.map(i => tiles[i]).join(joiner);
+  return <div className="space-y-2">
+    <Hall caption={`${title} · ${game.step + 1}/${game.steps} 관문 · ${GATE_NAME[game.kind]} · 넘은 관문 ${game.right} (필요 ${game.need})`}>
+      <div className="absolute inset-x-0 top-0 bottom-16 bg-gradient-to-b from-[#450a0a] to-[#1c1917]">
+        <div className="absolute bottom-1 left-1/2 -translate-x-1/2" aria-hidden="true"><TowerDragon color={0} asleep={false} size={140} /></div>
+        <div className="absolute left-3 top-3 flex gap-1" aria-hidden="true">{Array.from({ length: game.steps }, (_, i) => <span key={i} className={`flex h-6 w-6 items-center justify-center rounded-md border text-[11px] font-black ${i < game.step ? 'border-[#fde047] bg-[#a16207] text-[#fef9c3]' : i === game.step ? 'border-[#fde047] text-[#fde047]' : 'border-white/20 text-white/30'}`}>{i + 1}</span>)}</div>
+        <div className="absolute inset-x-3 top-11 rounded-xl bg-white/95 px-3 py-2 text-center text-xs text-[#26215c]">
+          {game.kind === 'listen' ? <div className="flex flex-col items-center gap-1"><span>들리는 단어의 뜻은?</span><div key={game.step}><ListenButton word={game.word!} revealed={false} /></div></div>
+            : game.kind === 'word' ? <>단어: <b className="text-lg font-black">{game.word}</b></>
+            : <>뜻: <b className="text-sm font-black">{game.prompt ?? game.meaning}</b></>}
+          {game.last && <span className={`ml-2 font-bold ${game.last.ok ? 'text-[#15803d]' : 'text-[#b91c1c]'}`}>{game.last.ok ? '관문 통과!' : `아쉬워요 (${game.last.answer})`}</span>}
+          {tiles.length > 0 && <p className="mt-1.5 min-h-[30px] rounded-lg bg-[#fef3c7] px-2 py-1 text-base font-black tracking-wide text-[#713f12]" aria-label="만든 답">{made || <span className="text-xs font-medium tracking-normal text-[#a16207]/60">{game.kind === 'spell' ? '글자를 순서대로 눌러요' : '조각을 순서대로 눌러요'}</span>}</p>}
+        </div>
+      </div>
+    </Hall>
+    {game.choices && !tiles.length ? <div className="grid grid-cols-2 gap-2">{game.choices.map((c, i) => <button key={`${game.step}-${i}`} type="button" disabled={busy} onClick={() => answer({ choice: i })} className="min-h-[44px] rounded-xl border border-[#d6d2ee] bg-white px-2 py-2 text-sm font-bold text-[#26215c] hover:bg-[#f5f4fd]">{c}</button>)}</div>
+      : <>
+        <div className="flex flex-wrap justify-center gap-1.5">{tiles.map((t, i) => <button key={`${game.step}-${i}`} type="button" disabled={busy || picked.includes(i)} onClick={() => setPicked(p => [...p, i])} className="min-w-[40px] rounded-lg border-2 border-[#a16207] bg-[#fffbeb] px-2 py-1.5 text-sm font-black text-[#713f12] disabled:opacity-30">{t}</button>)}</div>
+        <div className="grid grid-cols-2 gap-2 text-xs font-bold"><button type="button" disabled={busy || !picked.length} onClick={() => setPicked(p => p.slice(0, -1))} className="rounded-xl border border-[#d6d2ee] bg-white py-2.5 text-[#26215c] disabled:opacity-50">하나 빼기</button>
+          <button type="button" disabled={busy || picked.length !== tiles.length} onClick={() => answer({ text: made })} className="rounded-xl bg-[#fde68a] py-2.5 text-[#713f12] disabled:opacity-50">관문 열기</button></div>
+      </>}
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">관문마다 한 번씩. 5개 중 4개를 넘으면 강화석 3개와 물약. 2개를 놓치면 👑 용왕의 위엄(다음 전투 방어 -15%). 틀린 단어는 오답 복습으로.</p>
+  </div>;
+}
+
 export function MiniGameScreen({ view, busy, send }: { view: MiniGameView; busy: boolean; send: Send }) {
   if (view.type === 'mimic') return <Mimic title={view.title} game={view.game} busy={busy} send={send} />;
   if (view.type === 'fortune') return <Fortune title={view.title} busy={busy} send={send} />;
@@ -575,5 +631,7 @@ export function MiniGameScreen({ view, busy, send }: { view: MiniGameView; busy:
   if (view.type === 'blanks') return <Blanks title={view.title} game={view.game} busy={busy} send={send} />;
   if (view.type === 'oneline') return <Oneline title={view.title} game={view.game} busy={busy} send={send} />;
   if (view.type === 'stars') return <Stars title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'hoard') return <Hoard title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'trial') return <Trial title={view.title} game={view.game} busy={busy} send={send} />;
   return null;
 }
