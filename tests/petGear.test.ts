@@ -4,7 +4,7 @@ import {currentPet, initialPetState, setGearShow} from '../api/_lib/pet.js';
 import {dropSetPiece, initialTower, openEntranceChest, petTowerStats, syncGearInbox, syncGearLooks, towerPet} from '../api/_lib/petTower.js';
 import {finishStage, initialExpedition} from '../api/_lib/petExpedition.js';
 import {TOWER_SET_GEAR, chapterGearTier, floorGearTier, gearLookOf, gearSetBonus, petGearView, towerGearFor, towerStats} from '../src/lib/petCatalog.js';
-import {gearArt} from '../src/components/pet/petGearArt.js';
+import {gearArt, gearBack, gearPiece} from '../src/components/pet/petGearArt.js';
 
 const NOW = Date.parse('2026-10-20T03:00:00Z');
 
@@ -45,13 +45,15 @@ test('장비 그림: higher tiers move (수정 동굴 반짝임 → 모래 망�
 });
 
 test('장비 세트: 6 tiers × 6 places, 검사/마법사 names and stats, stronger each tier', () => {
-  assert.equal(TOWER_SET_GEAR.length, 36);
+  assert.equal(TOWER_SET_GEAR.length, 66);
   assert.deepEqual([towerGearFor('set_2_weapon', 'swordsman')!.name, towerGearFor('set_2_weapon', 'wizard')!.name, towerGearFor('set_2_weapon')!.name], ['수정 검', '수정 지팡이', '수정 무기']);
   assert.equal(towerGearFor('set_5_armor', 'wizard')!.name, '마도 로브');
   assert.ok(towerGearFor('set_5_armor')!.def! > towerGearFor('set_0_armor')!.def!);
   assert.ok(towerGearFor('set_3_helmet', 'swordsman')!.hp! > towerGearFor('set_3_helmet')!.hp!);
   assert.ok(towerGearFor('set_3_helmet', 'wizard')!.mp! > 0);
-  assert.deepEqual([1, 5, 6, 10, 11, 20, 21, 30, 31, 40, 41, 50, 60].map(floorGearTier), [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5]);
+  assert.deepEqual([1, 5, 6, 10, 11, 20, 21, 30, 31, 40, 41, 50, 51, 60, 61, 70, 71, 80, 81, 90, 91, 100].map(floorGearTier), [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10]);
+  assert.deepEqual([towerGearFor('set_7_armor', 'swordsman')!.name, towerGearFor('set_10_weapon', 'wizard')!.name], ['심해 갑옷', '용왕 지팡이']);
+  assert.ok(towerGearFor('set_10_armor')!.def! > towerGearFor('set_5_armor')!.def!);
   assert.deepEqual([0, 1, 2, 3, 4, 5, 6].map(chapterGearTier), [0, 0, 1, 2, 3, 4, 5]);
 });
 
@@ -105,4 +107,24 @@ test('다른 화면의 장비: worked out from the tower when the pet has none k
   assert.equal(gearViewFor(pet, towerPet(t, 1))!.style, 'knight');
   pet.gearShow = false;
   assert.equal(gearViewFor(pet, towerPet(t, 1)), null);
+});
+
+test("장비 6~10단계 그림: 화염·심해·천공·성운·용왕 move; wings and fins go behind the pet; clip ids are the picture's own", () => {
+  const all = (t: number) => ({weapon: t, helmet: t, armor: t, shoulder: t, gloves: t, boots: t});
+  for (const style of ['knight', 'mage'] as const) for (const t of [6, 7, 8, 9, 10]) {
+    const front = gearArt(style, all(t), 0, 'p1');
+    assert.ok(front.length > 800, `${style} ${t} drawn`);
+    assert.match(front, /class="(pg|px)-/, `${style} ${t} moves`);
+    assert.doesNotMatch(front, /__ID__/);
+  }
+  assert.deepEqual([6, 7, 8, 9, 10].map(t => gearBack({armor: t}, 'p1') !== ''), [false, true, true, false, true], '심해 fins, 천공 and 용왕 wings');
+  assert.equal(gearBack({armor: 5}), '');
+  const a = gearArt('knight', all(8), 0, 'pA'), b = gearArt('knight', all(8), 0, 'pB');
+  assert.match(a, /id="pApxk1"/); assert.match(b, /id="pBpxk1"/);
+  assert.ok(gearPiece('mage', 'weapon', 7).svg.length > 100);
+});
+
+test('51~100층 보스 보물상자: potions and 강화석', async () => {
+  const {TOWER_CHESTS} = await import('../src/lib/petCatalog.js');
+  assert.deepEqual([60, 70, 80, 90, 100].map(f => [TOWER_CHESTS[f].potions, TOWER_CHESTS[f].stones]), [[5, 2], [6, 2], [6, 3], [7, 3], [8, 5]]);
 });

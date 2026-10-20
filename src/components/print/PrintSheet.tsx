@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Pencil } from 'lucide-react';
-import { APP_NAME, DEFAULT_FOOTER, PRINT_LOGO, printFooter, setPrintFooter, type Orientation } from '../../lib/printFrame';
+import { Lock, Pencil } from 'lucide-react';
+import { APP_NAME, DEFAULT_FOOTER, PRINT_LOGO, printFooter, printFooterLocked, setPrintFooter, type Orientation } from '../../lib/printFrame';
 import './printSheet.css';
 
 // 출력 공통 틀 (인쇄): the pages to print are drawn apart from the screen (only they print), each A4 page with the logo and
@@ -45,6 +45,8 @@ export function PrintPortal({ active, orientation = 'portrait', onDone, children
 export function FooterSetting({ onChange }: { onChange?: (footer: string) => void }) {
   const [footer, setFooter] = useState(printFooter), [editing, setEditing] = useState(false), [draft, setDraft] = useState('');
   const save = () => { const v = setPrintFooter(draft); setFooter(v); setEditing(false); onChange?.(v); };
+  // Students: the academy's footer, shown but not changeable.
+  if (printFooterLocked()) return <span title="학생은 바닥글을 바꿀 수 없어요" className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600"><span className="font-medium text-slate-500">바닥글</span>{DEFAULT_FOOTER}<Lock size={11} aria-hidden="true" /></span>;
   if (editing) return <span className="inline-flex items-center gap-1 text-xs">
     <input autoFocus value={draft} maxLength={80} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }} placeholder={DEFAULT_FOOTER} aria-label="바닥글" className="w-40 rounded-lg border border-[#f3d5da] px-2 py-1" />
     <button type="button" onClick={save} className="rounded-lg bg-[#d26272] px-2 py-1 font-bold text-white">저장</button>

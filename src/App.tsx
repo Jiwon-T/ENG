@@ -3,6 +3,7 @@ import React, { useState, useEffect, Suspense, lazy, Component } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import { auth, db, recordAttendance, logout } from './lib/firebase';
+import { setPrintFooterLocked } from './lib/printFrame';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, collection, query, where, setDoc } from 'firebase/firestore';
 import { ChevronLeft, Home as HomeIcon, Sparkles, Languages, Loader2, LogOut, User as UserIcon, ExternalLink, ArrowRight, AlertTriangle, RefreshCw, Menu, BarChart3, Users, Download, Share, Smartphone, X as CloseIcon, Info, Plus, Dog, Pencil } from 'lucide-react';
@@ -174,6 +175,8 @@ export default function App() {
   // Home's 워크북 opens 선생님방 on that tab; the 선생님방 row opens it as usual.
   const [teacherStartTab, setTeacherStartTab] = useState<string | undefined>(undefined);
   useEffect(() => { if (currentView !== 'teacher-room') setTeacherStartTab(undefined); }, [currentView]);
+  // The print footer (채움학원 지원T) can be changed by teachers only; students always get the academy's.
+  useEffect(() => { setPrintFooterLocked(!['teacher', 'principal', 'admin'].includes(String(profile?.role))); }, [profile?.role]);
   useEffect(() => { if (!user) { setPetSummaryOf(null); return; } if (currentView !== 'home') return; const uid = user.uid; let live = true; PetService.summary().then(summary => { if (live) setPetSummaryOf({ uid, summary }); }).catch(() => undefined); return () => { live = false; }; }, [user, currentView]);
   const [showNameEditModal, setShowNameEditModal] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);

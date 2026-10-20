@@ -287,10 +287,13 @@ test('탑 4단계 crits: only a weak-element skill can crit (×2), the first cri
   assert.equal(towerAnswer(t, s, run().id, right(t, s), NOW, () => 0).crit, undefined, '수 is not the golem’s weakness');
 });
 
-test('탑 5단계: 50 floors in zones of 10 with their monsters and bosses; boss treasures change with the job; floor 40 gives the job weapon', async () => {
+test('탑: 100 floors in zones of 10 with their monsters and bosses; boss treasures change with the job; floor 40 gives the job weapon', async () => {
   const { TOWER_ZONES, towerMonster, towerGearFor, towerZone, TOWER_WEAKNESS } = await import('../src/lib/petCatalog.js');
-  assert.equal(PET_TOWER.floors, 50);
-  assert.deepEqual(TOWER_ZONES.map(z => [z.from, z.to, z.boss.name]), [[1, 10, '고대 수문장 골렘'], [11, 20, '수정 여왕 거미'], [21, 30, '스핑크스'], [31, 40, '서리 용'], [41, 50, '대마도사']]);
+  assert.equal(PET_TOWER.floors, 100);
+  assert.deepEqual(TOWER_ZONES.map(z => [z.from, z.to, z.boss.name]), [[1, 10, '고대 수문장 골렘'], [11, 20, '수정 여왕 거미'], [21, 30, '스핑크스'], [31, 40, '서리 용'], [41, 50, '대마도사'],
+    [51, 60, '화염 드레이크'], [61, 70, '크라켄'], [71, 80, '폭풍의 그리핀'], [81, 90, '성운 고래'], [91, 100, '태초의 용왕']]);
+  assert.deepEqual([towerZone(65).name, towerZone(100).name, TOWER_ZONES.map(z => z.level).slice(5)], ['심해 신전', '용왕의 왕좌', [120, 140, 160, 180, 200]]);
+  assert.deepEqual([towerMonster(100).boss, towerMonster(100).name, towerMonster(99).boss], [true, '태초의 용왕', false]);
   assert.equal(towerZone(25).name, '모래 신전');
   assert.ok(['crystal_slime', 'vampire_bat', 'cave_spider', 'golem', 'obsidian_golem'].includes(towerMonster(12).kind));
   assert.deepEqual([towerMonster(50).boss, towerMonster(50).name], [true, '대마도사']);
@@ -366,10 +369,10 @@ test('탑 5단계 명예의 전당: boss floors keep the first clear and the few
     await handlePet({method: 'POST', headers: {authorization: 'Bearer t'}, body: {action: 'tower-hall', teachers}} as any, res, {verify: async () => ({uid}), db: () => f.db, generate: async () => '{}', now: () => NOW} as any); return out.hall; };
   const hall = await hallFor('kid2', true), f10 = hall.floors.find((x: any) => x.floor === 10);
   assert.deepEqual([hall.teacherView, hall.withTeachers], [false, false], 'a student never gets the teachers’ records');
-  assert.deepEqual([hall.floors.map((x: any) => x.floor), f10.boss, f10.first.nickname, f10.first.me, f10.fewest.nickname, f10.fewest.me, f10.fewest.attacks], [[10, 20, 30, 40, 50], '고대 수문장 골렘', '별빛 해달', false, '이름 없는 모험가', true, 7], 'six attacks before + the winning one');
+  assert.deepEqual([hall.floors.map((x: any) => x.floor), f10.boss, f10.first.nickname, f10.first.me, f10.fewest.nickname, f10.fewest.me, f10.fewest.attacks], [[10, 20, 30, 40, 50, 60, 70, 80, 90, 100], '고대 수문장 골렘', '별빛 해달', false, '이름 없는 모험가', true, 7], 'six attacks before + the winning one');
   assert.ok(!JSON.stringify(hall).includes('"uid"'), 'no uids in the hall');
   assert.equal(hall.floors[1].first, null);
-  assert.deepEqual(hall.floors.map((x: any) => x.boss), ['고대 수문장 골렘', null, null, null, null], 'a boss stays ??? until beaten');
+  assert.deepEqual(hall.floors.map((x: any) => x.boss), ['고대 수문장 골렘', ...Array(9).fill(null)], 'a boss stays ??? until beaten');
   f.rows.set('users/new', {});
   assert.equal((await hallFor('new')).floors[0].boss, null, 'not beaten yet: the floor-10 boss is ??? too');
   f.rows.set('petGuild/kid2', {guildName: '구름빵', aliases: {1: '초록'}, aliasWarned: {}});

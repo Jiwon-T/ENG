@@ -8,8 +8,9 @@ import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
 import {awardCapped, currentPet, type ServerPet, type ServerPetState} from './pet.js';
 import {meaningsOverlap, randomDocId} from './petWordFeed.js';
-import { TOWER_DECOR, PET_JOB3, PET_JOB3_RULE, job3For, TOWER_ZONES, BRANCH_PASSIVE, TOWER_GEAR, TOWER_SKILL_RULES, TOWER_WEAKNESS, critChance, jobSkills, skillLevel, towerSkill,PET_TOWER, TOWER_CHESTS, TOWER_ENHANCE, TOWER_EVENTS, towerGear, towerGearFor, towerHit, towerMonster, towerStats, towerTaken, gearLookOf, petGearView, type PetGearLook, GEAR_DROP, TOWER_GEAR_SLOTS, floorGearTier, setGearId, type TowerEvent, type TowerGear, type TowerGearSlot, type TowerMonsterKind} from '../../src/lib/petCatalog.js';
+import { TOWER_DECOR, PET_JOB3, PET_JOB3_RULE, job3For, TOWER_ZONES, BRANCH_PASSIVE, TOWER_GEAR, TOWER_SKILL_RULES, TOWER_WEAKNESS, critChance, jobSkills, skillLevel, towerSkill,PET_TOWER, TOWER_CHESTS, TOWER_ENHANCE, TOWER_EVENTS, towerGear, towerGearFor, towerHit, towerMonster, towerStats, towerTaken, TOWER_DEBUFF_RULES, type TowerDebuff, FOE_RAGE, FOE_RULES, foeQuiet, foeSkill, foeSkillsFor, gearLookOf, petGearView, type PetGearLook, GEAR_DROP, TOWER_GEAR_SLOTS, floorGearTier, setGearId, type TowerEvent, type TowerGear, type TowerGearSlot, type TowerMonsterKind} from '../../src/lib/petCatalog.js';
 import {gradeOf} from '../../src/lib/schoolGrade.js';
+import {initGame, isMiniGame, playGame, publicGame, type GameResult} from './towerGames.js';
 
 export const PET_TOWERS = 'petTowers';
 export const PET_TOWER_SETTINGS = 'petTowerSettings';
@@ -28,11 +29,18 @@ export interface TowerRun {
   /** The skill the pending attack question casts; 방패 막기 up for the monster's next attack. */ skill?: string | null; shield?: boolean;
   /** 그믐 저주 has cut the monster's 공격 (once a battle). */ weakened?: boolean;
   /** Skills ask 문장 배열 from these (none: a word question as before); `ns` the next one. */ sentences?: TowerSentence[]; ns?: number;
+  /** 몬스터 스킬 (battles from before have none). */ foe?: TowerFoe;
+  /** what this battle started with (a 쉬어 가기 놀이 lost); `deafUsed`: 귀가 멍멍 has shortened its block question */ debuff?: TowerDebuff; deafUsed?: boolean;
 }
+/** A monster's skills in a battle: the one it warned of (`next`, used on its next turn), and what lasts: 방어 태세 (pet attacks
+ *  left), 봉인 and 지속 피해 on the pet (rounds left), 분노. `hit`: the pet hit it this round (cancels 재생); `hits`: the first
+ *  of a 연속 공격 is done; `last`: it just used a skill (the next turn is a plain attack). */
+export interface TowerFoe { skills: string[]; next: string | null; last: boolean; guard: number; sealed: number; sealNew?: boolean; dot: {name: '화상' | '독' | '저주'; turns: number} | null; hit: boolean; hits: number; rage: boolean; raged: boolean }
 /** A door's event that isn't a battle (yet): the 상인's stock, a riddle or trap question, the fairy's choice. */
-export interface TowerEventState { id: string; floor: number; door: number; type: Exclude<TowerEvent, 'monster' | 'mirror' | 'treasure'>; q: TowerQuestion | null; stock: {stone: number; potion: number}; pool: TowerPool; wrongs: TowerWrong[]; startedAt: number; /** 잠든 드래곤's look */ color?: number }
+export interface TowerEventState { id: string; floor: number; door: number; type: Exclude<TowerEvent, 'monster' | 'mirror' | 'treasure'>; q: TowerQuestion | null; stock: {stone: number; potion: number}; pool: TowerPool; wrongs: TowerWrong[]; startedAt: number; /** 잠든 드래곤's look */ color?: number;
+  /** a 쉬어 가기 놀이's own state (secrets stay on the server) */ game?: any }
 /** One pet's climb: `floor` is the next floor to play (saved on every clear), `best` the highest cleared. `levels`: 강화 by gear. */
-export interface TowerPet { floor: number; best: number; gear: string[]; equip: Partial<Record<TowerGearSlot, string>>; chests: number[]; potions: number; stones?: number; levels?: Record<string, number>; run: TowerRun | null; event?: TowerEventState | null; /** the last door opened (a resent request gets the same answer) */ lastOpen?: {id: string; result: any} | null }
+export interface TowerPet { /** a 쉬어 가기 놀이 lost: the next battle starts with it (TOWER_DEBUFFS); `curse`: the older 불운 */ debuff?: TowerDebuff; curse?: boolean; floor: number; best: number; gear: string[]; equip: Partial<Record<TowerGearSlot, string>>; chests: number[]; potions: number; stones?: number; levels?: Record<string, number>; run: TowerRun | null; event?: TowerEventState | null; /** the last door opened (a resent request gets the same answer) */ lastOpen?: {id: string; result: any} | null }
 /** 도감 entry: the floor where the student first met the monster, how often it was beaten, when it was first met (the order). */
 export interface TowerCodexEntry { name: string; boss: boolean; first: number; wins: number; at: number }
 export interface TowerState { version: 1; pets: Record<string, TowerPet>; updatedAt: number; /** monster kinds whose weakness a crit has revealed (도감) */ weakFound?: string[]; /** 도감: every monster kind met, for all the student's pets */ codex?: Record<string, TowerCodexEntry> }
@@ -69,20 +77,21 @@ export function seeded(text: string) {
 }
 /** The three doors of a floor for this pet: fixed (a retry finds the same doors), different for every student. */
 export function towerLayout(uid: string, slot: number, floor: number): TowerEvent[] {
-  const rand = seeded(`${uid}:${slot}:${floor}`), all = Object.entries(TOWER_EVENTS) as [TowerEvent, {weight: number}][], total = all.reduce((n, [, e]) => n + e.weight, 0);
+  // only what has opened by this floor (쉬어 가기 놀이 open zone by zone)
+  const rand = seeded(`${uid}:${slot}:${floor}`), all = (Object.entries(TOWER_EVENTS) as [TowerEvent, {weight: number; from?: number}][]).filter(([, e]) => (e.from || 1) <= floor), total = all.reduce((n, [, e]) => n + e.weight, 0);
   return Array.from({length: PET_TOWER.doors}, () => { let r = rand() * total; for (const [k, e] of all) { r -= e.weight; if (r < 0) return k; } return 'monster' as TowerEvent; });
 }
 
 /** A treasure chest: its gear (worn at once when that place is empty) and potions, once per pet. */
 function openChestFor(tp: TowerPet, floor: number, pet?: ServerPet) {
   const chest = TOWER_CHESTS[floor]; if (!chest || tp.chests.includes(floor)) return null;
-  tp.chests.push(floor); tp.potions += chest.potions;
+  tp.chests.push(floor); tp.potions += chest.potions; tp.stones = (tp.stones || 0) + (chest.stones || 0);
   // A job weapon treasure: the one for this pet's job (a pet without a job finds a 강화석 instead).
   const jobWeapon = chest.jobWeapon ? (pet?.job ? chest.jobWeapon[pet.job] : null) : null;
   if (chest.jobWeapon && !jobWeapon) tp.stones = (tp.stones || 0) + 1;
   const gear = [...chest.gear, ...(jobWeapon ? [jobWeapon] : [])].filter(id => towerGear(id) && !tp.gear.includes(id));
   for (const id of gear) { tp.gear.push(id); const g = towerGear(id)!; if (!tp.equip[g.slot]) tp.equip[g.slot] = id; }
-  return {floor, gear, potions: chest.potions};
+  return {floor, gear, potions: chest.potions, ...(chest.stones ? {stones: chest.stones} : {})};
 }
 /** The chest at the entrance (floor 1): the 견습 몽둥이 and the first potions. */
 export function openEntranceChest(t: TowerState, s: ServerPetState) {
@@ -146,14 +155,56 @@ const sameSentence = (a: string, b: string) => { const n = (t: string) => t.toLo
 function ask(run: TowerRun, kind: 'attack' | 'defend', now: number, rand: () => number) {
   run.q = question(run.pool, run.next, kind, now, rand); run.next += 1; run.asked += 1; run.phase = kind;
 }
+/** After a plain attack the monster may warn of a skill for its next turn (never two skills in a row). */
+function planFoe(run: TowerRun, rand: () => number) {
+  const f = run.foe; if (!f?.skills.length) return;
+  if (f.last) { f.last = false; f.next = null; return; }
+  f.next = rand() < (run.monster.boss ? FOE_RULES.bossChance : FOE_RULES.chance) ? f.skills[Math.min(f.skills.length - 1, Math.floor(rand() * f.skills.length))] : null;
+}
+/** The end of a round: 봉인 counts down (not the round it came), 지속 피해 hurts and counts down. */
+function endRound(run: TowerRun, out: any) {
+  const f = run.foe; if (!f) return;
+  if (f.sealed > 0 && !f.sealNew) f.sealed -= 1; f.sealNew = false;
+  if (f.dot) { const d = Math.max(1, Math.round(run.maxHp * FOE_RULES.dotPct)); run.hp = Math.max(0, run.hp - d); out.dot = {name: f.dot.name, damage: d}; f.dot.turns -= 1; if (f.dot.turns <= 0) f.dot = null; }
+  f.hit = false;
+}
+/** The monster's turn after the pet acted: a quiet skill (방어 태세, 재생) is its whole turn; otherwise it attacks (a block
+ *  question; 묶기 makes it shorter). 'lost': 지속 피해 ended the battle. */
+function monsterTurn(run: TowerRun, now: number, rand: () => number, out: any): 'defend' | 'quiet' | 'lost' {
+  const f = run.foe, k = f?.next ? foeSkill(f.next) : null;
+  if (f && k && foeQuiet(k)) {
+    out.foe = {skill: k.id, name: k.name};
+    if (k.fx.includes('guard')) { f.guard = FOE_RULES.guardTurns; out.foe.guard = f.guard; }
+    if (k.fx.includes('regen')) {
+      if (f.hit) out.foe.canceled = true;
+      else { const heal = Math.max(1, Math.round(run.monster.max * FOE_RULES.regen)); run.monster.hp = Math.min(run.monster.max, run.monster.hp + heal); out.foe.healed = heal; }
+    }
+    f.next = null; f.last = true; endRound(run, out);
+    if (run.hp <= 0) return 'lost';
+    run.phase = 'act'; planFoe(run, rand); return 'quiet';
+  }
+  ask(run, 'defend', now, rand);
+  if (k?.fx.includes('bind') && run.q) run.q.deadline = now + FOE_RULES.bindSeconds * 1000;
+  if (run.debuff === 'deafen' && !run.deafUsed && run.q) { run.q.deadline = Math.min(run.q.deadline ?? Infinity, now + TOWER_DEBUFF_RULES.deafenSeconds * 1000); run.deafUsed = true; }
+  return 'defend';
+}
 
 type Foe = {kind: TowerMonsterKind; name: string; boss: boolean; hp: number; atk: number; def: number; color?: number};
 function battle(tp: TowerPet, pet: ServerPet, pool: TowerPool, m: Foe, floor: number, now: number, rand: () => number, hpShare = 1) {
-  const st = petTowerStats(pet, tp);
+  const st = petTowerStats(pet, tp), debuff = tp.debuff || (tp.curse ? 'curse' : undefined);
+  delete tp.debuff; delete tp.curse; // only the next battle
+  if (debuff === 'curse') hpShare *= TOWER_DEBUFF_RULES.curse;
   tp.run = {id: randomDocId(rand), floor, monster: {kind: m.kind, name: m.name, boss: m.boss, hp: m.hp, max: m.hp, atk: m.atk, def: m.def, ...(m.color !== undefined ? {color: m.color} : {})},
     hp: Math.max(1, Math.round(st.hp * hpShare)), maxHp: st.hp, mp: st.mp, maxMp: st.mp, phase: 'act', q: null, attacks: 0, right: 0, asked: 0, wrongs: [],
     pool: shuffle(pool.words, rand), next: 0, wordbookId: pool.wordbookId, wordbookTitle: pool.wordbookTitle, startedAt: now, ...(pool.books ? {books: pool.books} : {}),
     ...(pool.sentences?.length ? {sentences: shuffle(pool.sentences, rand).slice(0, 12), ns: 0} : {})};
+  const skills = foeSkillsFor(m.kind, floor);
+  if (skills.length) tp.run.foe = {skills: skills.map(k => k.id), next: null, last: false, guard: 0, sealed: 0, dot: null, hit: false, hits: 0, rage: FOE_RAGE.has(m.kind), raged: false};
+  if (debuff) {
+    tp.run.debuff = debuff;
+    if (debuff === 'drained') tp.run.mp = Math.round(st.mp * TOWER_DEBUFF_RULES.drained);
+    if (debuff === 'bitten') (tp.run.foe ||= {skills: [], next: null, last: false, guard: 0, sealed: 0, dot: null, hit: false, hits: 0, rage: false, raged: false}).dot = {name: '독', turns: TOWER_DEBUFF_RULES.bittenTurns};
+  }
   return tp.run;
 }
 /** 거울방: the pet's own shadow, a little weaker than the pet. */
@@ -200,6 +251,7 @@ function openDoor(tp: TowerPet, pet: ServerPet, s: ServerPetState, uid: string, 
   const words = shuffle(pool.words, rand);
   tp.event = {id: randomDocId(rand), floor, door, type, q: null, stock: {stone: 1 + Math.floor(rand() * 3), potion: PET_TOWER.merchantPotions}, pool: {...pool, words}, wrongs: [], startedAt: now};
   if (type === 'riddle' || type === 'trap') tp.event.q = question(words, 0, type, now, rand);
+  if (isMiniGame(type)) { let i = 0; tp.event.game = initGame(type, rand, {ask: kind => question(words, i++, kind, now, rand)}); }
   if (type === 'sleeping') tp.event.color = Math.floor(seeded(`${uid}:${pet.slot}:${floor}:dragon`)() * PET_TOWER.dragonColors);
   return {opened: type};
 }
@@ -259,6 +311,13 @@ const eventEnded = (tp: TowerPet, ev: TowerEventState, right: number, asked: num
 
 /** The pet's turn: attack or an attack skill (a word question follows), 방패 막기 or 치유 (the monster then attacks), drink
  *  a potion, or run away (탈진). Skills need the 1차 전직, the level and the MP (paid when the word is answered). */
+/** A potion or 치유 ends 화상·독·저주. */
+const cure = (run: TowerRun) => { if (!run.foe?.dot) return {}; const name = run.foe.dot.name; run.foe.dot = null; return {cured: name}; };
+/** The pet acted without attacking: the monster's turn follows. */
+function foeAfter(tp: TowerPet, run: TowerRun, out: any, now: number, rand: () => number) {
+  if (monsterTurn(run, now, rand, out) === 'lost') return {...out, lost: true, floor: run.floor, end: ended(tp, run)};
+  return {...out, phase: run.phase};
+}
 export function towerAct(t: TowerState, s: ServerPetState, action: unknown, now: number, rand: () => number = Math.random, skillInput?: unknown) {
   const pet = currentPet(s), tp = towerPet(t, pet.slot), run = tp.run;
   if (!run) throw Error('TOWER_NO_RUN');
@@ -268,18 +327,19 @@ export function towerAct(t: TowerState, s: ServerPetState, action: unknown, now:
     if (!pet.job) throw Error('TOWER_SKILL_LOCKED');
     const k = towerSkill(String(skillInput || ''));
     if (!k || !jobSkills(pet).some(x => x.id === k.id) || pet.level < k.level) throw Error('TOWER_SKILL_NOT_LEARNED');
+    if (run.foe?.sealed) throw Error('TOWER_SEALED');
     if (run.mp < k.mp) throw Error('TOWER_NO_MP');
     // an attack skill asks 문장 배열 (a word question when there is no sentence)
     if (k.kind === 'attack') { run.skill = k.id; if (!askSentence(run, now, rand)) ask(run, 'attack', now, rand); return {phase: run.phase, skill: k.id}; }
     run.mp -= k.mp; run.skill = null;
-    if (k.kind === 'block') { run.shield = true; ask(run, 'defend', now, rand); return {phase: run.phase, skill: k.id, shield: true}; }
+    if (k.kind === 'block') { run.shield = true; return foeAfter(tp, run, {skill: k.id, shield: true}, now, rand); }
     const heal = Math.round(run.maxHp * TOWER_SKILL_RULES.heal * (k.power || 1) * (pet.job2 === 'white_mage' ? TOWER_SKILL_RULES.blessing : 1));
-    run.hp = Math.min(run.maxHp, run.hp + heal); ask(run, 'defend', now, rand); return {phase: run.phase, skill: k.id, healed: heal};
+    run.hp = Math.min(run.maxHp, run.hp + heal); return foeAfter(tp, run, {skill: k.id, healed: heal, ...cure(run)}, now, rand);
   }
   if (action === 'potion') {
     if (tp.potions <= 0) throw Error('TOWER_NO_POTION');
     tp.potions -= 1; const heal = Math.round(run.maxHp * PET_TOWER.potionHeal); run.hp = Math.min(run.maxHp, run.hp + heal);
-    ask(run, 'defend', now, rand); return {phase: run.phase, healed: heal};
+    return foeAfter(tp, run, {healed: heal, ...cure(run)}, now, rand);
   }
   if (action === 'flee') { pet.energy = 0; return {fled: true, floor: run.floor, end: ended(tp, run)}; }
   throw Error('PET_BAD_ACTION');
@@ -299,11 +359,13 @@ export function towerAnswer(t: TowerState, s: ServerPetState, runId: unknown, ch
   if (correct) { run.right += 1; run.mp = Math.min(run.maxMp, run.mp + 2); }
   else if (!q.order) run.wrongs.push(wrongOf(q, choice, late)); // missed words go to 오답 복습 (sentences are not words)
   run.q = null;
-  const st = petTowerStats(pet, tp);
+  // 물에 젖음 −방어, 눈이 침침 −공격 (a lost 쉬어 가기 놀이)
+  const base = petTowerStats(pet, tp), st = {...base, atk: base.atk * (run.debuff === 'dazzle' ? TOWER_DEBUFF_RULES.dazzle : 1), def: base.def * (run.debuff === 'wet' ? TOWER_DEBUFF_RULES.wet : 1)};
   if (q.kind === 'attack') {
     run.attacks += 1;
     const k = run.skill ? towerSkill(run.skill) : null; run.skill = null;
-    const def = run.monster.def * (pet.job2 === 'dark_mage' ? TOWER_SKILL_RULES.curse : 1), roll = 0.9 + rand() * 0.2;
+    const def = run.monster.def * (pet.job2 === 'dark_mage' ? TOWER_SKILL_RULES.curse : 1) * (run.foe?.guard ? FOE_RULES.guard : 1), roll = 0.9 + rand() * 0.2;
+    const weakHit = Boolean(k && correct && k.element && TOWER_WEAKNESS[run.monster.kind] === k.element);
     if (k) {
       // A skill: right = power × 공격 (a weak-element skill may crit ×2); wrong = a glancing 30% and half the MP.
       out.skill = k.id; out.element = k.element || null;
@@ -328,15 +390,38 @@ export function towerAnswer(t: TowerState, s: ServerPetState, runId: unknown, ch
       run.monster.hp = Math.max(0, run.monster.hp - out.damage);
       if (pet.job2 === 'dark_knight') { out.drained = Math.max(1, Math.round(out.damage * TOWER_SKILL_RULES.drain)); run.hp = Math.min(run.maxHp, run.hp + out.drained); }
     }
+    const f = run.foe;
+    if (f) {
+      if (correct) f.hit = true;
+      if (f.guard > 0) { if (weakHit) { f.guard = 0; out.guardBroken = true; } else f.guard -= 1; }
+      if (f.rage && !f.raged && run.monster.hp > 0 && run.monster.hp <= run.monster.max * FOE_RULES.rageAt) { f.raged = true; out.enraged = true; }
+    }
     if (run.monster.hp <= 0) { const entry = t.codex?.[run.monster.kind]; if (entry) entry.wins += 1; return {...out, ...win(tp, s, run, rand)}; }
-    ask(run, 'defend', now, rand); return out;
+    if (monsterTurn(run, now, rand, out) === 'lost') return {...out, lost: true, floor: run.floor, end: ended(tp, run)};
+    return out;
   }
   // The monster's turn: 방패 막기 blocks it whatever the answer (the word still counts for learning); 수호 takes 10% less.
   const blocked = correct || Boolean(run.shield); if (run.shield) { out.shield = true; run.shield = false; }
-  out.taken = Math.max(1, Math.round(towerTaken(run.monster.atk, st.def, blocked) * (pet.job2 === 'paladin' ? TOWER_SKILL_RULES.guard : 1))); out.blocked = blocked;
+  const f = run.foe, k = f?.next ? foeSkill(f.next) : null;
+  const mult = (pet.job2 === 'paladin' ? TOWER_SKILL_RULES.guard : 1) * (k?.fx.includes('smash') ? FOE_RULES.smash : 1) * (k?.fx.includes('multi') ? FOE_RULES.multi : 1) * (f?.raged ? FOE_RULES.rage : 1);
+  out.taken = Math.max(1, Math.round(towerTaken(run.monster.atk, st.def, blocked) * mult)); out.blocked = blocked;
   run.hp = Math.max(0, run.hp - out.taken);
+  if (f && k) {
+    // a warned skill: 흡혈 heals it; blocking keeps off 지속 피해 and 봉인; 연속 공격 asks a second block question
+    out.foe = {skill: k.id, name: k.name};
+    if (k.fx.includes('drain')) { const heal = Math.max(1, Math.round(out.taken * FOE_RULES.drain)); run.monster.hp = Math.min(run.monster.max, run.monster.hp + heal); out.foe.drained = heal; }
+    if (blocked && (k.fx.includes('dot') || k.fx.includes('seal'))) out.foe.avoided = true;
+    else {
+      if (k.fx.includes('dot')) { f.dot = {name: k.dot || '화상', turns: FOE_RULES.dotTurns}; out.foe.dot = f.dot.name; }
+      if (k.fx.includes('seal')) { f.sealed = FOE_RULES.sealTurns; f.sealNew = true; out.foe.sealed = f.sealed; }
+    }
+    if (k.fx.includes('multi') && f.hits === 0 && run.hp > 0) { f.hits = 1; out.foe.again = true; ask(run, 'defend', now, rand); return out; }
+    f.hits = 0; f.next = null; f.last = true;
+  }
   if (run.hp <= 0) return {...out, lost: true, floor: run.floor, end: ended(tp, run)};
-  run.phase = 'act'; return out;
+  endRound(run, out);
+  if (run.hp <= 0) return {...out, lost: true, floor: run.floor, end: ended(tp, run)};
+  run.phase = 'act'; planFoe(run, rand); return out;
 }
 function win(tp: TowerPet, s: ServerPetState, run: TowerRun, rand: () => number) {
   const potions = run.bonus?.potions || 0; tp.potions += potions;
@@ -390,6 +475,12 @@ function playEvent(t: TowerState, s: ServerPetState, move: unknown, input: any, 
     const run = battle(tp, pet, ev.pool, towerMonster(ev.floor, ev.door), ev.floor, now, rand, 0.7); run.wrongs.push(...missed); run.asked += 1;
     return {...out, trapped: true};
   }
+  if (isMiniGame(ev.type)) {
+    const r = playGame(ev.type, ev.game, move, input, now - ev.startedAt);
+    if (r.missed) ev.wrongs.push(wrongOf(r.missed.q, r.missed.choice, false)); // 오답 복습
+    if ('next' in r) return {game: r.next, correct: true};
+    return gameOver(tp, s, ev, r.over, rand);
+  }
   if (ev.type === 'sleeping' && move === 'sneak') {
     if (input?.ok === true) {
       // The mini-game runs in the browser; the server checks its time and the path it reports before letting the pet past.
@@ -399,6 +490,14 @@ function playEvent(t: TowerState, s: ServerPetState, move: unknown, input: any, 
     tp.event = null; battle(tp, pet, ev.pool, dragonOf(ev.color), ev.floor, now, rand); return {woke: true};
   }
   throw Error('PET_BAD_ACTION');
+}
+
+/** A 쉬어 가기 놀이 is over: its prize (or the mimic's bite), the floor passed either way. */
+function gameOver(tp: TowerPet, s: ServerPetState, ev: TowerEventState, r: GameResult, rand: () => number) {
+  const stone = r.stone || 0, potions = r.potions || 0, lost = r.losePotion && tp.potions > 0 ? 1 : 0;
+  tp.stones = (tp.stones || 0) + stone; tp.potions = tp.potions + potions - lost;
+  if (r.debuff) tp.debuff = r.debuff;
+  return {game: {type: ev.type, success: r.success, text: r.text, lostPotion: lost, ...(r.debuff ? {debuff: r.debuff} : {}), ...(r.reveal ? {reveal: r.reveal} : {})}, stone, potions, ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, r.right || 0, r.asked || 0)};
 }
 
 /** The sneak path the browser reports: [ms, progress 0–1] samples, at least `sneakMinMs` long on the server's clock and in
@@ -424,15 +523,22 @@ export function publicTower(t: TowerState, s: ServerPetState, now: number) {
   const weakKnown = (kind: string) => (t.weakFound || []).includes(kind) ? TOWER_WEAKNESS[kind as TowerMonsterKind] || null : null;
   const skills = pet.job ? jobSkills(pet).map(k => ({id: k.id, name: k.name, kind: k.kind, element: k.element || null, mp: k.mp, power: k.power || null, learnAt: k.level, level: skillLevel(k, pet.level), text: k.text || null,
     crit: k.element ? critChance(pet.level, skillLevel(k, pet.level), worn(tp, pet), tp.levels || {}) : 0})) : [];
-  const pq = (q: TowerQuestion | null) => q && {kind: q.kind, prompt: q.kind === 'defend' || q.kind === 'trap' ? q.word : q.meaning, choices: q.choices, msLeft: q.deadline === null ? null : Math.max(0, q.deadline - now), ...(q.order ? {order: q.order} : {})};
+  const pq = (q: TowerQuestion | null) => q && {kind: q.kind, prompt: q.kind === 'defend' || q.kind === 'trap' ? q.word : q.meaning, choices: q.choices, msLeft: q.deadline === null ? null : Math.max(0, q.deadline - now), msTotal: q.deadline === null ? null : q.deadline - q.issuedAt, ...(q.order ? {order: q.order} : {})};
   return {
     skills, passive: pet.job2 ? BRANCH_PASSIVE[pet.job2] : null, job: pet.job || null, job2: pet.job2 || null, job3: pet.job3 || null, job3Ready: job3Ready(pet, tp),
-    floor: tp.floor, best: tp.best, top: PET_TOWER.floors, gear: tp.gear, equip: tp.equip, levels: tp.levels || {}, chests: tp.chests, potions: tp.potions, stones: tp.stones || 0, stats: petTowerStats(pet, tp),
+    debuff: tp.debuff || (tp.curse ? 'curse' : null), floor: tp.floor, best: tp.best, top: PET_TOWER.floors, gear: tp.gear, equip: tp.equip, levels: tp.levels || {}, chests: tp.chests, potions: tp.potions, stones: tp.stones || 0, stats: petTowerStats(pet, tp),
     run: run && {id: run.id, floor: run.floor, monster: {kind: run.monster.kind, name: shownMonsterName(t, run.monster.kind, run.monster.name), boss: run.monster.boss, hp: run.monster.hp, max: run.monster.max, color: run.monster.color ?? null},
-      hp: run.hp, maxHp: run.maxHp, mp: run.mp, maxMp: run.maxMp, phase: run.phase, attacks: run.attacks, q: pq(run.q), skill: run.skill || null, shield: Boolean(run.shield), weak: weakKnown(run.monster.kind)},
-    event: ev && {id: ev.id, floor: ev.floor, type: ev.type, stock: ev.type === 'merchant' ? ev.stock : null, q: pq(ev.q), color: ev.color ?? null},
+      hp: run.hp, maxHp: run.maxHp, mp: run.mp, maxMp: run.maxMp, phase: run.phase, attacks: run.attacks, q: pq(run.q), skill: run.skill || null, shield: Boolean(run.shield), weak: weakKnown(run.monster.kind), foe: publicFoe(run), debuff: run.debuff || null},
+    event: ev && {id: ev.id, floor: ev.floor, type: ev.type, stock: ev.type === 'merchant' ? ev.stock : null, q: pq(ev.q), color: ev.color ?? null, game: isMiniGame(ev.type) ? publicGame(ev.type, ev.game) : null},
     codex: towerCodex(t),
   };
+}
+
+/** 몬스터 스킬 as the browser sees it: the skill warned of, 방어 태세, 봉인, 지속 피해, 분노. */
+function publicFoe(run: TowerRun) {
+  const f = run.foe; if (!f) return null;
+  const k = f.next ? foeSkill(f.next) : null;
+  return {next: k && {name: k.name, fx: k.fx, dot: k.dot || null, warn: k.warn}, guard: f.guard, sealed: f.sealed, dot: f.dot, raged: f.raged, rage: f.rage, again: f.hits > 0};
 }
 
 /** A zone boss stays a mystery ('???') until one of the student's pets has beaten its floor. */

@@ -138,3 +138,28 @@
 .pg-orbit{transform-box:view-box;transform-origin:60px 70px;animation:pg-spin 9s linear infinite}
 .pg-fall{animation:pg-fall 3.2s linear infinite;opacity:0}@keyframes pg-fall{0%{transform:translateY(-6px);opacity:0}20%{opacity:1}100%{transform:translateY(36px);opacity:0}}
 @media (prefers-reduced-motion:reduce){.pg-tw,.pg-pulse,.pg-sway,.pg-spin,.pg-orbit,.pg-fall{animation:none!important;opacity:1}.pg-fall{opacity:.8}}
+
+/* 탑 보스 움직임 (TowerCharacters): 날개·불씨·번개·빛·눈·회전·궤도. 움직임 줄이기면 멈춰요. */
+.bx-flap{transform-box:fill-box;animation:bx-flap 3.2s ease-in-out infinite}.bx-flap.r{transform-origin:0% 100%}.bx-flap.l{transform-origin:100% 100%}@keyframes bx-flap{0%,100%{transform:rotate(0)}50%{transform:rotate(-5deg)}}
+.bx-flap.r{animation-name:bx-flap-r}@keyframes bx-flap-r{0%,100%{transform:rotate(0)}50%{transform:rotate(5deg)}}
+.bx-rise{animation:bx-rise 2.8s linear infinite;opacity:0}@keyframes bx-rise{0%{transform:translateY(4px);opacity:0}25%{opacity:1}100%{transform:translateY(-34px);opacity:0}}
+.bx-flick{animation:bx-flick 1s steps(2) infinite}@keyframes bx-flick{0%,100%{opacity:1}50%{opacity:.35}}
+.bx-glow{transform-box:fill-box;transform-origin:center;animation:bx-glow 2.6s ease-in-out infinite}@keyframes bx-glow{0%,100%{transform:scale(.94);opacity:.55}50%{transform:scale(1.06);opacity:1}}
+.bx-sway{transform-box:fill-box;transform-origin:50% 100%;animation:bx-sway 3.4s ease-in-out infinite}@keyframes bx-sway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+.bx-spin{transform-box:fill-box;transform-origin:center;animation:bx-spin 14s linear infinite}@keyframes bx-spin{to{transform:rotate(360deg)}}
+.bx-orbit{transform-box:view-box;transform-origin:80px 52px;animation:bx-spin 12s linear infinite}
+.bx-eye{animation:bx-eye 3s ease-in-out infinite}@keyframes bx-eye{0%,100%{opacity:1}50%{opacity:.6}}
+@media (prefers-reduced-motion:reduce){.bx-flap,.bx-rise,.bx-flick,.bx-glow,.bx-sway,.bx-spin,.bx-orbit,.bx-eye{animation:none!important}.bx-rise{opacity:.8}}
+
+/* 장비 6~10단계 움직임 (petGearArtPlus): 빛 스침·불씨/거품·불꽃·날개. 움직임 줄이기면 멈춰요. */
+.px-sheen{animation:px-sheen 3.6s ease-in-out infinite}@keyframes px-sheen{0%,55%{transform:translateX(0)}100%{transform:translateX(110px)}}
+.px-rise{animation:px-rise 3s linear infinite;opacity:0}@keyframes px-rise{0%{transform:translateY(6px);opacity:0}20%{opacity:1}100%{transform:translateY(-40px);opacity:0}}
+.px-flick{animation:px-flick 1.2s steps(2) infinite}@keyframes px-flick{0%,100%{opacity:1}50%{opacity:.55}}
+.px-flap{transform-box:view-box;animation:px-flap 2.6s ease-in-out infinite}@keyframes px-flap{0%,100%{transform:rotate(0)}50%{transform:rotate(-6deg)}}
+@media (prefers-reduced-motion:reduce){.px-sheen,.px-rise,.px-flick,.px-flap{animation:none!important}.px-rise{opacity:.8}}
+
+/* 탑 장식 움직임 (TowerDecorArt): 둥실·모래 떨어짐·잎 살랑. 움직임 줄이기면 멈춰요. */
+.dx-bob{animation:dx-bob 3s ease-in-out infinite}@keyframes dx-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+.dx-drip{animation:dx-drip 1.4s linear infinite}@keyframes dx-drip{0%{transform:translateY(-6px);opacity:0}20%{opacity:1}100%{transform:translateY(10px);opacity:0}}
+.dx-leaf{transform-box:fill-box;transform-origin:50% 100%;animation:dx-leaf 3.6s ease-in-out infinite}@keyframes dx-leaf{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+@media (prefers-reduced-motion:reduce){.dx-bob,.dx-drip,.dx-leaf{animation:none!important}}

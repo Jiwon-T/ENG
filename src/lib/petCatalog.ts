@@ -292,7 +292,7 @@ export const PET_WORD_FEED = { questions: 10, minQuestions: 5, choices: 3, wrong
  * `bossEvery` floors a boss guards a treasure chest. Words come from the hard wordbook the admin sets (중등 / 고등).
  */
 export const PET_TOWER = {
-  name: '채움의 탑', floors: 50, doors: 3, bossEvery: 10, energy: 10, defendSeconds: 8, choices: 4, poolSize: 60,
+  name: '채움의 탑', floors: 100, doors: 3, bossEvery: 10, energy: 10, defendSeconds: 8, choices: 4, poolSize: 60,
   potionHeal: 0.4, startPotions: 2,
   /** 함정 바닥: answer within this many seconds. 상인: prices in points. A won battle drops a 강화석 this often. */
   trapSeconds: 6, stonePrice: 120, potionPrice: 40, stoneDrop: 0.3, merchantPotions: 3,
@@ -347,7 +347,7 @@ export const TOWER_GEAR: TowerGear[] = [
 const SET_NOUNS: Record<TowerGearSlot, [string, string, string]> = { weapon: ['무기', '검', '지팡이'], helmet: ['투구', '투구', '모자'], armor: ['갑옷', '갑옷', '로브'], shoulder: ['견갑', '견갑', '견갑'], gloves: ['장갑', '건틀릿', '장갑'], boots: ['신발', '장화', '신발'] };
 const SET_ICONS: Record<TowerGearSlot, string> = { weapon: '🗡️', helmet: '⛑️', armor: '🛡️', shoulder: '🪨', gloves: '🧤', boots: '🥾' };
 const SET_BASE: Record<TowerGearSlot, { atk?: number; def?: number; hp?: number }> = { weapon: { atk: 4 }, helmet: { def: 3, hp: 8 }, armor: { def: 4, hp: 12 }, shoulder: { def: 3, hp: 6 }, gloves: { atk: 2, def: 2 }, boots: { def: 3, hp: 8 } };
-export const GEAR_SET_SHORT = ['견습', '이끼', '수정', '모래', '얼음', '마도'] as const;
+export const GEAR_SET_SHORT = ['견습', '이끼', '수정', '모래', '얼음', '마도', '화염', '심해', '천공', '성운', '용왕'] as const;
 export const GEAR_SET_BONUS = { three: 0.05, six: 0.12 } as const;
 export const setGearId = (tier: number, slot: TowerGearSlot) => `set_${tier}_${slot}`;
 function setPiece(tier: number, slot: TowerGearSlot): TowerGear {
@@ -359,8 +359,9 @@ function setPiece(tier: number, slot: TowerGearSlot): TowerGear {
 export const TOWER_SET_GEAR: TowerGear[] = GEAR_SET_SHORT.flatMap((_, t) => TOWER_GEAR_SLOTS.map(s => setPiece(t, s.id)));
 TOWER_GEAR.push(...TOWER_SET_GEAR);
 /** Which set a floor drops (1–5 견습, 6–10 이끼 숲, 11–20 수정 동굴, 21–30 모래 신전, 31–40 얼음 성채, 41+ 마도사) and a 원정대 chapter
- *  gives on ★3 (1–2장 견습, 3장 이끼 숲 … 7장 마도사). Normal floors: 15% on the first clear; boss floors: always one. */
-export const floorGearTier = (floor: number) => floor <= 5 ? 0 : floor <= 10 ? 1 : Math.min(5, 2 + Math.floor((floor - 11) / 10));
+ *  gives on ★3 (1–2장 견습, 3장 이끼 숲 … 7장 마도사); 51~100층: 화염 · 심해 · 천공 · 성운 · 용왕, ten floors each (tower only).
+ *  Normal floors: 15% on the first clear; boss floors: always one. */
+export const floorGearTier = (floor: number) => floor <= 5 ? 0 : floor <= 10 ? 1 : Math.min(GEAR_SET_SHORT.length - 1, 2 + Math.floor((floor - 11) / 10));
 export const chapterGearTier = (chapterIndex: number) => [0, 0, 1, 2, 3, 4, 5][chapterIndex] ?? 5;
 export const GEAR_DROP = { floorChance: 0.15 } as const;
 export const towerGear = (id: string) => TOWER_GEAR.find(g => g.id === id);
@@ -369,8 +370,9 @@ export function towerGearFor(id: string, job?: PetJob | null): TowerGear | undef
   const g = towerGear(id), v = job && g?.variants?.[job];
   return g && v ? { ...g, ...v } : g;
 }
-/** 장비 그림 단계: 0 견습 · 1 이끼 숲 · 2 수정 동굴 · 3 모래 신전 · 4 얼음 성채 · 5 마도사 (more detail, and from 수정 동굴 it moves). */
-export const GEAR_TIER_NAMES = ['견습', '이끼 숲', '수정 동굴', '모래 신전', '얼음 성채', '마도사'] as const;
+/** 장비 그림 단계: 0 견습 · 1 이끼 숲 · 2 수정 동굴 · 3 모래 신전 · 4 얼음 성채 · 5 마도사, then (51~100층) 6 화염 · 7 심해 · 8 천공 ·
+ *  9 성운 · 10 용왕 (more detail, and from 수정 동굴 it moves). */
+export const GEAR_TIER_NAMES = ['견습', '이끼 숲', '수정 동굴', '모래 신전', '얼음 성채', '마도사', '화염', '심해', '천공', '성운', '용왕'] as const;
 const GEAR_LOOKS: Record<string, number> = {
   apprentice_club: 0, golem_pauldron: 1, crystal_helm: 2, sun_gloves: 3, snow_boots: 4, star_armor: 5, frost_greatsword: 4, frost_staff: 4,
   ice_sword: 3, ice_staff: 3, star_sword: 4, moon_staff: 4, holy_sword: 5, obsidian_sword: 5, dawn_scepter: 5, crescent_staff: 5,
@@ -392,24 +394,31 @@ export function petGearView(pet: { job?: PetJob | null; gear?: PetGearLook | nul
   return { style: (pet.job || pet.gearStyle) === 'wizard' ? 'mage' : 'knight', look: pet.gear.look, full: pet.gear.full ?? null };
 }
 /** 탑 장식: the first clear of each zone's boss floor gives that zone's room decoration (once a student, never in the
- *  shop), placed in the room like the 금메달 (the same 꾸미기). Floors 51–100 will bring five more. */
+ *  shop), placed in the room like the 금메달 (the same 꾸미기); ten, one for each zone (floors 10–100). */
 export const TOWER_DECOR: { id: string; name: string; floor: number }[] = [
   { id: 'moss_pot', name: '이끼 화분', floor: 10 }, { id: 'crystal_lamp', name: '수정 램프', floor: 20 }, { id: 'hourglass', name: '모래시계', floor: 30 },
   { id: 'ice_statue', name: '얼음 조각상', floor: 40 }, { id: 'spellbook_shelf', name: '마도서 책장', floor: 50 },
+  { id: 'lava_brazier', name: '용암 화로', floor: 60 }, { id: 'pearl_bed', name: '진주 조개 침대', floor: 70 }, { id: 'cloud_swing', name: '구름 그네', floor: 80 },
+  { id: 'star_telescope', name: '별자리 망원경', floor: 90 }, { id: 'dragon_throne', name: '용왕의 왕좌', floor: 100 },
 ];
 export const towerDecor = (id: string) => TOWER_DECOR.find(d => d.id === id);
 /** Treasure chests: floor 1 (at the entrance) and after each boss (that boss's own treasure). */
-export const TOWER_CHESTS: Record<number, { gear: string[]; potions: number; /** a job weapon: the one for the pet's job */ jobWeapon?: Record<PetJob, string> }> = {
+export const TOWER_CHESTS: Record<number, { gear: string[]; potions: number; /** a job weapon: the one for the pet's job */ jobWeapon?: Record<PetJob, string>; /** 51~100층 bosses: 강화석 */ stones?: number }> = {
   1: { gear: ['apprentice_club'], potions: PET_TOWER.startPotions },
   10: { gear: ['golem_pauldron'], potions: 2 },
   20: { gear: ['crystal_helm'], potions: 3 },
   30: { gear: ['sun_gloves'], potions: 3 },
   40: { gear: ['snow_boots'], potions: 4, jobWeapon: { swordsman: 'frost_greatsword', wizard: 'frost_staff' } },
   50: { gear: ['star_armor'], potions: 5 },
+  // 51~100층 bosses: potions and 강화석 (their set piece drops on the floor as always)
+  60: { gear: [], potions: 5, stones: 2 }, 70: { gear: [], potions: 6, stones: 2 }, 80: { gear: [], potions: 6, stones: 3 }, 90: { gear: [], potions: 7, stones: 3 }, 100: { gear: [], potions: 8, stones: 5 },
 };
 export type TowerMonsterKind = 'slime' | 'bat' | 'mushroom' | 'golem' | 'fairy' | 'shadow' | 'dragon' | 'gatekeeper' | 'obsidian_golem' | 'gold_golem'
   | 'crystal_slime' | 'vampire_bat' | 'cave_spider' | 'crystal_queen' | 'sand_scorpion' | 'mummy' | 'temple_cat' | 'sphinx'
-  | 'snow_spirit' | 'ice_wolf' | 'frost_knight' | 'frost_dragon' | 'shadow_knight' | 'magic_doll' | 'cursed_book' | 'archmage';
+  | 'snow_spirit' | 'ice_wolf' | 'frost_knight' | 'frost_dragon' | 'shadow_knight' | 'magic_doll' | 'cursed_book' | 'archmage'
+  | 'lava_slime' | 'fire_lizard' | 'ash_golem' | 'fire_drake' | 'glow_jelly' | 'merfolk_knight' | 'turtle_guard' | 'kraken'
+  | 'wind_spirit' | 'griffin' | 'thunder_bird' | 'storm_griffin' | 'star_fairy' | 'meteor_golem' | 'comet_fox' | 'nebula_whale'
+  | 'dragon_knight' | 'time_mage' | 'gold_wyvern' | 'dragon_king';
 /** 1구역 (floors 1–9) monsters; TOWER_ZONES has every zone. Floor 10 is the boss. */
 export const TOWER_MONSTERS: { kind: TowerMonsterKind; name: string }[] = [
   { kind: 'slime', name: '말랑 슬라임' }, { kind: 'bat', name: '밤 박쥐' }, { kind: 'mushroom', name: '버섯돌이' }, { kind: 'golem', name: '골렘' },
@@ -422,6 +431,12 @@ export const TOWER_ZONES: { from: number; to: number; name: string; level: numbe
   { from: 21, to: 30, name: '모래 신전', level: 40, monsters: [{ kind: 'sand_scorpion', name: '모래 전갈' }, { kind: 'mummy', name: '미라' }, { kind: 'gold_golem', name: '황금 골렘' }, { kind: 'temple_cat', name: '신전 고양이' }], boss: { kind: 'sphinx', name: '스핑크스' } },
   { from: 31, to: 40, name: '얼음 성채', level: 70, monsters: [{ kind: 'snow_spirit', name: '눈 정령' }, { kind: 'ice_wolf', name: '얼음 늑대' }, { kind: 'frost_knight', name: '서리 기사' }], boss: { kind: 'frost_dragon', name: '서리 용' } },
   { from: 41, to: 50, name: '마도사의 탑', level: 100, monsters: [{ kind: 'shadow_knight', name: '그림자 기사' }, { kind: 'magic_doll', name: '마도 인형' }, { kind: 'cursed_book', name: '저주받은 책' }], boss: { kind: 'archmage', name: '대마도사' } },
+  // 51–100층 (Lv.120 → 200): 화염 → 심해 → 천공 → 성운 → 용왕
+  { from: 51, to: 60, name: '화염 용암굴', level: 120, monsters: [{ kind: 'lava_slime', name: '용암 슬라임' }, { kind: 'fire_lizard', name: '불꽃 도마뱀' }, { kind: 'ash_golem', name: '재 골렘' }], boss: { kind: 'fire_drake', name: '화염 드레이크' } },
+  { from: 61, to: 70, name: '심해 신전', level: 140, monsters: [{ kind: 'glow_jelly', name: '빛 해파리' }, { kind: 'merfolk_knight', name: '인어 기사' }, { kind: 'turtle_guard', name: '거북 수호자' }], boss: { kind: 'kraken', name: '크라켄' } },
+  { from: 71, to: 80, name: '천공의 섬', level: 160, monsters: [{ kind: 'wind_spirit', name: '바람 정령' }, { kind: 'griffin', name: '그리핀' }, { kind: 'thunder_bird', name: '번개 새' }], boss: { kind: 'storm_griffin', name: '폭풍의 그리핀' } },
+  { from: 81, to: 90, name: '성운의 정원', level: 180, monsters: [{ kind: 'star_fairy', name: '별 요정' }, { kind: 'meteor_golem', name: '운석 골렘' }, { kind: 'comet_fox', name: '혜성 여우' }], boss: { kind: 'nebula_whale', name: '성운 고래' } },
+  { from: 91, to: 100, name: '용왕의 왕좌', level: 200, monsters: [{ kind: 'dragon_knight', name: '용 기사' }, { kind: 'time_mage', name: '시간 마도사' }, { kind: 'gold_wyvern', name: '황금 와이번' }], boss: { kind: 'dragon_king', name: '태초의 용왕' } },
 ];
 export const towerZone = (floor: number) => TOWER_ZONES.find(z => floor >= z.from && floor <= z.to) || TOWER_ZONES[TOWER_ZONES.length - 1];
 /** 10층: the obsidian 고대 수문장 골렘 (purple runes, a crystal crown). The floors' own 골렘 is a smaller, mossy one; from
@@ -453,11 +468,30 @@ export const towerTaken = (atk: number, def: number, blocked: boolean) => blocke
 
 /** What can wait behind a door (not a boss floor). Each pet's floor has its own fixed set (the same on a retry, different
  *  for other students); `weight`: how often. */
-export type TowerEvent = 'monster' | 'treasure' | 'merchant' | 'mirror' | 'riddle' | 'sleeping' | 'trap' | 'fairy';
-export const TOWER_EVENTS: Record<TowerEvent, { name: string; icon: string; weight: number }> = {
+export type TowerEvent = 'monster' | 'treasure' | 'merchant' | 'mirror' | 'riddle' | 'sleeping' | 'trap' | 'fairy'
+  /** 쉬어 가기 놀이 (api/_lib/towerGames), opening zone by zone */ | 'mimic' | 'fortune' | 'lilypad' | 'mushroom' | 'echo' | 'crystal' | 'maze' | 'scale' | 'jars';
+/** A 쉬어 가기 놀이 lost: the pet starts its next battle with one of these (then it wears off). */
+export const TOWER_DEBUFFS = {
+  wet: { icon: '💧', name: '물에 젖음', text: '몸이 무거워 방어 -15%' },
+  curse: { icon: '🌑', name: '불운', text: '체력 -10%로 시작' },
+  dazzle: { icon: '😵', name: '눈이 침침', text: '공격 -10%' },
+  deafen: { icon: '🙉', name: '귀가 멍멍', text: '첫 막기 문제는 4초' },
+  bitten: { icon: '🐍', name: '뱀독', text: '독에 걸린 채 시작 (3턴)' },
+  drained: { icon: '😮‍💨', name: '기운 빠짐', text: 'MP 절반으로 시작' },
+} as const;
+export type TowerDebuff = keyof typeof TOWER_DEBUFFS;
+export const TOWER_DEBUFF_RULES = { wet: 0.85, curse: 0.9, dazzle: 0.9, deafenSeconds: 4, bittenTurns: 3, drained: 0.5 } as const;
+
+/** `from`: the first floor it can be behind a door (none: from floor 1). */
+export const TOWER_EVENTS: Record<TowerEvent, { name: string; icon: string; weight: number; from?: number }> = {
   monster: { name: '몬스터', icon: '👾', weight: 44 }, treasure: { name: '보물', icon: '🎁', weight: 10 }, merchant: { name: '떠돌이 상인', icon: '🧙', weight: 12 },
   mirror: { name: '거울방', icon: '🪞', weight: 8 }, riddle: { name: '수수께끼 석상', icon: '🗿', weight: 8 }, sleeping: { name: '잠든 드래곤', icon: '🐉', weight: 7 },
   trap: { name: '함정 바닥', icon: '⚠️', weight: 5 }, fairy: { name: '길 잃은 요정', icon: '🧚', weight: 6 },
+  mimic: { name: '미믹 상자', icon: '🎁', weight: 4, from: 1 }, fortune: { name: '점쟁이 카드', icon: '🔮', weight: 4, from: 15 },
+  lilypad: { name: '연잎 점프', icon: '🐸', weight: 4, from: 1 }, mushroom: { name: '버섯 징검다리', icon: '🍄', weight: 4, from: 1 },
+  echo: { name: '메아리 동굴', icon: '🔊', weight: 4, from: 11 }, crystal: { name: '수정 불빛 퍼즐', icon: '💡', weight: 4, from: 11 },
+  maze: { name: '신전 미로', icon: '🧭', weight: 4, from: 21 }, scale: { name: '황금 저울', icon: '⚖️', weight: 4, from: 25 },
+  jars: { name: '짝 맞추기 항아리', icon: '🏺', weight: 4, from: 21 },
 };
 /** 장비 강화 at the 상인: +1 … +5. A failure only uses up the 강화석 (the gear never breaks). */
 export const TOWER_ENHANCE_STEP = 2;
@@ -515,6 +549,9 @@ export const TOWER_WEAKNESS: Partial<Record<TowerMonsterKind, PetElement>> = {
   slime: '토', bat: '빛', mushroom: '금', golem: '화', gatekeeper: '수', obsidian_golem: '토', gold_golem: '화', dragon: '수', shadow: '빛', fairy: '어둠',
   crystal_slime: '화', vampire_bat: '빛', cave_spider: '화', crystal_queen: '화', sand_scorpion: '수', mummy: '빛', temple_cat: '어둠', sphinx: '수',
   snow_spirit: '화', ice_wolf: '화', frost_knight: '빛', frost_dragon: '화', shadow_knight: '빛', magic_doll: '금', cursed_book: '화', archmage: '빛',
+  lava_slime: '수', fire_lizard: '빛', ash_golem: '어둠', fire_drake: '빛', glow_jelly: '어둠', merfolk_knight: '빛', turtle_guard: '토', kraken: '어둠',
+  wind_spirit: '금', griffin: '어둠', thunder_bird: '토', storm_griffin: '빛', star_fairy: '어둠', meteor_golem: '수', comet_fox: '빛', nebula_whale: '어둠',
+  dragon_knight: '빛', time_mage: '어둠', gold_wyvern: '화', dragon_king: '빛',
 };
 /** 크리티컬 확률 (%): pet level × 0.1 + skill level × 2 + gear (critPerLevel × 강화), at most 50. */
 export function critChance(petLevel: number, skillLv: number, gear: (TowerGear | undefined)[], levels: Record<string, number> = {}) {
@@ -523,3 +560,69 @@ export function critChance(petLevel: number, skillLv: number, gear: (TowerGear |
 }
 /** 빗나가면 공격 피해의 30%만, MP는 절반만 써요. 치유 30% (축복 ×1.5); 수호 ×0.9 받는 피해; 흡혈 10%; 저주 적 방어 ×0.9; 크리 ×2. */
 export const TOWER_SKILL_RULES = { missDamage: 0.3, missMp: 0.5, heal: 0.3, blessing: 1.5, guard: 0.9, drain: 0.1, curse: 0.9, crit: 2, weaken: 0.8 } as const;
+
+/* ------------------------------------------------------------------ 몬스터 스킬 (each monster its own) */
+
+/** What a monster skill does: 강타 ×2 · 연속 (two hits, a block question each) · 지속 피해 (화상·독·저주, unless blocked) ·
+ *  방어 태세 · 재생 (cancelled by a hit that turn) · 봉인 (no skills, unless blocked) · 묶기 (a shorter block question) · 흡혈. */
+export type FoeEffect = 'smash' | 'multi' | 'dot' | 'guard' | 'regen' | 'seal' | 'bind' | 'drain';
+/** One monster skill: its name, what it does, and the warning shown one turn before (`warn`). */
+export interface FoeSkill { id: string; name: string; fx: FoeEffect[]; dot?: '화상' | '독' | '저주'; warn: string }
+export const FOE_RULES = {
+  smash: 2, multi: 0.7, dotPct: 0.05, dotTurns: 3, guard: 1.5, guardTurns: 2, regen: 0.1, sealTurns: 2, bindSeconds: 4, drain: 0.5,
+  /** 분노 (51층+ bosses): 공격 ×1.3 below 30% 체력 */ rage: 1.3, rageAt: 0.3,
+  /** how often a monster warns of a skill after a plain attack (never two skills in a row) */ chance: 0.35, bossChance: 0.5,
+} as const;
+export const FOE_HINT: Record<FoeEffect, { icon: string; hint: string }> = {
+  smash: { icon: '💥', hint: '2배 피해 — 꼭 막으세요!' }, multi: { icon: '⚔️', hint: '두 번 공격 — 막기 문제가 2개예요' },
+  dot: { icon: '🔥', hint: '막지 못하면 3턴 동안 체력이 줄어요 (물약·치유로 나아요)' }, guard: { icon: '🛡️', hint: '2턴 동안 단단해져요 — 약점 속성 스킬로 깨요' },
+  regen: { icon: '💚', hint: '이번 턴에 공격을 맞히면 회복을 막아요' }, seal: { icon: '🔒', hint: '막지 못하면 2턴 동안 스킬을 못 써요' },
+  bind: { icon: '🕸️', hint: '다음 막기 문제는 4초 안에 답해야 해요' }, drain: { icon: '🩸', hint: '준 피해의 절반만큼 회복해요 — 막아서 줄여요' },
+};
+export const DOT_ICON = { 화상: '🔥', 독: '☠️', 저주: '💀' } as const;
+type S = [name: string, fx: FoeEffect | FoeEffect[], warn: string, dot?: FoeSkill['dot']];
+const FOE_TABLE: Partial<Record<TowerMonsterKind, S[]>> = {
+  gatekeeper: [['대지 내려찍기', 'smash', '주먹을 높이 들어 올렸어요']],
+  golem: [['바위 던지기', 'smash', '바위를 집어 들었어요']], obsidian_golem: [['흑요석 던지기', 'smash', '흑요석 덩어리를 들어 올렸어요']],
+  crystal_slime: [['수정 껍질', 'guard', '몸이 수정처럼 굳어 가요']], vampire_bat: [['흡혈 이빨', 'drain', '송곳니를 드러냈어요']], cave_spider: [['거미줄', 'bind', '거미줄을 뿜으려 해요']],
+  crystal_queen: [['수정 독침', 'dot', '독침을 겨누고 있어요', '독'], ['거미줄 감옥', 'bind', '거미줄 감옥을 짜고 있어요']],
+  sand_scorpion: [['독침', 'dot', '꼬리 독침을 치켜들었어요', '독']], mummy: [['붕대 감기', 'regen', '붕대를 다시 감으려 해요']], gold_golem: [['황금 갑옷', 'guard', '몸이 황금빛으로 빛나요']],
+  temple_cat: [['할퀴기 연타', 'multi', '발톱을 세웠어요']], sphinx: [['수수께끼의 저주', 'seal', '수수께끼를 읊기 시작했어요'], ['모래 폭풍', 'multi', '모래바람을 일으켜요']],
+  snow_spirit: [['눈보라', 'bind', '눈보라를 모으고 있어요']], ice_wolf: [['연속 물기', 'multi', '으르렁거리며 몸을 낮췄어요']], frost_knight: [['얼음 방패', 'guard', '얼음 방패를 세웠어요']],
+  frost_dragon: [['얼음 숨결', 'smash', '차가운 숨을 들이마셔요'], ['빙결 비늘', 'guard', '비늘이 얼어붙고 있어요']],
+  shadow_knight: [['그림자 베기', 'smash', '검에 그림자를 모아요']], magic_doll: [['조종 실', 'seal', '보이지 않는 실을 늘어뜨려요']], cursed_book: [['저주 주문', 'dot', '책장이 저절로 넘어가요', '저주']],
+  archmage: [['마력 봉인', 'seal', '봉인 주문을 외워요'], ['흑염 폭발', 'smash', '검은 불꽃을 모아요']],
+  lava_slime: [['용암 튀기기', 'dot', '몸이 부글부글 끓어요', '화상'], ['녹아 붙기', 'regen', '녹아내린 몸을 다시 붙여요']],
+  fire_lizard: [['불꽃 꼬리', 'multi', '꼬리에 불이 붙었어요'], ['불씨', 'dot', '불씨를 머금었어요', '화상']],
+  ash_golem: [['재 구름', 'bind', '재를 흩뿌리려 해요'], ['바위 주먹', 'smash', '불붙은 주먹을 들어 올렸어요']],
+  fire_drake: [['화염 숨결', ['smash', 'dot'], '숨을 크게 들이마셔요', '화상'], ['불꽃 날개', 'multi', '불꽃 날개를 펼쳤어요'], ['용암 비늘', 'guard', '비늘이 용암처럼 달아올라요']],
+  glow_jelly: [['마비 촉수', 'bind', '촉수가 찌릿찌릿 빛나요'], ['발광', 'regen', '온몸이 환하게 빛나요']],
+  merfolk_knight: [['삼지창 찌르기', 'multi', '삼지창을 겨눴어요'], ['물의 방패', 'guard', '물의 방패를 펼쳐요']],
+  turtle_guard: [['등껍질 숨기', 'guard', '등껍질 속으로 숨으려 해요'], ['박치기', 'smash', '고개를 뒤로 젖혔어요']],
+  kraken: [['촉수 강타', 'smash', '촉수를 높이 들어 올렸어요'], ['먹물', 'seal', '먹물을 뿜으려 해요'], ['휘감기', 'drain', '촉수로 휘감으려 해요']],
+  wind_spirit: [['회오리', 'multi', '바람이 빙글빙글 돌아요'], ['바람 장막', 'guard', '바람 장막을 두르려 해요']],
+  griffin: [['급강하', 'smash', '하늘 높이 날아올랐어요'], ['날갯바람', 'bind', '날개를 크게 펼쳤어요']],
+  thunder_bird: [['번개', 'bind', '깃털이 찌릿찌릿해요'], ['연쇄 번개', 'multi', '번개를 모으고 있어요']],
+  storm_griffin: [['천둥 낙뢰', 'smash', '먹구름이 몰려와요'], ['폭풍 날개', 'multi', '폭풍을 일으켜요'], ['회오리 장막', 'guard', '회오리를 두르고 있어요']],
+  star_fairy: [['별빛 치유', 'regen', '별빛을 모으고 있어요'], ['별가루', 'seal', '반짝이는 가루를 뿌리려 해요']],
+  meteor_golem: [['운석 낙하', 'smash', '하늘에서 운석을 불러요'], ['운석 갑옷', 'guard', '운석 조각을 두르려 해요']],
+  comet_fox: [['혜성 꼬리', 'multi', '꼬리가 혜성처럼 빛나요'], ['여우불', 'dot', '푸른 여우불을 피워요', '화상']],
+  nebula_whale: [['은하의 노래', 'seal', '깊은 노래를 부르기 시작했어요'], ['별 물줄기', 'multi', '별 물줄기를 뿜으려 해요'], ['성운 재생', 'regen', '성운이 몸을 감싸요']],
+  dragon_knight: [['용의 일격', 'smash', '용의 기운을 검에 모아요'], ['용린 방패', 'guard', '용 비늘 방패를 세워요']],
+  time_mage: [['시간 정지', 'bind', '시계 바늘이 멈춰 가요'], ['되감기', 'regen', '시간을 되감으려 해요']],
+  gold_wyvern: [['황금 숨결', 'dot', '황금빛 숨을 머금었어요', '화상'], ['연속 할퀴기', 'multi', '발톱을 번뜩여요']],
+  dragon_king: [['태초의 불길', ['smash', 'dot'], '태초의 불꽃을 모아요', '화상'], ['시간의 포효', 'seal', '크게 숨을 들이마셔요'], ['용린 재생', 'regen', '비늘이 금빛으로 빛나요']],
+  // 문 뒤 이벤트 전투: 거울 속 그림자, 수상한 요정, 깨어난 드래곤 (any floor, end-game strength)
+  shadow: [['거울 베기', 'smash', '내 동작을 똑같이 따라 해요'], ['그림자 장막', 'guard', '그림자가 짙어지고 있어요']],
+  fairy: [['요정 가루', 'bind', '반짝이는 가루를 흩뿌리려 해요'], ['반짝 치유', 'regen', '날개가 환하게 빛나요']],
+  dragon: [['용의 숨결', ['smash', 'dot'], '불꽃을 머금고 고개를 들었어요', '화상'], ['꼬리 휘두르기', 'multi', '꼬리를 크게 휘둘러요'], ['잠 깬 포효', 'seal', '크게 숨을 들이마셔요']],
+};
+export const TOWER_FOE_SKILLS: Partial<Record<TowerMonsterKind, FoeSkill[]>> = Object.fromEntries(Object.entries(FOE_TABLE).map(([kind, list]) =>
+  [kind, list!.map(([name, fx, warn, dot], i) => ({ id: `${kind}.${i}`, name, fx: Array.isArray(fx) ? fx : [fx], warn, ...(dot ? { dot } : {}) }))]));
+export const foeSkill = (id: string) => TOWER_FOE_SKILLS[id.split('.')[0] as TowerMonsterKind]?.find(k => k.id === id);
+/** The skills a monster uses on a floor: none below floor 10 (1구역 monsters), from the floor-10 boss on; the woken dragon and the 수상한 요정 always. */
+export const foeSkillsFor = (kind: TowerMonsterKind, floor: number) => floor >= PET_TOWER.bossEvery || kind === 'dragon' || kind === 'fairy' ? TOWER_FOE_SKILLS[kind] || [] : [];
+/** 51층+ bosses and the woken dragon grow angry when hurt (분노). */
+export const FOE_RAGE = new Set<TowerMonsterKind>(['fire_drake', 'kraken', 'storm_griffin', 'nebula_whale', 'dragon_king', 'dragon']);
+/** A skill that is the monster's whole turn (no attack, no block question): 방어 태세 and 재생. */
+export const foeQuiet = (k: FoeSkill) => k.fx.every(f => f === 'guard' || f === 'regen');

@@ -39,6 +39,7 @@ import { SortableWordbookCard, SortableWordCard } from './WordbookSortableCards'
 import {askConfirm} from './ConfirmDialog';
 import SentenceImportDialog from './SentenceImportDialog';
 import { sentenceUnits, unitLabel } from '../../lib/sentenceImport';
+import { wordbookPrintDays, wordbookPrintPlan, type WordbookPrintMode } from '../../lib/wordbookPrint';
 
 /** 기본 시험지 (직접 쓰기) is a word → 뜻 table: a 벼락치기 word is only its 분류 ("5형식" → "do") and 관계사 has
  *  four concept words, so those sets print 객관식 only. */
@@ -140,6 +141,8 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
     quizType: 'standard' as 'standard' | 'multiple-choice' | 'irregular-writing' | 'memorization-table',
     selectionMode: 'range' as 'random' | 'range',
     unitSize: 40,
+    // 'registered': the DAY each word was saved with (any size); 'count': every unitSize words.
+    dayMode: 'count' as WordbookPrintMode,
     startDay: 1,
     endDay: 1,
     shuffleVerbs: false
@@ -170,7 +173,9 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
   const [printConfig, setPrintConfig] = useState({
     startDay: 1,
     endDay: 1,
-    unitSize: 40
+    unitSize: 40,
+    // 'registered': the DAY/UNIT each word was saved with (any size); 'count': every N words.
+    mode: 'count' as WordbookPrintMode
   });
 
   const sensors = useSensors(
@@ -298,6 +303,9 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
 
   // 문장 세트 pasted with UNIT lines: those Days are shown as "UNIT 01" (title on hover).
   const units = React.useMemo(() => selectedWordbook?.type === 'sentence' ? sentenceUnits(words) : new Map<number, { title: string; chapter: string }>(), [words, selectedWordbook]);
+
+  // 단어장 출력하기: how a day is written beside each word ('Day 3', or 'UNIT 03' for a set saved by UNIT).
+  const printDayLabel = (day: number) => units.has(day) ? unitLabel(day, units.get(day), true) : `Day ${day}`;
 
   const currentDays = React.useMemo(() => {
     if (words.length === 0) return [1];
@@ -1229,10 +1237,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
         for (let set = testPaperConfig.startDay; set <= testPaperConfig.endDay; set++) selectedWords.push(...grammarSetWords<Word>(selectedWordbook?.type, words, set)!);
       } else {
         // Range selection by DAY: a word's own day, else the 학습 단위 typed here (the range shown under it)
-        selectedWords = words.filter((w, idx) => {
-          const d = Number(w.day) > 0 ? Number(w.day) : Math.floor(idx / Math.max(1, testPaperConfig.unitSize)) + 1;
-          return d >= testPaperConfig.startDay && d <= testPaperConfig.endDay;
-        });
+        selectedWords = wordbookPrintPlan(words, testPaperConfig.dayMode, testPaperConfig, getWordDay).words;
       }
       
       // Respect shuffle option if available (default true for random mode, but random mode handled above)
@@ -1305,7 +1310,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
           // Pick the requested number of questions
           const targetCount = testPaperConfig.selectionMode === 'random' 
             ? testPaperConfig.wordCount 
-            : (testPaperConfig.endDay - testPaperConfig.startDay + 1) * testPaperConfig.unitSize;
+            : wordbookPrintPlan(words, testPaperConfig.dayMode, testPaperConfig, getWordDay).words.length;
 
           const shuffledEx = allExamples.sort(() => 0.5 - Math.random());
           wordsForQuiz = shuffledEx.slice(0, Math.min(targetCount, allExamples.length));
@@ -1495,10 +1500,8 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
   const handlePrintWordbook = async () => {
     if (!selectedWordbook || words.length === 0) return;
     
-    const selectedWords = words.filter((w, idx) => {
-      const d = getWordDay(w, idx);
-      return d >= printConfig.startDay && d <= printConfig.endDay;
-    });
+    const plan = wordbookPrintPlan(words, printConfig.mode, printConfig, getWordDay, printDayLabel);
+    const selectedWords = plan.words;
 
     if (selectedWords.length === 0) {
       alert('선택된 범위에 단어가 없습니다.');
@@ -1506,14 +1509,14 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
     }
 
     try {
+      const range = printConfig.startDay === printConfig.endDay ? printDayLabel(printConfig.startDay) : `${printDayLabel(printConfig.startDay)}~${printConfig.endDay}`;
       await generateWordbookTable(
-        `${selectedWordbook.title} (DAY ${printConfig.startDay}-${printConfig.endDay})`,
+        `${selectedWordbook.title} (${range})`,
         selectedWords,
         {
           paperTitle: selectedWordbook.title,
           wordbookType: selectedWordbook.type,
-          unitSize: printConfig.unitSize,
-          startDay: printConfig.startDay
+          numbers: plan.numbers
         }
       );
       setIsPrintModalOpen(false);
@@ -1758,10 +1761,16 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
                   </button>}
                   <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => {
+                      // A book saved with its own DAYs picks by them (each DAY its own size), from its first DAY.
+                      const registered = words.some(w => Number(w.day) > 0), unitSize = selectedWordbook.defaultUnitSize || 10;
+                      const days = wordbookPrintDays(words, registered ? 'registered' : 'count', unitSize, getWordDay);
+                      const keep = days.some(x => x.day === testPaperConfig.startDay) && days.some(x => x.day === testPaperConfig.endDay);
                       setTestPaperConfig({
                         ...testPaperConfig,
                         title: selectedWordbook.title,
-                        unitSize: selectedWordbook.defaultUnitSize || 10,
+                        unitSize,
+                        dayMode: registered ? 'registered' : 'count',
+                        ...(keep ? {} : {startDay: days[0]?.day || 1, endDay: days[0]?.day || 1}),
                         quizType: noWritingTest(selectedWordbook.type) && testPaperConfig.quizType === 'standard' ? 'multiple-choice' : testPaperConfig.quizType
                       });
                       setIsTestPaperModalOpen(true);
@@ -1774,10 +1783,11 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
                   <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => {
                       if (selectedWordbook) {
-                        setPrintConfig({
-                          ...printConfig,
-                          unitSize: selectedWordbook.defaultUnitSize || 40
-                        });
+                        // A book saved with its own DAYs (or UNITs) prints by them by default, all of them.
+                        const registered = words.some(w => Number(w.day) > 0);
+                        const unitSize = selectedWordbook.defaultUnitSize || 40;
+                        const days = wordbookPrintDays(words, registered ? 'registered' : 'count', unitSize, getWordDay);
+                        setPrintConfig({ mode: registered ? 'registered' : 'count', unitSize, startDay: days[0]?.day || 1, endDay: days[days.length - 1]?.day || 1 });
                         setIsPrintModalOpen(true);
                       }
                     }}
@@ -2291,16 +2301,27 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
               </div>
               )}
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">학습 기본 단위 (DAY당 단어 수)</label>
-                <input
-                  type="number"
-                  value={editWbUnitSizeValue}
-                  onChange={(e) => setEditWbUnitSizeValue(parseInt(e.target.value) || 1)}
-                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
-                />
-                <p className="text-[10px] text-slate-400 mt-2 ml-1 leading-relaxed">
-                  * 시험지 생성 및 학생 학습 시 이 값이 기본 DAY 단위로 사용됩니다.
-                </p>
+                {(() => {
+                  // The open book saved with its own DAYs: those DAYs are what students and 시험지·출력 use, whatever their size.
+                  const own = editingWordbook.id === selectedWordbook?.id && words.some(w => Number(w.day) > 0) ? wordbookPrintDays(words, 'registered', 1, getWordDay) : [];
+                  const sizes = own.map(x => x.count);
+                  return <>
+                    {own.length > 0 && <div className="mb-3 p-3 rounded-2xl bg-emerald-50 border border-emerald-100 text-xs font-bold text-emerald-700 leading-relaxed">
+                      등록된 DAY대로 나뉘어 있어요 · {printDayLabel(own[0].day)}~{own[own.length - 1].day} · DAY마다 {Math.min(...sizes) === Math.max(...sizes) ? `${sizes[0]}개` : `${Math.min(...sizes)}~${Math.max(...sizes)}개`}
+                    </div>}
+                    <label className="block text-xs font-bold text-slate-400 mb-1 ml-1">{own.length ? 'DAY가 없는 단어의 DAY당 단어 수' : '학습 기본 단위 (DAY당 단어 수)'}</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={editWbUnitSizeValue}
+                      onChange={(e) => setEditWbUnitSizeValue(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-2 ml-1 leading-relaxed">
+                      * 단어에 DAY가 등록돼 있으면 그 DAY가 먼저예요(DAY마다 단어 수가 달라도 돼요). 이 값은 DAY가 없는 단어를 나눌 때만 쓰여요.
+                    </p>
+                  </>;
+                })()}
               </div>
               {editingWordbook.type === 'irregular' && (
                 <div>
@@ -3117,58 +3138,51 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
                       </div>
                     ) : (
                       <>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">학습 단위 (DAY당 단어)</label>
-                            <input
-                              type="number"
-                              value={testPaperConfig.unitSize}
-                              onChange={(e) => setTestPaperConfig({ ...testPaperConfig, unitSize: parseInt(e.target.value) || 1 })}
-                              className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">총 DAY 수</label>
-                            <div className="p-2.5 bg-white border border-blue-100 rounded-lg font-bold text-blue-600 text-sm">
-                              약 {Math.ceil(words.length / testPaperConfig.unitSize)} DAYS
+                        {/* How to split: as saved (each DAY its own size) or every N words. */}
+                        <div className="grid grid-cols-2 gap-1 p-1 bg-white rounded-lg border border-blue-100" role="group" aria-label="나누는 방법">
+                          {([['registered', '등록된 DAY 그대로'], ['count', 'DAY당 단어 수로']] as const).map(([mode, label]) => (
+                            <button key={mode} type="button" aria-pressed={testPaperConfig.dayMode === mode}
+                              onClick={() => { const days = wordbookPrintDays(words, mode, testPaperConfig.unitSize, getWordDay), first = days[0]?.day || 1; setTestPaperConfig({ ...testPaperConfig, dayMode: mode, startDay: first, endDay: first, subtitle: `${printDayLabel(first)}` }); }}
+                              className={`py-1.5 rounded-md text-[11px] font-bold transition-all ${testPaperConfig.dayMode === mode ? 'bg-blue-500 text-white' : 'text-blue-500 hover:bg-blue-50'}`}>{label}</button>
+                          ))}
+                        </div>
+                        {testPaperConfig.dayMode === 'count' && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">DAY당 단어</label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={testPaperConfig.unitSize}
+                                onChange={(e) => { const unitSize = Math.max(1, parseInt(e.target.value) || 1), last = Math.ceil(words.length / unitSize) || 1; setTestPaperConfig({ ...testPaperConfig, unitSize, startDay: Math.min(testPaperConfig.startDay, last), endDay: Math.min(testPaperConfig.endDay, last) }); }}
+                                className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">총 DAY 수</label>
+                              <div className="p-2.5 bg-white border border-blue-100 rounded-lg font-bold text-blue-600 text-sm">
+                                {Math.ceil(words.length / Math.max(1, testPaperConfig.unitSize))} DAYS
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                         <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">시작 DAY</label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={testPaperConfig.startDay}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value) || 1;
-                                setTestPaperConfig({ 
-                                  ...testPaperConfig, 
-                                  startDay: val,
-                                  subtitle: `DAY ${val.toString().padStart(2, '0')}-${testPaperConfig.endDay.toString().padStart(2, '0')}`
-                                });
-                              }}
-                              className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">종료 DAY</label>
-                            <input
-                              type="number"
-                              min={testPaperConfig.startDay}
-                              value={testPaperConfig.endDay}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value) || 1;
-                                setTestPaperConfig({ 
-                                  ...testPaperConfig, 
-                                  endDay: val,
-                                  subtitle: `DAY ${testPaperConfig.startDay.toString().padStart(2, '0')}-${val.toString().padStart(2, '0')}`
-                                });
-                              }}
-                              className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
-                            />
-                          </div>
+                          {([['startDay', '시작'], ['endDay', '끝']] as const).map(([key, label]) => (
+                            <div key={key}>
+                              <label className="block text-[10px] font-bold text-blue-400 mb-1 ml-1">{label}</label>
+                              <select
+                                value={testPaperConfig[key]}
+                                onChange={(e) => {
+                                  const day = Number(e.target.value);
+                                  const startDay = key === 'startDay' ? day : Math.min(day, testPaperConfig.startDay), endDay = key === 'endDay' ? day : Math.max(day, testPaperConfig.endDay);
+                                  setTestPaperConfig({ ...testPaperConfig, startDay, endDay, subtitle: startDay === endDay ? printDayLabel(startDay) : `${printDayLabel(startDay)}-${String(endDay).padStart(2, '0')}` });
+                                }}
+                                className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
+                              >
+                                {wordbookPrintDays(words, testPaperConfig.dayMode, testPaperConfig.unitSize, getWordDay).map(({ day, count }) => <option key={day} value={day}>{printDayLabel(day)} ({count}개)</option>)}
+                              </select>
+                            </div>
+                          ))}
                         </div>
                       </>
                     )}
@@ -3176,7 +3190,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
                       {grammarSetCount(selectedWordbook?.type) ? (
                         `선택된 세트: ${testPaperConfig.startDay}세트 ~ ${testPaperConfig.endDay}세트`
                       ) : (
-                        `선택 범위: ${((testPaperConfig.startDay - 1) * testPaperConfig.unitSize) + 1}번 ~ ${Math.min(testPaperConfig.endDay * testPaperConfig.unitSize, words.length)}번 단어`
+                        (() => { const plan = wordbookPrintPlan(words, testPaperConfig.dayMode, testPaperConfig, getWordDay); return `${plan.days.length}개 ${units.size ? 'UNIT' : 'DAY'} · 단어 ${plan.words.length}개`; })()
                       )}
                     </div>
                   </div>
@@ -3365,51 +3379,53 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
 
             <div className="space-y-6 mb-8">
               <div className="p-4 bg-pastel-pink-50 rounded-2xl border border-pastel-pink-100">
-                <p className="text-xs font-bold text-pastel-pink-600 mb-3 ml-1">출력할 범위를 DAY 단위로 지정해주세요.</p>
-                
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-[10px] font-black text-pastel-pink-400 uppercase mb-1 ml-1">학습 단위 (DAY당 단어)</label>
-                    <input
-                      type="number"
-                      value={printConfig.unitSize}
-                      onChange={(e) => setPrintConfig({ ...printConfig, unitSize: parseInt(e.target.value) || 1 })}
-                      className="w-full px-4 py-3 bg-white border border-pastel-pink-100 rounded-xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-pastel-pink-400 uppercase mb-1 ml-1">총 DAY 수</label>
-                    <div className="px-4 py-3 bg-white border border-pastel-pink-100 rounded-xl font-bold text-pastel-pink-600 text-sm">
-                      약 {Math.ceil(words.length / printConfig.unitSize)} DAYS
+                {/* How to split: as saved (each DAY its own size) or every N words. */}
+                <div className="grid grid-cols-2 gap-1 p-1 mb-4 bg-white rounded-xl border border-pastel-pink-100" role="group" aria-label="나누는 방법">
+                  {([['registered', '등록된 DAY 그대로'], ['count', 'DAY당 단어 수로']] as const).map(([mode, label]) => (
+                    <button key={mode} type="button" aria-pressed={printConfig.mode === mode}
+                      onClick={() => { const days = wordbookPrintDays(words, mode, printConfig.unitSize, getWordDay); setPrintConfig({ ...printConfig, mode, startDay: days[0]?.day || 1, endDay: days[days.length - 1]?.day || 1 }); }}
+                      className={`py-2 rounded-lg text-xs font-bold transition-all ${printConfig.mode === mode ? 'bg-pastel-pink-500 text-white shadow-sm' : 'text-pastel-pink-600 hover:bg-pastel-pink-50'}`}>{label}</button>
+                  ))}
+                </div>
+                {printConfig.mode === 'count' && (
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-pastel-pink-400 uppercase mb-1 ml-1">DAY당 단어</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={printConfig.unitSize}
+                        onChange={(e) => { const unitSize = Math.max(1, parseInt(e.target.value) || 1), last = Math.ceil(words.length / unitSize) || 1; setPrintConfig({ ...printConfig, unitSize, startDay: Math.min(printConfig.startDay, last), endDay: Math.min(Math.max(printConfig.endDay, 1), last) }); }}
+                        className="w-full px-4 py-3 bg-white border border-pastel-pink-100 rounded-xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-pastel-pink-400 uppercase mb-1 ml-1">총 DAY 수</label>
+                      <div className="px-4 py-3 bg-white border border-pastel-pink-100 rounded-xl font-bold text-pastel-pink-600 text-sm">
+                        {Math.ceil(words.length / Math.max(1, printConfig.unitSize))} DAYS
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
+                {printConfig.mode === 'registered' && <p className="text-[11px] font-bold text-pastel-pink-500 mb-3 ml-1">단어장에 등록한 DAY대로 나눠요. DAY마다 단어 수가 달라도 그대로예요.</p>}
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-black text-pastel-pink-400 uppercase mb-1 ml-1">시작 DAY</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={printConfig.startDay}
-                      onChange={(e) => setPrintConfig({ ...printConfig, startDay: parseInt(e.target.value) || 1 })}
-                      className="w-full px-4 py-3 bg-white border border-pastel-pink-100 rounded-xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-pastel-pink-400 uppercase mb-1 ml-1">종료 DAY</label>
-                    <input
-                      type="number"
-                      min={printConfig.startDay}
-                      value={printConfig.endDay}
-                      onChange={(e) => setPrintConfig({ ...printConfig, endDay: parseInt(e.target.value) || 1 })}
-                      className="w-full px-4 py-3 bg-white border border-pastel-pink-100 rounded-xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold text-sm"
-                    />
-                  </div>
+                  {([['startDay', '시작'], ['endDay', '끝']] as const).map(([key, label]) => (
+                    <div key={key}>
+                      <label className="block text-[10px] font-black text-pastel-pink-400 uppercase mb-1 ml-1">{label}</label>
+                      <select
+                        value={printConfig[key]}
+                        onChange={(e) => { const day = Number(e.target.value); setPrintConfig(key === 'startDay' ? { ...printConfig, startDay: day, endDay: Math.max(day, printConfig.endDay) } : { ...printConfig, endDay: day, startDay: Math.min(day, printConfig.startDay) }); }}
+                        className="w-full px-3 py-3 bg-white border border-pastel-pink-100 rounded-xl focus:ring-4 focus:ring-pastel-pink-100 outline-none font-bold text-sm"
+                      >
+                        {wordbookPrintDays(words, printConfig.mode, printConfig.unitSize, getWordDay).map(({ day, count }) => <option key={day} value={day}>{printDayLabel(day)} ({count}개)</option>)}
+                      </select>
+                    </div>
+                  ))}
                 </div>
 
                 <div className="mt-4 text-[11px] font-bold text-pastel-pink-400 text-center bg-white/50 py-2 rounded-lg">
-                  선택 범위: {((printConfig.startDay - 1) * printConfig.unitSize) + 1}번 ~ {Math.min(printConfig.endDay * printConfig.unitSize, words.length)}번 단어
+                  {(() => { const plan = wordbookPrintPlan(words, printConfig.mode, printConfig, getWordDay, printDayLabel); return `${plan.days.length}개 ${units.size ? 'UNIT' : 'DAY'} · 단어 ${plan.words.length}개`; })()}
                 </div>
               </div>
             </div>

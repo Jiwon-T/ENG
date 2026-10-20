@@ -1,4 +1,5 @@
 import type { TowerGearSlot } from '../../lib/petCatalog';
+import { PLUS, PLUS_ORDER, plusBack, plusFx, plusSlot } from './petGearArtPlus';
 
 // 장비 겹쳐 그리기: each worn place is drawn over the pet (120×130 grid), in its own tier's look — 견습 → 이끼 숲 → 수정 동굴 →
 // 모래 신전 → 얼음 성채 → 마도사, more detail as it goes up; from 수정 동굴 the gems twinkle, then capes sway, snow falls and
@@ -15,6 +16,8 @@ const TIERS = [
   { main: '#dbeafe', dark: '#1e40af', trim: '#7dd3fc' },
   { main: '#3b2a5c', dark: '#140b26', trim: '#facc15' },
 ];
+// 6~10단계 (화염 · 심해 · 천공 · 성운 · 용왕) are drawn in petGearArtPlus; their colours here for the set glow.
+TIERS.push(...PLUS_ORDER.map(i => ({ main: PLUS[i].main, dark: PLUS[i].dark, trim: PLUS[i].trim })));
 const r1 = (n: number) => String(Math.round(n * 10) / 10);
 function star(cx: number, cy: number, r: number, fill: string) {
   const pts: string[] = [];
@@ -129,36 +132,46 @@ const SNOW = (color: string) => [[20, 30, 0], [100, 24, .9], [30, 60, 1.6], [96,
 // the animation sets the circle's own opacity, so the wrapper keeps it soft
 export function gearSetBack(full: number) { return `<g opacity=".2"><circle class="pg-pulse" cx="60" cy="80" r="52" fill="${TIERS[full].trim}"/></g>`; }
 export function gearSetFront(full: number) {
+  if (full >= 6) return plusFx(full);
   const stars = full === 5 ? star(18, 30, 3, '#facc15') + star(104, 22, 2.4, '#c084fc') + star(16, 80, 2, '#c084fc') : '';
   if (full === 4) return SNOW('#bae6fd');
   if (full === 5) return stars + SNOW('#c084fc') + `<g class="pg-orbit">${star(112, 70, 2.6, '#facc15')}<circle cx="8" cy="70" r="1.8" fill="#facc15"/><circle cx="60" cy="18" r="1.4" fill="#facc15"/></g>`;
   return '';
 }
 
-/** Everything worn, in drawing order. `helmetY`: moves the helmet to the character's head (다롱's hair, 호두's ears). */
-export function gearArt(style: GearArtStyle, look: GearLook, helmetY = 0) {
+/** Wings and fins (6~10단계 armor) drawn behind the pet. */
+export function gearBack(look: GearLook, id = '') {
+  const a = look.armor; if (typeof a !== 'number' || a < 6 || a >= TIERS.length) return '';
+  const b = plusBack(a); return b.behind ? b.svg.replaceAll('__ID__', id) : '';
+}
+
+/** Everything worn, in drawing order. `helmetY`: moves the helmet to the character's head (다롱's hair, 호두's ears);
+ *  `id`: this picture's own, for the clip shapes of 6~10단계. */
+export function gearArt(style: GearArtStyle, look: GearLook, helmetY = 0, id = '') {
   const at = (s: TowerGearSlot) => { const L = look[s]; return typeof L === 'number' && L >= 0 && L < TIERS.length ? L : null; };
   const w = at('weapon'), h = at('helmet'), a = at('armor'), sh = at('shoulder'), gl = at('gloves'), b = at('boots'), out: string[] = [];
   const helmet = (svg: string) => helmetY ? `<g transform="translate(0 ${helmetY})">${svg}</g>` : svg;
+  const plus = (L: number) => L >= 6, cape = (L: number) => plus(L) ? (plusBack(L).behind ? '' : plusBack(L).svg) : style === 'knight' ? knight.cape(L) : mage.cape(L);
+  const piece = (slot: TowerGearSlot, L: number, own: () => string) => plus(L) ? plusSlot(style, L, slot) : own();
   if (style === 'knight') {
-    if (a !== null) out.push(knight.cape(a));
-    if (b !== null) out.push(knight.boots(b));
-    if (a !== null) out.push(knight.armor(a));
-    if (sh !== null) out.push(knight.shoulder(sh));
-    if (gl !== null) out.push(knight.glove(gl, 34));
-    if (w !== null) out.push(knight.weapon(w));
-    if (gl !== null) out.push(knight.glove(gl, 86));
-    if (h !== null) out.push(helmet(knight.helmet(h)));
+    if (a !== null) out.push(cape(a));
+    if (b !== null) out.push(piece('boots', b, () => knight.boots(b)));
+    if (a !== null) out.push(piece('armor', a, () => knight.armor(a)));
+    if (sh !== null) out.push(piece('shoulder', sh, () => knight.shoulder(sh)));
+    if (gl !== null) out.push(piece('gloves', gl, () => knight.glove(gl, 34)));
+    if (w !== null) out.push(piece('weapon', w, () => knight.weapon(w)));
+    if (gl !== null && !plus(gl)) out.push(knight.glove(gl, 86));
+    if (h !== null) out.push(helmet(piece('helmet', h, () => knight.helmet(h))));
   } else {
-    if (a !== null) out.push(mage.cape(a));
-    if (b !== null) out.push(mage.boots(b));
-    if (w !== null) out.push(mage.weapon(w));
-    if (a !== null) out.push(mage.armor(a));
-    if (sh !== null) out.push(mage.shoulder(sh));
-    if (gl !== null) out.push(mage.gloves(gl));
-    if (h !== null) out.push(helmet(mage.helmet(h)));
+    if (a !== null) out.push(cape(a));
+    if (b !== null) out.push(piece('boots', b, () => mage.boots(b)));
+    if (w !== null) out.push(piece('weapon', w, () => mage.weapon(w)));
+    if (a !== null) out.push(piece('armor', a, () => mage.armor(a)));
+    if (sh !== null) out.push(piece('shoulder', sh, () => mage.shoulder(sh)));
+    if (gl !== null) out.push(piece('gloves', gl, () => mage.gloves(gl)));
+    if (h !== null) out.push(helmet(piece('helmet', h, () => mage.helmet(h))));
   }
-  return out.join('');
+  return out.join('').replaceAll('__ID__', id);
 }
 
 const PIECE_BOX: Record<GearArtStyle, Record<TowerGearSlot, string>> = {
@@ -167,7 +180,7 @@ const PIECE_BOX: Record<GearArtStyle, Record<TowerGearSlot, string>> = {
   mage: { weapon: '0 18 36 106', helmet: '22 0 76 48', armor: '24 78 72 56', shoulder: '22 78 30 22', gloves: '25 95 18 18', boots: '35 113 24 16' },
 };
 /** One piece on its own (the gear icon): its drawing and the box around it. */
-export function gearPiece(style: GearArtStyle, slot: TowerGearSlot, tier: number) {
-  const art = slot === 'gloves' && style === 'knight' ? knight.glove(tier, 34) : gearArt(style, { [slot]: tier });
+export function gearPiece(style: GearArtStyle, slot: TowerGearSlot, tier: number, id = `ic${style}${slot}${tier}`) {
+  const art = slot === 'gloves' && style === 'knight' && tier < 6 ? knight.glove(tier, 34) : gearArt(style, { [slot]: tier }, 0, id);
   return { svg: art, box: PIECE_BOX[style][slot] };
 }

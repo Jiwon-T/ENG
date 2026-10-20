@@ -8,9 +8,15 @@ export const PRINT_LOGO = '/icons/icon-rosy-192.png';
 export const APP_NAME = '지원T English';
 export const DEFAULT_FOOTER = '채움학원 지원T';
 const FOOTER_KEY = 'print-footer', OLD_WORKBOOK_FOOTER = 'workbook-footer';
+// Students (and anyone not known to be a teacher yet) always get 채움학원 지원T; App unlocks it for teacher accounts.
+let footerLocked = true;
+export function setPrintFooterLocked(locked: boolean) { footerLocked = locked; }
+export const printFooterLocked = () => footerLocked;
 
-/** The footer on this device: the one set here, else the 워크북 one set before (moved over once), else 채움학원 지원T. */
+/** The footer on this device: the one set here, else the 워크북 one set before (moved over once), else 채움학원 지원T.
+ *  Fixed to 채움학원 지원T while locked (students). */
 export function printFooter(): string {
+  if (footerLocked) return DEFAULT_FOOTER;
   try {
     const saved = localStorage.getItem(FOOTER_KEY);
     if (saved !== null) return saved.trim() || DEFAULT_FOOTER;
@@ -19,8 +25,9 @@ export function printFooter(): string {
   } catch { /* storage off: the default */ }
   return DEFAULT_FOOTER;
 }
-/** Change the footer (empty = back to 채움학원 지원T). */
+/** Change the footer (empty = back to 채움학원 지원T); not while locked. */
 export function setPrintFooter(value: string) {
+  if (footerLocked) return DEFAULT_FOOTER;
   try { localStorage.setItem(FOOTER_KEY, value.trim().slice(0, 80)); } catch { /* not kept: this time only */ }
   return value.trim().slice(0, 80) || DEFAULT_FOOTER;
 }

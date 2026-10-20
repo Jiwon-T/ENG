@@ -1,6 +1,7 @@
 import { type ReactNode, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { medalLabel, PET_COUPON, towerDecor } from '../../lib/petCatalog';
 import type { CouponMonth, CouponView, LedgerItem, MedalSpot } from '../../lib/petService';
+import { DECOR_ART } from './TowerDecorArt';
 
 // 이달의 장학 쿠폰 and its 금메달: the goal gauge on the pet home, the 쿠폰 shop tab, and the medals placed in the room
 // (꾸미기: drag a medal anywhere in the room; the 메달함 puts one in or takes it out). One medal design for every month,
@@ -19,16 +20,9 @@ export function MedalArt({ month, size = 44 }: { month: string; size?: number })
   </svg>;
 }
 
-/** 탑 장식 art (the zones of floors 1–50): 이끼 화분, 수정 램프, 모래시계, 얼음 조각상, 마도서 책장. */
+/** 탑 장식 art: 이끼 화분 … 마도서 책장 (floors 10–50), 용암 화로 … 용왕의 왕좌 (60–100), in TowerDecorArt. */
 export function DecorArt({ id, size = 44 }: { id: string; size?: number }) {
-  const art: Record<string, ReactNode> = {
-    moss_pot: <g transform="translate(30 40)"><path d="M-18 4 L-14 30 H14 L18 4Z" fill="#c2410c" /><rect x="-20" y="0" width="40" height="7" rx="2" fill="#9a3412" /><ellipse cy="-2" rx="20" ry="8" fill="#4d7c0f" /><circle cx="-9" cy="-10" r="9" fill="#65a30d" /><circle cx="8" cy="-12" r="10" fill="#84cc16" /><circle cy="-20" r="8" fill="#65a30d" /></g>,
-    crystal_lamp: <g transform="translate(30 42)"><circle cy="-18" r="18" fill="#ddd6fe" opacity=".35" /><rect x="-3" y="-4" width="6" height="30" fill="#6b7280" /><ellipse cy="28" rx="14" ry="4" fill="#4b5563" /><path d="M0 -36 L12 -14 L0 -2 L-12 -14Z" fill="#c4b5fd" stroke="#7c3aed" strokeWidth="1" /><path d="M0 -36 L0 -2" stroke="#ede9fe" strokeWidth="1" /></g>,
-    hourglass: <g transform="translate(30 38)"><rect x="-16" y="-30" width="32" height="5" rx="2" fill="#92400e" /><rect x="-16" y="25" width="32" height="5" rx="2" fill="#92400e" /><path d="M-12 -25 Q-12 -6 0 0 Q-12 6 -12 25 H12 Q12 6 0 0 Q12 -6 12 -25Z" fill="#fef3c7" stroke="#b45309" strokeWidth="1" /><path d="M-8 -20 Q-6 -8 0 -2 Q6 -8 8 -20Z" fill="#f59e0b" /><path d="M-8 24 Q0 12 8 24Z" fill="#f59e0b" /></g>,
-    ice_statue: <g transform="translate(30 40)"><rect x="-16" y="20" width="32" height="10" rx="2" fill="#93c5fd" /><path d="M-10 20 L-12 -6 Q-12 -20 0 -24 Q12 -20 12 -6 L10 20Z" fill="#dbeafe" stroke="#60a5fa" strokeWidth="1" /><circle cy="-30" r="8" fill="#eff6ff" stroke="#60a5fa" strokeWidth="1" /><path d="M-6 0 L6 8 M6 0 L-6 8" stroke="#ffffff" strokeWidth="1.2" /></g>,
-    spellbook_shelf: <g transform="translate(30 40)"><rect x="-22" y="-32" width="44" height="62" rx="3" fill="#78350f" /><rect x="-18" y="-12" width="36" height="3" fill="#451a03" /><rect x="-18" y="10" width="36" height="3" fill="#451a03" /><rect x="-16" y="-28" width="6" height="16" fill="#7c3aed" /><rect x="-9" y="-26" width="5" height="14" fill="#db2777" /><rect x="-3" y="-28" width="6" height="16" fill="#2563eb" /><rect x="5" y="-25" width="5" height="13" fill="#ca8a04" /><rect x="-14" y="-6" width="5" height="16" fill="#059669" /><rect x="-7" y="-8" width="7" height="18" fill="#4c1d95" /><circle cx="10" cy="2" r="5" fill="#c4b5fd" opacity=".9" /><rect x="-16" y="16" width="32" height="10" fill="#92400e" /></g>,
-  };
-  return <svg viewBox="0 0 60 76" width={size} height={size * 76 / 60} role="img" aria-label={towerDecor(id)?.name || '장식'}>{art[id] || null}</svg>;
+  return <svg viewBox="0 0 60 76" width={size} height={size * 76 / 60} role="img" aria-label={towerDecor(id)?.name || '장식'} style={{ overflow: 'visible' }}>{DECOR_ART[id] || null}</svg>;
 }
 /** One thing in the room: a 금메달 (by month) or a 탑 장식 (by id). */
 const Placed = ({ id, size }: { id: string; size: number }) => towerDecor(id) ? <DecorArt id={id} size={size * 1.1} /> : <MedalArt month={id} size={size} />;

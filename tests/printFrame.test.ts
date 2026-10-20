@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 import { Paragraph } from 'docx';
-import { DEFAULT_FOOTER, frameDocx, partTitle, printFooter, sentencePages, setPrintFooter, sentenceMark } from '../src/lib/printFrame.ts';
+import { DEFAULT_FOOTER, frameDocx, partTitle, printFooter, printFooterLocked, sentencePages, setPrintFooter, setPrintFooterLocked, sentenceMark } from '../src/lib/printFrame.ts';
 
 const xmlText = (xml: string) => xml.replace(/<[^>]+>/g, '');
 
@@ -17,6 +17,7 @@ test('출력 틀: a long passage keeps 8 sentences a page and goes on with (2); 
 test('출력 틀: the footer is 채움학원 지원T unless changed; the old 워크북 footer moves over once; empty = back to the default', () => {
   const store = new Map<string, string>();
   (globalThis as any).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } };
+  setPrintFooterLocked(false); // a teacher account
   try {
     assert.equal(printFooter(), DEFAULT_FOOTER);
     store.set('workbook-footer', '고덕 캠퍼스 박T');
@@ -26,6 +27,18 @@ test('출력 틀: the footer is 채움학원 지원T unless changed; the old 워
     assert.equal(printFooter(), '이충 김T');
     assert.equal(setPrintFooter('  '), DEFAULT_FOOTER);
     assert.equal(printFooter(), DEFAULT_FOOTER);
+  } finally { delete (globalThis as any).localStorage; setPrintFooterLocked(true); }
+});
+
+test('출력 틀: students always get 채움학원 지원T — a footer saved on the device is ignored and cannot be changed', () => {
+  const store = new Map<string, string>([['print-footer', '내 마음대로 바닥글']]);
+  (globalThis as any).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } };
+  try {
+    setPrintFooterLocked(true);
+    assert.equal(printFooterLocked(), true, 'locked until the app knows a teacher signed in');
+    assert.equal(printFooter(), DEFAULT_FOOTER);
+    assert.equal(setPrintFooter('바꾼 바닥글'), DEFAULT_FOOTER);
+    assert.equal(store.get('print-footer'), '내 마음대로 바닥글', 'nothing written while locked');
   } finally { delete (globalThis as any).localStorage; }
 });
 

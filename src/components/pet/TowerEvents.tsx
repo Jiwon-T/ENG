@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { PET_TOWER, TOWER_ENHANCE, TOWER_EVENTS, petGearView, petStage, towerGearFor, wornAccessories, type PetCharacterType, type PetJob } from '../../lib/petCatalog';
+import { PET_TOWER, TOWER_ENHANCE, TOWER_EVENTS, petGearView, petStage, towerGearFor, wornAccessories, type PetCharacterType, type PetJob, type TowerEvent } from '../../lib/petCatalog';
 import { PetCharacter } from './PetCharacters';
 import { TowerMonster } from './TowerMonster';
 import { Hall, TowerGearIcon } from './TowerHall';
 import { TowerDragon, TowerMerchant } from './TowerCharacters';
+import { MiniGameScreen } from './TowerMiniGames';
 
 // What waits behind a door when it isn't a plain battle: the 떠돌이 상인, the 길 잃은 요정, the 수수께끼 석상, the 함정 바닥 and
 // the 잠든 몬스터 (a drag mini-game). Every result is decided by the server; these screens only ask.
 type Send = (move: string, input?: Record<string, unknown>) => Promise<any>;
-export interface TowerEventView { id: string; floor: number; type: 'merchant' | 'riddle' | 'sleeping' | 'trap' | 'fairy'; stock: { stone: number; potion: number } | null; q: { kind: string; prompt: string; choices: string[]; msLeft: number | null } | null; color?: number | null }
+export interface TowerEventView { id: string; floor: number; type: Exclude<TowerEvent, 'monster' | 'mirror' | 'treasure'>; /** a 쉬어 가기 놀이's view */ game?: any; stock: { stone: number; potion: number } | null; q: { kind: string; prompt: string; choices: string[]; msLeft: number | null } | null; color?: number | null }
 interface PetLook { character: string; level: number; clothing: string | null; accessories?: Record<string, string> }
 const won = (n: number) => n.toLocaleString('ko-KR');
 const Box = ({ children }: { children: ReactNode }) => <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-sm font-medium text-[#2c2c2a]">{children}</p>;
@@ -25,6 +26,7 @@ export function TowerEventScreen({ event, busy, points, stones, potions, gear, l
     </div>
   </div>;
   if (event.type === 'riddle' || event.type === 'trap') return <Question {...{ event, busy, send, title }} />;
+  if (event.game) return <MiniGameScreen view={{ type: event.type, title, game: event.game }} busy={busy} send={send} />;
   return <Sleeping {...{ busy, pet, send, title }} color={event.color ?? 0} />;
 }
 

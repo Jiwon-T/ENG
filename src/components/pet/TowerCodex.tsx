@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
-import { TOWER_ZONES, petGearView, petStage, wornAccessories, type PetElement, type TowerMonsterKind } from '../../lib/petCatalog';
+import { FOE_HINT, TOWER_FOE_SKILLS, TOWER_ZONES, petGearView, petStage, wornAccessories, type PetElement, type TowerMonsterKind } from '../../lib/petCatalog';
 import type { PetState } from '../../lib/petService';
 import { PetCharacter } from './PetCharacters';
 import { TowerMonster } from './TowerMonster';
-import { TowerBossFrostDragon, TowerBossGolem, TowerBossSphinx, TowerBossSpider, TowerDragon } from './TowerCharacters';
+import { BossDragonKing, BossFireDrake, BossKraken, BossNebulaWhale, BossStormGriffin, TowerBossFrostDragon, TowerBossGolem, TowerBossSphinx, TowerBossSpider, TowerDragon } from './TowerCharacters';
 
 // 몬스터 도감: every monster the student's pets have met, in the order met, with the weakness once a crit revealed it.
 // How many monsters there are stays a secret (a single "???" card stands for the rest); a boss's name too, until beaten.
@@ -27,6 +27,11 @@ export function MonsterArt({ kind, boss, color, size, pet }: { kind: TowerMonste
   if (kind === 'frost_dragon') return <TowerBossFrostDragon size={size} />;
   if (kind === 'crystal_queen') return <TowerBossSpider size={size} />;
   if (kind === 'sphinx') return <TowerBossSphinx size={size} />;
+  if (kind === 'fire_drake') return <BossFireDrake size={size} />;
+  if (kind === 'kraken') return <BossKraken size={size} />;
+  if (kind === 'storm_griffin') return <BossStormGriffin size={size} />;
+  if (kind === 'nebula_whale') return <BossNebulaWhale size={size} />;
+  if (kind === 'dragon_king') return <BossDragonKing size={size} />;
   return <TowerMonster kind={kind} boss={boss} size={small} />;
 }
 
@@ -48,6 +53,7 @@ export function TowerCodex({ codex, pet, onClose }: { codex: TowerCodexView[]; p
           <b className="text-sm font-black">{nameOf(sel)}</b>{sel.boss && <span className="ml-1 rounded-md bg-[#26215c] px-1 text-[10px] font-bold text-white">보스</span>}
           <p className="mt-0.5 text-slate-600">{sel.first ? `처음 만남 ${sel.first}층` : '도감 전에 만났어요'}{sel.wins !== null && ` · 쓰러뜨림 ${sel.wins}번`}</p>
           <p className="mt-0.5">{sel.weak ? <>약점<ElementBadge e={sel.weak} /></> : <span className="text-slate-400">약점 ? · 크리티컬이 처음 터지면 기록돼요</span>}</p>
+          {!sel.hidden && (TOWER_FOE_SKILLS[sel.kind] || []).length > 0 && <p className="mt-0.5">스킬 {TOWER_FOE_SKILLS[sel.kind]!.map(k => <span key={k.id} title={k.fx.map(f => FOE_HINT[f].hint).join(' · ')} className="ml-1 rounded-md bg-white px-1 text-[10px] font-bold text-[#534ab7]">{FOE_HINT[k.fx[0]].icon} {k.name}</span>)}</p>}
         </div>
       </div>}
       <div className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-4">

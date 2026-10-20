@@ -33,7 +33,7 @@ const defaults = (): Deps => ({
 });
 const MESSAGES: Record<string, string> = {
   TOWER_NOT_READY: '선생님이 탑 단어장을 아직 정하지 않았어요.', TOWER_CHEST_FIRST: '먼저 1층 보물상자를 열어 보세요!', TOWER_CHEST_OPENED: '이미 연 보물상자예요.', TOWER_TOP: '지금은 여기가 꼭대기예요. 더 높은 층은 곧 열려요!',
-  TOWER_NO_RUN: '전투가 끝났어요. 다시 들어가 주세요.', TOWER_WAIT: '지금은 문제에 답할 차례예요.', TOWER_SKILL_LOCKED: '스킬은 전직 후에 쓸 수 있어요. 1차 전직은 원정대 5장 설산의 왕관 스테이지에서 해요.', TOWER_SKILL_NOT_LEARNED: '아직 배우지 않은 스킬이에요.', TOWER_NO_MP: 'MP가 모자라요. 단어를 맞히면 MP가 2씩 차요.', TOWER_NO_POTION: '물약이 없어요.', TOWER_IN_BATTLE: '전투 중에는 장비를 바꿀 수 없어요.', TOWER_GEAR_JOB: '이 장비는 그 직업으로 전직한 펫만 낄 수 있어요.', TOWER_SOLD_OUT: '다 팔렸어요.', TOWER_MAX_ENHANCE: '이미 최고 강화(+5)예요.', TOWER_NO_STONES: '강화석이 모자라요.', TOWER_SNEAK_INVALID: '조금 더 천천히, 길을 따라 지나가 보세요.',
+  TOWER_NO_RUN: '전투가 끝났어요. 다시 들어가 주세요.', TOWER_WAIT: '지금은 문제에 답할 차례예요.', TOWER_SKILL_LOCKED: '스킬은 전직 후에 쓸 수 있어요. 1차 전직은 원정대 5장 설산의 왕관 스테이지에서 해요.', TOWER_SKILL_NOT_LEARNED: '아직 배우지 않은 스킬이에요.', TOWER_NO_MP: 'MP가 모자라요. 단어를 맞히면 MP가 2씩 차요.', TOWER_SEALED: '봉인되어 지금은 스킬을 쓸 수 없어요. 봉인이 풀릴 때까지 버텨요.', TOWER_NO_POTION: '물약이 없어요.', TOWER_IN_BATTLE: '전투 중에는 장비를 바꿀 수 없어요.', TOWER_GEAR_JOB: '이 장비는 그 직업으로 전직한 펫만 낄 수 있어요.', TOWER_SOLD_OUT: '다 팔렸어요.', TOWER_MAX_ENHANCE: '이미 최고 강화(+5)예요.', TOWER_NO_STONES: '강화석이 모자라요.', TOWER_SNEAK_INVALID: '조금 더 천천히, 길을 따라 지나가 보세요.',
   COUPON_NOT_ELIGIBLE: '이달의 장학 쿠폰은 학원에 연결된 채움 학원 학생이 받을 수 있어요.', COUPON_TAKEN: '이번 달 쿠폰은 이미 신청했어요.', COUPON_NOT_YET: '이번 달에 모은 포인트가 아직 10,000P가 안 됐어요.',
   PET_PASS_ITEM: '펫 패스·프리미엄 패스로 쓸 수 있는 방이에요.',
   PET_JOB3_LOCKED: '3차 전직은 2차 전직한 Lv.150 친구가 채움의 탑 50층을 깨면 할 수 있어요.',

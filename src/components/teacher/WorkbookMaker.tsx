@@ -7,6 +7,7 @@ import {
 import { readWorkbookFile } from '../../lib/workbookImport';
 import { AiWorking, workbookTranslate } from './workbookAi';
 import { FooterSetting } from '../print/PrintSheet';
+import { printFooterLocked } from '../../lib/printFrame';
 import SampleModal, { SampleButton } from '../SampleModal';
 import { sampleWorkbook } from '../../lib/samples';
 import { PASSAGE_LIMITS } from '../../lib/passageTools';
@@ -135,7 +136,7 @@ export default function WorkbookMaker({ request }: { request: Request }) {
         <label className="text-xs font-bold text-slate-500">워크북 제목<input value={title} maxLength={120} onChange={e => setTitle(e.target.value)} placeholder="예: 2026 고2 10월 모의고사" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800" /></label>
         <label className="text-xs font-bold text-slate-500">소제목 <span className="font-normal">(선택 · 교재·지문)</span><input value={source} maxLength={120} onChange={e => setSource(e.target.value)} placeholder="예: 18번 지문" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800" /></label>
       </div>
-      <div className="flex items-center gap-2 text-xs text-slate-500"><FooterSetting /><span>모든 쪽 아래에 들어가요 · 이 기기에 기억</span></div>
+      <div className="flex items-center gap-2 text-xs text-slate-500"><FooterSetting /><span>모든 쪽 아래에 들어가요{printFooterLocked() ? '' : ' · 이 기기에 기억'}</span></div>
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="자료 유형">{([['passage', '연속 지문'], ['excerpt', '발췌 문장 (한 줄에 한 문장)']] as const).map(([id, label]) => <button key={id} type="button" aria-pressed={mode === id} onClick={() => setMode(id)} className={`rounded-full px-3 py-1 text-xs font-bold ${mode === id ? 'bg-[#e0587a] text-white' : 'bg-[#f8f1f2] text-[#8b2f40]'}`}>{label}</button>)}</div>
       <textarea value={text} onChange={e => setText(e.target.value)} rows={10} aria-label="영어 지문 또는 문장" placeholder={mode === 'passage' ? '영어 지문을 붙여 넣으세요. 문장은 앱이 나눠요.' : '한 줄에 한 문장씩 넣으세요. 앞의 번호(1. 2) ①)는 빼고 처리해요.'} className="w-full rounded-xl border border-slate-200 px-3 py-2 font-mono text-sm leading-relaxed" />
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">

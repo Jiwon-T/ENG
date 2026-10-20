@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { PetService, type PetState } from '../../lib/petService';
-import { PET_JOB_GUIDE, PET_TOWER, TOWER_GEAR_SLOTS, towerZone, type PetElement, accessorySlot, petStage, towerGearFor, wornAccessories, type TowerGearSlot, type TowerMonsterKind, PET_JOB2, PET_JOB3, PET_JOB3_RULE, TOWER_SKILLS, job3For, petAura, petItem, type PetJob2, type PetJob3, towerDecor, petGearView, GEAR_SET_SHORT, GEAR_SET_BONUS, gearSetBonus, towerGear } from '../../lib/petCatalog';
+import { DOT_ICON, TOWER_DEBUFFS, type TowerDebuff, TOWER_EVENTS, FOE_HINT, type FoeEffect, PET_JOB_GUIDE, PET_TOWER, TOWER_GEAR_SLOTS, towerZone, type PetElement, accessorySlot, petStage, towerGearFor, wornAccessories, type TowerGearSlot, type TowerMonsterKind, PET_JOB2, PET_JOB3, PET_JOB3_RULE, TOWER_SKILLS, job3For, petAura, petItem, type PetJob2, type PetJob3, towerDecor, petGearView, GEAR_SET_SHORT, GEAR_SET_BONUS, gearSetBonus, towerGear } from '../../lib/petCatalog';
 import { PetCharacter } from './PetCharacters';
 import { TowerChest, TowerDoors, TowerGate, TowerGearIcon } from './TowerHall';
 import { TowerEventScreen, type TowerEventView } from './TowerEvents';
@@ -10,14 +10,41 @@ import { ELEMENT_COLOR, ElementBadge, MonsterArt, TowerCodex, type TowerCodexVie
 
 // 채움의 탑: the gate, the lone chest on floor 1, three doors on every floor, then the turn-based battle — the monster above, the pet
 // below (as in the old handheld RPGs), a message box and the word question. The server decides every result.
-interface TowerQ { kind: 'attack' | 'defend'; prompt: string; choices: string[]; msLeft: number | null; /** a skill's 문장 배열: the pieces, shuffled */ order?: string[] | null }
+interface TowerQ { kind: 'attack' | 'defend'; prompt: string; choices: string[]; msLeft: number | null; /** the whole time given (묶기: shorter) */ msTotal?: number | null; /** a skill's 문장 배열: the pieces, shuffled */ order?: string[] | null }
 /** A skill as the server shows it: `level` 0 = not learned yet (learned at `learnAt`); `crit` = 크리티컬 확률 % on a weakness. */
 export interface TowerSkillView { id: string; name: string; kind: 'attack' | 'block' | 'heal'; element: PetElement | null; mp: number; power: number | null; learnAt: number; level: number; crit: number; text?: string | null }
 export interface TowerInfo {
   skills?: TowerSkillView[]; passive?: { name: string; text: string } | null; job?: string | null; job3?: PetJob3 | null; /** 「별의 시험」 passed: the 3차 전직 may be taken */ job3Ready?: boolean;
-  floor: number; best: number; top: number; gear: string[]; equip: Partial<Record<TowerGearSlot, string>>; levels: Record<string, number>; chests: number[]; potions: number; stones: number; event: TowerEventView | null; stats: { atk: number; def: number; hp: number; mp: number };
+  /** carried into the next battle (a lost 쉬어 가기 놀이) */ debuff?: TowerDebuff | null; floor: number; best: number; top: number; gear: string[]; equip: Partial<Record<TowerGearSlot, string>>; levels: Record<string, number>; chests: number[]; potions: number; stones: number; event: TowerEventView | null; stats: { atk: number; def: number; hp: number; mp: number };
   codex?: TowerCodexView[];
-  run: null | { id: string; floor: number; monster: { kind: TowerMonsterKind; name: string; boss: boolean; hp: number; max: number; color?: number | null }; hp: number; maxHp: number; mp: number; maxMp: number; phase: 'act' | 'attack' | 'defend'; attacks: number; q: TowerQ | null; skill?: string | null; shield?: boolean; weak?: PetElement | null };
+  run: null | { id: string; floor: number; monster: { kind: TowerMonsterKind; name: string; boss: boolean; hp: number; max: number; color?: number | null }; hp: number; maxHp: number; mp: number; maxMp: number; phase: 'act' | 'attack' | 'defend'; attacks: number; q: TowerQ | null; skill?: string | null; shield?: boolean; weak?: PetElement | null; foe?: FoeView | null; debuff?: TowerDebuff | null };
+}
+/** 몬스터 스킬: the skill warned of, and what lasts (방어 태세, 봉인, 지속 피해, 분노). */
+interface FoeView { next: { name: string; fx: FoeEffect[]; dot: keyof typeof DOT_ICON | null; warn: string } | null; guard: number; sealed: number; dot: { name: keyof typeof DOT_ICON; turns: number } | null; raged: boolean; rage: boolean; again: boolean }
+/** What a monster's turn did, in words (after the answer's own line). */
+function foeText(x: any, monster: string) {
+  const f = x.foe, out: string[] = [];
+  if (x.guardBroken) out.push('약점 공격으로 방어 태세를 깼어요!');
+  if (x.enraged) out.push(`${monster}이(가) 분노했어요! 공격이 세져요.`);
+  if (f) {
+    if (f.guard) out.push(`${monster}의 ${f.name}! 2턴 동안 단단해져요.`);
+    else if (f.canceled) out.push(`공격을 맞혀서 ${f.name}을(를) 막았어요!`);
+    else if (f.healed) out.push(`${monster}의 ${f.name}! 체력 +${f.healed}`);
+    if (f.drained) out.push(`${f.name}! ${monster} 체력 +${f.drained}`);
+    if (f.avoided) out.push('막아서 추가 효과를 피했어요!');
+    if (f.dot) out.push(`${DOT_ICON[f.dot as keyof typeof DOT_ICON]} ${f.dot}에 걸렸어요!`);
+    if (f.sealed) out.push(`🔒 ${f.sealed}턴 동안 스킬 봉인!`);
+    if (f.again) out.push('한 번 더 공격해요!');
+  }
+  if (x.dot) out.push(`${DOT_ICON[x.dot.name as keyof typeof DOT_ICON]} ${x.dot.name} -${x.dot.damage}`);
+  if (x.cured) out.push(`${x.cured}이(가) 나았어요!`);
+  return out.join(' ');
+}
+/** The warning one turn before a monster skill: what it is doing and how to answer it. */
+function FoeWarning({ monster, next }: { monster: string; next: NonNullable<FoeView['next']> }) {
+  const main = FOE_HINT[next.fx[0]], hints = next.fx.map(f => FOE_HINT[f].hint);
+  return <div role="alert" className="border-t border-[#fecaca] bg-[#fef2f2] px-3 py-1.5 text-xs"><b className="text-[#b91c1c]">⚠️ {monster}: {next.warn}!</b>
+    <span className="block text-[11px] text-[#7f1d1d]">다음 턴: {main.icon} {next.name}{next.dot ? ` (${DOT_ICON[next.dot]} ${next.dot})` : ''} — {hints.join(' · ')}</span></div>;
 }
 /** One battle effect (restarted by `key`): what the last answer did. */
 type Fx = { key: number; kind: 'hit' | 'glance' | 'miss' | 'crit' | 'block' | 'hurt'; amount?: number; element?: PetElement | null; found?: { name: string; element: PetElement } | null };
@@ -67,7 +94,8 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
         : x.glancing ? `${skillName}이(가) 스쳤어요! ${x.damage} 피해 · 정답은 '${right}'`
         : `빗나갔어요! 정답은 '${right}'`)
       : x.shield ? `방패로 막았어요! ${x.taken}만 다쳤어요.${x.correct ? '' : ` · 정답은 '${shown.choices[x.answer]}'`}`
-      : x.correct ? `막았어요! ${x.taken}만 다쳤어요.` : `${x.late ? '시간 초과! ' : ''}${monster}의 공격! ${x.taken} 피해 · 정답은 '${shown.choices[x.answer]}'`);
+      : x.correct ? `막았어요! ${x.foe?.name ? `${x.foe.name}을(를) ` : ''}${x.taken}만 다쳤어요.` : `${x.late ? '시간 초과! ' : ''}${monster}의 ${x.foe?.name || '공격'}! ${x.taken} 피해 · 정답은 '${shown.choices[x.answer]}'`);
+    const extra = foeText(x, monster); if (extra) setMessage(m => `${m} ${extra}`);
     setFx({ key: Date.now(), amount: x.kind === 'attack' ? x.damage : x.taken, element: x.element || null, found: x.weakFound ? { name: x.weakFound.name, element: x.weakFound.element } : null,
       kind: x.kind === 'attack' ? (x.crit ? 'crit' : x.correct ? 'hit' : x.glancing ? 'glance' : 'miss') : x.blocked ? 'block' : 'hurt' });
     window.clearTimeout(feedbackTimer.current);
@@ -81,9 +109,10 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
   const act = async (move: string, skill?: TowerSkillView) => {
     setFleeAsk(false); setSkillsOpen(false);
     const r = await send('tower-act', { move, ...(skill ? { skill: skill.id } : {}) });
-    if (r?.result?.fled) setEnding(r.result);
+    if (r?.result?.fled || r?.result?.lost) setEnding(r.result);
     if (r?.result?.healed) setMessage(skill ? `${pet.name}의 치유! 체력 +${r.result.healed}` : `물약을 마셨어요! 체력 +${r.result.healed}`);
     if (r?.result?.shield) setMessage(`${pet.name}이(가) 방패를 들었어요! 다음 공격을 막아요.`);
+    const extra = r?.result ? foeText(r.result, run?.monster.name || '몬스터') : ''; if (extra) setMessage(m => `${m} ${extra}`.trim());
   };
   const skills = tower?.skills || [];
   const start = async (door: number) => {
@@ -116,7 +145,7 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
         : run ? <div className="mt-3 space-y-3"><section aria-label="전투" className="overflow-hidden rounded-3xl border border-[#e4e0f5]">
           <div className="flex items-center justify-between border-b border-[#e4e0f5] bg-white px-3 py-1.5 text-xs"><b className="font-black text-[#3c3489]">{towerZone(run.floor).name} · {run.floor}층{run.monster.boss && ' · 보스'}</b><span className="text-slate-500">공격 {run.attacks}회 · 물약 {tower.potions}</span></div>
           <div key={fx?.kind === 'crit' ? fx.key : 'area'} className={`relative h-56 bg-[#eeedfe] ${fx?.kind === 'crit' ? 'tw-crit' : ''}`} style={fx?.kind === 'crit' && fx.element ? { ['--tw-crit' as any]: ELEMENT_COLOR[fx.element].flash } : undefined}>
-            <div className="absolute left-2.5 top-2.5 w-[46%] rounded-xl border-2 border-[#3c3489] bg-white px-2.5 py-1.5"><div className="flex justify-between text-xs"><b className="font-black text-[#26215c]">{run.monster.name}</b></div><div className="mt-1 flex items-center gap-1.5"><span className="rounded bg-[#fac775] px-1 text-[10px] font-black text-[#633806]">HP</span><Bar value={run.monster.hp} max={run.monster.max} color={run.monster.hp / run.monster.max < 0.3 ? 'bg-[#e24b4a]' : 'bg-[#639922]'} /></div><p className="mt-0.5 text-right text-[10px] text-slate-500">{run.monster.hp.toLocaleString('ko-KR')}/{run.monster.max.toLocaleString('ko-KR')}</p></div>
+            <div className="absolute left-2.5 top-2.5 w-[46%] rounded-xl border-2 border-[#3c3489] bg-white px-2.5 py-1.5"><div className="flex justify-between text-xs"><b className="font-black text-[#26215c]">{run.monster.name}</b>{run.foe && (run.foe.guard > 0 || run.foe.raged) && <span className="flex gap-0.5 text-[10px] font-bold">{run.foe.guard > 0 && <span className="rounded bg-[#e0f2fe] px-1 text-[#0369a1]" title="방어 태세">🛡️{run.foe.guard}</span>}{run.foe.raged && <span className="rounded bg-[#fee2e2] px-1 text-[#b91c1c]" title="분노">😡</span>}</span>}</div><div className="mt-1 flex items-center gap-1.5"><span className="rounded bg-[#fac775] px-1 text-[10px] font-black text-[#633806]">HP</span><Bar value={run.monster.hp} max={run.monster.max} color={run.monster.hp / run.monster.max < 0.3 ? 'bg-[#e24b4a]' : 'bg-[#639922]'} /></div><p className="mt-0.5 text-right text-[10px] text-slate-500">{run.monster.hp.toLocaleString('ko-KR')}/{run.monster.max.toLocaleString('ko-KR')}</p></div>
             {fx && (fx.kind === 'hit' || fx.kind === 'glance' || fx.kind === 'crit') && <div key={`m${fx.key}`} className="pointer-events-none absolute right-10 top-12 z-20 flex flex-col items-center">
               <span className="tw-spark absolute text-3xl" style={{ color: fx.kind === 'crit' && fx.element ? ELEMENT_COLOR[fx.element].flash : '#ef9f27' }} aria-hidden="true">✦</span>
               <span className="tw-pop text-center font-black drop-shadow-sm" style={{ color: fx.kind === 'crit' ? '#a32d2d' : fx.kind === 'glance' ? '#888780' : '#ba7517', fontSize: fx.kind === 'crit' ? 20 : 17 }}>{fx.kind === 'crit' && <span className="block text-[13px] tracking-wide">CRITICAL!</span>}-{fx.amount}</span></div>}
@@ -127,17 +156,18 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
               {fx.kind === 'block' && <span className="tw-shield absolute -top-4 h-24 w-24 rounded-full border-4 border-[#1d9e75] bg-[#e1f5ee]/60" aria-hidden="true" />}
               <span className="tw-pop font-black" style={{ color: fx.kind === 'block' ? '#0f6e56' : '#a32d2d', fontSize: 15 }}>{fx.kind === 'block' ? '막았다! ' : ''}-{fx.amount}</span></div>}
             <div key={fx?.kind === 'hurt' ? `h${fx.key}` : 'pet'} className={`absolute bottom-1 left-4 ${fx?.kind === 'hurt' ? 'tw-hurt' : ''}`}><PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={battleLook} size={92} aura={petAura(pet)} gear={petGearView(pet as any)} /></div>
-            <div className="absolute bottom-2.5 right-2.5 w-[50%] rounded-xl border-2 border-[#3c3489] bg-white px-2.5 py-1.5"><div className="flex justify-between text-xs"><b className="font-black text-[#26215c]">{pet.name}</b><span className="text-slate-500">Lv.{pet.level}</span></div>
+            <div className="absolute bottom-2.5 right-2.5 w-[50%] rounded-xl border-2 border-[#3c3489] bg-white px-2.5 py-1.5"><div className="flex justify-between text-xs"><b className="font-black text-[#26215c]">{pet.name}</b><span className="flex items-center gap-0.5 text-slate-500">{run.foe?.dot && <span className="rounded bg-[#ffedd5] px-1 text-[10px] font-bold text-[#9a3412]" title={`${run.foe.dot.name} ${run.foe.dot.turns}턴`}>{DOT_ICON[run.foe.dot.name]}{run.foe.dot.turns}</span>}{run.debuff && <span className="rounded bg-[#e0f2fe] px-1 text-[10px] font-bold text-[#0369a1]" title={`${TOWER_DEBUFFS[run.debuff].name} · ${TOWER_DEBUFFS[run.debuff].text}`}>{TOWER_DEBUFFS[run.debuff].icon}</span>}{run.foe && run.foe.sealed > 0 && <span className="rounded bg-[#ede9fe] px-1 text-[10px] font-bold text-[#5b21b6]" title={`스킬 봉인 ${run.foe.sealed}턴`}>🔒{run.foe.sealed}</span>}Lv.{pet.level}</span></div>
               <div className="mt-1 flex items-center gap-1.5"><span className="rounded bg-[#fac775] px-1 text-[10px] font-black text-[#633806]">HP</span><Bar value={run.hp} max={run.maxHp} color={run.hp / run.maxHp < 0.3 ? 'bg-[#e24b4a]' : 'bg-[#639922]'} /></div>
               <div className="mt-0.5 flex items-center gap-1.5"><span className="rounded bg-[#b5d4f4] px-1 text-[10px] font-black text-[#0c447c]">MP</span><Bar value={run.mp} max={run.maxMp} color="bg-[#378add]" /></div>
               <p className="mt-0.5 text-right text-[10px] text-slate-500">{run.hp}/{run.maxHp} · {run.mp}/{run.maxMp}</p></div>
           </div>
+          {run.foe?.next && !feedback && q?.kind !== 'defend' && <FoeWarning monster={run.monster.name} next={run.foe.next} />}
           <div className="space-y-2 bg-white p-3">
             <p role="status" aria-live="polite" className="min-h-[44px] rounded-xl border-2 border-[#26215c] px-3 py-2 text-sm font-medium text-[#26215c]">
               {message || (q ? (q.order ? <>이 뜻이 되게 문장을 맞춰요 <b className="font-black">“{q.prompt}”</b></> : q.kind === 'attack' ? <>이 뜻의 영어 단어는? <b className="font-black">“{q.prompt}”</b></> : <>{run.monster.name}의 공격! 막으려면 뜻을 골라요 <b className="font-black">{q.prompt}</b></>) : '무엇을 할까요?')}
             </p>
             {q ? <>
-              {q.kind === 'defend' && defendMs !== null && <div key={`${run.id}:${q.prompt}`} className="h-1.5 overflow-hidden rounded-full bg-[#fcebeb]" aria-label={`남은 시간 ${Math.ceil(defendMs / 1000)}초`}><div className="h-full rounded-full bg-[#e24b4a]" style={{ width: `${(defendMs / (PET_TOWER.defendSeconds * 1000)) * 100}%`, animation: `tw-drain ${defendMs}ms linear forwards` }} /></div>}
+              {q.kind === 'defend' && defendMs !== null && <div key={`${run.id}:${q.prompt}`} className="h-1.5 overflow-hidden rounded-full bg-[#fcebeb]" aria-label={`남은 시간 ${Math.ceil(defendMs / 1000)}초`}><div className="h-full rounded-full bg-[#e24b4a]" style={{ width: `${Math.min(100, (defendMs / (q.msTotal || PET_TOWER.defendSeconds * 1000)) * 100)}%`, animation: `tw-drain ${defendMs}ms linear forwards` }} /></div>}
               {q.order ? <div className="space-y-2">
                 <p className="min-h-[40px] rounded-xl border border-dashed border-[#d6d2ee] bg-[#f5f4fd] px-3 py-2 text-sm font-bold text-[#26215c]" aria-label="맞춘 문장">{placed.length ? placed.map(i => q.order![i]).join(' ') : <span className="font-medium text-slate-400">조각을 순서대로 눌러요</span>}</p>
                 <div className="flex flex-wrap gap-1.5">{q.order.map((piece, i) => <button key={i} type="button" disabled={busy || Boolean(feedback) || placed.includes(i)} onClick={() => setPlaced(list => [...list, i])} className="rounded-lg border border-[#d6d2ee] bg-white px-2.5 py-1.5 text-sm font-bold text-[#26215c] disabled:opacity-30">{piece}</button>)}</div>
@@ -156,7 +186,7 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
             </div>
             : <div className="grid grid-cols-4 gap-1.5 text-xs font-bold">
               <button type="button" disabled={busy} onClick={() => void act('attack')} className="rounded-xl bg-[#fac775] px-1 py-2.5 text-[#633806]">때리기</button>
-              {skills.length ? <button type="button" disabled={busy} onClick={() => setSkillsOpen(true)} className="rounded-xl bg-[#cecbf6] px-1 py-2.5 text-[#26215c]">스킬 ✨</button>
+              {skills.length ? <button type="button" disabled={busy || Boolean(run.foe?.sealed)} onClick={() => setSkillsOpen(true)} className="rounded-xl bg-[#cecbf6] px-1 py-2.5 text-[#26215c] disabled:opacity-50">{run.foe?.sealed ? `🔒 봉인 ${run.foe.sealed}` : '스킬 ✨'}</button>
                 : <button type="button" disabled={busy} onClick={() => setMessage(`스킬은 전직 후에 쓸 수 있어요. ${PET_JOB_GUIDE.replace('스킬은 전직 후 · ', '')}`)} className="rounded-xl bg-[#f1efe8] px-1 py-2.5 text-[#888780]">스킬 (전직 후)</button>}
               <button type="button" disabled={busy || tower.potions <= 0} onClick={() => void act('potion')} className="rounded-xl bg-[#e1f5ee] px-1 py-2.5 text-[#085041] disabled:opacity-50">물약 {tower.potions}</button>
               <button type="button" disabled={busy} onClick={() => setFleeAsk(true)} className="rounded-xl bg-[#f1efe8] px-1 py-2.5 text-[#5f5e5a]">도망</button>
@@ -253,14 +283,14 @@ function Entrance({ tower, busy, energy, onEquip, onCodex, onFame }: { tower: To
 function Ending({ ending, tower, onAgain }: { ending: any; tower: TowerInfo; onAgain: () => void }) {
   return <section aria-label="결과" className="mt-6 rounded-3xl border border-[#e4e0f5] bg-[#f7f6fd] px-5 py-6 text-center">
     {ending.won || ending.cleared ? <>
-      <p className="text-3xl" aria-hidden="true">{ending.won ? '🏆' : ending.loot ? '🎁' : ending.saved ? '🧚' : ending.left ? '🧙' : ending.sneaked ? '💤' : ending.correct === false ? '🗿' : '✨'}</p>
+      <p className="text-3xl" aria-hidden="true">{ending.game ? (TOWER_EVENTS[ending.game.type as keyof typeof TOWER_EVENTS]?.icon || '✨') : ending.won ? '🏆' : ending.loot ? '🎁' : ending.saved ? '🧚' : ending.left ? '🧙' : ending.sneaked ? '💤' : ending.correct === false ? '🗿' : '✨'}</p>
       <h2 className="mt-1 text-lg font-black text-[#3c3489]">{ending.floor}층 {ending.won ? '돌파!' : '통과!'}</h2>
-      <p className="mt-1 text-sm text-slate-600">{ending.won ? `공격 ${ending.attacks}회 만에 이겼어요` : ending.loot ? `보물상자에서 ${[ending.loot.stones && `강화석 ${ending.loot.stones}개`, ending.loot.potions && `물약 ${ending.loot.potions}개`, ending.loot.points && `${ending.loot.points}P`].filter(Boolean).join(' · ') || '먼지만'} 나왔어요`
+      <p className="mt-1 text-sm text-slate-600">{ending.game ? `${ending.game.text}${ending.game.lostPotion ? ' (물약 -1)' : ''}${ending.game.debuff ? ` · 다음 전투: ${TOWER_DEBUFFS[ending.game.debuff as TowerDebuff].icon} ${TOWER_DEBUFFS[ending.game.debuff as TowerDebuff].name}(${TOWER_DEBUFFS[ending.game.debuff as TowerDebuff].text})` : ''}` : ending.won ? `공격 ${ending.attacks}회 만에 이겼어요` : ending.loot ? `보물상자에서 ${[ending.loot.stones && `강화석 ${ending.loot.stones}개`, ending.loot.potions && `물약 ${ending.loot.potions}개`, ending.loot.points && `${ending.loot.points}P`].filter(Boolean).join(' · ') || '먼지만'} 나왔어요`
         : ending.saved ? '요정을 구했어요! 고맙다며 물약을 줬어요' : ending.left ? '상인과 인사하고 헤어졌어요' : ending.sneaked ? '몬스터 몰래 살금살금 지나갔어요' : ending.correct === false ? `석상이 정답을 알려 주고 길을 열어 줬어요: ${ending.word}` : ending.correct ? '정답! 길이 열렸어요' : '길이 열렸어요'} · 다음엔 {tower.floor > tower.top ? '꼭대기' : `${tower.floor}층`}</p>
       {(ending.stone > 0 || ending.potions > 0) && <p className="mt-2 text-sm font-bold text-[#3c3489]">{[ending.stone > 0 && `💎 강화석 +${ending.stone}`, ending.potions > 0 && `🧪 물약 +${ending.potions}`].filter(Boolean).join(' · ')}</p>}
       {ending.hall && <p className="mt-2 rounded-xl bg-[#fef9c3] px-3 py-2 text-sm font-black text-[#854d0e]">🏆 명예의 전당에 올랐어요! {[ending.hall.first && '처음 깬 모험가', ending.hall.fewest && '가장 적은 공격'].filter(Boolean).join(' · ')}</p>}
       {ending.first && <p className="mt-2 text-sm font-bold text-[#633806]">처음 돌파 보상 +{ending.points}P · 경험치 +{ending.xp}</p>}
-      {ending.chest && <p className="mt-2 rounded-xl bg-[#fffaf0] px-3 py-2 text-sm font-bold text-[#633806]">🎁 보스의 보물상자: {ending.chest.gear.map((id: string) => towerGearFor(id, tower.job as any)?.name).join(', ')}{ending.chest.potions ? ` · 물약 ${ending.chest.potions}개` : ''}</p>}
+      {ending.chest && <p className="mt-2 rounded-xl bg-[#fffaf0] px-3 py-2 text-sm font-bold text-[#633806]">🎁 보스의 보물상자: {[...ending.chest.gear.map((id: string) => towerGearFor(id, tower.job as any)?.name), ending.chest.potions ? `물약 ${ending.chest.potions}개` : '', ending.chest.stones ? `강화석 ${ending.chest.stones}개` : ''].filter(Boolean).join(' · ')}</p>}
       {ending.drop && <p className="mt-2 rounded-xl bg-[#f7f6fd] px-3 py-2 text-sm font-bold text-[#3c3489]">{ending.drop.stone ? `🪨 ${towerGearFor(ending.drop.id, tower.job as any)?.name}이(가) 또 나와서 강화석 1개로 바꿨어요` : `🎁 장비 「${towerGearFor(ending.drop.id, tower.job as any)?.name}」을(를) 얻었어요!`}</p>}
       {ending.decor && <p className="mt-2 rounded-xl bg-[#fdf2f8] px-3 py-2 text-sm font-bold text-[#72243e]">🪴 탑 장식 「{towerDecor(ending.decor)?.name}」을(를) 받았어요! 펫 방의 꾸미기에서 놓아 보세요.</p>}
     </> : ending.lost ? <>

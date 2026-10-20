@@ -1079,9 +1079,11 @@ export const generateWordbookTable = async (
     wordbookType?: string;
     unitSize?: number;
     startDay?: number;
+    /** The number shown beside each word ("Day 3 - 5"), when the days are not a fixed size (see wordbookPrint). */
+    numbers?: string[];
   } = {}
 ) => {
-  const { paperTitle = '단어장', wordbookType, unitSize, startDay } = options;
+  const { paperTitle = '단어장', wordbookType, unitSize, startDay, numbers } = options;
 
   const isIrregular = wordbookType === 'irregular';
   const isComparative = wordbookType === 'comparative-grammar';
@@ -1228,7 +1230,8 @@ export const generateWordbookTable = async (
             // Data Rows
             ...words.map((word, index) => {
               let noText = (index + 1).toString();
-              if (unitSize && startDay) {
+              if (numbers?.[index]) noText = numbers[index];
+              else if (unitSize && startDay) {
                 const globalIndex = ((startDay - 1) * unitSize) + index;
                 const dayNum = Math.floor(globalIndex / unitSize) + 1;
                 const dayIdx = (globalIndex % unitSize) + 1;

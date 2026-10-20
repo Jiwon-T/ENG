@@ -36,7 +36,9 @@ test('탑 장식: boss floors cleared before it existed give theirs on the next 
   assert.deepEqual(s.towerDecor, ['moss_pot', 'crystal_lamp', 'hourglass']);
   syncTowerDecor(t, s);
   assert.equal(s.towerDecor!.length, 3, 'never twice');
-  assert.equal(TOWER_DECOR.length, 5);
+  assert.equal(TOWER_DECOR.length, 10);
+  towerPet(t, currentPet(s).slot).best = 72; syncTowerDecor(t, s);
+  assert.deepEqual(s.towerDecor!.slice(3), ['ice_statue', 'spellbook_shelf', 'lava_brazier', 'pearl_bed'], '51~100층 bosses too');
 });
 
 test('꾸미기: 탑 장식 can be placed with the medals; only ones owned, each once', () => {
