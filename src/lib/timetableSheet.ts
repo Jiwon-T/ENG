@@ -47,6 +47,7 @@ export function timetableSheet(data:any,base:TimetableBase,weekDate:string,teach
     }
     for(let k=lessons.length-1;k>=0;k--)if(lessons[k].from&&!lessons[k].students.length)lessons.splice(k,1);
    }
+   else if(d.kind==='상담')continue; // not a lesson: off the sheet
    else if(d.kind==='자습')for(const student of students)study.push({start:d.start,end:d.end,student});
    else if(d.kind==='테스트'||d.kind==='시험')for(const student of students)tests.push({start:d.start,end:d.end,student});
    else lessons.push({start:d.start,end:d.end,students});

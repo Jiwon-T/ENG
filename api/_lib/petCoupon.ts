@@ -160,15 +160,17 @@ export async function listPetPoints(db: any, actor: any, now = Date.now()) {
 }
 /** One student's points as the 수업 일지 give them (nothing saved): the linked account's pet plus what is still waiting, or
  *  for a student without the app the same lessons counted the same way. Null when the student has no record. */
-export async function owedPoints(db: any, key: string, now: number) {
-  const mapping = await readStudentMapping(db, key).catch(() => null);
+/** `strict`: a failed read of the student record or the lessons is thrown, not taken as 'no record' or 'no lessons' (대기
+ *  포인트 모두 넣기 must tell the admin which students it could not check). */
+export async function owedPoints(db: any, key: string, now: number, strict = false) {
+  const mapping = strict ? await readStudentMapping(db, key) : await readStudentMapping(db, key).catch(() => null);
   if (!mapping?.internalStudentId) return null;
   // the account counts only when it is the one linked now (the mapping points to it and it points back)
   const uid: string | null = mapping.firebaseUid || null, user = uid ? (await db.collection('users').doc(uid).get()).data() : null;
   const linked = Boolean(uid && user?.role === 'student' && !user.disabled && typeof user.notionStudentKey === 'string' && isNotionPageId(user.notionStudentKey) && uuid(user.notionStudentKey) === key);
   const raw = linked ? (await db.collection(PET_STATES).doc(uid!).get()).data() : null;
   const held: ServerPetState = raw ? rollDay(raw, now) : {...initialPetState(now), points: 0};
-  const rows = await lessonRows(db, mapping.internalStudentId, linked ? uid : null).catch(() => []);
+  const read = lessonRows(db, mapping.internalStudentId, linked ? uid : null), rows = strict ? await read : await read.catch(() => []);
   const all = structuredClone(held);
   if (rows.length) { claimStudyRewards(all, pendingStudyRewards(all, rows, now)); settleLessons(all, rows, now); }
   return {linked, uid: linked ? uid : null, user, hadPet: Boolean(raw), held: Number(held.points || 0), all, rows};
@@ -242,8 +244,14 @@ export async function teacherStudentCoupon(db: any, actor: any, keyInput: unknow
   if (!actor?.admin && !(actor?.scopes || []).some((s: any) => s?.studentKey === key)) throw Error('FORBIDDEN');
   const mapping = await readStudentMapping(db, key), uid = mapping?.firebaseUid;
   const user = uid ? (await db.collection('users').doc(uid).get()).data() : null;
-  if (!uid || !user || user.notionStudentKey == null || uuid(String(user.notionStudentKey)) !== key) return {linked: false};
   const month = seoulDay(now).slice(0, 7);
+  if (!uid || !user || user.notionStudentKey == null || uuid(String(user.notionStudentKey)) !== key) {
+    // no app account: the same count from the 수업 일지 (nothing saved), and coupons asked offline for the student
+    const o = await owedPoints(db, key, now); if (!o) return {linked: false};
+    const list = (await db.collection(PET_COUPONS).where('studentKey', '==', key).get()).docs.map((d: any) => d.data() as PetCoupon).filter((c: PetCoupon) => c.month === month);
+    return {linked: false, offline: true, month, goal: PET_COUPON.goal, earned: monthEarned(o.all), points: Number(o.all.points || 0), requested: list.length > 0, paid: list.length > 0 && list.every(c => Boolean(c.paidAt)),
+      coupons: list.map(c => ({won: c.won ?? PET_COUPON.monthWon, paid: Boolean(c.paidAt)})), ledger: (o.all.ledger || []).filter(x => x.day.slice(0, 7) === month)};
+  }
   const [raw, list] = await Promise.all([db.collection(PET_STATES).doc(uid).get().then((s: any) => s.data()), readMonthCoupons(db, uid, month)]);
   const s = raw ? rollDay(raw, now) as ServerPetState : null;
   // every coupon of the month (단계 쿠폰: up to two 5천 원), each with its own 지급 state

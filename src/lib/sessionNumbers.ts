@@ -69,7 +69,9 @@ export function sessionBase(records:readonly any[],input:any,kind:SessionKind):a
 export function nextSessionNumbers(records:readonly any[],input:any):{lesson:number|null;study:number|null} {
  const next=(kind:SessionKind)=>{if((kind==='lesson'?input.classSession:input.selfStudy)!=='있음')return null;
   const minutes=kindMinutes(kind,input);if(minutes===null)return null;
-  const base=sessionBase(records,input,kind);if(!base&&!latestSessionRecord(records,input,kind,false))return null;
+  // No earlier counted lesson of this student·subject at all (history not loaded, or a brand-new student): left empty.
+  // A first 자습 after earlier lessons with only a 수업 회차 starts at 0, like a new month.
+  const base=sessionBase(records,input,kind);if(!base&&!latestSessionRecord(records,input,'lesson',false)&&!latestSessionRecord(records,input,'study',false))return null;
   const tenths=(base?numberTenths(kind==='lesson'?base.round:base.selfStudyRound)!:0)+(absent(input)?0:sessionIncrement(kind,minutes)!);return tenths/10;
  };return {lesson:next('lesson'),study:next('study')};
 }

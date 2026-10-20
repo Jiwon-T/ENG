@@ -8,10 +8,10 @@ export function autoTestGrade(d: any) {
  return TEST_GRADE_STEPS.find(([min]) => avg >= min)![1];
 }
 const SCORE_KEYS = ['correct', 'total', 'wrong', 'scorePercent', 'extraTests'];
-/** A score changed: the 테스트 평가 follows it while it is still the automatic one (the teacher never picked it here, and it
- *  matches what the scores gave before); a grade the teacher chose stays. */
-export function withAutoTestGrade(prev: any, next: any, key: string, touched: Iterable<string>) {
- if (!SCORE_KEYS.includes(key) || [...touched].includes('test') || (prev.test || '미확인') !== autoTestGrade(prev)) return next;
+/** The last thing done wins: a score typed, changed or cleared sets the 테스트 평가 from the scores (none left: 미확인); a
+ *  grade the teacher picks stays until the next score change. */
+export function withAutoTestGrade(prev: any, next: any, key: string) {
+ if (!SCORE_KEYS.includes(key)) return next;
  return { ...next, test: autoTestGrade(next) };
 }
 export function wrongAnswers(value:any,correct:string,total:string,wrong:string):number|null {

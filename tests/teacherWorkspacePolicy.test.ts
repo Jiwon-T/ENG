@@ -32,11 +32,12 @@ test('draft conflicts and changing an already published student or subject are b
  assert.throws(()=>assertDraftEditable(old,2,{...lesson,subject:'수학'}),/SOURCE_IDENTITY_LOCKED/);
  for(const stage of ['publishing','processing','notion_saved'])assert.throws(()=>assertDraftEditable({...old,stage},2,lesson),/PUBLISH_IN_PROGRESS/);
 });
-test('schedule input requires recipients and rejects invalid dates and overnight time ranges',async()=>{
+test('schedule input: no recipients is allowed (a 신입생 상담), 상담 is a kind; invalid dates and overnight time ranges are rejected',async()=>{
  const {teacherScheduleSchema}=await import('../api/_lib/teacherWorkspacePolicy.ts');
  const value={title:'보강',subject:'영어',students:[studentKey],date:'2026-10-03',start:'14:00',end:'15:00',kind:'보강',status:'예정',place:'학원',note:''};
  assert.equal(teacherScheduleSchema.safeParse(value).success,true);
- for(const change of [{students:[]},{date:'2026-02-30'},{end:'13:00'}])assert.equal(teacherScheduleSchema.safeParse({...value,...change}).success,false);
+ for(const change of [{students:[]},{kind:'상담'},{students:[],kind:'상담'}])assert.equal(teacherScheduleSchema.safeParse({...value,...change}).success,true);
+ for(const change of [{date:'2026-02-30'},{end:'13:00'},{kind:'면담'}])assert.equal(teacherScheduleSchema.safeParse({...value,...change}).success,false);
 });
 
 test('fractional wrong answers save with normal afternoon lesson times',()=>{

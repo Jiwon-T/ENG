@@ -127,12 +127,13 @@ export function assertDraftEditable(old: any, revision: unknown, value: {
 }
 export const teacherScheduleSchema = z.object({
     title: z.string().trim().min(1).max(200), subject: z.enum(subjects),
-    students: z.array(z.string().uuid()).min(1).max(100),
+    // none: a schedule for no registered student yet (a 신입생 상담); nothing goes to any student's schedule
+    students: z.array(z.string().uuid()).max(100),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
     end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
     // '시험' was renamed '테스트'; older records still saying '시험' are accepted and saved as '테스트'.
-    kind: z.preprocess(value => value === '시험' ? '테스트' : value, z.enum(['정규 수업', '보강', '휴강', '테스트', '자습', '기타'])),
+    kind: z.preprocess(value => value === '시험' ? '테스트' : value, z.enum(['정규 수업', '보강', '휴강', '테스트', '자습', '상담', '기타'])),
     status: z.enum(['예정', '변경', '완료', '취소']),
     place: z.string().max(100), note: z.string().max(5000),
 }).superRefine((value, ctx) => {

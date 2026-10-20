@@ -166,3 +166,10 @@ test('saved lesson: date changed while the earlier lessons were loading — reco
  assert.ok(check>0&&store>check,'history is stored only after the open lesson is checked');
  assert.match(src,/latestLesson\.current=lesson;/);
 });
+test('a first 자습 after lessons with only a 수업 회차 starts at 0 (+1 for 60 minutes); no history at all stays empty',()=>{
+ const lessonsOnly=[row({selfStudy:'없음',selfStudyStart:'',selfStudyEnd:'',selfStudyRound:null})];
+ const first=autoSessionNumbers(input,lessonsOnly);
+ assert.deepEqual([first.data.round,first.data.selfStudyRound],[13,1]);
+ assert.equal(first.hints.selfStudyRound,'자동 입력 · 2026-10 월별 시작 0 +1');
+ assert.deepEqual(nextSessionNumbers([],input),{lesson:null,study:null},'nothing loaded yet');
+});

@@ -40,7 +40,7 @@ function RankNickname({name,value,save}:{name:string;value:string;save:(nickname
 interface PointsRow {key?:string;name:string;points:number;earned:number;requested:boolean;ledger?:LedgerItem[];app?:'linked'|'no-pet'|'none';waiting?:number;/** coupons that can be asked for now */options?:{id:'full'|'half';won:number}[]}
 const BUCKETS=[[0,2000,'~2천'],[2000,4000,'~4천'],[4000,6000,'~6천'],[6000,8000,'~8천'],[8000,10000,'~1만'],[10000,Infinity,'1만+']] as const;
 /** `canRequest` (관리자 설정 › 쿠폰): 오프라인 신청 for a student who reached a coupon but can't ask in the app. */
-export function PetPointsOverview({request,act,canRequest=false,onRequested}:{request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;canRequest?:boolean;onRequested?:()=>Promise<void>|void}){
+export function PetPointsOverview({request,act,canRequest=false,onRequested}:{key?:number;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;canRequest?:boolean;onRequested?:()=>Promise<void>|void}){
  const [data,setData]=useState<{month:string;goal:number;students:PointsRow[]}|null>(null),[query,setQuery]=useState(''),[all,setAll]=useState(false),[openRow,setOpenRow]=useState(-1);
  const reload=async()=>setData(await request('read:pet-points'));
  const [nicks,setNicks]=useState<Record<string,string>>({});
@@ -90,12 +90,23 @@ export default function PetCouponPanel({busy,request,act,autoLoad=false}:{busy:b
  useEffect(()=>{if(autoLoad)void act(()=>load());},[]);
  const months=useMemo(()=>[...new Set((rows||[]).map(r=>r.month))],[rows]),shown=month||months[0]||'';
  const list=(rows||[]).filter(r=>r.month===shown),waiting=list.filter(r=>!r.paidAt).length;
+ // 대기 포인트 모두 넣기: what the 수업 일지 give linked students but their accounts don't hold yet, paid as 반영 pays them
+ const [ver,setVer]=useState(0);
+ const settle=()=>act(async()=>{
+  const w=await request('read:waiting-points');
+  if(!w?.students){await askConfirm({title:w?.failed?`${w.failed}명은 확인하지 못했어요`:'대기 포인트가 없어요',message:w?.failed?'잠시 후 다시 눌러 주세요. 확인한 학생 중에는 대기 포인트가 없어요.':'모든 연결 학생의 포인트가 수업 일지대로 들어가 있어요.',confirmText:'확인',icon:'check'});return;}
+  if(!await askConfirm({title:`${w.students}명에게 대기 포인트 ${Number(w.points).toLocaleString('ko-KR')}P를 넣을까요?`,message:(w.failed?`${w.failed}명은 확인하지 못해 이번에는 빠져요(잠시 후 다시 눌러 주세요). `:'')+'수업 반영 때와 같은 방식으로 지금 바로 넣어요. 같은 수업은 두 번 주지 않고, 펫이 없는 학생은 포인트 통장을 만들어 넣어요. 학생이 다음에 앱을 열면 놓친 보상으로 보여요.',confirmText:'모두 넣기',icon:'check'}))return;
+  const r=await request('settle-waiting',{});
+  await askConfirm({title:`${r.students}명에게 ${Number(r.points).toLocaleString('ko-KR')}P를 넣었어요`,message:r.failed?`${r.failed}명은 넣지 못했어요. 잠시 후 다시 눌러 주세요.`:'목록의 대기 표시가 사라졌어요.',confirmText:'확인',icon:'check'});
+  setVer(v=>v+1);
+ });
  const paid=(c:PetCouponRow,value:boolean)=>act(async()=>{await request('coupon-paid',{id:c.id,paid:value});await load();});
  return <section className="panel rv">
   <div className="rv-head"><h2>이달의 장학 쿠폰{rows&&<small>{list.length}장{waiting?` · 지급 전 ${waiting}`:''}</small>}</h2>
    {months.length>1&&<select aria-label="달" value={shown} onChange={e=>setMonth(e.target.value)}>{months.map(m=><option key={m} value={m}>{m.replace('-','년 ')}월</option>)}</select>}</div>
   <p className="mt-1 text-xs text-slate-500">채움 학원 학생이 한 달에 모은 포인트가 1만 P를 넘으면 신청할 수 있어요 (포인트는 줄지 않아요). 앱이 없거나 불편한 학생은 아래 목록에서 오프라인으로 신청해요.</p>
-  {autoLoad&&<PetPointsOverview request={request} act={act} canRequest onRequested={load}/>}
+  {autoLoad&&<div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" className="small-button" disabled={busy} onClick={()=>void settle()}>대기 포인트 모두 넣기</button><span className="text-[11px] text-slate-400">수업 일지대로 받을 포인트 중 아직 학생 계정에 안 들어간 것(대기)을 지금 넣어요</span></div>}
+  {autoLoad&&<PetPointsOverview key={ver} request={request} act={act} canRequest onRequested={load}/>}
   {rows&&(list.length?<ul className="mt-2">{list.map(c=><CouponLine key={c.id} c={c} busy={busy} onPaid={paid}/>)}</ul>:<p className="mt-2 text-sm text-slate-500">아직 신청한 학생이 없어요.</p>)}
  </section>;
 }

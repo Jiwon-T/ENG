@@ -130,3 +130,27 @@ test('실명 이름 everywhere: a pet name is asked first too; the 모험가·�
   const p = (await buildRankings(f.db, OCT22)).pets.find(x => x.uid === 'b')!;
   assert.deepEqual([p.alias, p.guild, p.name], ['하늘짱', '', '박**'], 'the agreed 별칭 stays; the 원정대 이름 and pet name are hidden');
 });
+
+test('학생 목록 쿠폰 %: the snapshot keeps each student key (never sent to students); the card a % opens counts a student without the app from the 수업 일지', async () => {
+  const {teacherStudentCoupon} = await import('../api/_lib/petCoupon.js');
+  const f = await academy();
+  const snap = await buildMonthRanking(f.db, OCT22);
+  assert.deepEqual(snap.rows.map(r => r.key).sort(), [A, B, C].sort());
+  assert.equal(JSON.stringify(monthRankRows(snap, 'b')).includes(A), false, 'no key in what a student gets');
+  const card: any = await teacherStudentCoupon(f.db, {admin: true, academyId: 'main'}, A, OCT22);
+  assert.deepEqual([card.linked, card.offline, card.earned, card.requested], [false, true, 30 + 40 + 15, false]);
+  assert.ok(card.ledger.length > 0, 'the 내역 the % is made of');
+  assert.equal(f.rows.has('petStates/a'), false, 'nothing saved');
+  const src = (await import('node:fs')).readFileSync(new URL('../src/components/teacher/StudentMasterPanel.tsx', import.meta.url), 'utf8');
+  assert.match(src, /\{typeof s\.couponPoints==='number'&&onCouponCard&&<span className="smr-gauge"/, 'the list gauge reads couponPoints (pet summary or the snapshot)');
+});
+test('학생 목록 쿠폰 %: a snapshot over 10 minutes old (or marked stale) is made again, not reused', async () => {
+  const {listSnapshotFresh} = await import('../api/_lib/petMonthRanking.js');
+  const f = await academy(), snap = await buildMonthRanking(f.db, OCT22);
+  assert.equal(listSnapshotFresh(snap, OCT22 + 9 * 60_000), true, 'under 10 minutes');
+  assert.equal(listSnapshotFresh(snap, OCT22 + 10 * 60_000), false, '10 minutes old');
+  assert.equal(listSnapshotFresh({...snap, builtAt: 0}, OCT22), false, 'marked stale after a name change');
+  assert.equal(listSnapshotFresh({...snap, rows: snap.rows.map(({key, ...r}) => r)}, OCT22), false, 'no student keys');
+  const src = (await import('node:fs')).readFileSync(new URL('../api/teacher/workspace.ts', import.meta.url), 'utf8');
+  assert.match(src, /const snap=listSnapshotFresh\(plain,now\)\?plain:await monthRankingSnapshot\(db,now\)/);
+});

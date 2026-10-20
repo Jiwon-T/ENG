@@ -20,7 +20,7 @@ export const PET_RANK_NAMES = 'petRankNames';
 export const MONTH_RANK_DOC = 'month', MONTH_RANK_TOP = 10;
 export type MonthRankBy = 'alias' | 'pet' | 'nick' | 'name';
 export interface MonthRankLook { character: string; level: number; clothing: string | null; accessories: string[]; aura: 'light' | 'dark' | null; gear: PetGearView | null }
-export interface MonthRankRow { uid: string | null; earned: number; label: string; by: MonthRankBy; guild: string; look: MonthRankLook | null }
+export interface MonthRankRow { /** student key: for the teacher's list (never sent to students) */ key?: string; uid: string | null; earned: number; label: string; by: MonthRankBy; guild: string; look: MonthRankLook | null }
 export interface MonthRankSnapshot { builtAt: number; month: string; rows: MonthRankRow[]; buildingUntil?: number }
 
 /** Every active student with their name for the ranking and this month's points (nothing else is kept). */
@@ -35,13 +35,16 @@ export async function buildMonthRanking(db: any, now: number): Promise<MonthRank
     if (pet && o.uid) {
       const [g, t] = await Promise.all([db.collection(PET_GUILD).doc(o.uid).get().then((d: any) => d.data() as GuildProfile | undefined), db.collection(PET_TOWERS).doc(o.uid).get().then((d: any) => d.data() as TowerState | undefined)]);
       const agreed = g?.realNameOk || [], alias = shownName(shownAlias(g, pet.slot), real, agreed), petName = shownName(pet.name, real, pet.realNameOk ? [norm(pet.name)] : []), guild = shownName(shownGuild(g), real, agreed);
-      return {uid: o.uid, earned, label: alias || nick || petName || maskedName(real), by: alias ? 'alias' : nick ? 'nick' : petName ? 'pet' : 'name', guild,
+      return {key, uid: o.uid, earned, label: alias || nick || petName || maskedName(real), by: alias ? 'alias' : nick ? 'nick' : petName ? 'pet' : 'name', guild,
         look: {character: pet.character, level: pet.level, clothing: pet.clothing ?? null, accessories: wornAccessories(pet), aura: petAura(pet), gear: gearViewFor(pet, t?.pets?.[String(pet.slot)]) ?? null}};
     }
-    return {uid: o.uid, earned, label: nick || maskedName(real), by: nick ? 'nick' : 'name', guild: '', look: null};
+    return {key, uid: o.uid, earned, label: nick || maskedName(real), by: nick ? 'nick' : 'name', guild: '', look: null};
   }));
   return {builtAt: now, month: seoulDay(now).slice(0, 7), rows: rows.filter(Boolean) as MonthRankRow[]};
 }
+/** 학생 목록 쿠폰 % reads the snapshot as it is only when it is this month's, keeps student keys and is under 10 minutes old
+ *  (a stale one, or one marked stale by a name change, is made again through monthRankingSnapshot). */
+export const listSnapshotFresh = (s: any, now: number) => Boolean(s && Array.isArray(s.rows) && s.month === seoulDay(now).slice(0, 7) && s.rows.some((r: any) => r.key) && now - (Number(s.builtAt) || 0) < RANKING_TTL);
 /** The snapshot, rebuilt when older than 10 minutes or from last month. */
 export const monthRankingSnapshot = (db: any, now: number, maxAge = RANKING_TTL, staleMax = maxAge) => cachedSnapshot<MonthRankSnapshot>(db, MONTH_RANK_DOC, now, maxAge, staleMax,
   s => Boolean(s && Array.isArray(s.rows) && s.month === seoulDay(now).slice(0, 7)), () => buildMonthRanking(db, now));
