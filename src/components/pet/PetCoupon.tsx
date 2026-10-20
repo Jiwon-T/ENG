@@ -1,5 +1,5 @@
 import { type ReactNode, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { isSilverMedal, medalLabel, PET_COUPON, silverMedal, towerDecor } from '../../lib/petCatalog';
+import { countsForMonth, isSilverMedal, medalLabel, PET_COUPON, silverMedal, towerDecor } from '../../lib/petCatalog';
 import type { CouponMonth, CouponView, LedgerItem, MedalSpot } from '../../lib/petService';
 import { DECOR_ART } from './TowerDecorArt';
 
@@ -42,7 +42,7 @@ const dayTitle = (day: string) => { const d = new Date(`${day}T12:00:00+09:00`);
 /** 이번 달 내역: what this month's points came from — a bar by kind, then (folded) a line per day and kind, newest first. */
 export function PointsHistory({ coupon, ledger, defaultOpen = false }: { coupon: Pick<CouponView, 'month' | 'earned'>; ledger: LedgerItem[]; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen), [days, setDays] = useState(5);
-  const mine = ledger.filter(x => x.day.slice(0, 7) === coupon.month);
+  const mine = ledger.filter(x => countsForMonth(x.day, coupon.month));
   const byKind = new Map<LedgerItem['kind'], number>();
   for (const x of mine) byKind.set(x.kind, (byKind.get(x.kind) || 0) + x.points);
   // points counted before the 내역 began (the first season's points held, older records)

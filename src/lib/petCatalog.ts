@@ -117,6 +117,10 @@ export const PET_COUPON = { name: '이달의 장학 쿠폰', goal: 10_000, first
    *  most monthWon a month. Before it: one 1만 원 coupon at the goal. */
   tiersFrom: '2026-11', monthWon: 10_000, tiers: [{ id: 'half', points: 6_000, won: 5_000 }, { id: 'full', points: 10_000, won: 10_000 }] } as const;
 export type CouponTier = 'half' | 'full';
+/** The months a day's points count for: its own month — and in the first season, the September lessons before it too
+ *  (the 9월 수업 포인트 added to October's count). */
+const monthBefore = (month: string) => { const [y, m] = month.split('-').map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; };
+export const countsForMonth = (day: string, month: string) => { const m = String(day || '').slice(0, 7); return m === month || (month === PET_COUPON.firstSeason && m === monthBefore(month)); };
 /** '2026-10' → '26.10' (on the medal and the badges). */
 export const medalLabel = (month: string) => `${month.slice(2, 4)}.${month.slice(5, 7)}`;
 /** 은메달 ('2026-11-s'): the month's first 5천 원 coupon; it turns into the 금메달 ('2026-11') when the month reaches 1만 원

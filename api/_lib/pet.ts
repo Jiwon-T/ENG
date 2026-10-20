@@ -96,21 +96,31 @@ export type PointKind = 'class' | 'study' | 'cert' | 'adventure' | 'etc';
 export interface LedgerItem { day: string; kind: PointKind; label: string; points: number }
 export const prevMonth = (month: string) => { const [y, m] = month.split('-').map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; };
 /** Points earned for `month` (this month or last). The first season also counts the points held when counting began. */
-export function earnedIn(s: ServerPetState, month: string) {
+function ownEarned(s: ServerPetState, month: string) {
   if (s.earnedBy && Object.hasOwn(s.earnedBy, month)) return s.earnedBy[month];
   if (s.earned?.month === month) return s.earned.points;
   return !s.earned && !s.earnedBy && month === PET_COUPON.firstSeason ? s.points : 0;
 }
+/** Earned for `month`. The first season (October) also counts what was saved for September (the 9월 수업 포인트, and
+ *  anything earned in September), until the next write moves it into October. */
+export function earnedIn(s: ServerPetState, month: string) {
+  return ownEarned(s, month) + (month === PET_COUPON.firstSeason ? ownEarned(s, prevMonth(month)) : 0);
+}
+/** The months kept in `earnedBy`: this month and last — in the first season only October (September is folded in). */
+const keptMonths = (cur: string) => cur === PET_COUPON.firstSeason ? [cur] : [prevMonth(cur), cur];
+/** The month a day counts for: before the first season, the first season. */
+const countedMonth = (day: string, cur: string) => day.slice(0, 7) < PET_COUPON.firstSeason ? cur : day.slice(0, 7);
 /** This month's earned points (the month of `s.day`, which is Korea time). */
 export function monthEarned(s: ServerPetState) { return earnedIn(s, s.day.slice(0, 7)); }
 /** Every point a student receives also counts for this month's coupon (call before adding it to `points`). */
 export function earnPoints(s: ServerPetState, points: number, kind: PointKind = 'etc', label = '', dayInput?: string) {
   if (!(points > 0)) return;
   const cur = s.day.slice(0, 7), prev = prevMonth(cur), asked = String(dayInput || s.day).slice(0, 10);
-  // the month it was earned for: a lesson's own month (this month or last), anything else this month
-  const day = asked.slice(0, 7) === prev || asked.slice(0, 7) === cur && asked <= s.day ? asked : s.day, month = day.slice(0, 7);
+  // the month it was earned for: a lesson's own month (this month or last; a September lesson counts for the first
+  // season), anything else this month. The 내역 keeps the lesson's day.
+  const day = asked.slice(0, 7) === prev || asked.slice(0, 7) === cur && asked <= s.day ? asked : s.day, month = countedMonth(day, cur);
   const by: Record<string, number> = {};
-  for (const m of [prev, cur]) { const v = earnedIn(s, m); if (v) by[m] = v; }
+  for (const m of keptMonths(cur)) { const v = earnedIn(s, m); if (v) by[m] = v; }
   by[month] = (by[month] || 0) + points;
   s.earnedBy = by; s.earned = {month: cur, points: by[cur] || 0};
   const list = (s.ledger || []).filter(x => x.day.slice(0, 7) >= prev), hit = list.find(x => x.day === day && x.kind === kind && x.label === label);
@@ -124,9 +134,9 @@ export function takePoints(s: ServerPetState, points: number, kind: PointKind, l
   if (!take) return 0;
   s.points -= take;
   const cur = s.day.slice(0, 7), prev = prevMonth(cur), asked = String(dayInput || s.day).slice(0, 10);
-  const day = asked.slice(0, 7) === prev || asked.slice(0, 7) === cur && asked <= s.day ? asked : s.day, month = day.slice(0, 7);
+  const day = asked.slice(0, 7) === prev || asked.slice(0, 7) === cur && asked <= s.day ? asked : s.day, month = countedMonth(day, cur);
   const by: Record<string, number> = {};
-  for (const m of [prev, cur]) { const v = earnedIn(s, m); if (v) by[m] = v; }
+  for (const m of keptMonths(cur)) { const v = earnedIn(s, m); if (v) by[m] = v; }
   by[month] = Math.max(0, (by[month] || 0) - take);
   s.earnedBy = by; s.earned = {month: cur, points: by[cur] || 0};
   const list = (s.ledger || []).filter(x => x.day.slice(0, 7) >= prev), hit = list.find(x => x.day === day && x.kind === kind && x.label === label);
