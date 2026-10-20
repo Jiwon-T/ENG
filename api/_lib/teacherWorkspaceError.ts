@@ -38,6 +38,9 @@ export function workspaceError(error: unknown, failureStage: string) {
   STUDENT_NOT_FOUND:'학생 정보를 찾지 못했어요. 학생 목록을 새로고침해 주세요.',
   MULTIPLE_STUDENTS_MATCHED:'같은 학생으로 보이는 기록이 둘 이상이에요. 학생 관리에서 직접 연결해 주세요.',
   STUDENT_ACCOUNT_NOT_LINKED:'학생 앱 계정이 연결되어 있지 않아 평가를 남길 수 없습니다. 학생 관리에서 계정을 먼저 연결해 주세요.',
+  COUPON_NOT_YET:'이 학생은 이번 달 쿠폰 포인트에 아직 닿지 않았어요.',
+  COUPON_TAKEN:'이 학생은 이번 달 쿠폰을 이미 받았어요(한 달 1만 원까지).',
+  RANK_NICK_BAD:'닉네임은 2~10자로 정해 주세요(전화번호·주소·링크는 쓸 수 없어요).',
   EVALUATION_CONFLICT:'다른 선생님이 먼저 평가를 바꿨습니다. 새로고침해서 최신 평가를 확인한 뒤 다시 저장해 주세요.',
   // Codes keep their old names (screens and tests match on them); only the wording changes.
   NOTION_EDIT_CONFLICT:'다른 곳에서 이 자료가 먼저 수정되었습니다. 새로고침한 뒤 다시 수정해 주세요.',

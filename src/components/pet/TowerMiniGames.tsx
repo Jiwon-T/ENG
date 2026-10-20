@@ -78,7 +78,7 @@ function Mushrooms({ title, game, busy, send }: { title: string; game: { step: n
         <span className="-mt-1 rounded-lg bg-white px-2 py-0.5 text-xs font-black text-[#26215c]">{w}</span></button>)}</div>
       <div className="absolute inset-x-0 top-4 flex justify-center gap-1.5" aria-hidden="true">{Array.from({ length: game.steps }, (_, i) => <span key={i} className={`h-2 w-6 rounded-full ${i < game.step ? 'bg-[#4ade80]' : 'bg-white/25'}`} />)}</div>
     </Hall>
-    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">세 번 모두 맞히면 물약 하나. 틀리면 풍덩 빠지지만 이 층은 지나가요 (틀린 단어는 오답 복습으로).</p>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">세 번 모두 맞히면 물약 하나. 틀리면 풍덩! 💧 젖은 채(방어 -15%) 다음 전투를 시작해요. 틀린 단어는 오답 복습으로.</p>
   </div>;
 }
 
@@ -93,7 +93,7 @@ function Echo({ title, game, busy, send }: { title: string; game: { step: number
       </div>
     </Hall>
     <div className="grid grid-cols-2 gap-2">{game.choices.map((c, i) => <button key={`${game.step}-${i}`} type="button" disabled={busy} onClick={() => void send('step', { choice: i })} className="min-h-[44px] rounded-xl border border-[#d6d2ee] bg-white px-2 py-2 text-sm font-bold text-[#26215c] hover:bg-[#f5f4fd]">{c}</button>)}</div>
-    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">세 번 모두 맞히면 강화석 하나. 틀리면 동굴을 빠져나와 다음 층으로 가요 (틀린 단어는 오답 복습으로).</p>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">세 번 모두 맞히면 강화석 하나. 틀리면 🙉 귀가 멍멍(다음 전투 첫 막기 4초). 틀린 단어는 오답 복습으로.</p>
   </div>;
 }
 
@@ -114,7 +114,7 @@ function Crystals({ title, game, busy, send }: { title: string; game: { cells: b
       </button>)}</div>
     </Hall>
     <button type="button" disabled={busy || sent.current} onClick={() => done(presses)} className="w-full rounded-xl border border-[#d6d2ee] bg-white py-2 text-xs font-bold text-slate-500">그만하고 지나가기</button>
-    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">9개를 모두 켜면 강화석 하나. 못 켜도 이 층은 지나가요.</p>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">9개를 모두 켜면 강화석 하나. 못 켜면 😵 눈이 침침(다음 전투 공격 -10%).</p>
   </div>;
 }
 
@@ -143,7 +143,7 @@ function Maze({ title, game, busy, send }: { title: string; game: { size: number
     </Hall>
     <div className="mx-auto grid w-40 grid-cols-3 gap-1.5 text-lg">{PADS.map(([d, icon, label], i) => d ? <button key={i} type="button" disabled={busy} onClick={() => walk(d)} aria-label={label} className="rounded-xl border border-[#d6d2ee] bg-white py-1.5">{icon}</button> : <span key={i} />)}</div>
     <button type="button" disabled={busy || sent.current} onClick={() => { sent.current = true; void send('walk', { path }); }} className="w-full rounded-xl border border-[#d6d2ee] bg-white py-2 text-xs font-bold text-slate-500">그만하고 지나가기</button>
-    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">출구까지 가면 강화석 하나. 뱀을 밟거나 그만둬도 이 층은 지나가요.</p>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">출구까지 가면 강화석 하나. 뱀을 밟으면 🐍 뱀독(독 3턴), 그만두면 😮‍💨 기운 빠짐(MP 절반)으로 다음 전투를 시작해요.</p>
   </div>;
 }
 
@@ -180,7 +180,7 @@ function Scale({ title, game, busy, send }: { title: string; game: { coins: numb
       : <div className="grid grid-cols-2 gap-2 text-xs font-bold">
         <button type="button" disabled={busy || !L.length || L.length !== R.length} onClick={() => void weigh()} className="rounded-xl bg-[#fde047] py-2.5 text-[#713f12] disabled:opacity-50">저울에 달기 (왼쪽 {L.length} · 오른쪽 {R.length})</button>
         <button type="button" disabled={busy} onClick={() => setGuessing(true)} className="rounded-xl border border-[#d6d2ee] bg-white py-2.5 text-[#26215c]">가짜 고르기</button></div>}
-    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">금화를 한 번 누르면 왼쪽(파랑), 두 번 오른쪽(빨강) 접시에 올라가요. 양쪽 개수가 같아야 해요. 맞히면 강화석 2개, 틀려도 이 층은 지나가요.</p>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">금화를 한 번 누르면 왼쪽(파랑), 두 번 오른쪽(빨강) 접시에 올라가요. 양쪽 개수가 같아야 해요. 맞히면 강화석 2개, 틀리면 🌑 가짜 금화의 저주(다음 전투 체력 -10%).</p>
   </div>;
 }
 
@@ -202,7 +202,166 @@ function Jars({ title, game, busy, send }: { title: string; game: { jars: number
         return <button key={i} type="button" disabled={busy} onClick={() => void tap(i)} className={`flex h-[72px] items-center justify-center rounded-2xl border-2 px-1 text-center text-[12px] font-black leading-tight ${text !== null && text !== '…' ? open || peek?.match ? 'border-[#639922] bg-[#eaf3de] text-[#27500a]' : 'border-[#d97706] bg-[#fffbeb] text-[#78350f]' : first === i ? 'border-[#fde68a] bg-[#f59e0b]' : 'border-[#b45309] bg-[#f59e0b]'}`}>
           {text !== null && text !== '…' ? text : <svg viewBox="0 0 40 48" width="30" aria-hidden="true"><path d="M12 4 h16 v6 Q36 16 34 30 Q32 44 20 44 Q8 44 6 30 Q4 16 12 10Z" fill="#c2410c" stroke="#7c2d12" strokeWidth="1.4" /><path d="M8 24 h24 M9 30 h22" stroke="#fde68a" strokeWidth="1.6" /></svg>}</button>; })}</div>
     </Hall>
-    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">항아리 두 개를 열어 영어 단어와 그 뜻을 짝지어요. 4쌍을 다 찾으면 강화석과 물약! 기회가 끝나도 이 층은 지나가요.</p>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">항아리 두 개를 열어 영어 단어와 그 뜻을 짝지어요. 4쌍을 다 찾으면 강화석과 물약! 기회가 끝나면 먼지에 😵 눈이 침침(다음 전투 공격 -10%).</p>
+  </div>;
+}
+
+/** 얼음 철자 자물쇠: a meaning and the word's letters, shuffled — tap them in order to spell it (two tries). */
+function Icelock({ title, game, busy, send }: { title: string; game: { meaning: string; letters: string[]; triesLeft: number; wrong?: boolean }; busy: boolean; send: Send }) {
+  const [picked, setPicked] = useState<number[]>([]);
+  const word = picked.map(i => game.letters[i]).join('');
+  const spell = async () => { await send('spell', { text: word }); setPicked([]); };
+  return <div className="space-y-2">
+    <Hall caption={`${title} · 뜻: ${game.meaning} — 글자를 순서대로 눌러 단어를 완성해요 (남은 기회 ${game.triesLeft})`}>
+      <div className="absolute inset-x-0 top-5 flex justify-center"><svg viewBox="0 0 80 56" width="110" aria-hidden="true"><rect x="6" y="18" width="68" height="34" rx="5" fill="#bae6fd" stroke="#0369a1" strokeWidth="2" /><path d="M6 26 Q6 6 40 6 Q74 6 74 26Z" fill="#e0f2fe" stroke="#0369a1" strokeWidth="2" /><rect x="32" y="22" width="16" height="16" rx="3" fill="#7dd3fc" stroke="#0369a1" /><circle cx="40" cy="30" r="2.4" fill="#0c4a6e" /><path d="M14 52 v5 M30 52 v4 M52 52 v5 M66 52 v3" stroke="#e0f2fe" strokeWidth="2" strokeLinecap="round" /></svg></div>
+      <p className="absolute inset-x-4 top-[96px] min-h-[40px] rounded-xl bg-white/90 px-3 py-2 text-center text-xl font-black tracking-widest text-[#0c4a6e]" aria-label="만든 단어">{word || <span className="text-sm font-medium tracking-normal text-slate-400">글자를 눌러요</span>}</p>
+      {game.wrong && !picked.length && <p className="absolute inset-x-0 top-[148px] text-center text-xs font-bold text-[#fca5a5]">아직 안 열려요! 한 번 더</p>}
+      <div className="absolute inset-x-4 top-[172px] flex flex-wrap justify-center gap-1.5">{game.letters.map((l, i) => <button key={i} type="button" disabled={busy || picked.includes(i)} onClick={() => setPicked(p => [...p, i])} className="h-10 w-9 rounded-lg border-2 border-[#0369a1] bg-[#e0f2fe] text-lg font-black text-[#0c4a6e] disabled:opacity-30">{l}</button>)}</div>
+    </Hall>
+    <div className="grid grid-cols-2 gap-2 text-xs font-bold"><button type="button" disabled={busy || !picked.length} onClick={() => setPicked(p => p.slice(0, -1))} className="rounded-xl border border-[#d6d2ee] bg-white py-2.5 text-[#26215c] disabled:opacity-50">하나 지우기</button>
+      <button type="button" disabled={busy || picked.length !== game.letters.length} onClick={() => void spell()} className="rounded-xl bg-[#7dd3fc] py-2.5 text-[#0c4a6e] disabled:opacity-50">자물쇠 열기</button></div>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">열면 강화석 2개. 두 번 다 틀리면 ❄️ 손이 꽁꽁(다음 전투 공격 -10%). 틀린 단어는 오답 복습으로.</p>
+  </div>;
+}
+
+/** 미끄러운 얼음길: a push slides until a rock or the wall; reach the exit (bottom-right) within the pushes given. */
+function Icepath({ title, game, busy, send }: { title: string; game: { size: number; rocks: number[]; limit: number }; busy: boolean; send: Send }) {
+  const n = game.size, exit = n * n - 1, [at, setAt] = useState(0), [moves, setMoves] = useState<string[]>([]), sent = useRef(false);
+  const slide = (dir: string) => {
+    if (busy || sent.current) return;
+    const [dr, dc] = STEP[dir]; let r = Math.floor(at / n), c = at % n;
+    for (;;) { const rr = r + dr, cc = c + dc; if (rr < 0 || rr >= n || cc < 0 || cc >= n || game.rocks.includes(rr * n + cc)) break; r = rr; c = cc; if (r * n + c === exit) break; }
+    const to = r * n + c; if (to === at) return;
+    const list = [...moves, dir]; setAt(to); setMoves(list);
+    if (to === exit || list.length >= game.limit) { sent.current = true; window.setTimeout(() => void send('slide', { moves: list }), 600); }
+  };
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { const d = ARROWS[e.key]; if (d) { e.preventDefault(); slide(d); } };
+    window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
+  });
+  return <div className="space-y-2">
+    <Hall caption={`${title} · 밀면 바위나 벽까지 미끄러져요 · 남은 밀기 ${game.limit - moves.length}`}>
+      <div className="absolute inset-x-0 top-4 mx-auto grid w-[222px] gap-0.5 rounded-xl bg-[#bfdbfe] p-1" style={{ gridTemplateColumns: `repeat(${n}, 1fr)` }}>{Array.from({ length: n * n }, (_, i) => <div key={i} className={`flex h-[34px] items-center justify-center rounded text-lg ${game.rocks.includes(i) ? 'bg-[#64748b]' : i === exit ? 'bg-[#86efac]' : 'bg-[#eff6ff]'}`}>{i === at ? '🐾' : game.rocks.includes(i) ? '🪨' : i === exit ? '🚪' : ''}</div>)}</div>
+    </Hall>
+    <div className="mx-auto grid w-40 grid-cols-3 gap-1.5 text-lg">{PADS.map(([d, icon, label], i) => d ? <button key={i} type="button" disabled={busy} onClick={() => slide(d)} aria-label={label} className="rounded-xl border border-[#d6d2ee] bg-white py-1.5">{icon}</button> : <span key={i} />)}</div>
+    <button type="button" disabled={busy || sent.current} onClick={() => { sent.current = true; void send('slide', { moves }); }} className="w-full rounded-xl border border-[#d6d2ee] bg-white py-2 text-xs font-bold text-slate-500">그만하고 지나가기</button>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">출구까지 가면 강화석과 물약. 못 가면 🤕 엉덩방아(다음 전투 방어 -15%).</p>
+  </div>;
+}
+
+/** 룬 따라 하기: watch the runes glow, then press them in the same order (3 → 4 → 5). */
+const RUNE_LOOK = [{ c: '#f472b6', d: 'M0 -9 L8 6 H-8Z' }, { c: '#60a5fa', d: 'M-8 -8 H8 V8 H-8Z' }, { c: '#facc15', d: 'M0 -10 L3 -3 10 -3 4 2 6 9 0 5 -6 9 -4 2 -10 -3 -3 -3Z' }, { c: '#4ade80', d: 'M0 -9 A9 9 0 1 1 -0.1 -9Z' }];
+function Runes({ title, game, busy, send }: { title: string; game: { runes: number; round: number; rounds: number; show: number[] }; busy: boolean; send: Send }) {
+  const [lit, setLit] = useState<number | null>(null), [watching, setWatching] = useState(true), [input, setInput] = useState<number[]>([]);
+  useEffect(() => {
+    setWatching(true); setInput([]); let k = 0; const timers: number[] = [];
+    const next = () => { if (k >= game.show.length) { setLit(null); setWatching(false); return; } setLit(game.show[k]); timers.push(window.setTimeout(() => { setLit(null); k += 1; timers.push(window.setTimeout(next, 220)); }, 520)); };
+    timers.push(window.setTimeout(next, 700)); return () => timers.forEach(t => window.clearTimeout(t));
+  }, [game.round]); // eslint-disable-line react-hooks/exhaustive-deps
+  const press = (i: number) => {
+    if (busy || watching || input.length >= game.show.length) return;
+    setLit(i); window.setTimeout(() => setLit(l => l === i ? null : l), 200);
+    const list = [...input, i]; setInput(list); if (list.length === game.show.length) window.setTimeout(() => void send('repeat', { input: list }), 300);
+  };
+  const spots = [[0, -48], [48, 0], [0, 48], [-48, 0]];
+  return <div className="space-y-2">
+    <Hall caption={`${title} · ${watching ? '빛나는 순서를 잘 봐요…' : `같은 순서로 눌러요 (${input.length}/${game.show.length})`} · ${game.round + 1}/${game.rounds}라운드`}>
+      <svg viewBox="-80 -80 160 160" width="210" className="absolute left-1/2 top-3 -translate-x-1/2" aria-hidden="true"><circle r="70" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeDasharray="4 4" opacity=".6" /><circle r="30" fill="#3b0764" opacity=".5" /></svg>
+      <div className="absolute left-1/2 top-3 h-[210px] w-[210px] -translate-x-1/2">{spots.slice(0, game.runes).map(([x, y], i) => <button key={i} type="button" disabled={busy || watching} onClick={() => press(i)} aria-label={`룬 ${i + 1}`} className="absolute flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 transition-all" style={{ left: 105 + x, top: 105 + y, borderColor: RUNE_LOOK[i].c, background: lit === i ? RUNE_LOOK[i].c : '#1e1b4b', boxShadow: lit === i ? `0 0 18px ${RUNE_LOOK[i].c}` : 'none' }}>
+        <svg viewBox="-12 -12 24 24" width="26" aria-hidden="true"><path d={RUNE_LOOK[i].d} fill={lit === i ? '#fff' : RUNE_LOOK[i].c} /></svg></button>)}</div>
+    </Hall>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">세 라운드를 모두 따라 하면 강화석과 물약. 틀리면 💫 마력 반동(다음 전투 MP 절반).</p>
+  </div>;
+}
+
+/** 주문서 완성: the spell's meaning and its pieces, shuffled — tap them in order (two tries). */
+function Scroll({ title, game, busy, send }: { title: string; game: { meaning: string; pieces: string[]; sentence: boolean; triesLeft: number; wrong?: boolean }; busy: boolean; send: Send }) {
+  const [picked, setPicked] = useState<number[]>([]), line = picked.map(i => game.pieces[i]).join(game.sentence ? ' ' : '');
+  const cast = async () => { await send('cast', { text: line }); setPicked([]); };
+  return <div className="space-y-2">
+    <Hall caption={`${title} · 뜻: ${game.meaning} — 조각을 순서대로 눌러 주문을 완성해요 (남은 기회 ${game.triesLeft})`}>
+      <div className="absolute inset-x-5 top-4 rounded-2xl border-2 border-[#a16207] bg-[#fef3c7] px-3 py-3 shadow-inner">
+        <p className="min-h-[44px] text-center text-base font-black text-[#713f12]" aria-label="만든 주문">{line || <span className="text-sm font-medium text-[#a16207]/60">조각을 눌러요</span>}</p>
+        {game.wrong && !picked.length && <p className="mt-1 text-center text-xs font-bold text-[#b91c1c]">봉인이 꿈쩍도 안 해요! 한 번 더</p>}
+      </div>
+      <div className="absolute inset-x-4 top-[132px] flex flex-wrap justify-center gap-1.5">{game.pieces.map((p, i) => <button key={i} type="button" disabled={busy || picked.includes(i)} onClick={() => setPicked(list => [...list, i])} className="rounded-lg border-2 border-[#a16207] bg-[#fffbeb] px-2.5 py-1.5 text-sm font-bold text-[#713f12] disabled:opacity-30">{p}</button>)}</div>
+    </Hall>
+    <div className="grid grid-cols-2 gap-2 text-xs font-bold"><button type="button" disabled={busy || !picked.length} onClick={() => setPicked(list => list.slice(0, -1))} className="rounded-xl border border-[#d6d2ee] bg-white py-2.5 text-[#26215c] disabled:opacity-50">하나 빼기</button>
+      <button type="button" disabled={busy || picked.length !== game.pieces.length} onClick={() => void cast()} className="rounded-xl bg-[#fde68a] py-2.5 text-[#713f12] disabled:opacity-50">주문 외우기</button></div>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">완성하면 강화석 2개. 두 번 다 틀리면 📜 주문 역류(다음 전투 체력 -10%).</p>
+  </div>;
+}
+
+/** 물약 섞기: pick two flasks to make the colour asked (twice). */
+const FLASK_COLOR: Record<string, string> = { red: '#ef4444', blue: '#3b82f6', yellow: '#facc15', white: '#f8fafc' };
+const BREW_COLOR: Record<string, string> = { 보라: '#8b5cf6', 초록: '#22c55e', 주황: '#f97316', 분홍: '#f9a8d4', 하늘: '#93c5fd', 연노랑: '#fef08a' };
+function Potions({ title, game, busy, send }: { title: string; game: { flasks: string[]; target: string; round: number; rounds: number; made?: boolean }; busy: boolean; send: Send }) {
+  const [pick, setPick] = useState<string[]>([]);
+  useEffect(() => setPick([]), [game.round]);
+  const tap = (f: string) => {
+    if (busy) return;
+    const list = pick.includes(f) ? pick.filter(x => x !== f) : [...pick, f].slice(-2); setPick(list);
+    if (list.length === 2) window.setTimeout(() => void send('mix', { a: list[0], b: list[1] }), 350);
+  };
+  const flask = (fill: string, size = 46) => <svg viewBox="0 0 40 52" width={size} aria-hidden="true"><path d="M15 4 h10 v12 l11 24 Q38 48 30 48 H10 Q2 48 4 40 L15 16Z" fill="#ffffff22" stroke="#e2e8f0" strokeWidth="2" /><path d="M8 34 L32 34 L35 41 Q36 46 30 46 H10 Q4 46 5 41Z" fill={fill} /><rect x="13" y="1" width="14" height="5" rx="1.5" fill="#a16207" /></svg>;
+  return <div className="space-y-2">
+    <Hall caption={`${title} · ${game.target} 물약을 만들어요 (${game.round + 1}/${game.rounds}) — 플라스크 두 개를 골라요`}>
+      <div className="absolute inset-x-0 top-4 flex flex-col items-center"><span className="text-[11px] font-bold text-[#e7e5e4]">만들 색</span>{flask(BREW_COLOR[game.target] || '#a78bfa', 64)}<b className="text-sm text-white">{game.target}</b>{game.made && <span className="text-[11px] font-bold text-[#86efac]">첫 물약 성공! 하나 더</span>}</div>
+      <div className="absolute inset-x-0 top-[170px] flex justify-center gap-3">{game.flasks.map(f => <button key={f} type="button" disabled={busy} onClick={() => tap(f)} aria-label={{ red: '빨강', blue: '파랑', yellow: '노랑', white: '하양' }[f]} aria-pressed={pick.includes(f)} className={`rounded-xl p-1 transition-transform ${pick.includes(f) ? '-translate-y-2 ring-2 ring-[#fde68a]' : ''}`}>{flask(FLASK_COLOR[f])}</button>)}</div>
+    </Hall>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">두 번 다 맞게 섞으면 물약 2개와 강화석. 틀리면 🤢 배탈(다음 전투 독 3턴).</p>
+  </div>;
+}
+
+/** 용암 돌다리 기억: the safe stones glow for a moment, then — from memory — step on one stone a row, bottom to top. */
+function Lavapath({ title, game, busy, send }: { title: string; game: { rows: number; cols: number; path: number[]; peekMs: number }; busy: boolean; send: Send }) {
+  const [peek, setPeek] = useState(true), [steps, setSteps] = useState<number[]>([]), sent = useRef(false);
+  // after the peek the server stops sending the path too
+  useEffect(() => { const t = window.setTimeout(() => { setPeek(false); void send('hide'); }, game.peekMs); return () => window.clearTimeout(t); }, [game.peekMs]); // eslint-disable-line react-hooks/exhaustive-deps
+  const path = useRef(game.path || []); if (game.path) path.current = game.path;
+  const row = steps.length; // the next row to step on (0 = the nearest)
+  const step = (r: number, c: number) => {
+    if (busy || peek || sent.current || r !== row) return;
+    const list = [...steps, c]; setSteps(list);
+    if (c !== path.current[r] || list.length === game.rows) { sent.current = true; window.setTimeout(() => void send('cross', { cols: list }), 500); }
+  };
+  return <div className="space-y-2">
+    <Hall caption={`${title} · ${peek ? '빛나는 돌을 기억해요…' : `기억한 돌만 밟아 건너요 (${row}/${game.rows})`}`}>
+      <div className="absolute inset-x-6 top-3 bottom-16 rounded-2xl bg-[#ea580c]">{[18, 46, 74].map((y, i) => <span key={y} className="bx-rise absolute h-1.5 w-1.5 rounded-full bg-[#fde047]" style={{ left: `${20 + i * 28}%`, top: `${y}%`, animationDelay: `${i * .7}s` }} />)}</div>
+      <div className="absolute inset-x-8 top-5 flex flex-col-reverse gap-1.5">{Array.from({ length: game.rows }, (_, r) => <div key={r} className="flex justify-around">{Array.from({ length: game.cols }, (_, c) => {
+        const safe = path.current[r] === c, stepped = steps[r] === c, glow = peek && safe, sunk = stepped && !safe;
+        return <button key={c} type="button" disabled={busy || peek || r !== row} onClick={() => step(r, c)} aria-label={`${r + 1}번째 줄 ${c + 1}번 돌`} className={`h-9 w-14 rounded-[50%] border-2 transition-all ${sunk ? 'border-[#7f1d1d] bg-[#7f1d1d] opacity-40' : stepped ? 'border-[#fde68a] bg-[#78716c]' : glow ? 'border-[#fde68a] bg-[#a8a29e] shadow-[0_0_14px_#fde68a]' : 'border-[#292524] bg-[#57534e]'} ${r === row && !peek ? 'ring-1 ring-white/40' : ''}`}>{stepped && !sunk ? '🐾' : ''}</button>; })}</div>)}</div>
+    </Hall>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">아래 줄부터 한 줄에 하나씩. 다 건너면 강화석 2개. 가라앉는 돌을 밟으면 🔥 화상(다음 전투 화상 3턴).</p>
+  </div>;
+}
+
+/** 용암 탈출: press start, then five meanings → words before the lava rises (20 seconds); four right to escape. */
+function Lavarun({ title, game, busy, send }: { title: string; game: { started: boolean; step: number; steps: number; need: number; right: number; ms: number; msLeft: number | null; prompt?: string; choices?: string[]; last?: boolean }; busy: boolean; send: Send }) {
+  const [end, setEnd] = useState<number | null>(null), [left, setLeft] = useState(game.msLeft ?? game.ms);
+  useEffect(() => { if (game.msLeft !== null) setEnd(Date.now() + game.msLeft); }, [game.started]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (end === null) return; const t = window.setInterval(() => setLeft(Math.max(0, end - Date.now())), 200); return () => window.clearInterval(t); }, [end]);
+  // time's up: the server checks it on its clock and ends the game (the floor passes)
+  // a refused or failed time-out (the clocks differ a little, a dropped request) is sent again 2 s later
+  const timedOut = useRef(false), retryTimer = useRef(0), [retry, setRetry] = useState(0);
+  useEffect(() => () => window.clearTimeout(retryTimer.current), []);
+  useEffect(() => {
+    if (!game.started || left > 0 || timedOut.current || busy) return;
+    timedOut.current = true;
+    // no result (refused, failed or thrown): send it again in 2 seconds, so the screen never stays stuck at 0
+    const again = () => { window.clearTimeout(retryTimer.current); retryTimer.current = window.setTimeout(() => { timedOut.current = false; setRetry(n => n + 1); }, 2000); };
+    void Promise.resolve().then(() => send('timeout')).then(r => { if (!r?.result) again(); }, again);
+  }, [left, game.started, busy, retry]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rise = game.started ? 100 - Math.round((left / game.ms) * 100) : 0;
+  return <div className="space-y-2">
+    <Hall caption={`${title} · ${game.started ? `${game.step + 1}/${game.steps} · 맞힘 ${game.right} (필요 ${game.need}) · 남은 ${Math.ceil(left / 1000)}초` : '용암이 차오르기 전에 5문제 중 4문제를 맞혀요 (20초)'}`}>
+      <div className="absolute inset-x-0 bottom-16 bg-[#ea580c] transition-all duration-200" style={{ height: `${16 + rise * 1.6}px` }}><div className="h-1.5 bg-[#fde047] opacity-70" /></div>
+      <div className="absolute right-3 top-3 h-40 w-2 overflow-hidden rounded-full bg-white/20"><div className="absolute bottom-0 w-full rounded-full bg-[#f97316]" style={{ height: `${rise}%` }} /></div>
+      {game.started && game.prompt ? <div className="absolute inset-x-4 top-4 rounded-xl bg-white/95 px-3 py-2 text-center text-xs text-[#26215c]">뜻: <b className="text-sm font-black">{game.prompt}</b>{game.last !== undefined && <span className={`ml-2 font-bold ${game.last ? 'text-[#15803d]' : 'text-[#b91c1c]'}`}>{game.last ? '정답!' : '아쉬워요'}</span>}
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5">{game.choices!.map((c, i) => <button key={`${game.step}-${i}`} type="button" disabled={busy || left <= 0} onClick={() => void send('answer', { choice: i })} className="rounded-xl border border-[#d6d2ee] bg-white px-2 py-1.5 text-xs font-bold text-[#26215c] hover:bg-[#f5f4fd]">{c}</button>)}</div></div>
+        : <div className="absolute inset-x-0 top-16 flex justify-center"><button type="button" disabled={busy} onClick={() => void send('start')} className="rounded-2xl bg-[#f97316] px-6 py-3 text-sm font-black text-white shadow">시작! 🌋</button></div>}
+    </Hall>
+    <p className="rounded-xl border-2 border-[#5f5e5a] bg-[#f1efe8] px-3 py-2 text-xs text-[#2c2c2a]">4문제 이상 맞히고 탈출하면 강화석 2개. 시간이 지나거나 2문제를 놓치면 🥵 그을림(다음 전투 방어 -15%). 틀린 단어는 오답 복습으로.</p>
   </div>;
 }
 
@@ -216,5 +375,12 @@ export function MiniGameScreen({ view, busy, send }: { view: MiniGameView; busy:
   if (view.type === 'maze') return <Maze title={view.title} game={view.game} busy={busy} send={send} />;
   if (view.type === 'scale') return <Scale title={view.title} game={view.game} busy={busy} send={send} />;
   if (view.type === 'jars') return <Jars title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'icelock') return <Icelock title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'icepath') return <Icepath title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'runes') return <Runes title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'scroll') return <Scroll title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'potions') return <Potions title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'lavapath') return <Lavapath title={view.title} game={view.game} busy={busy} send={send} />;
+  if (view.type === 'lavarun') return <Lavarun title={view.title} game={view.game} busy={busy} send={send} />;
   return null;
 }

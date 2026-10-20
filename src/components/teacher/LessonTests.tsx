@@ -15,10 +15,15 @@ function TestNamePicker({value,onChange}:{key?:number;value:string;onChange:(nam
 }
 const circled=['①','②','③','④'];
 /** 테스트 평가 points: 종이 시험지 pays more; each test (tab) has its own, and one on paper makes the lesson's paper. 자동 (null):
- *  no app 단어 테스트 that day counts as paper. Tap: 자동 → 종이 → 앱. */
+ *  no app 단어 테스트 that day counts as paper. Tap: 자동 → 종이 → 앱. A short chip (room for ①②③ tabs) and a small ⓘ that
+ *  says what it is for, for a teacher who has not used it yet. */
 function PaperChip({value,onChange}:{value:boolean|null;onChange:(next:boolean|null)=>void}){
- const label=value===true?'종이':value===false?'앱':'자동';
- return <button type="button" className="lesson-test-paper" aria-pressed={value!==null} aria-label={`테스트 방식 ${label} (눌러서 바꾸기)`} title={'테스트 평가 포인트: 종이 시험지는 더 많이 받아요. 자동: 그날 앱 단어 테스트를 안 봤으면 종이로 쳐요'} onClick={()=>onChange(value===null?true:value===true?false:null)}>{label==='자동'?'시험 자동':label==='종이'?'종이 시험':'앱 시험'}</button>;
+ const label=value===true?'종이':value===false?'앱':'자동',[help,setHelp]=useState(false);
+ return <span className="lesson-test-paper-wrap">
+  <button type="button" className="lesson-test-paper" aria-pressed={value!==null} aria-label={`시험 방식 ${label} (눌러서 바꾸기: 자동 → 종이 → 앱)`} title="시험 방식: 눌러서 자동 → 종이 → 앱" onClick={()=>onChange(value===null?true:value===true?false:null)}>{label}</button>
+  <button type="button" className="lesson-test-paper-info" aria-expanded={help} aria-label="시험 방식 설명" onClick={()=>setHelp(h=>!h)} onBlur={()=>setHelp(false)}>i</button>
+  {help&&<span className="lesson-test-paper-help" role="note">어떤 시험이었는지 골라요: <b>종이</b> 시험지 · <b>앱</b> 단어 테스트. 종이 시험은 포인트를 더 받아요. <b>자동</b>은 그날 앱 테스트를 봤으면 앱, 아니면 종이로 쳐요(앱 계정이 없는 학생은 늘 종이). 칩을 누르면 바뀌어요.</span>}
+ </span>;
 }
 /** 테스트 점수 can hold more than one test (단어 + 벼락치기 …): small tabs in the title row, the box below edits the chosen
  *  one, so the box never grows. The first test stays in correct/total/…/testName; the others go in extraTests. */

@@ -4,7 +4,7 @@ import {registrationFirestore} from './helpers/registrationFirestore.js';
 import {currentPet, initialPetState} from '../api/_lib/pet.js';
 import {initialTower, misspellings, openTowerDoor, towerEvent, towerLayout, towerBookFor, openEntranceChest, publicTower, readTowerSettings, saveTowerSettings, startTowerRun, towerAct, towerAnswer, towerLevelFor, towerPet} from '../api/_lib/petTower.js';
 import {handlePet} from '../api/_lib/student/pet.js';
-import {PET_TOWER, towerMonster, towerStats} from '../src/lib/petCatalog.js';
+import {PET_DAILY_STUDY_POINTS, PET_TOWER, towerMonster, towerStats} from '../src/lib/petCatalog.js';
 
 const NOW = Date.parse('2026-10-16T03:00:00Z');
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
@@ -57,7 +57,15 @@ test('tower: winning saves the floor and pays the first clear once; losing keeps
     return r; };
   const first = play(1);
   assert.deepEqual([first.won, first.floor, first.first, first.points > 0, towerPet(t, 1).floor, towerPet(t, 1).best], [true, 1, true, true, 2, 1]);
-  for (let f = 2; f <= 9; f++) { currentPet(s).energy = 100; play(f); }
+  // a first clear is paid outside the daily cap; a floor another pet of the student already cleared stays inside it
+  s.today.studyPoints = PET_DAILY_STUDY_POINTS; currentPet(s).energy = 100;
+  const second = play(2);
+  assert.deepEqual([second.first, second.points, s.today.studyPoints], [true, PET_TOWER.reward.base + PET_TOWER.reward.perFloor * 2, PET_DAILY_STUDY_POINTS]);
+  towerPet(t, 2).best = 5; currentPet(s).energy = 100;
+  const third = play(3);
+  assert.deepEqual([third.first, third.points], [true, 0], 'another pet cleared floor 3 first: inside the cap');
+  s.today.studyPoints = 0; delete t.pets['2'];
+  for (let f = 4; f <= 9; f++) { currentPet(s).energy = 100; play(f); }
   currentPet(s).energy = 100;
   const boss = play(10);
   assert.deepEqual([boss.won, boss.chest?.gear, towerPet(t, 1).equip.shoulder], [true, ['golem_pauldron'], 'golem_pauldron'], 'the floor-10 boss guards a chest');

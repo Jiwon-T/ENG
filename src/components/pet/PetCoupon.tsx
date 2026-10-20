@@ -1,5 +1,5 @@
 import { type ReactNode, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { medalLabel, PET_COUPON, towerDecor } from '../../lib/petCatalog';
+import { isSilverMedal, medalLabel, PET_COUPON, silverMedal, towerDecor } from '../../lib/petCatalog';
 import type { CouponMonth, CouponView, LedgerItem, MedalSpot } from '../../lib/petService';
 import { DECOR_ART } from './TowerDecorArt';
 
@@ -7,16 +7,20 @@ import { DECOR_ART } from './TowerDecorArt';
 // (꾸미기: drag a medal anywhere in the room; the 메달함 puts one in or takes it out). One medal design for every month,
 // only the 'YY.MM' in the middle changes.
 const won = (n: number) => n.toLocaleString('ko-KR');
+/** +80 / −15 (a lowered 평가 or a deleted 일지 shows as a minus). */
+const signed = (n: number) => `${n < 0 ? '−' : '+'}${won(Math.abs(n))}`;
 
-/** The medal: ribbon, gold rim, star and the month ('2026-10' → 26.10). */
+/** The medal: ribbon, rim, star and the month ('2026-10' → 26.10); gold, or silver for a '2026-11-s' 은메달. */
+const SILVER = { rim: '#9aa4b2', face: '#dfe4ea', line: '#6b7685', text: '#3d4654' }, GOLD = { rim: '#efa23a', face: '#fac977', line: '#b9761c', text: '#6b3d08' };
 export function MedalArt({ month, size = 44 }: { month: string; size?: number }) {
-  return <svg viewBox="0 0 60 92" width={size} height={size * 92 / 60} role="img" aria-label={`${medalLabel(month)} 금메달`}>
+  const c = isSilverMedal(month) ? SILVER : GOLD;
+  return <svg viewBox="0 0 60 92" width={size} height={size * 92 / 60} role="img" aria-label={`${medalLabel(month)} ${isSilverMedal(month) ? '은메달' : '금메달'}`}>
     <path d="M14 0h12l8 30h-12z" fill="#e0587a" /><path d="M34 0h12l-8 30h-12z" fill="#5b8fd6" />
     <path d="M22 0h4l8 30h-4z" fill="#fff" opacity=".85" /><path d="M34 0h4l-8 30h-4z" fill="#fff" opacity=".85" />
-    <circle cx="30" cy="58" r="26" fill="#efa23a" /><circle cx="30" cy="58" r="21" fill="#fac977" />
-    <circle cx="30" cy="58" r="21" fill="none" stroke="#b9761c" strokeWidth="1" strokeDasharray="2 2.5" />
-    <path d="M30 40l2.2 4.4 4.8.7-3.5 3.4.8 4.8-4.3-2.3-4.3 2.3.8-4.8-3.5-3.4 4.8-.7z" fill="#b9761c" />
-    <text x="30" y="67" textAnchor="middle" fontSize="12" fontWeight="800" fill="#6b3d08" letterSpacing=".4">{medalLabel(month)}</text>
+    <circle cx="30" cy="58" r="26" fill={c.rim} /><circle cx="30" cy="58" r="21" fill={c.face} />
+    <circle cx="30" cy="58" r="21" fill="none" stroke={c.line} strokeWidth="1" strokeDasharray="2 2.5" />
+    <path d="M30 40l2.2 4.4 4.8.7-3.5 3.4.8 4.8-4.3-2.3-4.3 2.3.8-4.8-3.5-3.4 4.8-.7z" fill={c.line} />
+    <text x="30" y="67" textAnchor="middle" fontSize="12" fontWeight="800" fill={c.text} letterSpacing=".4">{medalLabel(month)}</text>
   </svg>;
 }
 
@@ -45,7 +49,8 @@ export function PointsHistory({ coupon, ledger, defaultOpen = false }: { coupon:
   const rest = coupon.earned - mine.reduce((sum, x) => sum + x.points, 0); if (rest > 0) byKind.set('etc', (byKind.get('etc') || 0) + rest);
   const parts = (Object.keys(KINDS) as LedgerItem['kind'][]).map(k => [k, byKind.get(k) || 0] as const).filter(([, n]) => n > 0);
   const lines = new Map<string, { day: string; kind: LedgerItem['kind']; labels: string[]; points: number }>();
-  for (const x of mine) { const key = `${x.day}|${x.kind}`, l = lines.get(key) || { day: x.day, kind: x.kind, labels: [], points: 0 }; if (x.label && !l.labels.includes(x.label)) l.labels.push(x.label); l.points += x.points; lines.set(key, l); }
+  for (const x of mine) { const key = x.kind === 'class' ? `${x.day}|class|${x.label}` : `${x.day}|${x.kind}`, l = lines.get(key) || { day: x.day, kind: x.kind, labels: [], points: 0 }; if (x.label && !l.labels.includes(x.label)) l.labels.push(x.label); l.points += x.points; lines.set(key, l); }
+  for (const [key, l] of lines) if (!l.points) lines.delete(key); // a 수정 that went back and forth
   const grouped = [...new Set([...lines.values()].map(l => l.day))].sort().reverse();
   if (!parts.length) return null;
   return <div className="mt-2">
@@ -56,7 +61,7 @@ export function PointsHistory({ coupon, ledger, defaultOpen = false }: { coupon:
       {grouped.slice(0, days).map(day => <div key={day}>
         <p className="mb-0.5 mt-2 text-[11px] text-slate-400">{dayTitle(day)}</p>
         {[...lines.values()].filter(l => l.day === day).sort((a, b) => Object.keys(KINDS).indexOf(a.kind) - Object.keys(KINDS).indexOf(b.kind)).map(l =>
-          <p key={l.kind} className="flex items-baseline justify-between gap-2 py-0.5"><span className="min-w-0"><span aria-hidden="true">{KINDS[l.kind].icon}</span> {l.labels.join(' · ') || KINDS[l.kind].name}</span><b className="flex-none font-bold">+{won(l.points)}</b></p>)}
+          <p key={`${l.kind}|${l.labels.join()}`} className="flex items-baseline justify-between gap-2 py-0.5"><span className="min-w-0"><span aria-hidden="true">{KINDS[l.kind].icon}</span> {l.labels.join(' · ') || KINDS[l.kind].name}</span><b className={`flex-none font-bold ${l.points < 0 ? 'text-slate-500' : ''}`}>{signed(l.points)}</b></p>)}
       </div>)}
       {grouped.length > days && <button type="button" onClick={() => setDays(days + 7)} className="mt-1 w-full text-center text-[11px] font-bold text-[#8b2f40]">더 보기</button>}
     </div>}
@@ -76,7 +81,7 @@ export function CouponGauge({ coupon, onShop, ledger = [] }: { coupon: CouponVie
     <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-[#f6e3e6]"><div className="h-full rounded-full bg-[#efa23a]" style={{ width: `${pct}%` }} />{half > 0 && <span className="absolute top-0 h-full w-0.5 bg-white" style={{ left: `${half / coupon.goal * 100}%` }} title="6,000P · 5천 원" />}</div>
     {coupon.tiered && <p className="mt-1 flex justify-between text-[10px] text-slate-400"><span>6,000P · 5천 원</span><span>10,000P · 1만 원</span></p>}
     {ready ? <button type="button" onClick={onShop} className="mt-2 flex w-full items-center gap-2 rounded-xl bg-[#fff6e6] px-3 py-2 text-left text-xs font-bold text-[#8a5a12]"><span className="flex-1">{coupon.requested ? '쿠폰을 한 장 더 받을 수 있어요!' : '이번 달 쿠폰을 받을 수 있어요!'}</span><span>상점 가기 ›</span></button>
-      : coupon.requested ? <p className="mt-1.5 text-[11px] text-slate-500">{coupon.paid ? '선생님이 쿠폰을 주셨어요.' : '선생님이 곧 쿠폰을 주실 거예요.'}{coupon.tiered && (coupon.won || 0) < PET_COUPON.monthWon ? ` 남은 ${won(coupon.left ?? 0)}P로 6,000P를 채우면 5천 원을 한 번 더 받아요.` : ''} 금메달은 방 꾸미기에서 놓을 수 있어요.</p>
+      : coupon.requested ? <p className="mt-1.5 text-[11px] text-slate-500">{coupon.paid ? '선생님이 쿠폰을 주셨어요.' : '선생님이 곧 쿠폰을 주실 거예요.'}{coupon.tiered && (coupon.won || 0) < PET_COUPON.monthWon ? ` 남은 ${won(coupon.left ?? 0)}P로 6,000P를 채우면 5천 원을 한 번 더 받아요.` : ''} 메달은 방 꾸미기에서 놓을 수 있어요.</p>
       : <p className="mt-1.5 text-[11px] text-slate-400">이번 달 1일부터 모은 포인트예요 (써도 줄지 않아요) · {coupon.tiered ? '한 달 최대 1만 원' : '쿠폰은 한 달에 1장'}</p>}
     <PointsHistory coupon={coupon} ledger={ledger} />
   </section>;
@@ -105,17 +110,19 @@ function CouponMonthCard({ title, note, m, busy, onRequest }: { title: string; n
 }
 
 export function CouponShop({ coupon, medals, busy, onRequest }: { coupon: CouponView; medals: string[]; busy: boolean; onRequest: (month?: string, tier?: 'half' | 'full') => void }) {
-  const shown = [...new Set([coupon.month, ...medals])].sort().reverse();
+  // one place a month: its 금메달, else its 은메달, else (not yet) the gold greyed out
+  const shown = [...new Set([coupon.month, ...medals.map(m => m.slice(0, 7))])].sort().reverse();
+  const art = (month: string) => medals.includes(month) ? month : medals.includes(silverMedal(month)) ? silverMedal(month) : month;
   const last = coupon.last && (coupon.last.options || []).some(o => o.ready) ? coupon.last : null;
   return <div className="space-y-3">
     {/* last month's coupons, in the first days of a month (its lessons' points came in late) */}
     {last && <CouponMonthCard title={`지난달 ${last.label} ${PET_COUPON.name}`} note={`${Number(last.until.slice(8))}일까지 신청할 수 있어요 · 남은 포인트 ${won(last.left ?? last.earned)}P`} m={last} busy={busy} onRequest={tier => onRequest(last.month, tier)} />}
     <CouponMonthCard title={`${coupon.label} ${PET_COUPON.name}`} note={coupon.tiered ? `이번 달 모은 ${won(coupon.earned)}P · 남은 ${won(coupon.left ?? coupon.earned)}P (포인트를 써도 줄지 않아요)` : `이번 달 ${won(coupon.goal)}P 모으면 교환 · 포인트는 그대로예요`} m={coupon} busy={busy} onRequest={tier => onRequest(undefined, tier)} />
     <div>
-      <p className="mb-1.5 text-xs font-bold text-[#8b2f40]">금메달 · 쿠폰을 신청하면 그 달 메달을 받아요</p>
-      <div className="grid grid-cols-3 gap-2">{shown.map(m => { const mine = medals.includes(m); return <div key={m} className={`flex flex-col items-center rounded-2xl border px-1 py-2 text-center ${mine ? 'border-[#efc77a] bg-[#fffaf0]' : 'border-[#f3e6e8] bg-white'}`}>
-        <span className={mine ? '' : 'opacity-40 grayscale'}><MedalArt month={m} size={34} /></span>
-        <span className="mt-1 text-[11px] font-bold text-[#5e1e2a]">{medalLabel(m)} 금메달</span>
+      <p className="mb-1.5 text-xs font-bold text-[#8b2f40]">메달 · 쿠폰을 신청하면 그 달 메달을 받아요{coupon.tiered ? ' (5천 원 은메달, 그 달 1만 원을 채우면 금메달)' : ''}</p>
+      <div className="grid grid-cols-3 gap-2">{shown.map(m => { const id = art(m), mine = medals.includes(id); return <div key={m} className={`flex flex-col items-center rounded-2xl border px-1 py-2 text-center ${mine ? 'border-[#efc77a] bg-[#fffaf0]' : 'border-[#f3e6e8] bg-white'}`}>
+        <span className={mine ? '' : 'opacity-40 grayscale'}><MedalArt month={id} size={34} /></span>
+        <span className="mt-1 text-[11px] font-bold text-[#5e1e2a]">{medalLabel(m)} {isSilverMedal(id) ? '은메달' : '금메달'}</span>
         <span className="text-[10px] text-slate-400">{mine ? '메달함에 있어요' : m === coupon.month ? '이번 달' : ''}</span>
       </div>; })}</div>
     </div>

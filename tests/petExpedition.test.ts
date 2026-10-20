@@ -23,7 +23,7 @@ test('expedition: 35 stages in order (7 chapters); each opens when the one befor
   assert.equal(publicExpedition(e).current, 'sea-1');
 });
 
-test('expedition: bonuses once per stage (clear 20, ★2 10, ★3 10), best stars kept, inside the daily cap and never carried over', () => {
+test('expedition: bonuses once per stage (clear 20, ★2 10, ★3 10), best stars kept, ★ inside the daily cap and never carried over', () => {
   const e = initialExpedition(NOW), s = initialPetState(NOW);
   const a = finishStage(e, s, 'forest-1', 2);
   assert.deepEqual([a.bonus, a.bonuses], [30, ['clear', 'star2']]);
@@ -34,7 +34,8 @@ test('expedition: bonuses once per stage (clear 20, ★2 10, ★3 10), best star
   assert.equal(finishStage(e, s, 'forest-1', 3).bonus, 0);
   s.today.studyPoints = PET_DAILY_STUDY_POINTS;
   const capped = finishStage(e, s, 'forest-2', 3);
-  assert.deepEqual([capped.bonus, petProgress(e, 1).bonuses['forest-2']], [0, ['clear', 'star2', 'star3']], 'capped: counted as paid, nothing later');
+  assert.deepEqual([capped.bonus, capped.paid, petProgress(e, 1).bonuses['forest-2']], [20, {clear: 20, star2: 0, star3: 0}, ['clear', 'star2', 'star3']], 'capped: the first clear is still paid, the ★ count as paid with 0P');
+  assert.equal(s.today.studyPoints, PET_DAILY_STUDY_POINTS, 'a first clear leaves the day as it was');
   assert.equal(stageCleared(petProgress(e, 1), 'forest-2'), true);
 });
 
@@ -76,9 +77,9 @@ test('expedition: chapters need the main pet level (숲 1, 바다 5, 성 10); pa
   assert.deepEqual([stageUnlocked(petProgress(e, 1), 'sea-1', 4), stageUnlocked(petProgress(e, 1), 'sea-1', 5), levelOk('castle-1', 9), levelOk('castle-1', 10)], [false, true, false, true]);
   const view = publicExpedition(e, 4);
   assert.deepEqual(view.chapters.map(c => [c.minLevel, c.levelOk, c.unlocked]), [[1, true, true], [5, false, false], [10, false, false], [20, false, false], [35, false, false], [50, false, false], [70, false, false]]);
-  const t = initialPetState(NOW); t.today.studyPoints = PET_DAILY_STUDY_POINTS - 25;
+  const t = initialPetState(NOW); t.today.studyPoints = PET_DAILY_STUDY_POINTS - 15;
   const out = finishStage(initialExpedition(NOW), t, 'forest-1', 3);
-  assert.deepEqual([out.paid, out.bonus], [{clear: 20, star2: 5, star3: 0}, 25], 'the screen shows what was really paid');
+  assert.deepEqual([out.paid, out.bonus], [{clear: 20, star2: 10, star3: 5}, 35], 'the screen shows what was really paid (the first clear outside the cap)');
 });
 
 test('expedition API: a chapter above the main pet level is refused', async () => {

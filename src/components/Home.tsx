@@ -9,6 +9,7 @@ import RosyLogo from './RosyLogo';
 import { PassBadge, PetPointsChip, RankChip } from './PassBadge';
 import { AssignedQuestionRow } from './generator/AssignedQuestions';
 import { PetService, type PetSummary } from '../lib/petService';
+import PointsInbox from './pet/PointsInbox';
 const loadPetRanking = () => import('./pet/PetRanking');
 const PetRanking = lazy(loadPetRanking);
 
@@ -34,6 +35,8 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
   const isEducator = userRole === 'teacher' || userRole === 'principal' || userRole === 'admin';
   const [linkOpen, setLinkOpen] = useState(false);
   const [rankOpen, setRankOpen] = useState(false);
+  // 쌓인 포인트 알림: the 수업 보상 that came in while away, once (확인 empties the inbox on the server).
+  const [inboxClosed, setInboxClosed] = useState(false);
   const recent = userUid ? readRecentLearning(userUid) : null;
   const [nextSchedule, setNextSchedule] = useState<{ uid: string; schedule: StudentScheduleDTO | null } | null>(null);
   const [lessonPending, setLessonPending] = useState<{ uid: string; count: number } | null>(null);
@@ -134,6 +137,7 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
           <p className="mt-1">© 2026 지원T English</p>
         </footer>
       </div>
+      {!inboxClosed && petSummary?.inbox?.length ? <PointsInbox lines={petSummary.inbox} onClose={() => { setInboxClosed(true); void PetService.act('inbox-seen').catch(() => undefined); }} /> : null}
       {rankOpen && <Suspense fallback={null}><PetRanking send={(action, payload) => PetService.act(action, payload)} withTeachers={Boolean(petSummary?.rankTeacher)} onClose={() => setRankOpen(false)} /></Suspense>}
     </div>
   );

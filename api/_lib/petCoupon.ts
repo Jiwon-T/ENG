@@ -4,12 +4,14 @@
 import {normalizeNotionPageId as uuid, isNotionPageId} from './notionPageId.js';
 import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
-import {PET_STATES, earnedIn, monthEarned, prevMonth, rollDay, seoulDay, type ServerPetState} from './pet.js';
-import {PET_COUPON, medalLabel, passAllows, petItem, type CouponTier} from '../../src/lib/petCatalog.js';
+import {PET_STATES, claimStudyRewards, earnedIn, initialPetState, monthEarned, noteInbox, pendingStudyRewards, petSummary, prevMonth, rollDay, seoulDay, settleLessons, type ServerPetState} from './pet.js';
+import {lessonRows} from './lessonRewardRows.js';
+import {PET_COUPON, medalLabel, passAllows, petItem, silverMedal, type CouponTier} from '../../src/lib/petCatalog.js';
 
 export const PET_COUPONS = 'petCoupons';
 export interface PetCoupon { uid: string; studentKey: string; month: string; requestedAt: number; earned: number; paidAt: number | null; paidBy: string | null;
-  /** 단계 쿠폰: which one, its won and the points it used (none = the one coupon before 단계 쿠폰: full, 1만 원, the goal) */ tier?: CouponTier; won?: number; points?: number }
+  /** 단계 쿠폰: which one, its won and the points it used (none = the one coupon before 단계 쿠폰: full, 1만 원, the goal) */ tier?: CouponTier; won?: number; points?: number;
+  /** 오프라인 신청: asked for by the admin for the student (who may have no app account: `uid` null), and by whom */ offline?: boolean; requestedBy?: string }
 
 /** The student's academy key when this account is the one linked to them (the server's mapping says so) and they are an
  *  active member of this academy (any subject, any teacher); otherwise null. */
@@ -60,9 +62,20 @@ export async function readCoupon(db: any, uid: string, month: string) {
   return list[0] || null;
 }
 
+/** The month's medal: 금 once the month's coupons reach 1만 원 (a 은메달 turns gold, keeping its place in the room), else 은
+ *  (the first 5천 원). Before 단계 쿠폰 every coupon is 1만 원, so gold as before. */
+export function grantMonthMedal(s: ServerPetState, month: string, wonThisMonth: number) {
+  const silver = silverMedal(month), medals = new Set(s.medals || []);
+  if (wonThisMonth >= PET_COUPON.monthWon) {
+    if (medals.has(month) && !medals.has(silver)) return;
+    medals.delete(silver); medals.add(month);
+    s.decor = Object.fromEntries(Object.entries(s.decor || {}).map(([bg, items]) => [bg, items.map(it => it.id === silver ? {...it, id: month} : it)]));
+  } else if (!medals.has(month)) medals.add(silver);
+  s.medals = [...medals];
+}
 /** 쿠폰 교환 신청: this month's (or, in the grace days, last month's) earned points reach the coupon; 단계 쿠폰 use their points
  *  (what is left keeps counting) and give at most 1만 원 a month. The first one of a month adds its 금메달. */
-export async function requestCoupon(db: any, uid: string, studentKey: string, now: number, monthInput?: unknown, tierInput?: unknown) {
+export async function requestCoupon(db: any, uid: string, studentKey: string, now: number, monthInput?: unknown, tierInput?: unknown, extra: Partial<PetCoupon> = {}) {
   const ref = db.collection(PET_STATES).doc(uid);
   return db.runTransaction(async (tx: any) => {
     const snap = await tx.get(ref); if (!snap.exists) throw Error('COUPON_NOT_YET');
@@ -78,8 +91,8 @@ export async function requestCoupon(db: any, uid: string, studentKey: string, no
     if (!option.ready) throw Error('COUPON_NOT_YET');
     const slot = tier === 'full' ? 0 : snaps.findIndex((x: any, k: number) => k > 0 && !x.exists);
     if (slot < 0) throw Error('COUPON_TAKEN');
-    const coupon: PetCoupon = {uid, studentKey, month, requestedAt: now, earned: state.earned, paidAt: null, paidBy: null, tier, won: t.won, points: t.points};
-    s.medals = [...new Set([...(s.medals || []), month])]; s.updatedAt = now;
+    const coupon: PetCoupon = {uid, studentKey, month, requestedAt: now, earned: state.earned, paidAt: null, paidBy: null, tier, won: t.won, points: t.points, ...extra};
+    grantMonthMedal(s, month, state.won + t.won); s.updatedAt = now;
     tx.set(refs[slot], coupon); tx.set(ref, s);
     return {state: s, coupon};
   });
@@ -103,7 +116,7 @@ export function placeDecor(s: ServerPetState, backgroundInput: unknown, itemsInp
 
 // ---- 관리자 설정 › 쿠폰 and the badges in 학생 관리 (admin only) ----
 function admin(actor: any) { if (!actor.admin || actor.academyId !== 'main') throw Error('FORBIDDEN'); }
-async function displayName(db: any, key: string) {
+export async function displayName(db: any, key: string) {
   const row = (await db.collection(DIRECTORY_ROWS).doc(directoryRowKey('students', key)).get()).data();
   const fromRow = row?.kind === 'students' && row.academyId === 'main' ? row.fields?.summaryOverride?.studentDisplayName : null;
   return String(fromRow || (await readStudentMapping(db, key))?.studentDisplayName || '학생').slice(0, 40);
@@ -114,32 +127,114 @@ export async function listCoupons(db: any, actor: any) {
   const snap = await db.collection(PET_COUPONS).get();
   const rows = snap.docs.map((d: any) => ({id: d.id, ...d.data()})) as (PetCoupon & {id: string})[];
   const coupons = await Promise.all(rows.map(async c => ({id: c.id, studentKey: c.studentKey, month: c.month, label: `${medalLabel(c.month)}${(c.won ?? PET_COUPON.monthWon) < PET_COUPON.monthWon ? ' 5천 원' : ''}`, requestedAt: c.requestedAt, paidAt: c.paidAt,
-    name: await displayName(db, c.studentKey), points: (await db.collection(PET_STATES).doc(c.uid).get()).data()?.points ?? 0})));
+    name: await displayName(db, c.studentKey), points: c.uid ? (await db.collection(PET_STATES).doc(c.uid).get()).data()?.points ?? 0 : 0, ...(c.offline ? {offline: true} : {})})));
   return {coupons: coupons.sort((a, b) => b.month.localeCompare(a.month) || b.requestedAt - a.requestedAt)};
 }
-/** 이번 달 포인트 (관리자 설정 › 쿠폰, 학생 관리 › 장학 쿠폰): the admin and the principal see every linked, active student of
- *  the academy, a teacher the students they have; each with the points they hold and this
- *  month's earned points (the coupon count), most earned first, and whether this month's coupon was asked for. */
+/** 이번 달 포인트 (관리자 설정 › 쿠폰, 학생 관리 › 장학 쿠폰): the admin and the principal see every active student of the
+ *  academy, a teacher the students they have — with or without the app. Each shows the points the 수업 일지 give them, as
+ *  if every lesson were already paid: the linked student's pet plus what is still waiting, and for a student without the app
+ *  the same lessons counted the same way (nothing is saved). So the list is fair to students who study without the app,
+ *  and a coupon can be asked for offline. `app`: 'linked' (has a pet), 'no-pet' (account, no pet yet), 'none' (no account). */
 export async function listPetPoints(db: any, actor: any, now = Date.now()) {
   // the admin and the principal: the whole academy; a teacher: the students they have (any subject)
   const whole = Boolean(actor?.admin && actor.academyId === 'main' || actor?.principal && actor.academyId === 'main');
   if (!whole && !(actor?.scopes || []).length) throw Error('FORBIDDEN');
-  const mine = new Set((actor?.scopes || []).map((s: any) => String(s?.studentKey || '')));
+  const mine = new Set((actor?.scopes || []).map((s: any) => { try { return uuid(String(s?.studentKey || '')); } catch { return ''; } }));
   const month = seoulDay(now).slice(0, 7);
-  const [users, members, coupons] = await Promise.all([db.collection('users').where('role', '==', 'student').get(), db.collection('academyStudentMemberships').where('academyId', '==', 'main').get(), db.collection(PET_COUPONS).where('month', '==', month).get()]);
-  const active = new Set(members.docs.filter((d: any) => !d.data().disabled).map((d: any) => d.id)), asked = new Set(coupons.docs.map((d: any) => d.data().uid));
-  const linked = users.docs.map((d: any) => ({uid: d.id, key: d.data().notionStudentKey})).filter((u: any) => typeof u.key === 'string' && isNotionPageId(u.key) && active.has(uuid(u.key)) && (whole || mine.has(uuid(u.key))));
-  // only the account the student is linked to now (the mapping points back to it): an old account still holding the key
-  // is left out, so a student is never listed twice nor shown another account's points
-  const checked = await Promise.all(linked.map(async (u: any) => ((await readStudentMapping(db, u.key).catch(() => null))?.firebaseUid === u.uid ? u : null)));
-  const students = await Promise.all(checked.filter(Boolean).map(async (u: any) => {
-    const raw = (await db.collection(PET_STATES).doc(u.uid).get()).data(), s = raw ? rollDay(raw, now) as ServerPetState : null;
-    return {name: await displayName(db, uuid(u.key)), points: s ? Number(s.points || 0) : 0, earned: s ? monthEarned(s) : 0, requested: asked.has(u.uid),
-      // this month's 포인트 내역 (what the gauge is made of), as the student sees it
-      ledger: (s?.ledger || []).filter(x => x.day.slice(0, 7) === month)};
-  }));
+  const [members, coupons] = await Promise.all([db.collection('academyStudentMemberships').where('academyId', '==', 'main').get(), db.collection(PET_COUPONS).where('month', '==', month).get()]);
+  const asked = new Set(coupons.docs.map((d: any) => d.data().studentKey));
+  const keys = members.docs.filter((d: any) => !d.data().disabled).map((d: any) => { try { return uuid(d.id); } catch { return ''; } }).filter((k: string) => k && (whole || mine.has(k)));
+  const byKey = new Map<string, PetCoupon[]>();
+  for (const c of coupons.docs.map((x: any) => x.data() as PetCoupon)) byKey.set(c.studentKey, [...(byKey.get(c.studentKey) || []), c]);
+  const students = (await Promise.all(keys.map(async (key: string) => {
+    const o = await owedPoints(db, key, now); if (!o) return null;
+    const earned = monthEarned(o.all);
+    return {key, name: await displayName(db, key), points: Number(o.all.points || 0), earned, requested: asked.has(key),
+      app: !o.linked ? 'none' : o.hadPet ? 'linked' : 'no-pet', waiting: Math.max(0, Number(o.all.points || 0) - o.held),
+      // the coupons the admin may ask for offline now (단계 쿠폰 from November)
+      options: monthState(month, earned, byKey.get(key) || []).options.filter(x => x.ready).map(x => ({id: x.id, won: x.won})),
+      // this month's 포인트 내역 (what the gauge is made of), with what is still waiting
+      ledger: (o.all.ledger || []).filter(x => x.day.slice(0, 7) === month)};
+  }))).filter(Boolean) as {key: string; name: string; points: number; earned: number; requested: boolean; app: string; waiting: number; options: {id: CouponTier; won: number}[]; ledger: any[]}[];
   return {month, goal: PET_COUPON.goal, students: students.sort((a, b) => b.earned - a.earned || a.name.localeCompare(b.name, 'ko'))};
 }
+/** One student's points as the 수업 일지 give them (nothing saved): the linked account's pet plus what is still waiting, or
+ *  for a student without the app the same lessons counted the same way. Null when the student has no record. */
+export async function owedPoints(db: any, key: string, now: number) {
+  const mapping = await readStudentMapping(db, key).catch(() => null);
+  if (!mapping?.internalStudentId) return null;
+  // the account counts only when it is the one linked now (the mapping points to it and it points back)
+  const uid: string | null = mapping.firebaseUid || null, user = uid ? (await db.collection('users').doc(uid).get()).data() : null;
+  const linked = Boolean(uid && user?.role === 'student' && !user.disabled && typeof user.notionStudentKey === 'string' && isNotionPageId(user.notionStudentKey) && uuid(user.notionStudentKey) === key);
+  const raw = linked ? (await db.collection(PET_STATES).doc(uid!).get()).data() : null;
+  const held: ServerPetState = raw ? rollDay(raw, now) : {...initialPetState(now), points: 0};
+  const rows = await lessonRows(db, mapping.internalStudentId, linked ? uid : null).catch(() => []);
+  const all = structuredClone(held);
+  if (rows.length) { claimStudyRewards(all, pendingStudyRewards(all, rows, now)); settleLessons(all, rows, now); }
+  return {linked, uid: linked ? uid : null, user, hadPet: Boolean(raw), held: Number(held.points || 0), all, rows};
+}
+
+/** A student who had coupons asked offline before joining the app: their medals go into the room once they have a pet (and the
+ *  coupons now point at the account, so the list shows its points). Returns how many months got a medal. */
+export async function syncOfflineMedals(db: any, uid: string, key: string, now = Date.now()) {
+  const snap = await db.collection(PET_COUPONS).where('studentKey', '==', key).get();
+  const offline = snap.docs.filter((d: any) => !d.data().uid);
+  if (!offline.length) return 0;
+  const ref = db.collection(PET_STATES).doc(uid);
+  return db.runTransaction(async (tx: any) => {
+    const pet = await tx.get(ref); if (!pet.exists) return 0;
+    const s: ServerPetState = rollDay(pet.data(), now), before = JSON.stringify(s.medals || []);
+    const won = new Map<string, number>();
+    for (const d of snap.docs) { const c = d.data() as PetCoupon; won.set(c.month, (won.get(c.month) || 0) + (c.won ?? PET_COUPON.monthWon)); }
+    for (const [month, total] of won) grantMonthMedal(s, month, total);
+    for (const d of offline) tx.update(d.ref, {uid});
+    if (JSON.stringify(s.medals || []) !== before) { s.updatedAt = now; tx.set(ref, s); }
+    return won.size;
+  });
+}
+
+/** 오프라인 신청 (admin): a coupon for a student who reached it but can't ask in the app. A linked student's waiting lesson
+ *  rewards are first paid into their pet (the account made if needed), then the coupon is asked as in the app (the month's
+ *  금메달 in their room). A student without an app account gets the coupon recorded from the points their lessons give
+ *  (no room yet, so no medal); the same limits apply: one 1만 원 a month, 단계 쿠폰 from November. */
+export async function requestCouponOffline(db: any, actor: any, input: any, now = Date.now()) {
+  admin(actor);
+  let key: string; try { key = uuid(String(input?.studentKey || '')); } catch { throw Error('BAD_REQUEST'); }
+  const member = (await db.collection('academyStudentMemberships').doc(key).get()).data();
+  if (!member || member.disabled || member.academyId !== 'main') throw Error('FORBIDDEN');
+  const o = await owedPoints(db, key, now); if (!o) throw Error('COUPON_NOT_YET');
+  const extra = {offline: true, requestedBy: String(actor.uid || 'admin')};
+  if (o.linked && o.uid) {
+    const ref = db.collection(PET_STATES).doc(o.uid), userRef = db.collection('users').doc(o.uid);
+    await db.runTransaction(async (tx: any) => {
+      const snap = await tx.get(ref), s: ServerPetState = rollDay(snap.exists ? snap.data() : initialPetState(now, o.user?.petStats), now);
+      const before = JSON.stringify([s.points, s.rewarded, s.lessonPaid || {}]), ledger = structuredClone(s.ledger || []);
+      claimStudyRewards(s, pendingStudyRewards(s, o.rows, now)); settleLessons(s, o.rows, now);
+      if (JSON.stringify([s.points, s.rewarded, s.lessonPaid || {}]) === before && snap.exists) return;
+      noteInbox(s, ledger); s.updatedAt = now; tx.set(ref, s); tx.set(userRef, {petStats: petSummary(s)}, {merge: true});
+    });
+    const out = await requestCoupon(db, o.uid, key, now, input?.month, input?.tier, extra);
+    return {coupon: out.coupon};
+  }
+  // no app account: the coupon record only (ids by the student key)
+  const day = seoulDay(now), cur = day.slice(0, 7), month = input?.month === prevMonth(cur) && inGrace(day) ? prevMonth(cur) : cur;
+  const id = `k${key.replace(/-/g, '')}`, refs = [`${id}_${month}`, `${id}_${month}_h1`, `${id}_${month}_h2`].map(x => db.collection(PET_COUPONS).doc(x));
+  const earned = earnedIn(o.all, month);
+  return db.runTransaction(async (tx: any) => {
+    const snaps = await Promise.all(refs.map(r => tx.get(r))), list = snaps.filter((x: any) => x.exists).map((x: any) => x.data() as PetCoupon);
+    const tier: CouponTier = tiered(month) && input?.tier === 'half' ? 'half' : 'full', t = tierOf(tier);
+    const state = monthState(month, earned, list), option = state.options.find(x => x.id === tier);
+    if (!option) throw Error('COUPON_NOT_YET');
+    if (tier === 'full' && snaps[0].exists || state.won + t.won > PET_COUPON.monthWon) throw Error('COUPON_TAKEN');
+    if (!option.ready) throw Error('COUPON_NOT_YET');
+    const slot = tier === 'full' ? 0 : snaps.findIndex((x: any, k: number) => k > 0 && !x.exists);
+    if (slot < 0) throw Error('COUPON_TAKEN');
+    const coupon: PetCoupon = {uid: null as any, studentKey: key, month, requestedAt: now, earned: state.earned, paidAt: null, paidBy: null, tier, won: t.won, points: t.points, ...extra};
+    tx.set(refs[slot], coupon);
+    return {coupon};
+  });
+}
+
 /** 학습 리포트 › 장학 쿠폰 (선생님): one student's progress this month — earned, held, asked for, the 내역 — for the admin and
  *  the teachers who have the student (a principal: every student); the linked account only. */
 export async function teacherStudentCoupon(db: any, actor: any, keyInput: unknown, now = Date.now()) {

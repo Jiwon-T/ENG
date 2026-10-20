@@ -3,7 +3,7 @@
 // teacher screens. The AI talk uses fixed instructions written here; the student's text is only ever passed as data.
 import {
   PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_CHARACTERS, PET_DAILY_STUDY_POINTS, PET_ENERGY_ITEMS_PER_DAY, PET_FRIEND_LEVEL, PET_MAX_ENERGY, PET_MAX_LEVEL, PET_MAX_PETS, PET_REVIVES_PER_DAY,
-  PET_ATTITUDE_REWARD, PET_COUPON, PET_LATE_REWARD, PET_REWARD_WINDOW_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob, type PetGearLook} from '../../src/lib/petCatalog.js';
+  PET_ATTITUDE_REWARD, PET_COUPON, PET_LATE_REWARD, PET_REWARD_WINDOW_DAYS, LESSON_REWARD_FROM, LESSON_REWARD_LOCK_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob, type PetGearLook} from '../../src/lib/petCatalog.js';
 
 export const PET_STATES = 'petStates';
 export interface ServerPhrase { original: string; remembered: string; learnedAtLevel: number; evolvedVersions: Record<string, string> }
@@ -26,7 +26,12 @@ export interface ServerPetState {
   medals?: string[]; decor?: Record<string, { id: string; x: number; y: number }[]>;
   /** 탑 장식 won (TOWER_DECOR ids), placed with the medals. */ towerDecor?: string[];
   /** 영어 회화 모드 on (works only while a pass is in force) */ englishTalk?: boolean;
+  /** 수업 보상 paid per lesson report (반영 settles to the 일지): points `p`, the most XP ever given `x`, the lesson day `d`. */
+  lessonPaid?: Record<string, { p: number; x: number; d: string }>;
+  /** 쌓인 포인트 알림: 수업 보상 that came in (or changed) without the student, shown once when the app opens. */
+  inbox?: InboxLine[];
 }
+export interface InboxLine { day: string; label: string; points: number }
 export const seoulDay = (at = Date.now()) => new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Seoul'}).format(new Date(at));
 const clampInt = (v: any, min: number, max: number, fallback: number) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback; };
 const cleanText = (v: any, max: number) => String(v ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max);
@@ -111,6 +116,34 @@ export function earnPoints(s: ServerPetState, points: number, kind: PointKind = 
   if (hit) hit.points += points; else list.push({day, kind, label, points});
   s.ledger = list.sort((a, b) => a.day.localeCompare(b.day)).slice(-400);
 }
+/** Points taken back (a lowered 평가): from the balance, never below 0, and from the month they were earned for; shown
+ *  in the 포인트 내역 as a minus. Returns what was really taken. */
+export function takePoints(s: ServerPetState, points: number, kind: PointKind, label: string, dayInput?: string) {
+  const take = Math.min(Math.max(0, Math.floor(points)), Math.max(0, s.points));
+  if (!take) return 0;
+  s.points -= take;
+  const cur = s.day.slice(0, 7), prev = prevMonth(cur), asked = String(dayInput || s.day).slice(0, 10);
+  const day = asked.slice(0, 7) === prev || asked.slice(0, 7) === cur && asked <= s.day ? asked : s.day, month = day.slice(0, 7);
+  const by: Record<string, number> = {};
+  for (const m of [prev, cur]) { const v = earnedIn(s, m); if (v) by[m] = v; }
+  by[month] = Math.max(0, (by[month] || 0) - take);
+  s.earnedBy = by; s.earned = {month: cur, points: by[cur] || 0};
+  const list = (s.ledger || []).filter(x => x.day.slice(0, 7) >= prev), hit = list.find(x => x.day === day && x.kind === kind && x.label === label);
+  if (hit) hit.points -= take; else list.push({day, kind, label, points: -take});
+  s.ledger = list.sort((a, b) => a.day.localeCompare(b.day)).slice(-400);
+  return take;
+}
+/** 쌓인 포인트 알림: the 수업 lines of the 포인트 내역 that changed since `before` go to the inbox (merged by day and label;
+ *  a lowered 평가 as a minus). The app shows the inbox once when it opens, then empties it (inbox-seen). */
+export function noteInbox(s: ServerPetState, before: LedgerItem[]) {
+  const key = (x: {day: string; label: string}) => `${x.day}|${x.label}`, was = new Map(before.filter(x => x.kind === 'class').map(x => [key(x), x.points]));
+  const box = (s.inbox || []).map(x => ({...x}));
+  for (const x of (s.ledger || []).filter(x => x.kind === 'class')) {
+    const change = x.points - (was.get(key(x)) || 0); if (!change) continue;
+    const hit = box.find(b => key(b) === key(x)); if (hit) hit.points += change; else box.push({day: x.day, label: x.label, points: change});
+  }
+  s.inbox = box.filter(b => b.points).slice(-30);
+}
 export const energyItemsUsed = (s: ServerPetState) => s.today.energyItems ?? (s.today.energyItem ? 1 : 0);
 /** Points inside the daily study cap; XP is cut by the same share. */
 export function awardCapped(s: ServerPetState, wanted: number, wantedXp: number, kind: PointKind = 'study', label = '') {
@@ -119,6 +152,13 @@ export function awardCapped(s: ServerPetState, wanted: number, wantedXp: number,
   earnPoints(s, points, kind, label); s.points += points; s.today.studyPoints += points;
   const {leveledUp} = addXP(s, xp);
   return {points, xp, capped: points < wanted, leveledUp};
+}
+/** A student's first clear (원정대 stage, 탑 floor) is paid in full outside the daily cap and leaves today's room as it was. */
+export function awardFirstClear(s: ServerPetState, wanted: number, wantedXp: number, label: string) {
+  const points = Math.max(0, Math.floor(wanted)), xp = Math.max(0, Math.floor(wantedXp));
+  earnPoints(s, points, 'adventure', label); s.points += points;
+  const {leveledUp} = addXP(s, xp);
+  return {points, xp, capped: false, leveledUp};
 }
 /** 공부 포인트 with the daily cap: points stop at the cap and XP is cut by the same share. */
 export function awardStudy(s: ServerPetState, source: PetStudySource, count: number) {
@@ -232,17 +272,68 @@ export function homeworkGrades(reports: {id: string; date: string; subject: stri
   });
   return out;
 }
-type StudyReward = {id: string; kind: 'attendance' | 'assignment' | 'test' | 'attitude'; grade?: string; paper?: boolean; /** the lesson's day (숙제: the lesson that graded it) */ day?: string};
+/** One lesson report as the 수업 보상 reads it. `testPaper`: 종이 시험 (else 앱). */
+export interface LessonRewardRow { id: string; date: string; attendance: string; homework: string; test: string; testPaper: boolean; attitude: string }
+/** What a lesson's 일지 is worth now: 출석 (지각 less), its 숙제 평가, 시험 평가 and 태도 — each from the grade written there. */
+export function lessonRewardParts(r: Omit<LessonRewardRow, 'id' | 'date'>) {
+  const parts: {label: string; points: number; xp: number}[] = [];
+  if (ATTENDED(r.attendance)) parts.push(/지각/.test(r.attendance) ? {label: '지각', ...PET_LATE_REWARD} : {label: '출석', ...PET_ATTENDANCE_REWARD});
+  const hw = PET_HOMEWORK_REWARD[r.homework]; if (hw) parts.push({label: `숙제 ${r.homework}`, ...hw});
+  const test = PET_TEST_REWARD[r.testPaper ? 'paper' : 'app'][r.test]; if (test) parts.push({label: `시험(${r.testPaper ? '종이' : '앱'}) ${r.test}`, ...test});
+  const attitude = PET_ATTITUDE_REWARD[r.attitude]; if (attitude) parts.push({label: `태도 ${r.attitude}`, ...attitude});
+  return parts;
+}
+/** 놓친 수업 보상: lessons from this day on are paid even after the 30-day window (a student who could not use the app
+ *  gets them all at once); the part older than 30 days counts for this month's coupon (September lessons for October's). */
+export const LESSON_BACKPAY_FROM = '2026-09-01';
+const addDays = (day: string, n: number) => { const d = new Date(`${day}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+/**
+ * 수업 보상: settle one lesson to what its 일지 says now (`row` null: the lesson was deleted). The difference from what was
+ * paid is paid or taken back (never below 0); XP only ever goes up to the most this lesson was worth. Lessons before
+ * LESSON_REWARD_FROM are left to the old way; once paid, a lesson stays as it is 7 days after its day; a lesson never paid
+ * can still be paid within the reward window (a student linked later). Returns the points change, or null when untouched.
+ */
+export function settleLessonReward(s: ServerPetState, id: string, date: string, row: Omit<LessonRewardRow, 'id' | 'date'> | null, now = Date.now()) {
+  const day = String(date || '').slice(0, 10), today = seoulDay(now), paid = s.lessonPaid?.[id];
+  if (!day || day < LESSON_REWARD_FROM || day > today) return null;
+  // once paid, it stays 7 days after the lesson; never paid (no pet, not linked yet): paid whenever it can be
+  if (paid && today > addDays(paid.d, LESSON_REWARD_LOCK_DAYS)) return null;
+  const parts = row ? lessonRewardParts(row) : [], target = parts.reduce((n, p) => n + p.points, 0), targetXp = parts.reduce((n, p) => n + p.xp, 0);
+  const was = paid?.p || 0, xpWas = paid?.x || 0;
+  if (target === was && targetXp <= xpWas && paid) return 0;
+  if (!paid && !target) return null;
+  let change = 0;
+  if (target > was) { earnPoints(s, target - was, 'class', paid ? '평가 수정' : parts.map(p => p.label).join('·'), day); s.points += target - was; change = target - was; }
+  else if (target < was) change = -takePoints(s, was - target, 'class', row ? '평가 수정' : '일지 삭제', day);
+  if (targetXp > xpWas) addXP(s, targetXp - xpWas);
+  // keep this month's and last month's lessons (older ones are locked anyway)
+  const keep = addDays(today, -(PET_REWARD_WINDOW_DAYS + LESSON_REWARD_LOCK_DAYS));
+  s.lessonPaid = Object.fromEntries(Object.entries({...(s.lessonPaid || {}), [id]: {p: target, x: Math.max(targetXp, xpWas), d: day}}).filter(([, v]) => v.d >= keep));
+  return change;
+}
+/** Settle every lesson the student has (and the ones paid that are gone: deleted). Returns the net points change. */
+export function settleLessons(s: ServerPetState, rows: LessonRewardRow[], now = Date.now()) {
+  let net = 0;const seen = new Set<string>();
+  for (const r of rows) { seen.add(r.id); net += settleLessonReward(s, r.id, r.date, r, now) || 0; }
+  for (const [id, paid] of Object.entries(s.lessonPaid || {})) if (!seen.has(id)) net += settleLessonReward(s, id, paid.d, null, now) || 0;
+  return net;
+}
+type StudyReward = {id: string; kind: 'attendance' | 'assignment' | 'test' | 'attitude'; grade?: string; paper?: boolean; /** the lesson's day (숙제: the lesson that graded it) */ day?: string;
+  /** older than the 30-day window (놓친 수업 보상): one '지난 수업 보상' line, counted for this month */ late?: boolean};
 /** 공부 보상 waiting: attended lessons, graded 숙제 and 테스트 평가 (중 and above) from the last 30 days not yet rewarded. */
 export function pendingStudyRewards(s: ServerPetState, reports: {id: string; date: string; attendance: string; homeworkGrade?: string; gradedAt?: string; test?: string; testPaper?: boolean; attitude?: string}[], now = Date.now()) {
-  const from = seoulDay(now - PET_REWARD_WINDOW_DAYS * 86_400_000), today = seoulDay(now), out: StudyReward[] = [];
+  // the last 30 days as before, and older lessons back to LESSON_BACKPAY_FROM never paid (놓친 수업 보상)
+  const recent = seoulDay(now - PET_REWARD_WINDOW_DAYS * 86_400_000), from = LESSON_BACKPAY_FROM < recent ? LESSON_BACKPAY_FROM : recent, today = seoulDay(now), out: StudyReward[] = [];
   const inWindow = (date?: string) => { const day = String(date || '').slice(0, 10); return Boolean(day) && day >= from && day <= today; };
+  const late = (date?: string) => String(date || '').slice(0, 10) < recent ? {late: true} : {};
+  // From LESSON_REWARD_FROM on, lessons are settled on 반영 (settleLessonReward), not here.
+  const old = (date?: string) => String(date || '').slice(0, 10) < LESSON_REWARD_FROM;
   for (const r of reports) {
     const done = s.rewarded[r.id] || [];
-    if (inWindow(r.date) && ATTENDED(r.attendance) && !done.includes('attendance')) out.push({id: r.id, kind: 'attendance', day: String(r.date).slice(0, 10), ...(/지각/.test(r.attendance) ? {grade: '지각'} : {})});
-    if (r.homeworkGrade && PET_HOMEWORK_REWARD[r.homeworkGrade] && inWindow(r.gradedAt) && !done.includes('assignment')) out.push({id: r.id, kind: 'assignment', grade: r.homeworkGrade, day: String(r.gradedAt).slice(0, 10)});
-    if (r.test && PET_TEST_REWARD.paper[r.test] && inWindow(r.date) && !done.includes('test')) out.push({id: r.id, kind: 'test', grade: r.test, paper: Boolean(r.testPaper), day: String(r.date).slice(0, 10)});
-    if (r.attitude && PET_ATTITUDE_REWARD[r.attitude] && inWindow(r.date) && !done.includes('attitude')) out.push({id: r.id, kind: 'attitude', grade: r.attitude, day: String(r.date).slice(0, 10)});
+    if (inWindow(r.date) && old(r.date) && ATTENDED(r.attendance) && !done.includes('attendance')) out.push({id: r.id, kind: 'attendance', day: String(r.date).slice(0, 10), ...(/지각/.test(r.attendance) ? {grade: '지각'} : {}), ...late(r.date)});
+    if (r.homeworkGrade && PET_HOMEWORK_REWARD[r.homeworkGrade] && inWindow(r.gradedAt) && old(r.gradedAt) && !done.includes('assignment')) out.push({id: r.id, kind: 'assignment', grade: r.homeworkGrade, day: String(r.gradedAt).slice(0, 10), ...late(r.gradedAt)});
+    if (r.test && PET_TEST_REWARD.paper[r.test] && inWindow(r.date) && old(r.date) && !done.includes('test')) out.push({id: r.id, kind: 'test', grade: r.test, paper: Boolean(r.testPaper), day: String(r.date).slice(0, 10), ...late(r.date)});
+    if (r.attitude && PET_ATTITUDE_REWARD[r.attitude] && inWindow(r.date) && old(r.date) && !done.includes('attitude')) out.push({id: r.id, kind: 'attitude', grade: r.attitude, day: String(r.date).slice(0, 10), ...late(r.date)});
   }
   return out;
 }
@@ -252,9 +343,10 @@ export function claimStudyRewards(s: ServerPetState, pending: StudyReward[]) {
     const r = p.kind === 'attendance' ? (p.grade === '지각' ? PET_LATE_REWARD : PET_ATTENDANCE_REWARD) : p.kind === 'test' ? PET_TEST_REWARD[p.paper ? 'paper' : 'app'][p.grade || ''] : p.kind === 'attitude' ? PET_ATTITUDE_REWARD[p.grade || ''] : PET_HOMEWORK_REWARD[p.grade || ''];
     if (!r) continue;
     points += r.points; xp += r.xp; s.rewarded[p.id] = [...new Set([...(s.rewarded[p.id] || []), p.kind])];
-    // each counts for its lesson's month and shows in the 포인트 내역 on that day
-    const label = p.kind === 'attendance' ? (p.grade === '지각' ? '지각' : '출석') : p.kind === 'assignment' ? `숙제 ${p.grade}` : p.kind === 'test' ? `시험(${p.paper ? '종이' : '앱'}) ${p.grade}` : '수업 태도 칭찬';
-    earnPoints(s, r.points, 'class', label, p.day);
+    // each counts for its lesson's month and shows in the 포인트 내역 on that day; 놓친 수업 보상 (older than 30 days) is one
+    // '지난 수업 보상' line today, counted for this month's coupon
+    const label = p.late ? '지난 수업 보상' : p.kind === 'attendance' ? (p.grade === '지각' ? '지각' : '출석') : p.kind === 'assignment' ? `숙제 ${p.grade}` : p.kind === 'test' ? `시험(${p.paper ? '종이' : '앱'}) ${p.grade}` : '수업 태도';
+    earnPoints(s, r.points, 'class', label, p.late ? s.day : p.day);
   }
   s.points += points; const {leveledUp} = addXP(s, xp);
   return {points, xp, count: pending.length, leveledUp};

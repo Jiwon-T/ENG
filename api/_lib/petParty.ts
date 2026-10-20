@@ -16,6 +16,7 @@ export interface GuildProfile {
   parties: Record<string, string>; lastResult?: PartyResult | null; updatedAt: number;
   guildName?: string; guildWarned?: boolean; aliases?: Record<string, string>; aliasWarned?: Record<string, boolean>;
   /** parties of past weeks known to be settled (not checked again) */ settledParties?: string[];
+  /** normalized names holding the student's real name that they chose to show anyway (asked first; another name asks again) */ realNameOk?: string[];
   /** normalized names, for the 'someone already uses this name' check */ guildKey?: string; aliasKeys?: string[]; /** the old nickname was moved: ask the student to look at it */ movedNickname?: boolean;
 }
 export interface PartyResult { week: string; party: string; progress: number; reward: number; counted: boolean }

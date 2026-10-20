@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
-import {awardStudy, claimStudyRewards, earnedIn, initialPetState, monthEarned, pendingStudyRewards, rollDay} from '../api/_lib/pet.js';
+import {awardStudy, earnedIn, initialPetState, monthEarned, rollDay, settleLessonReward} from '../api/_lib/pet.js';
 import {couponView, requestCoupon} from '../api/_lib/petCoupon.js';
 
 const OCT31 = Date.parse('2026-10-31T05:00:00Z'), NOV1 = Date.parse('2026-11-01T05:00:00Z'), NOV5 = Date.parse('2026-11-05T05:00:00Z');
@@ -9,15 +9,16 @@ const OCT31 = Date.parse('2026-10-31T05:00:00Z'), NOV1 = Date.parse('2026-11-01T
 test('포인트 내역: by day, kind and what it was for; the same on one day adds up', () => {
   const s = initialPetState(OCT31); s.earned = {month: '2026-10', points: 0};
   awardStudy(s, 'vocab-test', 3); awardStudy(s, 'vocab-test', 2);
-  claimStudyRewards(s, pendingStudyRewards(s, [{id: 'r1', date: '2026-10-31T14:00:00+09:00', attendance: '출석', test: '최상', testPaper: true, attitude: '상'}], OCT31));
+  // a lesson from 10/21 on is settled on 반영: one line for the lesson
+  settleLessonReward(s, 'r1', '2026-10-31T14:00:00+09:00', {attendance: '출석', homework: '', test: '최상', testPaper: true, attitude: '상'}, OCT31);
   assert.deepEqual(s.ledger!.map(x => [x.day, x.kind, x.label, x.points]), [
-    ['2026-10-31', 'study', '단어 테스트', 50], ['2026-10-31', 'class', '출석', 30], ['2026-10-31', 'class', '시험(종이) 최상', 40], ['2026-10-31', 'class', '수업 태도 칭찬', 10]]);
-  assert.equal(monthEarned(s), 130);
+    ['2026-10-31', 'study', '단어 테스트', 50], ['2026-10-31', 'class', '출석·시험(종이) 최상·태도 상', 85]]);
+  assert.equal(monthEarned(s), 135);
 });
 
 test('다음 달로 안 넘어감: a lesson on 10/31 taken on 11/1 counts for October; the October coupon can be asked for until 11/3', async () => {
   const s = rollDay({...initialPetState(OCT31), earned: {month: '2026-10', points: 9_980}} as any, NOV1);
-  claimStudyRewards(s, pendingStudyRewards(s, [{id: 'r1', date: '2026-10-31T14:00:00+09:00', attendance: '출석'}], NOV1));
+  settleLessonReward(s, 'r1', '2026-10-31T14:00:00+09:00', {attendance: '출석', homework: '', test: '', testPaper: true, attitude: ''}, NOV1);
   assert.deepEqual([earnedIn(s, '2026-10'), monthEarned(s)], [10_010, 0], 'October, not November');
   assert.equal(s.ledger!.at(-1)!.day, '2026-10-31');
   const view: any = couponView(s, true, [], []);

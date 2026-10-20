@@ -6,9 +6,9 @@ import {FieldPath} from 'firebase-admin/firestore';
 import { orderPieces, shuffledOrder } from '../../src/lib/sentenceGame.js';
 import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
-import {awardCapped, currentPet, type ServerPet, type ServerPetState} from './pet.js';
+import {awardCapped, awardFirstClear, currentPet, type ServerPet, type ServerPetState} from './pet.js';
 import {meaningsOverlap, randomDocId} from './petWordFeed.js';
-import { TOWER_DECOR, PET_JOB3, PET_JOB3_RULE, job3For, TOWER_ZONES, BRANCH_PASSIVE, TOWER_GEAR, TOWER_SKILL_RULES, TOWER_WEAKNESS, critChance, jobSkills, skillLevel, towerSkill,PET_TOWER, TOWER_CHESTS, TOWER_ENHANCE, TOWER_EVENTS, towerGear, towerGearFor, towerHit, towerMonster, towerStats, towerTaken, TOWER_DEBUFF_RULES, type TowerDebuff, FOE_RAGE, FOE_RULES, foeQuiet, foeSkill, foeSkillsFor, gearLookOf, petGearView, type PetGearLook, GEAR_DROP, TOWER_GEAR_SLOTS, floorGearTier, setGearId, type TowerEvent, type TowerGear, type TowerGearSlot, type TowerMonsterKind} from '../../src/lib/petCatalog.js';
+import { TOWER_DECOR, PET_JOB3, PET_JOB3_RULE, job3For, TOWER_ZONES, BRANCH_PASSIVE, TOWER_GEAR, TOWER_SKILL_RULES, TOWER_WEAKNESS, critChance, jobSkills, skillLevel, towerSkill,PET_TOWER, TOWER_CHESTS, TOWER_ENHANCE, TOWER_EVENTS, towerGear, towerGearFor, towerHit, towerMonster, towerStats, towerTaken, TOWER_DEBUFFS, TOWER_DEBUFF_RULES, debuffEffect, type TowerDebuff, FOE_RAGE, FOE_RULES, foeQuiet, foeSkill, foeSkillsFor, gearLookOf, petGearView, type PetGearLook, GEAR_DROP, TOWER_GEAR_SLOTS, floorGearTier, setGearId, type TowerEvent, type TowerGear, type TowerGearSlot, type TowerMonsterKind} from '../../src/lib/petCatalog.js';
 import {gradeOf} from '../../src/lib/schoolGrade.js';
 import {initGame, isMiniGame, playGame, publicGame, type GameResult} from './towerGames.js';
 
@@ -30,7 +30,7 @@ export interface TowerRun {
   /** 그믐 저주 has cut the monster's 공격 (once a battle). */ weakened?: boolean;
   /** Skills ask 문장 배열 from these (none: a word question as before); `ns` the next one. */ sentences?: TowerSentence[]; ns?: number;
   /** 몬스터 스킬 (battles from before have none). */ foe?: TowerFoe;
-  /** what this battle started with (a 쉬어 가기 놀이 lost); `deafUsed`: 귀가 멍멍 has shortened its block question */ debuff?: TowerDebuff; deafUsed?: boolean;
+  /** what this battle started with (쉬어 가기 놀이 lost; `debuff`: one, before they piled up); `blocksUsed`: block questions 귀가 멍멍 has shortened (`deafUsed`: the first, before they piled up) */ debuffs?: TowerDebuff[]; debuff?: TowerDebuff; deafUsed?: boolean; blocksUsed?: number;
 }
 /** A monster's skills in a battle: the one it warned of (`next`, used on its next turn), and what lasts: 방어 태세 (pet attacks
  *  left), 봉인 and 지속 피해 on the pet (rounds left), 분노. `hit`: the pet hit it this round (cancels 재생); `hits`: the first
@@ -40,7 +40,7 @@ export interface TowerFoe { skills: string[]; next: string | null; last: boolean
 export interface TowerEventState { id: string; floor: number; door: number; type: Exclude<TowerEvent, 'monster' | 'mirror' | 'treasure'>; q: TowerQuestion | null; stock: {stone: number; potion: number}; pool: TowerPool; wrongs: TowerWrong[]; startedAt: number; /** 잠든 드래곤's look */ color?: number;
   /** a 쉬어 가기 놀이's own state (secrets stay on the server) */ game?: any }
 /** One pet's climb: `floor` is the next floor to play (saved on every clear), `best` the highest cleared. `levels`: 강화 by gear. */
-export interface TowerPet { /** a 쉬어 가기 놀이 lost: the next battle starts with it (TOWER_DEBUFFS); `curse`: the older 불운 */ debuff?: TowerDebuff; curse?: boolean; floor: number; best: number; gear: string[]; equip: Partial<Record<TowerGearSlot, string>>; chests: number[]; potions: number; stones?: number; levels?: Record<string, number>; run: TowerRun | null; event?: TowerEventState | null; /** the last door opened (a resent request gets the same answer) */ lastOpen?: {id: string; result: any} | null }
+export interface TowerPet { /** 쉬어 가기 놀이 lost: the next battle starts with these (TOWER_DEBUFFS); `debuff`, `curse`: older single ones */ debuffs?: TowerDebuff[]; debuff?: TowerDebuff; curse?: boolean; floor: number; best: number; gear: string[]; equip: Partial<Record<TowerGearSlot, string>>; chests: number[]; potions: number; stones?: number; levels?: Record<string, number>; run: TowerRun | null; event?: TowerEventState | null; /** the last door opened (a resent request gets the same answer) */ lastOpen?: {id: string; result: any} | null }
 /** 도감 entry: the floor where the student first met the monster, how often it was beaten, when it was first met (the order). */
 export interface TowerCodexEntry { name: string; boss: boolean; first: number; wins: number; at: number }
 export interface TowerState { version: 1; pets: Record<string, TowerPet>; updatedAt: number; /** monster kinds whose weakness a crit has revealed (도감) */ weakFound?: string[]; /** 도감: every monster kind met, for all the student's pets */ codex?: Record<string, TowerCodexEntry> }
@@ -185,25 +185,31 @@ function monsterTurn(run: TowerRun, now: number, rand: () => number, out: any): 
   }
   ask(run, 'defend', now, rand);
   if (k?.fx.includes('bind') && run.q) run.q.deadline = now + FOE_RULES.bindSeconds * 1000;
-  if (run.debuff === 'deafen' && !run.deafUsed && run.q) { run.q.deadline = Math.min(run.q.deadline ?? Infinity, now + TOWER_DEBUFF_RULES.deafenSeconds * 1000); run.deafUsed = true; }
+  // 귀가 멍멍: each one piled up shortens one block question
+  const blocks = runDebuffs(run).filter(d => debuffEffect(d) === 'block').length, used = run.blocksUsed ?? (run.deafUsed ? 1 : 0);
+  if (used < blocks && run.q) { run.q.deadline = Math.min(run.q.deadline ?? Infinity, now + TOWER_DEBUFF_RULES.blockSeconds * 1000); run.blocksUsed = used + 1; }
   return 'defend';
 }
 
 type Foe = {kind: TowerMonsterKind; name: string; boss: boolean; hp: number; atk: number; def: number; color?: number};
 function battle(tp: TowerPet, pet: ServerPet, pool: TowerPool, m: Foe, floor: number, now: number, rand: () => number, hpShare = 1) {
-  const st = petTowerStats(pet, tp), debuff = tp.debuff || (tp.curse ? 'curse' : undefined);
-  delete tp.debuff; delete tp.curse; // only the next battle
-  if (debuff === 'curse') hpShare *= TOWER_DEBUFF_RULES.curse;
+  const st = petTowerStats(pet, tp), debuffs = pendingDebuffs(tp);
+  delete tp.debuffs; delete tp.debuff; delete tp.curse; // only the next battle
+  for (const d of debuffs) if (debuffEffect(d) === 'hp') hpShare *= TOWER_DEBUFF_RULES.hp;
   tp.run = {id: randomDocId(rand), floor, monster: {kind: m.kind, name: m.name, boss: m.boss, hp: m.hp, max: m.hp, atk: m.atk, def: m.def, ...(m.color !== undefined ? {color: m.color} : {})},
     hp: Math.max(1, Math.round(st.hp * hpShare)), maxHp: st.hp, mp: st.mp, maxMp: st.mp, phase: 'act', q: null, attacks: 0, right: 0, asked: 0, wrongs: [],
     pool: shuffle(pool.words, rand), next: 0, wordbookId: pool.wordbookId, wordbookTitle: pool.wordbookTitle, startedAt: now, ...(pool.books ? {books: pool.books} : {}),
     ...(pool.sentences?.length ? {sentences: shuffle(pool.sentences, rand).slice(0, 12), ns: 0} : {})};
   const skills = foeSkillsFor(m.kind, floor);
   if (skills.length) tp.run.foe = {skills: skills.map(k => k.id), next: null, last: false, guard: 0, sealed: 0, dot: null, hit: false, hits: 0, rage: FOE_RAGE.has(m.kind), raged: false};
-  if (debuff) {
-    tp.run.debuff = debuff;
-    if (debuff === 'drained') tp.run.mp = Math.round(st.mp * TOWER_DEBUFF_RULES.drained);
-    if (debuff === 'bitten') (tp.run.foe ||= {skills: [], next: null, last: false, guard: 0, sealed: 0, dot: null, hit: false, hits: 0, rage: false, raged: false}).dot = {name: '독', turns: TOWER_DEBUFF_RULES.bittenTurns};
+  if (debuffs.length) {
+    tp.run.debuffs = debuffs;
+    for (const id of debuffs) {
+      const d: {effect: string; dot?: '화상' | '독'} = TOWER_DEBUFFS[id];
+      if (d.effect === 'mp') tp.run.mp = Math.round(tp.run.mp * TOWER_DEBUFF_RULES.mp);
+      // one 지속 피해 at a time (two of them: the longer)
+      if (d.effect === 'dot') { const foe = tp.run.foe ||= {skills: [], next: null, last: false, guard: 0, sealed: 0, dot: null, hit: false, hits: 0, rage: false, raged: false}; foe.dot = {name: d.dot || '독', turns: foe.dot ? foe.dot.turns + 1 : TOWER_DEBUFF_RULES.dotTurns}; }
+    }
   }
   return tp.run;
 }
@@ -225,12 +231,12 @@ export function openTowerDoor(t: TowerState, s: ServerPetState, uid: string, poo
   const pet = currentPet(s), tp = towerPet(t, pet.slot), rid = typeof requestId === 'string' && /^[A-Za-z0-9_-]{6,64}$/.test(requestId) ? requestId : null;
   // A resent request (the answer got lost on the way) gets the same answer instead of opening the next floor's door.
   if (rid && tp.lastOpen?.id === rid) return {...tp.lastOpen.result, replayed: true};
-  const out = openDoor(tp, pet, s, uid, pool, now, rand, doorInput, layout);
+  const out = openDoor(t, tp, pet, s, uid, pool, now, rand, doorInput, layout);
   meet(t, tp, now);
   if (rid && !out.resumed) tp.lastOpen = {id: rid, result: out};
   return out;
 }
-function openDoor(tp: TowerPet, pet: ServerPet, s: ServerPetState, uid: string, pool: TowerPool, now: number, rand: () => number, doorInput: unknown, layout?: TowerEvent[]): any {
+function openDoor(t: TowerState, tp: TowerPet, pet: ServerPet, s: ServerPetState, uid: string, pool: TowerPool, now: number, rand: () => number, doorInput: unknown, layout?: TowerEvent[]): any {
   if (tp.run || tp.event) return {resumed: true};
   if (!tp.chests.includes(1)) throw Error('TOWER_CHEST_FIRST');
   if (tp.floor > PET_TOWER.floors) throw Error('TOWER_TOP');
@@ -246,12 +252,17 @@ function openDoor(tp: TowerPet, pet: ServerPet, s: ServerPetState, uid: string, 
     const r = rand(), loot: {stones?: number; potions?: number; points?: number} = r < 0.45 ? {stones: 1 + Math.floor(rand() * 2)} : r < 0.8 ? {potions: 1} : {points: 30};
     tp.stones = (tp.stones || 0) + (loot.stones || 0); tp.potions += loot.potions || 0;
     if (loot.points) loot.points = awardCapped(s, loot.points, 0, 'adventure', '탑 보물').points;
-    return {opened: type, loot, ...clearFloor(tp, s, floor, false, rand)};
+    return {opened: type, loot, ...clearFloor(t, tp, s, floor, false, rand)};
   }
   const words = shuffle(pool.words, rand);
   tp.event = {id: randomDocId(rand), floor, door, type, q: null, stock: {stone: 1 + Math.floor(rand() * 3), potion: PET_TOWER.merchantPotions}, pool: {...pool, words}, wrongs: [], startedAt: now};
   if (type === 'riddle' || type === 'trap') tp.event.q = question(words, 0, type, now, rand);
-  if (isMiniGame(type)) { let i = 0; tp.event.game = initGame(type, rand, {ask: kind => question(words, i++, kind, now, rand)}); }
+  if (isMiniGame(type)) {
+    let i = 0; const lines = shuffle(pool.sentences || [], rand);
+    // a sentence in pieces (the same as a skill's 문장 배열), or null when the wordbook has none
+    const sentence = () => { for (const x of lines) { const pieces = orderPieces({word: x.text, chunked: x.chunked, meaning: x.meaning}); if (pieces.length >= 3 && pieces.length <= 8) return {text: x.text, meaning: x.meaning, pieces}; } return null; };
+    tp.event.game = initGame(type, rand, {ask: kind => question(words, i++, kind, now, rand), sentence});
+  }
   if (type === 'sleeping') tp.event.color = Math.floor(seeded(`${uid}:${pet.slot}:${floor}:dragon`)() * PET_TOWER.dragonColors);
   return {opened: type};
 }
@@ -299,11 +310,12 @@ export function dropSetPiece(tp: TowerPet, floor: number, boss: boolean, rand: (
   const slot = TOWER_GEAR_SLOTS[Math.min(TOWER_GEAR_SLOTS.length - 1, Math.floor(rand() * TOWER_GEAR_SLOTS.length))].id;
   return giveSetPiece(tp, setGearId(floorGearTier(floor), slot));
 }
-function clearFloor(tp: TowerPet, s: ServerPetState, floor: number, boss: boolean, rand: () => number = Math.random) {
-  const first = floor > tp.best;
+function clearFloor(t: TowerState, tp: TowerPet, s: ServerPetState, floor: number, boss: boolean, rand: () => number = Math.random) {
+  // a floor no pet of the student had cleared is paid outside the daily cap; another pet's first clear stays inside it
+  const first = floor > tp.best, studentFirst = first && Object.values(t.pets).every(p => p === tp || (p.best || 0) < floor);
   tp.best = Math.max(tp.best, floor); tp.floor = Math.max(tp.floor, floor + 1);
   let points = 0, xp = 0;
-  if (first) { const r = PET_TOWER.reward, want = boss ? r.boss : r.base + r.perFloor * floor, got = awardCapped(s, want, want * 2, 'adventure', '채움의 탑'); points = got.points; xp = got.xp; }
+  if (first) { const r = PET_TOWER.reward, want = boss ? r.boss : r.base + r.perFloor * floor, got = studentFirst ? awardFirstClear(s, want, want * 2, '채움의 탑') : awardCapped(s, want, want * 2, 'adventure', '채움의 탑'); points = got.points; xp = got.xp; }
   return {cleared: true, floor, first, points, xp, chest: boss ? openChestFor(tp, floor, currentPet(s)) : null, decor: boss ? giveTowerDecor(s, floor) : null, drop: first ? dropSetPiece(tp, floor, boss, rand) : null};
 }
 const ended = (tp: TowerPet, run: TowerRun) => { tp.run = null; return {runId: run.id, wrongs: run.wrongs, right: run.right, asked: run.asked, wordbookId: run.wordbookId, wordbookTitle: run.wordbookTitle, startedAt: run.startedAt, books: run.books}; };
@@ -360,7 +372,8 @@ export function towerAnswer(t: TowerState, s: ServerPetState, runId: unknown, ch
   else if (!q.order) run.wrongs.push(wrongOf(q, choice, late)); // missed words go to 오답 복습 (sentences are not words)
   run.q = null;
   // 물에 젖음 −방어, 눈이 침침 −공격 (a lost 쉬어 가기 놀이)
-  const base = petTowerStats(pet, tp), st = {...base, atk: base.atk * (run.debuff === 'dazzle' ? TOWER_DEBUFF_RULES.dazzle : 1), def: base.def * (run.debuff === 'wet' ? TOWER_DEBUFF_RULES.wet : 1)};
+  const base = petTowerStats(pet, tp), fx = runDebuffs(run).map(debuffEffect), times = (e: string) => fx.filter(x => x === e).length;
+  const st = {...base, atk: base.atk * TOWER_DEBUFF_RULES.atk ** times('atk'), def: base.def * TOWER_DEBUFF_RULES.def ** times('def')};
   if (q.kind === 'attack') {
     run.attacks += 1;
     const k = run.skill ? towerSkill(run.skill) : null; run.skill = null;
@@ -396,7 +409,7 @@ export function towerAnswer(t: TowerState, s: ServerPetState, runId: unknown, ch
       if (f.guard > 0) { if (weakHit) { f.guard = 0; out.guardBroken = true; } else f.guard -= 1; }
       if (f.rage && !f.raged && run.monster.hp > 0 && run.monster.hp <= run.monster.max * FOE_RULES.rageAt) { f.raged = true; out.enraged = true; }
     }
-    if (run.monster.hp <= 0) { const entry = t.codex?.[run.monster.kind]; if (entry) entry.wins += 1; return {...out, ...win(tp, s, run, rand)}; }
+    if (run.monster.hp <= 0) { const entry = t.codex?.[run.monster.kind]; if (entry) entry.wins += 1; return {...out, ...win(t, tp, s, run, rand)}; }
     if (monsterTurn(run, now, rand, out) === 'lost') return {...out, lost: true, floor: run.floor, end: ended(tp, run)};
     return out;
   }
@@ -423,10 +436,10 @@ export function towerAnswer(t: TowerState, s: ServerPetState, runId: unknown, ch
   if (run.hp <= 0) return {...out, lost: true, floor: run.floor, end: ended(tp, run)};
   run.phase = 'act'; planFoe(run, rand); return out;
 }
-function win(tp: TowerPet, s: ServerPetState, run: TowerRun, rand: () => number) {
+function win(t: TowerState, tp: TowerPet, s: ServerPetState, run: TowerRun, rand: () => number) {
   const potions = run.bonus?.potions || 0; tp.potions += potions;
   const stone = !run.monster.boss && rand() < PET_TOWER.stoneDrop ? 1 : 0; tp.stones = (tp.stones || 0) + stone;
-  return {won: true, attacks: run.attacks, potions, stone, ...clearFloor(tp, s, run.floor, run.monster.boss, rand), end: ended(tp, run)};
+  return {won: true, attacks: run.attacks, potions, stone, ...clearFloor(t, tp, s, run.floor, run.monster.boss, rand), end: ended(tp, run)};
 }
 
 /** Playing an event behind a door. 요정: save it (a potion) or fight it (two potions for winning). 상인: buy, enhance,
@@ -441,7 +454,7 @@ function playEvent(t: TowerState, s: ServerPetState, move: unknown, input: any, 
   if (!ev) throw Error('TOWER_NO_RUN');
   const stone = (n = 1) => { tp.stones = (tp.stones || 0) + n; return n; };
   if (ev.type === 'fairy') {
-    if (move === 'save') { tp.potions += 1; return {saved: true, potions: 1, ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 0)}; }
+    if (move === 'save') { tp.potions += 1; return {saved: true, potions: 1, ...clearFloor(t, tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 0)}; }
     if (move === 'fight') { const run = battle(tp, pet, ev.pool, fairyOf(ev.floor), ev.floor, now, rand); run.bonus = {potions: 2}; tp.event = null; return {fight: true}; }
   }
   if (ev.type === 'merchant') {
@@ -461,43 +474,47 @@ function playEvent(t: TowerState, s: ServerPetState, move: unknown, input: any, 
       const ok = rand() < step.rate; if (ok) tp.levels![id] = step.to;
       return {enhanced: ok, gearId: id, level: tp.levels![id] || 0, stones: step.stones};
     }
-    if (move === 'leave') return {left: true, ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 0)};
+    if (move === 'leave') return {left: true, ...clearFloor(t, tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 0)};
   }
   if ((ev.type === 'riddle' || ev.type === 'trap') && move === 'answer' && ev.q) {
     const q = ev.q, choice = Number(input?.choice), late = q.deadline !== null && now > q.deadline + 1500, correct = !late && choice === q.answer;
     const out = {correct, late, answer: q.answer, word: q.word, meaning: q.meaning};
     if (!correct) ev.wrongs.push(wrongOf(q, choice, late));
     ev.q = null;
-    if (correct) return {...out, stone: stone(), ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 1, 1)};
-    if (ev.type === 'riddle') return {...out, stone: 0, ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 1)};
+    if (correct) return {...out, stone: stone(), ...clearFloor(t, tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 1, 1)};
+    if (ev.type === 'riddle') return {...out, stone: 0, ...clearFloor(t, tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 1)};
     // 함정에 빠짐: a monster jumps in while the pet is hurt (70% HP); the missed word goes with that battle.
     const missed = ev.wrongs; tp.event = null;
     const run = battle(tp, pet, ev.pool, towerMonster(ev.floor, ev.door), ev.floor, now, rand, 0.7); run.wrongs.push(...missed); run.asked += 1;
     return {...out, trapped: true};
   }
   if (isMiniGame(ev.type)) {
-    const r = playGame(ev.type, ev.game, move, input, now - ev.startedAt);
+    const r = playGame(ev.type, ev.game, move, input, now - ev.startedAt, now);
     if (r.missed) ev.wrongs.push(wrongOf(r.missed.q, r.missed.choice, false)); // 오답 복습
     if ('next' in r) return {game: r.next, correct: true};
-    return gameOver(tp, s, ev, r.over, rand);
+    return gameOver(t, tp, s, ev, r.over, rand);
   }
   if (ev.type === 'sleeping' && move === 'sneak') {
     if (input?.ok === true) {
       // The mini-game runs in the browser; the server checks its time and the path it reports before letting the pet past.
       if (!sneakLooksPlayed(input.samples, now - ev.startedAt)) throw Error('TOWER_SNEAK_INVALID');
-      return {sneaked: true, stone: stone(), ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 0)};
+      return {sneaked: true, stone: stone(), ...clearFloor(t, tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, 0, 0)};
     }
     tp.event = null; battle(tp, pet, ev.pool, dragonOf(ev.color), ev.floor, now, rand); return {woke: true};
   }
   throw Error('PET_BAD_ACTION');
 }
 
+/** Debuffs waiting for the next battle (older saves kept one, or a 불운 flag). */
+const pendingDebuffs = (tp: TowerPet): TowerDebuff[] => tp.debuffs ? [...tp.debuffs] : tp.debuff ? [tp.debuff] : tp.curse ? ['curse'] : [];
+const runDebuffs = (run: TowerRun): TowerDebuff[] => run.debuffs || (run.debuff ? [run.debuff] : []);
+
 /** A 쉬어 가기 놀이 is over: its prize (or the mimic's bite), the floor passed either way. */
-function gameOver(tp: TowerPet, s: ServerPetState, ev: TowerEventState, r: GameResult, rand: () => number) {
+function gameOver(t: TowerState, tp: TowerPet, s: ServerPetState, ev: TowerEventState, r: GameResult, rand: () => number) {
   const stone = r.stone || 0, potions = r.potions || 0, lost = r.losePotion && tp.potions > 0 ? 1 : 0;
   tp.stones = (tp.stones || 0) + stone; tp.potions = tp.potions + potions - lost;
-  if (r.debuff) tp.debuff = r.debuff;
-  return {game: {type: ev.type, success: r.success, text: r.text, lostPotion: lost, ...(r.debuff ? {debuff: r.debuff} : {}), ...(r.reveal ? {reveal: r.reveal} : {})}, stone, potions, ...clearFloor(tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, r.right || 0, r.asked || 0)};
+  if (r.debuff) { tp.debuffs = [...pendingDebuffs(tp), r.debuff].slice(-TOWER_DEBUFF_RULES.stack); delete tp.debuff; delete tp.curse; }
+  return {game: {type: ev.type, success: r.success, text: r.text, lostPotion: lost, ...(r.debuff ? {debuff: r.debuff} : {}), ...(r.reveal ? {reveal: r.reveal} : {})}, stone, potions, ...clearFloor(t, tp, s, ev.floor, false, rand), end: eventEnded(tp, ev, r.right || 0, r.asked || 0)};
 }
 
 /** The sneak path the browser reports: [ms, progress 0–1] samples, at least `sneakMinMs` long on the server's clock and in
@@ -526,10 +543,10 @@ export function publicTower(t: TowerState, s: ServerPetState, now: number) {
   const pq = (q: TowerQuestion | null) => q && {kind: q.kind, prompt: q.kind === 'defend' || q.kind === 'trap' ? q.word : q.meaning, choices: q.choices, msLeft: q.deadline === null ? null : Math.max(0, q.deadline - now), msTotal: q.deadline === null ? null : q.deadline - q.issuedAt, ...(q.order ? {order: q.order} : {})};
   return {
     skills, passive: pet.job2 ? BRANCH_PASSIVE[pet.job2] : null, job: pet.job || null, job2: pet.job2 || null, job3: pet.job3 || null, job3Ready: job3Ready(pet, tp),
-    debuff: tp.debuff || (tp.curse ? 'curse' : null), floor: tp.floor, best: tp.best, top: PET_TOWER.floors, gear: tp.gear, equip: tp.equip, levels: tp.levels || {}, chests: tp.chests, potions: tp.potions, stones: tp.stones || 0, stats: petTowerStats(pet, tp),
+    debuffs: pendingDebuffs(tp), floor: tp.floor, best: tp.best, top: PET_TOWER.floors, gear: tp.gear, equip: tp.equip, levels: tp.levels || {}, chests: tp.chests, potions: tp.potions, stones: tp.stones || 0, stats: petTowerStats(pet, tp),
     run: run && {id: run.id, floor: run.floor, monster: {kind: run.monster.kind, name: shownMonsterName(t, run.monster.kind, run.monster.name), boss: run.monster.boss, hp: run.monster.hp, max: run.monster.max, color: run.monster.color ?? null},
-      hp: run.hp, maxHp: run.maxHp, mp: run.mp, maxMp: run.maxMp, phase: run.phase, attacks: run.attacks, q: pq(run.q), skill: run.skill || null, shield: Boolean(run.shield), weak: weakKnown(run.monster.kind), foe: publicFoe(run), debuff: run.debuff || null},
-    event: ev && {id: ev.id, floor: ev.floor, type: ev.type, stock: ev.type === 'merchant' ? ev.stock : null, q: pq(ev.q), color: ev.color ?? null, game: isMiniGame(ev.type) ? publicGame(ev.type, ev.game) : null},
+      hp: run.hp, maxHp: run.maxHp, mp: run.mp, maxMp: run.maxMp, phase: run.phase, attacks: run.attacks, q: pq(run.q), skill: run.skill || null, shield: Boolean(run.shield), weak: weakKnown(run.monster.kind), foe: publicFoe(run), debuffs: runDebuffs(run)},
+    event: ev && {id: ev.id, floor: ev.floor, type: ev.type, stock: ev.type === 'merchant' ? ev.stock : null, q: pq(ev.q), color: ev.color ?? null, game: isMiniGame(ev.type) ? publicGame(ev.type, ev.game, now) : null},
     codex: towerCodex(t),
   };
 }

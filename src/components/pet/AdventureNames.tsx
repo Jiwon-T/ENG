@@ -23,10 +23,21 @@ export default function AdventureNames({ names, send, onSaved, onClose }: { name
   const save = (action: 'guild-name' | 'guild-alias', extra: Record<string, unknown>) => async (name: string) => {
     setBusy(true); setNotice('');
     try {
-      try { onSaved(await send(action, { ...extra, name })); }
-      catch (e: any) {
-        if (e?.code !== 'NAME_TAKEN') throw e;
-        if (await askConfirm({ title: `'${name}' 같은 이름이 있어요`, message: '다른 친구가 이미 쓰고 있어요. 그래도 이 이름으로 할까요?', confirmText: '이 이름으로 하기' })) onSaved(await send(action, { ...extra, name, confirm: true }));
+      // asked one at a time: a name holding the student's real name (it may show on the rankings), then another student's name
+      const flags: { realName?: true; confirm?: true } = {};
+      for (;;) {
+        try { onSaved(await send(action, { ...extra, name, ...flags })); break; }
+        catch (e: any) {
+          if (e?.code === 'NAME_REAL' && !flags.realName) {
+            if (!await askConfirm({ title: '실명을 입력하셨어요', message: '순위표에 드러날 수 있는데 그대로 진행하시겠어요?', confirmText: '그대로 하기' })) break;
+            flags.realName = true; continue;
+          }
+          if (e?.code === 'NAME_TAKEN' && !flags.confirm) {
+            if (!await askConfirm({ title: `'${name}' 같은 이름이 있어요`, message: '다른 친구가 이미 쓰고 있어요. 그래도 이 이름으로 할까요?', confirmText: '이 이름으로 하기' })) break;
+            flags.confirm = true; continue;
+          }
+          throw e;
+        }
       }
     } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); } finally { setBusy(false); }
   };

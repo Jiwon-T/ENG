@@ -119,6 +119,10 @@ export const PET_COUPON = { name: '이달의 장학 쿠폰', goal: 10_000, first
 export type CouponTier = 'half' | 'full';
 /** '2026-10' → '26.10' (on the medal and the badges). */
 export const medalLabel = (month: string) => `${month.slice(2, 4)}.${month.slice(5, 7)}`;
+/** 은메달 ('2026-11-s'): the month's first 5천 원 coupon; it turns into the 금메달 ('2026-11') when the month reaches 1만 원
+ *  (one 1만 원 coupon at 10,000P, or two 5천 원 at 12,000P — the harder way). */
+export const silverMedal = (month: string) => `${month}-s`;
+export const isSilverMedal = (id: string) => /^\d{4}-\d{2}-s$/.test(id);
 export const accessorySlot = (id: string): AccessorySlot => petItem(id)?.slot || 'head';
 /** What a pet wears, in drawing order; older saves (and party snapshots) kept a single `accessory`. */
 export const wornAccessories = (p: { accessories?: Partial<Record<AccessorySlot, string | null>> | null; accessory?: string | null } | null | undefined): string[] =>
@@ -151,9 +155,13 @@ export const PET_TEST_REWARD: Record<'paper' | 'app', Record<string, { points: n
   app: { '최상': { points: 20, xp: 30 }, '상': { points: 15, xp: 22 }, '중상': { points: 10, xp: 15 }, '중': { points: 5, xp: 8 } },
 };
 export const PET_TEST_REWARD_TEXT = (kind: 'paper' | 'app') => Object.entries(PET_TEST_REWARD[kind]).map(([grade, r]) => `${grade} ${r.points}`).join(' · ') + 'P';
-/** 수업 태도 칭찬: the 일지's 태도 최상 or 상 (once a lesson, outside the daily cap); below that nothing (never taken away),
- *  so the points never tell a student a lower grade. */
-export const PET_ATTITUDE_REWARD: Record<string, { points: number; xp: number }> = { '최상': { points: 15, xp: 25 }, '상': { points: 10, xp: 15 } };
+/** 수업 태도: the 일지's 태도 (once a lesson, outside the daily cap); below 중 nothing. */
+export const PET_ATTITUDE_REWARD: Record<string, { points: number; xp: number }> = { '최상': { points: 20, xp: 30 }, '상': { points: 15, xp: 22 }, '중상': { points: 10, xp: 15 }, '중': { points: 5, xp: 8 } };
+/** 수업 보상 on 반영 (from this lesson day on): each 반영 settles the lesson to what its 일지 now says — the difference is
+ *  paid or taken back (never below 0 points), and 7 days after the lesson it stays as it is. Lessons before this day keep
+ *  the old way (taken when the app opens). */
+export const LESSON_REWARD_FROM = '2026-10-21';
+export const LESSON_REWARD_LOCK_DAYS = 7;
 /** "최상 40 · 상 30 · 중상 20 · 중 10P" for the screens that explain the rewards. */
 export const PET_HOMEWORK_REWARD_TEXT = Object.entries(PET_HOMEWORK_REWARD).map(([grade, r]) => `${grade} ${r.points}`).join(' · ') + 'P';
 export const PET_REWARD_WINDOW_DAYS = 30;
@@ -469,18 +477,31 @@ export const towerTaken = (atk: number, def: number, blocked: boolean) => blocke
 /** What can wait behind a door (not a boss floor). Each pet's floor has its own fixed set (the same on a retry, different
  *  for other students); `weight`: how often. */
 export type TowerEvent = 'monster' | 'treasure' | 'merchant' | 'mirror' | 'riddle' | 'sleeping' | 'trap' | 'fairy'
-  /** 쉬어 가기 놀이 (api/_lib/towerGames), opening zone by zone */ | 'mimic' | 'fortune' | 'lilypad' | 'mushroom' | 'echo' | 'crystal' | 'maze' | 'scale' | 'jars';
+  /** 쉬어 가기 놀이 (api/_lib/towerGames), opening zone by zone */ | 'mimic' | 'fortune' | 'lilypad' | 'mushroom' | 'echo' | 'crystal' | 'maze' | 'scale' | 'jars' | 'icelock' | 'icepath' | 'runes' | 'scroll' | 'potions' | 'lavapath' | 'lavarun';
 /** A 쉬어 가기 놀이 lost: the pet starts its next battle with one of these (then it wears off). */
+/** What a debuff does (`TOWER_DEBUFF_RULES`): def −방어, atk −공격, hp 체력이 줄어든 채, mp MP 절반, block 첫 막기 문제가 짧게,
+ *  dot 화상·독 3턴. Each game names its own (젖음, 손이 꽁꽁, 엉덩방아…). */
+type DebuffEffect = 'def' | 'atk' | 'hp' | 'mp' | 'block' | 'dot';
+const debuff = (icon: string, name: string, effect: DebuffEffect, text: string, dot?: '화상' | '독') => ({ icon, name, effect, text, ...(dot ? { dot } : {}) });
 export const TOWER_DEBUFFS = {
-  wet: { icon: '💧', name: '물에 젖음', text: '몸이 무거워 방어 -15%' },
-  curse: { icon: '🌑', name: '불운', text: '체력 -10%로 시작' },
-  dazzle: { icon: '😵', name: '눈이 침침', text: '공격 -10%' },
-  deafen: { icon: '🙉', name: '귀가 멍멍', text: '첫 막기 문제는 4초' },
-  bitten: { icon: '🐍', name: '뱀독', text: '독에 걸린 채 시작 (3턴)' },
-  drained: { icon: '😮‍💨', name: '기운 빠짐', text: 'MP 절반으로 시작' },
-} as const;
+  wet: debuff('💧', '물에 젖음', 'def', '몸이 무거워 방어 -15%'),
+  curse: debuff('🌑', '불운', 'hp', '체력 -10%로 시작'),
+  dazzle: debuff('😵', '눈이 침침', 'atk', '공격 -10%'),
+  deafen: debuff('🙉', '귀가 멍멍', 'block', '첫 막기 문제는 4초'),
+  bitten: debuff('🐍', '뱀독', 'dot', '독에 걸린 채 시작 (3턴)', '독'),
+  drained: debuff('😮‍💨', '기운 빠짐', 'mp', 'MP 절반으로 시작'),
+  frozen: debuff('❄️', '손이 꽁꽁', 'atk', '손이 얼어 공격 -10%'),
+  bruised: debuff('🤕', '엉덩방아', 'def', '꽈당! 방어 -15%'),
+  backlash: debuff('💫', '마력 반동', 'mp', '룬이 튕겨 MP 절반으로 시작'),
+  recoil: debuff('📜', '주문 역류', 'hp', '주문이 되돌아와 체력 -10%로 시작'),
+  tummy: debuff('🤢', '배탈', 'dot', '이상한 물약에 배탈이 난 채 시작 (3턴)', '독'),
+  burned: debuff('🔥', '화상', 'dot', '발을 데어 화상 입은 채 시작 (3턴)', '화상'),
+  scorched: debuff('🥵', '그을림', 'def', '열기에 그을려 방어 -15%'),
+} as const satisfies Record<string, { icon: string; name: string; effect: DebuffEffect; text: string; dot?: '화상' | '독' }>;
 export type TowerDebuff = keyof typeof TOWER_DEBUFFS;
-export const TOWER_DEBUFF_RULES = { wet: 0.85, curse: 0.9, dazzle: 0.9, deafenSeconds: 4, bittenTurns: 3, drained: 0.5 } as const;
+/** `stack`: lost games in a row pile up (the newest ones kept) and all hit the next battle; the same kind counts each time. */
+export const TOWER_DEBUFF_RULES = { def: 0.85, hp: 0.9, atk: 0.9, mp: 0.5, blockSeconds: 4, dotTurns: 3, stack: 3 } as const;
+export const debuffEffect = (id: TowerDebuff | null | undefined) => id ? TOWER_DEBUFFS[id].effect : null;
 
 /** `from`: the first floor it can be behind a door (none: from floor 1). */
 export const TOWER_EVENTS: Record<TowerEvent, { name: string; icon: string; weight: number; from?: number }> = {
@@ -492,6 +513,10 @@ export const TOWER_EVENTS: Record<TowerEvent, { name: string; icon: string; weig
   echo: { name: '메아리 동굴', icon: '🔊', weight: 4, from: 11 }, crystal: { name: '수정 불빛 퍼즐', icon: '💡', weight: 4, from: 11 },
   maze: { name: '신전 미로', icon: '🧭', weight: 4, from: 21 }, scale: { name: '황금 저울', icon: '⚖️', weight: 4, from: 25 },
   jars: { name: '짝 맞추기 항아리', icon: '🏺', weight: 4, from: 21 },
+  icelock: { name: '얼음 철자 자물쇠', icon: '🧊', weight: 4, from: 31 }, icepath: { name: '미끄러운 얼음길', icon: '⛸️', weight: 4, from: 31 },
+  runes: { name: '룬 따라 하기', icon: '🎵', weight: 4, from: 41 }, scroll: { name: '주문서 완성', icon: '📜', weight: 4, from: 41 },
+  potions: { name: '물약 섞기', icon: '🧪', weight: 4, from: 45 }, lavapath: { name: '용암 돌다리 기억', icon: '🔥', weight: 4, from: 51 },
+  lavarun: { name: '용암 탈출', icon: '🌋', weight: 4, from: 51 },
 };
 /** 장비 강화 at the 상인: +1 … +5. A failure only uses up the 강화석 (the gear never breaks). */
 export const TOWER_ENHANCE_STEP = 2;

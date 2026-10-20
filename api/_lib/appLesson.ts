@@ -5,6 +5,7 @@ import { identity, draftAccess } from './appAcademic.js';
 import { directLessonReport } from './teacherDirectReport.js';
 import { normalizeNotionPageId } from './notionPageId.js';
 import { linkedSourceRows, markSourceRows } from './appLessonSource.js';
+import { readLessonReward, writeLessonReward } from './lessonRewardOnPublish.js';
 
 // Foundation only: no route or authority flag activates this before migration verification.
 function stable(record: any) {
@@ -96,13 +97,16 @@ async function changePublicLesson(db: any, actor: any, idInput: unknown, revisio
         const projected = archive ? null : { ...prior, ...directLessonReport(id, record, mapping,
             prior || { reportIdentity: source || id }), notionPageId: source ? normalizeNotionPageId(source) : null,
             appLessonId: id, academyId: actor.academyId, sourceMode: 'firestore' };
+        // 수업 보상: the lesson's points follow this 반영 (or the deletion), in this same transaction.
+        const reward = await readLessonReward(tx, db, mapping, archive ? prior : projected, archive);
         if (archive && previous) tx.delete(target);
         if (archive) markSourceRows(tx, sourceRows, { draftId: id, at: now });
         if (projected) tx.set(target, projected);
         tx.set(ref, record);
+        const rewardChange = writeLessonReward(tx, db, reward, now);
         tx.set(db.collection('lessonAppHistory').doc(id + ':' + version + (archive ? ':archive' : ':publish')),
             { beforeDraft: old, afterDraft: record, publicId: target.id, before: prior || null,
                 after: projected, by: actor.uid, at: now, reason: archive ? 'archive' : 'publish' });
-        return { stage: record.stage, archived: archive, record: { id, ...record } };
+        return { stage: record.stage, archived: archive, record: { id, ...record }, ...(rewardChange ? { rewardChange } : {}) };
     });
 }

@@ -654,6 +654,11 @@
 .teacher-workspace .lesson-test-tabs>button[aria-pressed=true] {border-color:#f3a5b4;background:#fef2f3;color:#8b2f40;}
 .teacher-workspace .lesson-test-paper {flex:none;height:18px;min-height:18px;padding:0 6px;margin-left:4px;border:1px dashed var(--workspace-line,#cbd5e1);border-radius:999px;background:var(--workspace-surface,#fff);color:var(--workspace-muted);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;vertical-align:middle;}
 .teacher-workspace .lesson-test-paper[aria-pressed=true] {border-style:solid;border-color:#f3a5b4;background:#fef2f3;color:#8b2f40;}
+.teacher-workspace .lesson-test-paper-wrap {position:relative;display:inline-flex;align-items:center;gap:2px;vertical-align:middle;}
+.teacher-workspace .lesson-test-paper-info {flex:none;display:inline-grid;place-items:center;width:15px;height:15px;min-height:15px;padding:0;border:1px solid var(--workspace-line,#cbd5e1);border-radius:999px;background:var(--workspace-surface,#fff);color:var(--workspace-muted);font:italic 700 9px/1 Georgia,serif;cursor:pointer;}
+.teacher-workspace .lesson-test-paper-info[aria-expanded=true] {border-color:#f3a5b4;color:#8b2f40;}
+.teacher-workspace .lesson-test-paper-help {position:absolute;top:calc(100% + 6px);left:0;z-index:40;width:min(240px,70vw);padding:7px 9px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;box-shadow:0 8px 20px #0f172a1f;color:#475569;font-size:11px;font-weight:400;line-height:1.5;white-space:normal;}
+.teacher-workspace .lesson-test-paper-help b {color:#8b2f40;font-weight:700;}
 .teacher-workspace .lesson-test-tab-name {display:inline-block;max-width:44px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;}
 .teacher-workspace .lesson-test-tabs>.lesson-test-add {width:18px;padding:0;justify-content:center;color:#8b2f40;}
 /* Narrow box with several tests: (선택) and the names give way so every tab still shows. */

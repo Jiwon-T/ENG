@@ -3,7 +3,7 @@
 // a new pet starts the map from the first stage and earns the stage bonuses again. Chapter rewards (backgrounds, gear)
 // are items the student already owns, so they are given once per student.
 // Finishing a stage is applied in the same transaction as the last answer, so a bonus can never be paid twice.
-import {awardCapped, currentPet, type ServerPetState} from './pet.js';
+import {awardCapped, awardFirstClear, currentPet, type ServerPetState} from './pet.js';
 import {PET_EXPEDITION, PET_JOB2, PET_JOBS, PET_MAX_LEVEL, TOWER_GEAR_SLOTS, chapterGearTier, petItem, setGearId, stageQuestions, type PetJob, type PetJob2} from '../../src/lib/petCatalog.js';
 
 export const PET_EXPEDITIONS = 'petExpeditions';
@@ -36,15 +36,17 @@ export const stageUnlocked = (e: PetProgress, id: string, level = PET_MAX_LEVEL)
 
 /**
  * A finished stage game, for the pet that started it (`slot`, the main pet by default): keep its best stars, pay each
- * bonus once per pet (even when today's cap leaves 0P it counts as paid, nothing is carried over), and give the chapter's
+ * bonus once per pet (even when today's cap leaves 0P it counts as paid, nothing is carried over; the student's first
+ * clear of a stage, by any pet, is paid outside the cap), and give the chapter's
  * background the first time any pet of the student clears its crown stage.
  */
 export function finishStage(state: ExpeditionState, s: ServerPetState, id: string, stars: number, slot = currentPet(s).slot) {
   const info = stageInfo(id); if (!info) throw Error('EXPEDITION_BAD_STAGE');
   const e = petProgress(state, slot), wasCleared = stageCleared(e, id), best = Math.max(e.stars[id] || 0, stars);
   e.stars[id] = best;
+  const studentFirst = !Object.entries(state.pets).some(([k, p]) => k !== String(slot) && (p.bonuses?.[id] || []).includes('clear'));
   const cleared = stageCleared(e, id), paid = e.bonuses[id] || [], out = {stage: id, boss: info.boss, stars, best, cleared, bonus: 0, bonuses: [] as string[], paid: {} as Record<string, number>, unlocked: null as string | null, chapterReward: null as string | null, gear: [] as string[], setGear: null as string | null, jobChoice: false, job2Choice: false};
-  const pay = (key: keyof typeof PET_EXPEDITION.bonus) => { if (paid.includes(key)) return; paid.push(key); out.bonuses.push(key); const amount = PET_EXPEDITION.bonus[key], got = awardCapped(s, amount, amount * 2, 'adventure', '원정대').points; out.paid[key] = got; out.bonus += got; };
+  const pay = (key: keyof typeof PET_EXPEDITION.bonus) => { if (paid.includes(key)) return; paid.push(key); out.bonuses.push(key); const amount = PET_EXPEDITION.bonus[key], got = (key === 'clear' && studentFirst ? awardFirstClear(s, amount, amount * 2, '원정대') : awardCapped(s, amount, amount * 2, 'adventure', '원정대')).points; out.paid[key] = got; out.bonus += got; };
   if (cleared) pay('clear');
   if (stars >= 2) pay('star2');
   if (stars >= 3) pay('star3');

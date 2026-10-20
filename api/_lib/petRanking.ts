@@ -22,7 +22,7 @@ export interface RankPet { uid: string; slot: number; alias: string; guild: stri
 export interface RankSnapshot { builtAt: number; pets: RankPet[]; /** a rebuild in progress until then (others keep the last snapshot) */ buildingUntil?: number }
 
 /** Every document of a collection, 500 at a time (nothing is cut off however many students there are). */
-async function docsOf(db: any, name: string) {
+export async function docsOf(db: any, name: string) {
   const out = new Map<string, any>(); let last: any = null;
   for (;;) {
     let q = db.collection(name).orderBy(FieldPath.documentId()).limit(500); if (last) q = q.startAfter(last);
@@ -57,22 +57,25 @@ export async function buildRankings(db: any, now: number): Promise<RankSnapshot>
 }
 /** The snapshot, rebuilt when older than 10 minutes. One request rebuilds (a short lock taken in a transaction); others
  *  meanwhile get the last snapshot instead of reading everything again. */
-export async function rankingSnapshot(db: any, now: number, maxAge = RANKING_TTL, stale = false): Promise<RankSnapshot> {
-  const ref = db.collection(PET_RANKINGS).doc('current');
-  // A fresh snapshot is a plain read; the transaction (the rebuild lock) only when it is old or missing. `stale`: an older
-  // one (up to RANKING_STALE_OK) is shown at once, and the screen asks for the rebuild separately (rank-refresh).
-  const plain = await ref.get(), seen = plain.exists ? plain.data() as RankSnapshot : null;
-  if (seen && Array.isArray(seen.pets) && now - seen.builtAt < (stale ? Math.max(maxAge, RANKING_STALE_OK) : maxAge)) return seen;
-  const {cur, build} = await db.runTransaction(async (tx: any) => {
-    const snap = await tx.get(ref), cur = snap.exists ? snap.data() as RankSnapshot : null, usable = Boolean(cur && Array.isArray(cur.pets));
-    if (usable && now - cur!.builtAt < maxAge) return {cur, build: false};
+export const rankingSnapshot = (db: any, now: number, maxAge = RANKING_TTL, stale = false) => cachedSnapshot<RankSnapshot>(db, 'current', now, maxAge,
+  stale ? Math.max(maxAge, RANKING_STALE_OK) : maxAge, s => Boolean(s && Array.isArray(s.pets)), () => buildRankings(db, now));
+/** One snapshot document of petRankings, rebuilt when older than `maxAge` (or not `usable`). A fresh one is a plain read
+ *  (`staleMax`: an older one is shown at once, and the screen asks for the rebuild separately with rank-refresh); the
+ *  transaction (the rebuild lock) only when it is old or missing, so others meanwhile get the last snapshot. */
+export async function cachedSnapshot<T extends {builtAt: number; buildingUntil?: number}>(db: any, id: string, now: number, maxAge: number, staleMax: number, usable: (s: any) => boolean, build: () => Promise<T>): Promise<T> {
+  const ref = db.collection(PET_RANKINGS).doc(id);
+  const plain = await ref.get(), seen = plain.exists ? plain.data() as T : null;
+  if (seen && usable(seen) && now - seen.builtAt < staleMax) return seen;
+  const {cur, again} = await db.runTransaction(async (tx: any) => {
+    const snap = await tx.get(ref), cur = snap.exists ? snap.data() as T : null, ok = usable(cur);
+    if (ok && now - cur!.builtAt < maxAge) return {cur, again: false};
     // Someone is rebuilding: the last snapshot meanwhile, or (none yet, a cold start) "being made" instead of a second build.
-    if ((cur?.buildingUntil || 0) > now) { if (usable) return {cur, build: false}; throw Error('RANK_BUILDING'); }
+    if ((cur?.buildingUntil || 0) > now) { if (ok) return {cur, again: false}; throw Error('RANK_BUILDING'); }
     tx.set(ref, {buildingUntil: now + 60_000}, {merge: true});
-    return {cur, build: true};
+    return {cur, again: true};
   });
-  if (!build) return cur as RankSnapshot;
-  const next = await buildRankings(db, now);
+  if (!again) return cur as T;
+  const next = await build();
   await ref.set({...next, buildingUntil: 0});
   return next;
 }
@@ -135,5 +138,5 @@ export async function readRankProfile(db: any, viewer: string, atInput: unknown,
   const s = raw ? rollDay(raw, now) as ServerPetState : null, pet = s?.pets.find(x => x.slot === p.slot);
   const background = s?.background || 'default';
   return {label: p.alias || p.name, guild: p.guild || NO_GUILD, name: p.name, character: pet?.character || p.character, level: pet?.level || p.level, job: pet?.job || p.job,
-    clothing: pet ? pet.clothing ?? null : p.clothing, accessories: pet ? wornAccessories(pet) : p.accessories, aura: pet ? petAura(pet) : p.aura ?? null, gear: pet ? gearViewFor(pet, tower?.pets?.[String(pet.slot)]) : p.gear ?? null, pass: p.pass ?? null, background, decor: s?.decor?.[background] || [], medals: (s?.medals || []).length, best: p.best, stars: p.stars, me: p.uid === viewer};
+    clothing: pet ? pet.clothing ?? null : p.clothing, accessories: pet ? wornAccessories(pet) : p.accessories, aura: pet ? petAura(pet) : p.aura ?? null, gear: pet ? gearViewFor(pet, tower?.pets?.[String(pet.slot)]) : p.gear ?? null, pass: p.pass ?? null, background, decor: s?.decor?.[background] || [], medals: (s?.medals || []).filter(m => !/-s$/.test(m)).length, silver: (s?.medals || []).filter(m => /-s$/.test(m)).length, best: p.best, stars: p.stars, me: p.uid === viewer};
 }
