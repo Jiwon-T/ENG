@@ -38,6 +38,6 @@ test('첫 시즌: a student without the app gets a late-September lesson in Octo
   // within the last 30 days, so not a 지난 수업 보상: before, it counted for September
   f.rows.set('lessonReports/a1', {internalStudentId: 'int-a', reportIdentity: 'a1', lessonDateStart: '2026-09-28T14:00:00+09:00', attendance: '출석', attitude: '', homework: '', test: ''});
   const out: any = await listPetPoints(f.db, {admin: true, academyId: 'main'}, OCT22);
-  assert.equal(out.students[0].earned, 30);
+  assert.equal(out.students[0].earned, 30, '출석 alone: ×1');
   assert.equal(out.students[0].ledger.some((x: any) => x.day === '2026-09-28'), true, 'shown in October\u2019s 내역');
 });

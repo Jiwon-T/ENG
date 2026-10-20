@@ -13,7 +13,7 @@ import { aiErrorCode, generateAi, planOf, readPetTalk, refundPetTalkQuota, takeP
 import { AI_PLANS, PASS_NOTE, PET_TALK_DAILY_GUARD, activePlan } from '../../../src/lib/aiPlans.js';
 import {
   PET_STATES, addXP, adoptPet, awardStudy, buyItem, chatRequest, museRequest, chooseCharacter, claimStudyRewards, currentPet, earnPoints, equipItem, evolveRequest, importLocalPet,
-  homeworkGrades, initialPetState, noteInbox, parseAi, pendingStudyRewards, settleLessons, petSummary, petThePet, publicPetState, renamePet, setGearShow, rollDay, seoulDay, switchPet, teachRequest, wearItem, type ServerPetState,
+  applyCouponExtras, homeworkGrades, initialPetState, noteInbox, parseAi, pendingStudyRewards, settleLessons, petSummary, petThePet, publicPetState, renamePet, setGearShow, rollDay, seoulDay, switchPet, teachRequest, wearItem, type ServerPetState,
 } from '../pet.js';
 import { cleanPetSpeech, petEmojiLimit, PET_ACTIONS, PET_REWARD_WINDOW_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PET_WORD_FEED, stageGame, stageQuestions, stageWithSentences, passAllows, petItem } from '../../../src/lib/petCatalog.js';
 import { loadSentencesFor } from '../petSentences.js';
@@ -37,7 +37,7 @@ const defaults = (): Deps => ({
 const MESSAGES: Record<string, string> = {
   TOWER_NOT_READY: '선생님이 탑 단어장을 아직 정하지 않았어요.', TOWER_CHEST_FIRST: '먼저 1층 보물상자를 열어 보세요!', TOWER_CHEST_OPENED: '이미 연 보물상자예요.', TOWER_TOP: '지금은 여기가 꼭대기예요. 더 높은 층은 곧 열려요!',
   TOWER_NO_RUN: '전투가 끝났어요. 다시 들어가 주세요.', TOWER_WAIT: '지금은 문제에 답할 차례예요.', TOWER_SKILL_LOCKED: '스킬은 전직 후에 쓸 수 있어요. 1차 전직은 원정대 5장 설산의 왕관 스테이지에서 해요.', TOWER_SKILL_NOT_LEARNED: '아직 배우지 않은 스킬이에요.', TOWER_NO_MP: 'MP가 모자라요. 단어를 맞히면 MP가 2씩 차요.', TOWER_SEALED: '봉인되어 지금은 스킬을 쓸 수 없어요. 봉인이 풀릴 때까지 버텨요.', TOWER_NO_POTION: '물약이 없어요.', TOWER_IN_BATTLE: '전투 중에는 장비를 바꿀 수 없어요.', TOWER_GEAR_JOB: '이 장비는 그 직업으로 전직한 펫만 낄 수 있어요.', TOWER_SOLD_OUT: '다 팔렸어요.', TOWER_MAX_ENHANCE: '이미 최고 강화(+5)예요.', TOWER_NO_STONES: '강화석이 모자라요.', TOWER_SNEAK_INVALID: '조금 더 천천히, 길을 따라 지나가 보세요.',
-  COUPON_NOT_ELIGIBLE: '이달의 장학 쿠폰은 학원에 연결된 채움 학원 학생이 받을 수 있어요.', COUPON_TAKEN: '이번 달 쿠폰은 이미 신청했어요.', COUPON_NOT_YET: '이번 달에 모은 포인트가 아직 10,000P가 안 됐어요.',
+  COUPON_NOT_ELIGIBLE: '이달의 장학 쿠폰은 학원에 연결된 채움 학원 학생이 받을 수 있어요.', COUPON_TAKEN: '이번 달 쿠폰은 이미 신청했어요.', COUPON_NOT_YET: '이번 달에 모은 포인트가 아직 10,000P가 안 됐어요.', COUPON_HOMEWORK: '숙제 통과율(\'중상\' 이상이 통과)이 80% 이상이어야 장학 쿠폰을 신청할 수 있어요.',
   PET_PASS_ITEM: '펫 패스·프리미엄 패스로 쓸 수 있는 방이에요.',
   PET_JOB3_LOCKED: '3차 전직은 2차 전직한 Lv.150 친구가 채움의 탑 50층을 깨면 할 수 있어요.',
   PET_JOB_BAD: '검사나 마법사 중에서 골라 주세요.', PET_JOB_TAKEN: '이 친구는 이미 전직했어요.', PET_JOB_LOCKED: '5장 설산의 왕관 스테이지를 이 친구와 통과하면 1차 전직할 수 있어요.', PET_JOB2_BAD: '이 친구의 직업에 맞는 갈래를 골라 주세요.', PET_JOB2_LOCKED: '1차 전직한 친구와 7장 꿈의 정원의 왕관 스테이지를 통과하면 2차 전직할 수 있어요.',
@@ -61,9 +61,10 @@ async function autoClaimStudy(db: any, uid: string, now: number, reportsIn?: any
   // Lessons before the switch day: the old rewards; from it on, each lesson settled to its 일지 (usually already done on
   // 반영; this catches a student linked later or a 반영 that could not reach the pet).
   const before = rollDay(snap.exists ? snap.data() : initialPetState(now, userSnap.data()?.petStats), now), dry = structuredClone(before);
-  if (!pendingStudyRewards(before, reports, now).length && !settleLessons(dry, reports, now) && JSON.stringify(dry.lessonPaid || {}) === JSON.stringify(before.lessonPaid || {})) return 0;
+  applyCouponExtras(dry, reports, now);
+  if (!pendingStudyRewards(before, reports, now).length && !settleLessons(dry, reports, now) && JSON.stringify(dry.lessonPaid || {}) === JSON.stringify(before.lessonPaid || {}) && JSON.stringify(dry.couponExtra || {}) === JSON.stringify(before.couponExtra || {})) return 0;
   // the points that came in (shown as +N); a lowered 평가 shows in the 포인트 내역
-  return Math.max(0, (await change(db, uid, now, s => { const ledger = structuredClone(s.ledger || []); const net = claimStudyRewards(s, pendingStudyRewards(s, reports, now)).points + settleLessons(s, reports, now); noteInbox(s, ledger); return net; })).result as number);
+  return Math.max(0, (await change(db, uid, now, s => { const ledger = structuredClone(s.ledger || []); const net = claimStudyRewards(s, pendingStudyRewards(s, reports, now)).points + settleLessons(s, reports, now); applyCouponExtras(s, reports, now); noteInbox(s, ledger); return net; })).result as number);
 }
 /** A name shown in the rankings changed (별칭, 원정대 이름, pet name): both snapshots are made again on their next look, so
  *  an old name (a real name no longer agreed to) is not shown to others. */

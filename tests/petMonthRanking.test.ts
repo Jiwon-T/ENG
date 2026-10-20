@@ -35,12 +35,12 @@ test('이달 포인트 순위: every active student, app or not, by this month\'
   const snap = await buildMonthRanking(f.db, OCT22);
   const by = Object.fromEntries(snap.rows.map(r => [r.label, r]));
   assert.deepEqual(Object.keys(by).sort(), ['류**', '반짝이', '영어왕'], 'the inactive student is left out');
-  assert.deepEqual([by['류**'].by, by['류**'].uid, by['류**'].earned, by['류**'].look], ['name', null, 30 + 40 + 15, null]);
+  assert.deepEqual([by['류**'].by, by['류**'].uid, by['류**'].earned, by['류**'].look], ['name', null, 30 + (40 + 15) * 3, null]);
   assert.deepEqual([by['반짝이'].by, by['반짝이'].guild, by['반짝이'].earned, by['반짝이'].look?.character], ['alias', '별빛 원정대', 50 + 30, pet(f).pets[0].character]);
   assert.deepEqual([by['영어왕'].by, by['영어왕'].earned], ['nick', 30]);
   assert.equal(f.rows.has('petStates/a'), false, 'nothing is saved for the students');
   const seen: any = await readMonthRanking(f.db, 'b', OCT22);
-  assert.deepEqual(seen.rows.map((r: any) => [r.rank, r.label, r.earned, r.me]), [[1, '류**', 85, false], [2, '반짝이', 80, true], [3, '영어왕', 30, false]]);
+  assert.deepEqual(seen.rows.map((r: any) => [r.rank, r.label, r.earned, r.me]), [[1, '류**', 195, false], [2, '반짝이', 80, true], [3, '영어왕', 30, false]]);
   assert.deepEqual([seen.kind, seen.goal, seen.month, seen.mine], ['month', 10_000, '2026-10', {rank: 2, earned: 80}]);
   const text = JSON.stringify(seen);
   for (const secret of ['류지수', '박하늘', '김구름', A, B, C, '"b"']) assert.equal(text.includes(secret), false, `no ${secret} in what the student gets`);
@@ -138,11 +138,12 @@ test('학생 목록 쿠폰 %: the snapshot keeps each student key (never sent to
   assert.deepEqual(snap.rows.map(r => r.key).sort(), [A, B, C].sort());
   assert.equal(JSON.stringify(monthRankRows(snap, 'b')).includes(A), false, 'no key in what a student gets');
   const card: any = await teacherStudentCoupon(f.db, {admin: true, academyId: 'main'}, A, OCT22);
-  assert.deepEqual([card.linked, card.offline, card.earned, card.requested], [false, true, 30 + 40 + 15, false]);
+  assert.deepEqual([card.linked, card.offline, card.earned, card.requested], [false, true, 30 + (40 + 15) * 3, false]);
   assert.ok(card.ledger.length > 0, 'the 내역 the % is made of');
   assert.equal(f.rows.has('petStates/a'), false, 'nothing saved');
   const src = (await import('node:fs')).readFileSync(new URL('../src/components/teacher/StudentMasterPanel.tsx', import.meta.url), 'utf8');
-  assert.match(src, /\{typeof s\.couponPoints==='number'&&onCouponCard&&<span className="smr-gauge"/, 'the list gauge reads couponPoints (pet summary or the snapshot)');
+  assert.match(src, /\{typeof s\.couponPoints==='number'&&onCouponCard&&<span className=\{`smr-gauge/, 'the list % reads couponPoints (pet summary or the snapshot)');
+  assert.doesNotMatch(src, /smr-gauge-bar/, 'the number only: no bar over the pet’s name and level');
 });
 test('학생 목록 쿠폰 %: a snapshot over 10 minutes old (or marked stale) is made again, not reused', async () => {
   const {listSnapshotFresh} = await import('../api/_lib/petMonthRanking.js');

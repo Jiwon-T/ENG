@@ -4,7 +4,7 @@
 import {keepsNameHidden} from '../../src/lib/rankNames.js';
 import {
   PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_CHARACTERS, PET_DAILY_STUDY_POINTS, PET_ENERGY_ITEMS_PER_DAY, PET_FRIEND_LEVEL, PET_MAX_ENERGY, PET_MAX_LEVEL, PET_MAX_PETS, PET_REVIVES_PER_DAY,
-  PET_ATTITUDE_REWARD, PET_COUPON, PET_LATE_REWARD, PET_REWARD_WINDOW_DAYS, LESSON_REWARD_FROM, LESSON_REWARD_LOCK_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob, type PetGearLook} from '../../src/lib/petCatalog.js';
+  PET_ATTITUDE_REWARD, COUPON_BOOST, PET_COUPON, PET_LATE_REWARD, PET_REWARD_WINDOW_DAYS, LESSON_REWARD_FROM, LESSON_REWARD_LOCK_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob, type PetGearLook} from '../../src/lib/petCatalog.js';
 
 export const PET_STATES = 'petStates';
 export interface ServerPhrase { original: string; remembered: string; learnedAtLevel: number; evolvedVersions: Record<string, string> }
@@ -22,6 +22,7 @@ export interface ServerPetState {
   rewarded: Record<string, string[]>; updatedAt: number;
   /** 이달의 장학 쿠폰: points earned in `month` ('YYYY-MM', Korea time). */ earned?: { month: string; points: number };
   /** Earned by month (this month and last): a lesson's points count for the month of the lesson. */ earnedBy?: Record<string, number>;
+  /** 장학 쿠폰 누적 보완 by coupon month (from the 수업 일지, made again at each settling; the coupon count only) */ couponExtra?: Record<string, CouponExtra>;
   /** 포인트 내역 (this month and last), by day, kind and what it was for. */ ledger?: LedgerItem[];
   /** 금메달 by month ('2026-10'), and where each one sits in each room (% of the room, by background). */
   medals?: string[]; decor?: Record<string, { id: string; x: number; y: number }[]>;
@@ -106,12 +107,14 @@ function ownEarned(s: ServerPetState, month: string) {
 export function earnedIn(s: ServerPetState, month: string) {
   return ownEarned(s, month) + (month === PET_COUPON.firstSeason ? ownEarned(s, prevMonth(month)) : 0);
 }
+/** The coupon count of `month`: what was earned, and the 누적 보완 the 수업 일지 give (lesson points ×3, 자습, 보너스). */
+export function couponEarnedIn(s: ServerPetState, month: string) { return earnedIn(s, month) + (Number(s.couponExtra?.[month]?.points) || 0); }
 /** The months kept in `earnedBy`: this month and last — in the first season only October (September is folded in). */
 const keptMonths = (cur: string) => cur === PET_COUPON.firstSeason ? [cur] : [prevMonth(cur), cur];
 /** The month a day counts for: before the first season, the first season. */
 const countedMonth = (day: string, cur: string) => day.slice(0, 7) < PET_COUPON.firstSeason ? cur : day.slice(0, 7);
 /** This month's earned points (the month of `s.day`, which is Korea time). */
-export function monthEarned(s: ServerPetState) { return earnedIn(s, s.day.slice(0, 7)); }
+export function monthEarned(s: ServerPetState) { return couponEarnedIn(s, s.day.slice(0, 7)); }
 /** Every point a student receives also counts for this month's coupon (call before adding it to `points`). */
 export function earnPoints(s: ServerPetState, points: number, kind: PointKind = 'etc', label = '', dayInput?: string) {
   if (!(points > 0)) return;
@@ -283,12 +286,12 @@ const UNDECIDED = (homework: string) => !homework || homework === '미확인';
 /** Each lesson with a 숙제 gets the 숙제 평가 of the next lesson of the same subject that has one decided (미확인 is skipped:
  *  the teacher hasn't checked yet). `gradedAt` is that lesson's date (the reward is counted from then). */
 export function homeworkGrades(reports: {id: string; date: string; subject: string; homework: string; hasAssignment: boolean}[]) {
-  const out = new Map<string, {grade: string; gradedAt: string}>();
+  const out = new Map<string, {grade: string; gradedAt: string; by: string}>();
   const sorted = [...reports].sort((a, b) => String(a.date).localeCompare(String(b.date)));
   sorted.forEach((r, i) => {
     if (!r.hasAssignment) return;
     const next = sorted.slice(i + 1).find(n => n.subject === r.subject && String(n.date) > String(r.date) && !UNDECIDED(n.homework));
-    if (next) out.set(r.id, {grade: next.homework, gradedAt: next.date});
+    if (next) out.set(r.id, {grade: next.homework, gradedAt: next.date, by: next.id});
   });
   return out;
 }
@@ -338,20 +341,30 @@ export function settleLessons(s: ServerPetState, rows: LessonRewardRow[], now = 
   for (const [id, paid] of Object.entries(s.lessonPaid || {})) if (!seen.has(id)) net += settleLessonReward(s, id, paid.d, null, now) || 0;
   return net;
 }
-type StudyReward = {id: string; kind: 'attendance' | 'assignment' | 'test' | 'attitude'; grade?: string; paper?: boolean; /** the lesson's day (숙제: the lesson that graded it) */ day?: string;
+type StudyReward = {id: string; kind: 'attendance' | 'assignment' | 'homework' | 'test' | 'attitude'; grade?: string; paper?: boolean; /** the lesson's day (숙제: the lesson that graded it) */ day?: string;
   /** older than the 30-day window (놓친 수업 보상): one '지난 수업 보상' line, counted for this month */ late?: boolean};
 /** 공부 보상 waiting: attended lessons, graded 숙제 and 테스트 평가 (중 and above) from the last 30 days not yet rewarded. */
-export function pendingStudyRewards(s: ServerPetState, reports: {id: string; date: string; attendance: string; homeworkGrade?: string; gradedAt?: string; test?: string; testPaper?: boolean; attitude?: string}[], now = Date.now()) {
+export function pendingStudyRewards(s: ServerPetState, reports: {id: string; date: string; attendance: string; homework?: string; homeworkGrade?: string; gradedAt?: string; gradedBy?: string; test?: string; testPaper?: boolean; attitude?: string}[], now = Date.now()) {
   // the last 30 days as before, and older lessons back to LESSON_BACKPAY_FROM never paid (놓친 수업 보상)
   const recent = seoulDay(now - PET_REWARD_WINDOW_DAYS * 86_400_000), from = LESSON_BACKPAY_FROM < recent ? LESSON_BACKPAY_FROM : recent, today = seoulDay(now), out: StudyReward[] = [];
   const inWindow = (date?: string) => { const day = String(date || '').slice(0, 10); return Boolean(day) && day >= from && day <= today; };
   const late = (date?: string) => String(date || '').slice(0, 10) < recent ? {late: true} : {};
   // From LESSON_REWARD_FROM on, lessons are settled on 반영 (settleLessonReward), not here.
   const old = (date?: string) => String(date || '').slice(0, 10) < LESSON_REWARD_FROM;
+  // a 숙제 chip that grades no earlier 과제 (none was written) pays as that lesson's own 숙제 (kind 'homework'); a chip
+  // that graded a 과제 already pays through it ('assignment'), never twice
+  const graders = new Set(reports.map(r => r.gradedBy).filter(Boolean));
+  // 첫 시즌 보충: a September reward marked paid but with no line in the 내역 (it never came in) is paid again — only in
+  // October, while September's lines are kept, for days since the student's 내역 began (points from before it have no
+  // line), and not for a student with a 지난 수업 보상 line (that one hides the days)
+  const ledger = s.ledger || [], since = ledger.map(x => x.day).sort()[0] || '9999', repair = s.day.slice(0, 7) === PET_COUPON.firstSeason && !ledger.some(x => x.label === '지난 수업 보상');
+  const LINE: Record<string, RegExp> = {attendance: /^(출석|지각)$/, assignment: /^숙제 /, homework: /^숙제 /, test: /^시험/, attitude: /^(수업 )?태도/};
+  const lost = (kind: string, date?: string) => { const day = String(date || '').slice(0, 10); return repair && day >= since && day.slice(0, 7) === prevMonth(PET_COUPON.firstSeason) && !ledger.some(x => x.kind === 'class' && x.day === day && LINE[kind].test(x.label)); };
   for (const r of reports) {
-    const done = s.rewarded[r.id] || [];
+    const paid = s.rewarded[r.id] || [], done = paid.filter(kind => !lost(kind, kind === 'assignment' ? r.gradedAt : r.date));
     if (inWindow(r.date) && old(r.date) && ATTENDED(r.attendance) && !done.includes('attendance')) out.push({id: r.id, kind: 'attendance', day: String(r.date).slice(0, 10), ...(/지각/.test(r.attendance) ? {grade: '지각'} : {}), ...late(r.date)});
     if (r.homeworkGrade && PET_HOMEWORK_REWARD[r.homeworkGrade] && inWindow(r.gradedAt) && old(r.gradedAt) && !done.includes('assignment')) out.push({id: r.id, kind: 'assignment', grade: r.homeworkGrade, day: String(r.gradedAt).slice(0, 10), ...late(r.gradedAt)});
+    if (r.homework && PET_HOMEWORK_REWARD[r.homework] && !graders.has(r.id) && inWindow(r.date) && old(r.date) && !done.includes('homework')) out.push({id: r.id, kind: 'homework', grade: r.homework, day: String(r.date).slice(0, 10), ...late(r.date)});
     if (r.test && PET_TEST_REWARD.paper[r.test] && inWindow(r.date) && old(r.date) && !done.includes('test')) out.push({id: r.id, kind: 'test', grade: r.test, paper: Boolean(r.testPaper), day: String(r.date).slice(0, 10), ...late(r.date)});
     if (r.attitude && PET_ATTITUDE_REWARD[r.attitude] && inWindow(r.date) && old(r.date) && !done.includes('attitude')) out.push({id: r.id, kind: 'attitude', grade: r.attitude, day: String(r.date).slice(0, 10), ...late(r.date)});
   }
@@ -365,7 +378,7 @@ export function claimStudyRewards(s: ServerPetState, pending: StudyReward[]) {
     points += r.points; xp += r.xp; s.rewarded[p.id] = [...new Set([...(s.rewarded[p.id] || []), p.kind])];
     // each counts for its lesson's month and shows in the 포인트 내역 on that day; 놓친 수업 보상 (older than 30 days) is one
     // '지난 수업 보상' line today, counted for this month's coupon
-    const label = p.late ? '지난 수업 보상' : p.kind === 'attendance' ? (p.grade === '지각' ? '지각' : '출석') : p.kind === 'assignment' ? `숙제 ${p.grade}` : p.kind === 'test' ? `시험(${p.paper ? '종이' : '앱'}) ${p.grade}` : '수업 태도';
+    const label = p.late ? '지난 수업 보상' : p.kind === 'attendance' ? (p.grade === '지각' ? '지각' : '출석') : p.kind === 'assignment' || p.kind === 'homework' ? `숙제 ${p.grade}` : p.kind === 'test' ? `시험(${p.paper ? '종이' : '앱'}) ${p.grade}` : '수업 태도';
     earnPoints(s, r.points, 'class', label, p.late ? s.day : p.day);
   }
   s.points += points; const {leveledUp} = addXP(s, xp);
@@ -432,3 +445,60 @@ export function publicPetState(s: ServerPetState) {
 }
 /** For the teacher screens: the highest-level pet and how many live here. */
 export const petSummary = (s: ServerPetState) => { const pet = [...s.pets].sort((a, b) => b.level - a.level || b.xp - a.xp)[0]; return {points: s.points, totalXP: pet.xp, highestLevel: pet.level, petName: pet.name, character: pet.character, petCount: s.pets.length, /** 장학 쿠폰: this month's earned (the % on the student list) */ couponMonth: s.day.slice(0, 7), couponEarned: monthEarned(s)}; };
+
+// ---- 장학 쿠폰 누적 보완 (COUPON_BOOST) ----
+/** One coupon month's 보완: `lesson` (the extra of lesson points ×3), `study` (자습 days ×30 ×3), the runs, `perfect` (개근,
+ *  only once its month is over); `pending`: this month's 개근 if it keeps up (shown, not counted yet). */
+export interface CouponExtra { points: number; lesson: number; study: number; studyDays: number; homeworkRuns: number; bestRuns: number; perfect: number; pending?: number;
+  /** 숙제 통과율: 평가 written ('없는 날'·'미확인' left out) and 중상 이상 (통과) among them */ hwCounted?: number; hwDone?: number }
+/** A 수업 일지 as the 보완 reads it: `session` a class session (수업 시간 written), `studied` a 자습 that day. */
+export interface CouponRow { date: string; attendance: string; homework: string; test: string; testPaper: boolean; attitude: string; subject?: string; session?: boolean; studied?: boolean }
+const SKIP_HOMEWORK = (h: string) => !h || h === '없는 날' || h === '미확인';
+export function couponExtras(rows: CouponRow[], today: string): Record<string, CouponExtra> {
+  const B = COUPON_BOOST, cur = today.slice(0, 7), out: Record<string, CouponExtra> = {};
+  const target = (month: string) => month < PET_COUPON.firstSeason ? PET_COUPON.firstSeason : month;
+  const at = (month: string) => out[target(month)] ||= {points: 0, lesson: 0, study: 0, studyDays: 0, homeworkRuns: 0, bestRuns: 0, perfect: 0};
+  const day = (r: CouponRow) => String(r.date || '').slice(0, 10);
+  const list = rows.filter(r => day(r) >= LESSON_BACKPAY_FROM && day(r) <= today).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const GOOD = (g: string) => g === '상' || g === '최상';
+  for (const r of list) {
+    const e = at(day(r).slice(0, 7)), chips = [r.homework, r.test, r.attitude].filter(c => !SKIP_HOMEWORK(c));
+    // ×3 only for a lesson done well all round: 숙제·테스트·태도 상 이상 (출석 stays as it is)
+    if (chips.length && chips.every(GOOD)) e.lesson += (B.lessonTimes - 1) * lessonRewardParts(r).filter(p => p.label !== '출석' && p.label !== '지각').reduce((n, p) => n + p.points, 0);
+    if (!SKIP_HOMEWORK(r.homework)) { e.hwCounted = (e.hwCounted || 0) + 1; if (GOOD(r.homework) || r.homework === '중상') e.hwDone = (e.hwDone || 0) + 1; }
+  }
+  // 자습: one a day however long (and whatever the number of 일지), on a day whose 태도 was 상 이상
+  for (const d of new Set(list.filter(r => r.studied).map(day))) {
+    if (!list.some(r => day(r) === d && GOOD(r.attitude))) continue;
+    const e = at(d.slice(0, 7)); e.study += B.studyDay * B.lessonTimes; e.studyDays += 1;
+  }
+  for (const month of new Set(list.map(r => day(r).slice(0, 7)))) {
+    const inMonth = list.filter(r => day(r).slice(0, 7) === month), e = at(month);
+    // 숙제 runs, each subject on its own, within the calendar month
+    for (const subject of new Set(inMonth.map(r => r.subject || '영어'))) {
+      let good = 0, best = 0;
+      for (const r of inMonth.filter(x => (x.subject || '영어') === subject)) {
+        if (SKIP_HOMEWORK(r.homework)) continue;
+        good = r.homework === '상' || r.homework === '최상' ? good + 1 : 0;
+        best = r.homework === '최상' ? best + 1 : 0;
+        if (good === B.homeworkRun.need) { e.homeworkRuns += 1; good = 0; }
+        if (best === B.bestRun.need) { e.bestRuns += 1; best = 0; }
+      }
+    }
+    // 한 달 개근: 8+ class sessions attended, no 결석; 30% less a 지각, +500 with none, +500 with no 숙제 미제출 (성실 개근);
+    // final once the month is over
+    const sessions = inMonth.filter(r => r.session), attended = sessions.filter(r => ATTENDED(r.attendance)), lates = attended.filter(r => /지각/.test(r.attendance)).length;
+    if (attended.length >= B.minSessions && !sessions.some(r => /결석/.test(r.attendance))) {
+      const amount = Math.round(B.perfect * Math.max(0, 1 - B.latePenalty * lates)) + (lates ? 0 : B.perfectNoLate) + (inMonth.some(r => r.homework === '미제출') ? 0 : B.diligent);
+      if (month < cur) e.perfect += amount; else e.pending = (e.pending || 0) + amount;
+    }
+  }
+  for (const e of Object.values(out)) e.points = e.lesson + e.study + e.homeworkRuns * B.homeworkRun.points + e.bestRuns * B.bestRun.points + e.perfect;
+  return out;
+}
+/** Keep the 보완 of the months the coupon still looks at (this month and last; in the first season only October). */
+export function applyCouponExtras(s: ServerPetState, rows: CouponRow[], now = Date.now()) {
+  const all = couponExtras(rows, seoulDay(now)), keep = keptMonths(s.day.slice(0, 7));
+  s.couponExtra = Object.fromEntries(keep.filter(m => all[m]).map(m => [m, all[m]]));
+}
+

@@ -19,7 +19,8 @@ export interface MedalSpot { id: string; x: number; y: number }
 /** One month's coupons: earned, used by coupons, left, the won given, and which can be asked for (단계 쿠폰: 5천 원 at 6,000P,
  *  1만 원 at 10,000P, at most 1만 원 a month). */
 export interface CouponMonth { earned: number; spent?: number; left?: number; won?: number; tiered?: boolean; requested: boolean; paid: boolean;
-  options?: { id: 'half' | 'full'; points: number; won: number; ready: boolean }[]; coupons?: { tier: 'half' | 'full'; won: number; paid: boolean }[] }
+  options?: { id: 'half' | 'full'; points: number; won: number; ready: boolean }[]; coupons?: { tier: 'half' | 'full'; won: number; paid: boolean }[];
+  /** 숙제 통과율 (80% to ask for a coupon; 중상 이상 = 통과); null: no 숙제 평가 this month */ homework?: { done: number; counted: number; rate: number; ok: boolean } | null }
 export interface CouponView extends CouponMonth { eligible: boolean; month: string; label: string; goal: number;
   /** last month's, in the first days of a month (its lessons' points count for it) */ last?: CouponMonth & { month: string; label: string; until: string } }
 /** 포인트 내역: one line a day, kind and what it was for. */

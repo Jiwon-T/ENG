@@ -3,7 +3,7 @@
 // paid (놓친 수업 보상), and lessons gone. The student needs neither the app nor a pet: a linked student without one gets
 // the pet account made here, with the points in it (the first pet is still chosen in the app). Only a student whose app
 // account is not linked waits (nothing to pay into).
-import { claimStudyRewards, initialPetState, noteInbox, pendingStudyRewards, PET_STATES, petSummary, rollDay, settleLessons, type ServerPetState } from './pet.js';
+import { applyCouponExtras, claimStudyRewards, initialPetState, noteInbox, pendingStudyRewards, PET_STATES, petSummary, rollDay, settleLessons, type ServerPetState } from './pet.js';
 import { studyReports } from './lessonRewardRows.js';
 
 /** Reads (the pet and account in the transaction, the student's lessons beside it), before any write. `report`: the 일지
@@ -19,12 +19,13 @@ export async function readLessonReward(tx: any, db: any, mapping: any, report: a
   return { uid, state: pet.exists ? pet.data() as ServerPetState : null, user: u, rows };
 }
 
-const settled = (s: ServerPetState) => JSON.stringify([s.points, s.rewarded, s.lessonPaid || {}]);
+const settled = (s: ServerPetState) => JSON.stringify([s.points, s.rewarded, s.lessonPaid || {}, s.couponExtra || {}]);
 /** Writes: settle everything for the student. Returns the points change, or null when nothing changed (no account made). */
 export function writeLessonReward(tx: any, db: any, read: Awaited<ReturnType<typeof readLessonReward>>, now: number) {
   if (!read) return null;
   const s = rollDay(read.state ?? initialPetState(now, read.user.petStats), now), before = settled(s), ledger = structuredClone(s.ledger || []);
   const change = claimStudyRewards(s, pendingStudyRewards(s, read.rows, now)).points + settleLessons(s, read.rows, now);
+  applyCouponExtras(s, read.rows, now);
   if (settled(s) === before) return null;
   noteInbox(s, ledger); // shown once when the student next opens the app
   s.updatedAt = now;

@@ -39,6 +39,7 @@ export function workspaceError(error: unknown, failureStage: string) {
   MULTIPLE_STUDENTS_MATCHED:'같은 학생으로 보이는 기록이 둘 이상이에요. 학생 관리에서 직접 연결해 주세요.',
   STUDENT_ACCOUNT_NOT_LINKED:'학생 앱 계정이 연결되어 있지 않아 평가를 남길 수 없습니다. 학생 관리에서 계정을 먼저 연결해 주세요.',
   COUPON_NOT_YET:'이 학생은 이번 달 쿠폰 포인트에 아직 닿지 않았어요.',
+  COUPON_HOMEWORK:'이 학생은 이번 달 숙제 통과율(\'중상\' 이상이 통과)이 80%가 안 돼서 쿠폰을 신청할 수 없어요.',
   COUPON_TAKEN:'이 학생은 이번 달 쿠폰을 이미 받았어요(한 달 1만 원까지).',
   RANK_NICK_BAD:'닉네임은 2~10자로 정해 주세요(전화번호·주소·링크는 쓸 수 없어요).',
   EVALUATION_CONFLICT:'다른 선생님이 먼저 평가를 바꿨습니다. 새로고침해서 최신 평가를 확인한 뒤 다시 저장해 주세요.',

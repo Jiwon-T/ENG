@@ -22,8 +22,8 @@ test('이번 달 포인트: every active student, with or without the app, at th
   lesson('int-b', 'b1', '2026-10-21T14:00:00+09:00');
   const out: any = await listPetPoints(f.db, {admin: true, academyId: 'main'}, OCT22);
   const by = Object.fromEntries(out.students.map((s: any) => [s.name, s]));
-  assert.deepEqual([by['앱없는 학생'].app, by['앱없는 학생'].earned, by['앱없는 학생'].points], ['none', (30 + 15 + 40) + (30 + 40 + 15), 170]);
-  assert.deepEqual([by['앱있는 학생'].app, by['앱있는 학생'].points, by['앱있는 학생'].waiting, by['앱있는 학생'].earned], ['linked', 145, 45, 45]);
+  assert.deepEqual([by['앱없는 학생'].app, by['앱없는 학생'].earned, by['앱없는 학생'].points], ['none', (30 + (15 + 40) * 3) + (30 + (40 + 15) * 3), 170]);
+  assert.deepEqual([by['앱있는 학생'].app, by['앱있는 학생'].points, by['앱있는 학생'].waiting, by['앱있는 학생'].earned], ['linked', 145, 45, 30 + 15 * 3]);
   assert.equal(by['앱없는 학생'].ledger.some((x: any) => x.label === '지난 수업 보상'), true, 'the 내역 shows what the gauge is made of');
   assert.equal(f.rows.has('petStates/a'), false, 'nothing is saved');
   assert.equal(f.rows.get('petStates/b').points, 100);

@@ -115,9 +115,9 @@ test('pet: 숙제 평가 comes from the next lesson of the same subject that has
     row('m3', '2026-10-10T14:00:00+09:00', '미확인'), // the teacher hasn't checked m2's 숙제 here yet
     row('m4', '2026-10-13T14:00:00+09:00', '미제출', false),
   ]);
-  assert.deepEqual(grades.get('m1'), {grade: '상', gradedAt: '2026-10-08T14:00:00+09:00'});
-  assert.deepEqual(grades.get('m2'), {grade: '미제출', gradedAt: '2026-10-13T14:00:00+09:00'}, '미확인 in between is skipped');
-  assert.deepEqual(grades.get('m3'), {grade: '미제출', gradedAt: '2026-10-13T14:00:00+09:00'});
+  assert.deepEqual(grades.get('m1'), {grade: '상', gradedAt: '2026-10-08T14:00:00+09:00', by: 'm2'});
+  assert.deepEqual(grades.get('m2'), {grade: '미제출', gradedAt: '2026-10-13T14:00:00+09:00', by: 'm4'}, '미확인 in between is skipped');
+  assert.deepEqual(grades.get('m3'), {grade: '미제출', gradedAt: '2026-10-13T14:00:00+09:00', by: 'm4'});
   assert.equal(grades.has('m4'), false, 'no 숙제 given, or nothing after it yet');
   assert.equal(grades.has('x1'), false);
 });

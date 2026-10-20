@@ -21,7 +21,9 @@ async function waitingStudents(db: any, now: number) {
     try { o = await owedPoints(db, key, now, true); } catch { failed += 1; console.warn('SETTLE_WAITING_READ_FAILED'); continue; }
     if (!o?.linked || !o.uid || !o.rows.length) continue;
     const waiting = Math.max(0, Number(o.all.points || 0) - o.held);
-    if (waiting > 0) out.push({uid: o.uid, user: o.user, rows: o.rows, waiting});
+    // the 장학 쿠폰 보완 made again from the 일지 differs from the saved one: saved too (no points paid for it)
+    const boost = !o.hadPet || JSON.stringify(o.all.couponExtra || {}) !== JSON.stringify(o.saved?.couponExtra || {});
+    if (waiting > 0 || boost) out.push({uid: o.uid, user: o.user, rows: o.rows, waiting});
   }
   return {list: out, failed};
 }
@@ -29,7 +31,7 @@ async function waitingStudents(db: any, now: number) {
 export async function readWaitingPoints(db: any, actor: any, now = Date.now()) {
   admin(actor);
   const {list, failed} = await waitingStudents(db, now);
-  return {students: list.length, points: list.reduce((a, s) => a + s.waiting, 0), failed};
+  return {students: list.filter(s => s.waiting > 0).length, points: list.reduce((a, s) => a + s.waiting, 0), failed};
 }
 /** Pay them, one student per transaction (the pet read again inside it, so a lesson paid meanwhile is not paid twice). */
 export async function settleWaitingPoints(db: any, actor: any, now = Date.now()) {

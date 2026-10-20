@@ -4,9 +4,9 @@
 import {normalizeNotionPageId as uuid, isNotionPageId} from './notionPageId.js';
 import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
-import {PET_STATES, claimStudyRewards, earnedIn, initialPetState, monthEarned, noteInbox, pendingStudyRewards, petSummary, prevMonth, rollDay, seoulDay, settleLessons, type ServerPetState} from './pet.js';
+import {PET_STATES, applyCouponExtras, claimStudyRewards, couponEarnedIn, earnedIn, initialPetState, monthEarned, noteInbox, pendingStudyRewards, petSummary, prevMonth, rollDay, seoulDay, settleLessons, type ServerPetState} from './pet.js';
 import {lessonRows} from './lessonRewardRows.js';
-import {PET_COUPON, countsForMonth, medalLabel, passAllows, petItem, silverMedal, type CouponTier} from '../../src/lib/petCatalog.js';
+import {COUPON_BOOST, PET_COUPON, countsForMonth, medalLabel, passAllows, petItem, silverMedal, type CouponTier} from '../../src/lib/petCatalog.js';
 
 export const PET_COUPONS = 'petCoupons';
 export interface PetCoupon { uid: string; studentKey: string; month: string; requestedAt: number; earned: number; paidAt: number | null; paidBy: string | null;
@@ -36,18 +36,23 @@ export async function readMonthCoupons(db: any, uid: string, month: string): Pro
 /** Points used and won given by a month's coupons (one before 단계 쿠폰 = the goal and 1만 원). */
 const used = (list: PetCoupon[]) => ({points: list.reduce((n, c) => n + (c.points ?? PET_COUPON.goal), 0), won: list.reduce((n, c) => n + (c.won ?? PET_COUPON.monthWon), 0)});
 /** One month's coupon state: earned, used, left to use, and which coupons can be asked for now. */
-function monthState(month: string, earned: number, list: PetCoupon[]) {
-  const u = used(list), left = Math.max(0, earned - u.points), hasFull = list.some(c => (c.tier ?? 'full') === 'full');
+/** 숙제 통과율 for a coupon month (null: no 숙제 평가 written, nothing to ask of it). */
+function homeworkRate(extra?: {hwCounted?: number; hwDone?: number} | null) {
+  const counted = Number(extra?.hwCounted) || 0, done = Number(extra?.hwDone) || 0;
+  return counted ? {done, counted, rate: Math.floor(done / counted * 100), ok: done / counted >= COUPON_BOOST.homeworkRate} : null;
+}
+function monthState(month: string, earned: number, list: PetCoupon[], extra?: {hwCounted?: number; hwDone?: number} | null) {
+  const u = used(list), left = Math.max(0, earned - u.points), hasFull = list.some(c => (c.tier ?? 'full') === 'full'), homework = homeworkRate(extra);
   const options = (tiered(month) ? PET_COUPON.tiers : [tierOf('full')]).map(t => ({id: t.id as CouponTier, points: t.points, won: t.won,
-    ready: left >= t.points && u.won + t.won <= PET_COUPON.monthWon && !(t.id === 'full' && hasFull)}));
-  return {earned, spent: u.points, left, won: u.won, tiered: tiered(month), options, requested: list.length > 0, paid: list.length > 0 && list.every(c => Boolean(c.paidAt)),
+    ready: left >= t.points && u.won + t.won <= PET_COUPON.monthWon && !(t.id === 'full' && hasFull) && homework?.ok !== false}));
+  return {earned, spent: u.points, left, won: u.won, tiered: tiered(month), options, homework, requested: list.length > 0, paid: list.length > 0 && list.every(c => Boolean(c.paidAt)),
     coupons: list.map(c => ({tier: (c.tier ?? 'full') as CouponTier, won: c.won ?? PET_COUPON.monthWon, paid: Boolean(c.paidAt)}))};
 }
 export function couponView(s: ServerPetState, eligible: boolean, list: PetCoupon[] = [], last?: PetCoupon[]) {
   const month = s.day.slice(0, 7), pm = prevMonth(month);
-  return {eligible, month, label: medalLabel(month), goal: PET_COUPON.goal, ...monthState(month, monthEarned(s), list),
+  return {eligible, month, label: medalLabel(month), goal: PET_COUPON.goal, ...monthState(month, monthEarned(s), list, s.couponExtra?.[month]),
     // `last`: last month's, while it may still be asked for
-    ...(inGrace(s.day) && last !== undefined ? {last: {month: pm, label: medalLabel(pm), until: `${s.day.slice(0, 8)}${String(PET_COUPON.graceDays).padStart(2, '0')}`, ...monthState(pm, earnedIn(s, pm), last)}} : {})};
+    ...(inGrace(s.day) && last !== undefined ? {last: {month: pm, label: medalLabel(pm), until: `${s.day.slice(0, 8)}${String(PET_COUPON.graceDays).padStart(2, '0')}`, ...monthState(pm, couponEarnedIn(s, pm), last, s.couponExtra?.[pm])}} : {})};
 }
 /** couponView with this month's coupons (and last month's during the grace days). */
 export async function readCouponView(db: any, uid: string, s: ServerPetState, eligible: boolean) {
@@ -85,7 +90,8 @@ export async function requestCoupon(db: any, uid: string, studentKey: string, no
     const refs = couponIds(uid, month).map(id => db.collection(PET_COUPONS).doc(id)), snaps = await Promise.all(refs.map(r => tx.get(r)));
     const list = snaps.filter((x: any) => x.exists).map((x: any) => x.data() as PetCoupon);
     const tier: CouponTier = tiered(month) && tierInput === 'half' ? 'half' : 'full', t = tierOf(tier);
-    const state = monthState(month, earnedIn(s, month), list), option = state.options.find(o => o.id === tier);
+    const state = monthState(month, couponEarnedIn(s, month), list, s.couponExtra?.[month]), option = state.options.find(o => o.id === tier);
+    if (state.homework?.ok === false) throw Error('COUPON_HOMEWORK');
     if (!option) throw Error('COUPON_NOT_YET');
     if (tier === 'full' && snaps[0].exists || state.won + t.won > PET_COUPON.monthWon) throw Error('COUPON_TAKEN');
     if (!option.ready) throw Error('COUPON_NOT_YET');
@@ -152,7 +158,7 @@ export async function listPetPoints(db: any, actor: any, now = Date.now()) {
     return {key, name: await displayName(db, key), points: Number(o.all.points || 0), earned, requested: asked.has(key),
       app: !o.linked ? 'none' : o.hadPet ? 'linked' : 'no-pet', waiting: Math.max(0, Number(o.all.points || 0) - o.held),
       // the coupons the admin may ask for offline now (단계 쿠폰 from November)
-      options: monthState(month, earned, byKey.get(key) || []).options.filter(x => x.ready).map(x => ({id: x.id, won: x.won})),
+      options: monthState(month, earned, byKey.get(key) || [], o.all.couponExtra?.[month]).options.filter(x => x.ready).map(x => ({id: x.id, won: x.won})), homework: homeworkRate(o.all.couponExtra?.[month]),
       // this month's 포인트 내역 (what the gauge is made of), with what is still waiting
       ledger: (o.all.ledger || []).filter(x => countsForMonth(x.day, month))};
   }))).filter(Boolean) as {key: string; name: string; points: number; earned: number; requested: boolean; app: string; waiting: number; options: {id: CouponTier; won: number}[]; ledger: any[]}[];
@@ -172,8 +178,8 @@ export async function owedPoints(db: any, key: string, now: number, strict = fal
   const held: ServerPetState = raw ? rollDay(raw, now) : {...initialPetState(now), points: 0};
   const read = lessonRows(db, mapping.internalStudentId, linked ? uid : null), rows = strict ? await read : await read.catch(() => []);
   const all = structuredClone(held);
-  if (rows.length) { claimStudyRewards(all, pendingStudyRewards(all, rows, now)); settleLessons(all, rows, now); }
-  return {linked, uid: linked ? uid : null, user, hadPet: Boolean(raw), held: Number(held.points || 0), all, rows};
+  if (rows.length) { claimStudyRewards(all, pendingStudyRewards(all, rows, now)); settleLessons(all, rows, now); applyCouponExtras(all, rows, now); }
+  return {linked, uid: linked ? uid : null, user, hadPet: Boolean(raw), held: Number(held.points || 0), all, rows, saved: raw ? held : null};
 }
 
 /** A student who had coupons asked offline before joining the app: their medals go into the room once they have a pet (and the
@@ -210,9 +216,10 @@ export async function requestCouponOffline(db: any, actor: any, input: any, now 
     const ref = db.collection(PET_STATES).doc(o.uid), userRef = db.collection('users').doc(o.uid);
     await db.runTransaction(async (tx: any) => {
       const snap = await tx.get(ref), s: ServerPetState = rollDay(snap.exists ? snap.data() : initialPetState(now, o.user?.petStats), now);
-      const before = JSON.stringify([s.points, s.rewarded, s.lessonPaid || {}]), ledger = structuredClone(s.ledger || []);
-      claimStudyRewards(s, pendingStudyRewards(s, o.rows, now)); settleLessons(s, o.rows, now);
-      if (JSON.stringify([s.points, s.rewarded, s.lessonPaid || {}]) === before && snap.exists) return;
+      const before = JSON.stringify([s.points, s.rewarded, s.lessonPaid || {}, s.couponExtra || {}]), ledger = structuredClone(s.ledger || []);
+      // the 장학 쿠폰 보완 made again too (the 숙제 통과율 the request checks comes with it)
+      claimStudyRewards(s, pendingStudyRewards(s, o.rows, now)); settleLessons(s, o.rows, now); applyCouponExtras(s, o.rows, now);
+      if (JSON.stringify([s.points, s.rewarded, s.lessonPaid || {}, s.couponExtra || {}]) === before && snap.exists) return;
       noteInbox(s, ledger); s.updatedAt = now; tx.set(ref, s); tx.set(userRef, {petStats: petSummary(s)}, {merge: true});
     });
     const out = await requestCoupon(db, o.uid, key, now, input?.month, input?.tier, extra);
@@ -221,11 +228,12 @@ export async function requestCouponOffline(db: any, actor: any, input: any, now 
   // no app account: the coupon record only (ids by the student key)
   const day = seoulDay(now), cur = day.slice(0, 7), month = input?.month === prevMonth(cur) && inGrace(day) ? prevMonth(cur) : cur;
   const id = `k${key.replace(/-/g, '')}`, refs = [`${id}_${month}`, `${id}_${month}_h1`, `${id}_${month}_h2`].map(x => db.collection(PET_COUPONS).doc(x));
-  const earned = earnedIn(o.all, month);
+  const earned = couponEarnedIn(o.all, month);
   return db.runTransaction(async (tx: any) => {
     const snaps = await Promise.all(refs.map(r => tx.get(r))), list = snaps.filter((x: any) => x.exists).map((x: any) => x.data() as PetCoupon);
     const tier: CouponTier = tiered(month) && input?.tier === 'half' ? 'half' : 'full', t = tierOf(tier);
-    const state = monthState(month, earned, list), option = state.options.find(x => x.id === tier);
+    const state = monthState(month, earned, list, o.all.couponExtra?.[month]), option = state.options.find(x => x.id === tier);
+    if (state.homework?.ok === false) throw Error('COUPON_HOMEWORK');
     if (!option) throw Error('COUPON_NOT_YET');
     if (tier === 'full' && snaps[0].exists || state.won + t.won > PET_COUPON.monthWon) throw Error('COUPON_TAKEN');
     if (!option.ready) throw Error('COUPON_NOT_YET');
@@ -255,7 +263,8 @@ export async function teacherStudentCoupon(db: any, actor: any, keyInput: unknow
   const [raw, list] = await Promise.all([db.collection(PET_STATES).doc(uid).get().then((s: any) => s.data()), readMonthCoupons(db, uid, month)]);
   const s = raw ? rollDay(raw, now) as ServerPetState : null;
   // every coupon of the month (단계 쿠폰: up to two 5천 원), each with its own 지급 state
-  return {linked: true, month, goal: PET_COUPON.goal, earned: s ? monthEarned(s) : 0, points: s ? Number(s.points || 0) : 0, requested: list.length > 0, paid: list.length > 0 && list.every(c => Boolean(c.paidAt)),
+  const o = await owedPoints(db, key, now).catch(() => null);
+  return {linked: true, month, goal: PET_COUPON.goal, earned: o ? monthEarned(o.all) : s ? monthEarned(s) : 0, points: s ? Number(s.points || 0) : 0, requested: list.length > 0, paid: list.length > 0 && list.every(c => Boolean(c.paidAt)),
     coupons: list.map(c => ({won: c.won ?? PET_COUPON.monthWon, paid: Boolean(c.paidAt)})),
     ledger: (s?.ledger || []).filter(x => countsForMonth(x.day, month))};
 }

@@ -80,6 +80,7 @@ export function CouponGauge({ coupon, onShop, ledger = [] }: { coupon: CouponVie
     </div>
     <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-[#f6e3e6]"><div className="h-full rounded-full bg-[#efa23a]" style={{ width: `${pct}%` }} />{half > 0 && <span className="absolute top-0 h-full w-0.5 bg-white" style={{ left: `${half / coupon.goal * 100}%` }} title="6,000P · 5천 원" />}</div>
     {coupon.tiered && <p className="mt-1 flex justify-between text-[10px] text-slate-400"><span>6,000P · 5천 원</span><span>10,000P · 1만 원</span></p>}
+    {coupon.homework && !coupon.homework.ok && <p className="mt-1.5 rounded-lg bg-[#fff6e6] px-2 py-1 text-[11px] font-bold text-[#8a5a12]">숙제 통과율 {coupon.homework.rate}% · 80% 이상이면 쿠폰을 신청할 수 있어요 ('중상' 이상이 통과)</p>}
     {ready ? <button type="button" onClick={onShop} className="mt-2 flex w-full items-center gap-2 rounded-xl bg-[#fff6e6] px-3 py-2 text-left text-xs font-bold text-[#8a5a12]"><span className="flex-1">{coupon.requested ? '쿠폰을 한 장 더 받을 수 있어요!' : '이번 달 쿠폰을 받을 수 있어요!'}</span><span>상점 가기 ›</span></button>
       : coupon.requested ? <p className="mt-1.5 text-[11px] text-slate-500">{coupon.paid ? '선생님이 쿠폰을 주셨어요.' : '선생님이 곧 쿠폰을 주실 거예요.'}{coupon.tiered && (coupon.won || 0) < PET_COUPON.monthWon ? ` 남은 ${won(coupon.left ?? 0)}P로 6,000P를 채우면 5천 원을 한 번 더 받아요.` : ''} 메달은 방 꾸미기에서 놓을 수 있어요.</p>
       : <p className="mt-1.5 text-[11px] text-slate-400">이번 달 1일부터 모은 포인트예요 (써도 줄지 않아요) · {coupon.tiered ? '한 달 최대 1만 원' : '쿠폰은 한 달에 1장'}</p>}

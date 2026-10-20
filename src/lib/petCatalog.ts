@@ -117,6 +117,11 @@ export const PET_COUPON = { name: '이달의 장학 쿠폰', goal: 10_000, first
    *  most monthWon a month. Before it: one 1만 원 coupon at the goal. */
   tiersFrom: '2026-11', monthWon: 10_000, tiers: [{ id: 'half', points: 6_000, won: 5_000 }, { id: 'full', points: 10_000, won: 10_000 }] } as const;
 export type CouponTier = 'half' | 'full';
+/** 장학 쿠폰 누적 보완 (doing well counts more; the coupon count only — the points to spend stay as they are): a lesson
+ *  whose 숙제·테스트·태도 are all 상 이상 ('없는 날'·'미확인' left out) has those three ×3 (출석 stays ×1); a 자습 day with 태도
+ *  상 이상 30P (×3); 한 달 개근 (8+ class sessions, no 결석) 1,000P less 30% a 지각, +500 with no 지각, +500 more with no 숙제
+ *  미제출 (성실 개근); 숙제 상 이상 3 in a row +500, 최상 2 in a row +300. A coupon needs 숙제 통과율 80% (중상 이상 = 통과). */
+export const COUPON_BOOST = { lessonTimes: 3, studyDay: 30, perfect: 1000, perfectNoLate: 500, diligent: 500, latePenalty: 0.3, minSessions: 8, homeworkRun: { need: 3, points: 500 }, bestRun: { need: 2, points: 300 }, homeworkRate: 0.8 } as const;
 /** The months a day's points count for: its own month — and in the first season, the September lessons before it too
  *  (the 9월 수업 포인트 added to October's count). */
 const monthBefore = (month: string) => { const [y, m] = month.split('-').map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`; };

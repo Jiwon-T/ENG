@@ -1098,6 +1098,7 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 /* 이달의 장학 쿠폰 % beside the pet (opens the student's coupon card) */
 .student-master-row .smr-gauge{display:inline-flex;align-items:center;gap:4px;flex:none;padding:1px 6px;border-radius:999px;background:#fff7f8;color:#8b2f40;font-size:10.5px;font-weight:800;cursor:pointer;}
 .student-master-row .smr-gauge:hover{background:#fde4e8;}
+.student-master-row .smr-gauge.is-full{background:#fdf1dc;color:#9a5b12;}
 .student-master-row .smr-gauge-bar{display:block;width:26px;height:4px;overflow:hidden;border-radius:999px;background:#f6e3e6;}
 .student-master-row .smr-gauge-bar>span{display:block;height:100%;border-radius:999px;background:#e0587a;}
 .student-master-row .smr-gauge-bar>span.is-full{background:#efa23a;}
