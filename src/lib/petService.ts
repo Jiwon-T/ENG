@@ -24,7 +24,7 @@ export interface CouponMonth { earned: number; spent?: number; left?: number; wo
   /** 장학 쿠폰 누적 보완 (the coupon count only) */ extra?: CouponExtraView | null }
 /** What the 보완 is made of (api/_lib/pet couponExtras): 잘한 수업 ×3, 자습 days, 숙제 runs, 한 달 개근. */
 export interface CouponExtraView { points: number; lesson: number; boosted?: number; study: number; studyDays: number; homeworkRuns: number; bestRuns: number; perfect: number; pending?: number;
-  days?: { day: string; kind: 'lesson' | 'study' | 'hwRun' | 'bestRun'; points: number }[]; perfects?: { month: string; base: number; noLate: number; diligent: number; lates: number; final: boolean }[];
+  days?: { day: string; kind: 'lesson' | 'study' | 'hwRun' | 'bestRun'; points: number }[]; perfects?: { month: string; base: number; noLate: number; diligent: number; lates: number; forgiven?: number; final: boolean }[];
   now?: { sessions: number; absences: number; lates: number } }
 export interface CouponView extends CouponMonth { eligible: boolean; month: string; label: string; goal: number;
   /** last month's, in the first days of a month (its lessons' points count for it) */ last?: CouponMonth & { month: string; label: string; until: string } }
@@ -35,7 +35,7 @@ export interface InboxLine { day: string; label: string; points: number }
 /** Talks (말 가르치기·대화하기) left this month: free = for this pet (`perPet`), a 펫 패스 = all pets together. */
 export interface AiTalkView { plan: 'free' | 'pet' | 'premium'; limit: number; left: number; perPet: boolean }
 /** Points and the AI pass for the home screen and the top bar (GET ?summary=1, two reads). */
-export interface PetSummary { /** 쌓인 포인트 알림 waiting (shown once as a popup on the home screen) */ inbox?: InboxLine[]; hasPet: boolean; points: number; pass: { plan: 'pet' | 'premium'; until: string } | null; /** 장학 쿠폰 students only */ coupon?: { earned: number; goal: number; requested: boolean } | null; /** best 모험가 place; null = no place yet (–위); left out when it couldn't be read */ rank?: number | null; /** the place is in the ranking with the teachers */ rankTeacher?: boolean }
+export interface PetSummary { /** 쌓인 포인트 알림 waiting (shown once as a popup on the home screen) */ inbox?: InboxLine[]; hasPet: boolean; points: number; pass: { plan: 'pet' | 'premium'; until: string } | null; /** 장학 쿠폰 students only (`extra`: what the 보완 added) */ coupon?: { earned: number; goal: number; requested: boolean; extra?: CouponExtraView | null } | null; /** best 모험가 place; null = no place yet (–위); left out when it couldn't be read */ rank?: number | null; /** the place is in the ranking with the teachers */ rankTeacher?: boolean }
 export interface PetResponse { state: PetState; result?: any; pendingRewards?: number; saved?: boolean; run?: any; expedition?: any; coupon?: CouponView; aiTalk?: AiTalkView | null }
 
 const LEGACY_KEY = (uid: string) => `pet_system_data_${uid}`;

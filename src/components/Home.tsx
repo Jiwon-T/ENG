@@ -89,10 +89,9 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
     <div className="mx-auto max-w-3xl pb-6 md:max-w-5xl md:px-6">
       <header className="bg-[#fde3e6] px-5 pt-4 pb-12 text-[#5e1e2a] md:mt-8 md:rounded-[28px] md:px-8 md:pt-6 md:pb-16">
         <div className="flex items-center justify-between">
-          <span className="flex items-center gap-2"><RosyLogo size={32} /><span className={`whitespace-nowrap text-sm font-black tracking-tight md:text-base ${petSummary && 'rank' in petSummary ? 'max-[409px]:hidden' : ''}`}>지원T English</span></span>
+          <span className="flex items-center gap-2"><RosyLogo size={32} /><span className={`whitespace-nowrap text-sm font-black tracking-tight md:text-base ${petSummary?.coupon ? 'max-md:hidden' : petSummary && 'rank' in petSummary ? 'max-[409px]:hidden' : ''}`}>지원T English</span></span>
           <span className="relative flex items-center gap-1.5">
           {petSummary && 'rank' in petSummary ? <RankChip rank={petSummary.rank ?? null} onOpen={() => setRankOpen(true)} /> : null}
-          {petSummary && <PetPointsChip points={petSummary.points} coupon={petSummary.coupon} onPet={() => onNavigate('pet')} />}
           {onOpenMenu && <button type="button" onClick={onOpenMenu} aria-label="메뉴 열기" className="relative flex items-center gap-1.5 rounded-full border border-[#f6d3d8] bg-white/80 py-1 pl-1 pr-2.5 transition-colors hover:border-[#eaa9b3] hover:bg-white">
             {hasNewAssignment && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" aria-hidden="true" />}
             <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-[#fef2f3] text-sm">{avatar && avatar.startsWith('http') ? <img src={avatar} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" /> : (avatar || '🙂')}</span>
@@ -103,7 +102,10 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
           </span>
         </div>
         <h1 className="mt-5 text-xl font-black tracking-tight md:mt-8 md:text-[30px]">{displayName ? `${displayName}님, 안녕하세요` : '안녕하세요'}</h1>
-        <p className="mt-0.5 text-xs font-medium text-[#8b2f40] md:mt-1.5 md:text-sm">{today}</p>
+        <div className="relative mt-0.5 flex items-center justify-between gap-2 md:mt-1.5">
+          <p className="text-xs font-medium text-[#8b2f40] md:text-sm">{today}</p>
+          {petSummary && <PetPointsChip points={petSummary.points} coupon={petSummary.coupon} onPet={() => onNavigate('pet')} />}
+        </div>
       </header>
 
       <div className="px-4 md:px-6">
@@ -137,7 +139,7 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
           <p className="mt-1">© 2026 지원T English</p>
         </footer>
       </div>
-      {!inboxClosed && petSummary?.inbox?.length ? <PointsInbox lines={petSummary.inbox} onClose={() => { setInboxClosed(true); void PetService.act('inbox-seen').catch(() => undefined); }} /> : null}
+      {!inboxClosed && petSummary?.inbox?.length ? <PointsInbox lines={petSummary.inbox} extra={petSummary.coupon?.extra} onClose={() => { setInboxClosed(true); void PetService.act('inbox-seen').catch(() => undefined); }} /> : null}
       {rankOpen && <Suspense fallback={null}><PetRanking send={(action, payload) => PetService.act(action, payload)} withTeachers={Boolean(petSummary?.rankTeacher)} onClose={() => setRankOpen(false)} /></Suspense>}
     </div>
   );

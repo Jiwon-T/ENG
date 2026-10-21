@@ -254,7 +254,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       // visit. rankTeacher: the place is in the ranking with the teachers (the chip opens that view).
       const rank = await myPetRank(db, uid, now, Boolean(state)).then(r => ({rank: r.rank, ...(r.teacher ? {rankTeacher: true} : {})}), () => { console.warn('PET_RANK_FAILED'); return {}; });
       return sendJson(res, 200, {ok: true, hasPet: st.exists, points: state ? Number(state.points || 0) : 0, pass: plan === 'free' ? null : {plan, until: String(pass.data()?.until || '')},
-        coupon: coupon ? {earned: coupon.earned, goal: coupon.goal, requested: coupon.requested} : null, ...(claimed ? {claimed} : {}), ...rank,
+        coupon: coupon ? {earned: coupon.earned, goal: coupon.goal, requested: coupon.requested, extra: coupon.extra || null} : null, ...(claimed ? {claimed} : {}), ...rank,
         // 쌓인 포인트 알림 (shown once as a popup, then inbox-seen)
         ...(state?.inbox?.length ? {inbox: state.inbox} : {})});
     }

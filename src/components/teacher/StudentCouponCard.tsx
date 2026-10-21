@@ -19,7 +19,7 @@ export default function StudentCouponCard({ studentKey, open = false }: { studen
   if (!v || (!v.linked && !v.offline)) return null; // no record at all: nothing to show
   const goal = v.goal || 10000, earned = v.earned || 0, pct = Math.min(100, Math.floor(earned / goal * 100));
   return <section aria-label="이달의 장학 쿠폰" className="report-online-assignments">
-    <div className="flex items-baseline justify-between gap-2"><h4>🎟️ 이달의 장학 쿠폰 · {pct}%</h4><span className="text-xs text-slate-500">{won(earned)} / {won(goal)}P{v.offline ? ' · 앱 미연결 (수업 일지대로)' : ` · 보유 ${won(v.points || 0)}P`}</span></div>
+    <div className="flex items-baseline justify-between gap-2"><h4>🎟️ 이달의 장학 쿠폰 · {pct}%</h4><span className="text-xs text-slate-500">{won(earned)} / {won(goal)}P{v.offline ? ' · 앱 미연결 (수업 일지대로)' : ` · 포인트 ${won(v.points || 0)}P`}</span></div>
     <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#f6e3e6]"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: earned >= goal ? '#efa23a' : '#e0587a' }} /></div>
     {v.requested && <p className="mt-1 text-[11px] text-slate-500">{Number(v.month!.slice(5))}월 쿠폰 · {(v.coupons || []).map(c => `${c.won >= 10000 ? '1만 원' : '5천 원'} ${c.paid ? '지급 완료' : '지급 전'}`).join(' · ')}</p>}
     <CouponBonus extra={v.extra} earned={earned} />

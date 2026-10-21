@@ -91,7 +91,7 @@ export function CouponGauge({ coupon, onShop, ledger = [] }: { coupon: CouponVie
     <CouponBonus extra={coupon.extra} earned={coupon.earned} />
     {ready ? <button type="button" onClick={onShop} className="mt-2 flex w-full items-center gap-2 rounded-xl bg-[#fff6e6] px-3 py-2 text-left text-xs font-bold text-[#8a5a12]"><span className="flex-1">{coupon.requested ? '쿠폰을 한 장 더 받을 수 있어요!' : '이번 달 쿠폰을 받을 수 있어요!'}</span><span>상점 가기 ›</span></button>
       : coupon.requested ? <p className="mt-1.5 text-[11px] text-slate-500">{coupon.paid ? '선생님이 쿠폰을 주셨어요.' : '선생님이 곧 쿠폰을 주실 거예요.'}{coupon.tiered && (coupon.won || 0) < PET_COUPON.monthWon ? ` 남은 ${won(coupon.left ?? 0)}P로 6,000P를 채우면 5천 원을 한 번 더 받아요.` : ''} 메달은 방 꾸미기에서 놓을 수 있어요.</p>
-      : <p className="mt-1.5 text-[11px] text-slate-400">이번 달 1일부터 모은 포인트예요 (써도 줄지 않아요) · {coupon.tiered ? '한 달 최대 1만 원' : '쿠폰은 한 달에 1장'}</p>}
+      : <p className="mt-1.5 text-[11px] text-slate-400">포인트와 따로 쌓여요 · 잘한 수업은 3배로! · {coupon.tiered ? '한 달 최대 1만 원' : '쿠폰은 한 달에 1장'}</p>}
     <PointsHistory coupon={coupon} ledger={ledger} extra={coupon.extra} />
   </section>;
 }
@@ -108,19 +108,21 @@ export function CouponBonus({ extra, earned }: { extra?: CouponExtraView | null;
   if (extra.bestRuns > 0) rows.push({ name: `숙제 '최상' 2연속 × ${extra.bestRuns}`, points: extra.bestRuns * B.bestRun.points });
   for (const p of extra.perfects || []) {
     const at = many ? `${mon(p.month)} ` : '';
-    rows.push({ name: `${at}한 달 개근`, sub: `수업 ${B.minSessions}번 이상 · 결석 0${p.lates ? ` · 지각 ${p.lates}번 (-${Math.round(B.latePenalty * 100 * p.lates)}%)` : ''}`, points: p.base, later: !p.final });
+    const cut = p.lates + (p.forgiven || 0), why = [p.lates ? `지각 ${p.lates}번` : '', p.forgiven ? `결석 ${p.forgiven}번` : ''].filter(Boolean).join(' · ');
+    rows.push({ name: `${at}한 달 개근`, sub: `수업 ${B.minSessions}번 이상${p.forgiven ? '' : ' · 결석 0'}${cut ? ` · ${why} (-${Math.round(B.latePenalty * 100 * cut)}%)` : ''}`, points: p.base, later: !p.final });
     if (p.noLate) rows.push({ name: `${at}지각 없는 개근`, points: p.noLate, later: !p.final });
     if (p.diligent) rows.push({ name: `${at}성실 개근`, sub: '숙제 미제출 0번', points: p.diligent, later: !p.final });
   }
   // saved before the parts were kept (made again at the next settling)
   if (!extra.perfects) { if (extra.perfect) rows.push({ name: '한 달 개근', points: extra.perfect }); if (extra.pending) rows.push({ name: '한 달 개근', points: extra.pending, later: true }); }
-  const now = extra.now, toward = !(extra.perfects || []).some(p => !p.final) && now ? now.absences ? '이번 달은 결석이 있어 개근 보너스가 없어요' : `한 달 개근까지 수업 ${Math.min(now.sessions, B.minSessions)}/${B.minSessions}번 · 결석 없이` : '';
+  // the 11+ exception is never told ahead (no 보강 asked for to reach it): a month with a 결석 shows nothing toward 개근
+  const now = extra.now, toward = !(extra.perfects || []).some(p => !p.final) && now ? now.absences ? '' : `한 달 개근까지 수업 ${Math.min(now.sessions, B.minSessions)}/${B.minSessions}번 · 결석 없이` : '';
   if (!rows.length && !toward) return null;
   return <div className="mt-2 rounded-xl bg-[#fdf6f8] px-3 py-2 text-xs text-[#5e1e2a]">
     <p className="flex justify-between gap-2 border-b border-[#f3d5da] pb-1"><span>받은 포인트 <span className="text-[10px] text-slate-400">수업·앱 학습·원정대·탑</span></span><b className="font-bold tabular-nums">{won(Math.max(0, earned - extra.points))}</b></p>
     {rows.map((r, i) => <p key={i} className={`flex justify-between gap-2 border-b border-[#f6e3e6] py-1 last:border-0 ${r.later ? 'text-slate-400' : ''}`}><span className="min-w-0">{r.name}{r.later && <span className="ml-1 rounded bg-[#faeeda] px-1 text-[10px] text-[#633806]">달이 끝나면 확정</span>}{r.sub && <span className="block text-[10px] text-slate-400">{r.sub}</span>}</span><b className="flex-none font-bold tabular-nums">+{won(r.points)}</b></p>)}
     {toward && <p className="pt-1 text-[10px] text-slate-400">{toward}</p>}
-    <p className="pt-1 text-[10px] text-slate-400">상점에서 쓰는 포인트는 그대로예요. 3배·자습·보너스는 장학 쿠폰 누적에만 더해져요.</p>
+    <p className="pt-1 text-[10px] text-slate-400">포인트는 그대로예요. 3배·자습·보너스는 쿠폰 누적에만 더해져요.</p>
   </div>;
 }
 

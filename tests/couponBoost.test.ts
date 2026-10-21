@@ -94,3 +94,12 @@ test('보완 내역: what it is made of — tripled lessons, a line a day (×3, 
   assert.deepEqual(e.now, {sessions: 2, absences: 1, lates: 0});
   assert.equal(e.points, e.lesson + e.study + 500 + 700 + 500);
 });
+
+test('보완: 한 달 개근 — at 11+ sessions attended one 결석 is let pass, counted like a 지각 (−30%, no 지각 없는 +500); two are not', () => {
+  const sept = (n: number, x: (i: number) => Partial<CouponRow>) => couponExtras(lessons('2026-09', n, x), '2026-10-22')['2026-10'];
+  const one = sept(12, i => i === 0 ? {attendance: '결석'} : {});
+  assert.deepEqual([one.perfect, one.perfects![0].forgiven], [700 + 500, 1], '11 attended, 1 결석: 개근 less 30% + 성실');
+  assert.equal(sept(12, i => i === 0 ? {attendance: '결석'} : i === 1 ? {attendance: '지각'} : {}).perfect, 400 + 500, 'a 지각 too: less 60%');
+  assert.equal(sept(11, i => i === 0 ? {attendance: '결석'} : {}).perfect, 0, '10 attended: not let pass');
+  assert.equal(sept(14, i => i < 2 ? {attendance: '결석'} : {}).perfect, 0, 'two 결석: no 개근');
+});

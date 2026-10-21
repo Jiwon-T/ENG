@@ -452,7 +452,7 @@ export const petSummary = (s: ServerPetState) => { const pet = [...s.pets].sort(
 export interface CouponExtra { points: number; lesson: number; study: number; studyDays: number; homeworkRuns: number; bestRuns: number; perfect: number; pending?: number;
   /** lessons tripled (숙제·시험·태도 all 상 이상) */ boosted?: number;
   /** the 보완 by day, for the 내역: a lesson's ×3 part, a 자습 day, a 숙제 run */ days?: {day: string; kind: 'lesson' | 'study' | 'hwRun' | 'bestRun'; points: number}[];
-  /** 한 달 개근 by month: 개근 (less 30% a 지각), 지각 없는, 성실; `final` once the month is over */ perfects?: {month: string; base: number; noLate: number; diligent: number; lates: number; final: boolean}[];
+  /** 한 달 개근 by month: 개근 (less 30% a 지각), 지각 없는, 성실; `final` once the month is over */ perfects?: {month: string; base: number; noLate: number; diligent: number; lates: number; /** a 결석 let pass (11+ attended) */ forgiven?: number; final: boolean}[];
   /** this month so far, toward 개근 */ now?: {sessions: number; absences: number; lates: number};
   /** 숙제 통과율: 평가 written ('없는 날'·'미확인' left out) and 중상 이상 (통과) among them */ hwCounted?: number; hwDone?: number }
 /** A 수업 일지 as the 보완 reads it: `session` a class session (수업 시간 written), `studied` a 자습 that day. */
@@ -492,13 +492,14 @@ export function couponExtras(rows: CouponRow[], today: string): Record<string, C
         if (best === B.bestRun.need) { e.bestRuns += 1; best = 0; (e.days ||= []).push({day: day(r), kind: 'bestRun', points: B.bestRun.points}); }
       }
     }
-    // 한 달 개근: 8+ class sessions attended, no 결석; 30% less a 지각, +500 with none, +500 with no 숙제 미제출 (성실 개근);
-    // final once the month is over
+    // 한 달 개근: 8+ class sessions attended, no 결석 (at 11+ attended one 결석 is let pass, counted like a 지각); 30% less a
+    // 지각, +500 with none, +500 with no 숙제 미제출 (성실 개근); final once the month is over
     const sessions = inMonth.filter(r => r.session), attended = sessions.filter(r => ATTENDED(r.attendance)), lates = attended.filter(r => /지각/.test(r.attendance)).length;
     const absences = sessions.filter(r => /결석/.test(r.attendance)).length;
     if (month === cur) e.now = {sessions: attended.length, absences, lates};
-    if (attended.length >= B.minSessions && !absences) {
-      const p = {month, base: Math.round(B.perfect * Math.max(0, 1 - B.latePenalty * lates)), noLate: lates ? 0 : B.perfectNoLate, diligent: inMonth.some(r => r.homework === '미제출') ? 0 : B.diligent, lates, final: month < cur};
+    const forgiven = attended.length >= B.forgiveAt && absences === 1 ? 1 : 0, marks = lates + forgiven;
+    if (attended.length >= B.minSessions && absences <= forgiven) {
+      const p = {month, base: Math.round(B.perfect * Math.max(0, 1 - B.latePenalty * marks)), noLate: marks ? 0 : B.perfectNoLate, diligent: inMonth.some(r => r.homework === '미제출') ? 0 : B.diligent, lates, ...(forgiven ? {forgiven} : {}), final: month < cur};
       const amount = p.base + p.noLate + p.diligent; (e.perfects ||= []).push(p);
       if (p.final) e.perfect += amount; else e.pending = (e.pending || 0) + amount;
     }
