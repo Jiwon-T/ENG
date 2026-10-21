@@ -57,6 +57,8 @@ export async function buildLessonExcel(template:ArrayBuffer|Uint8Array,day:strin
  return zip.generateAsync({type:'uint8array',compression:'DEFLATE'});
 }
 
+/** The 일지 to export: all, or without the 테스트 일지 (수업 없는 날 on a 3차시 누적 테스트 날, `testDay` from the server). */
+export const lessonExportRecords=(records:any[],withTests:boolean)=>withTests?records:records.filter(r=>!r.testDay);
 export async function downloadLessonExcel(result:{day:string;teacherName:string;records:any[]}) {
  if(!result.records.length)throw Error('선택한 날짜·선생님·학생 조건에 해당하는 일지가 없습니다.');
  const response=await fetch('/templates/lesson-log.xlsx');

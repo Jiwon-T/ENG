@@ -78,3 +78,22 @@ test('excel: a wrapped cell gets one spare line so the last line is never cut of
  const two=['','','','첫째 줄\n둘째 줄','',''],one=['','','','한 줄','',''];
  assert.equal(lessonExcelRowHeight(one),31);assert.equal(lessonExcelRowHeight(two),3*21+10);
 });
+
+test('엑셀 › 테스트 일지 포함: off leaves out the 테스트 일지 the server marked, on keeps every 일지',async()=>{
+ const {lessonExportRecords}=await import('../src/lib/lessonExcel.ts');
+ const rows=[{id:'a',data:{classSession:'있음'}},{id:'t',testDay:true,data:{classSession:'없음'}},{id:'s',data:{classSession:'없음'}}];
+ assert.deepEqual(lessonExportRecords(rows,true).map(r=>r.id),['a','t','s']);
+ assert.deepEqual(lessonExportRecords(rows,false).map(r=>r.id),['a','s'],'a 수업 없는 날 that is not a test day (자습 only) stays');
+});
+test('테스트 일지: a 수업 없는 날 일지 on the student’s 누적 테스트 날 (a class test line that weekday or a 테스트 일정) is marked; a lesson day or a 자습-only day is not',async()=>{
+ const {markTestDayLessons}=await import('../api/_lib/testDays.ts');
+ const {registrationFirestore}=await import('./helpers/registrationFirestore.ts');
+ const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222',C='33333333-3333-4333-8333-333333333333';
+ const f=registrationFirestore();
+ // 2026-10-21 is a Wednesday (3): A has a class test line that day, B a one-off 테스트 일정, C nothing
+ f.rows.set('teacherClasses/c1',{academyId:'main',status:'진행 중',students:[A],slots:[{weekday:3,start:'18:00',end:'19:00',kind:'test'}]});
+ f.rows.set('teacherSchedules/s1',{academyId:'main',data:{date:'2026-10-21',kind:'테스트',status:'예정',students:[B],start:'17:00',end:'18:00'}});
+ const day='2026-10-21',rec=(id:string,key:string,session:string)=>({id,data:{date:day,studentKey:key,classSession:session}});
+ const out:any[]=await markTestDayLessons(f.db,[rec('a',A,'없음'),rec('b',B,'없음'),rec('c',C,'없음'),rec('a2',A,'있음')],day);
+ assert.deepEqual(out.map(r=>[r.id,Boolean(r.testDay)]),[['a',true],['b',true],['c',false],['a2',false]]);
+});

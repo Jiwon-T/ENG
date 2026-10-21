@@ -40,6 +40,15 @@ function timetable(db: any, from: string, to: string) {
   reads.set(key, {at: Date.now(), read});
   return read;
 }
+/** 일지 조회 › 엑셀 (테스트 일지 포함 or not): a 수업 없는 날 일지 on the student's 누적 테스트 날 is a 테스트 일지 — marked
+ *  `testDay` (nothing saved). A failed timetable read marks none, so nothing is left out on a guess. */
+export async function markTestDayLessons<T extends {data?: any}>(db: any, records: T[], day: string): Promise<(T & {testDay?: true})[]> {
+  const keys = [...new Set(records.filter(r => r.data?.classSession === '없음').map(r => String(r.data.studentKey || '')))];
+  if (!keys.length) return records;
+  const {classes, schedules} = await timetable(db, day, day).catch(() => { console.warn('TEST_DAYS_FAILED'); return {classes: [], schedules: []}; });
+  const testing = new Set(keys.filter(k => testDaysOf(k, classes, schedules, day, day).has(day)));
+  return records.map(r => r.data?.classSession === '없음' && testing.has(String(r.data.studentKey || '')) ? {...r, testDay: true as const} : r);
+}
 /** Read the academy's classes and the 일정 in range, then the student's test days. A failed read gives none (no day is
  *  taken for 결석 on a guess). */
 export async function expectedTestDays(db: any, studentKey: string, from: string, to: string) {

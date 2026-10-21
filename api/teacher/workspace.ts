@@ -231,7 +231,9 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                     const selected=named.filter((r:any)=>r.ownerUid===exportTeacher&&r.data.date===params.get('day')&&(!params.get('student')||r.data.studentKey===params.get('student')));
                     const students=await workspaceStudents(db,actor,force);
                     const studentNames=new Map(students.map(s=>[s.studentKey,s.studentDisplayName]));
-                    return sendJson(res,200,{ok:true,day:params.get('day'),teacherName:names.get(exportTeacher)||'선생님',records:selected.map((r:any)=>({...r,studentDisplayName:studentNames.get(r.data.studentKey)||'학생'}))});
+                    // 테스트 일지 (수업 없는 날 on a 누적 테스트 날) marked, so the export can leave them out
+                    const marked=await (await import('../_lib/testDays.js')).markTestDayLessons(db,selected,params.get('day')||'');
+                    return sendJson(res,200,{ok:true,day:params.get('day'),teacherName:names.get(exportTeacher)||'선생님',records:marked.map((r:any)=>({...r,studentDisplayName:studentNames.get(r.data.studentKey)||'학생'}))});
                 }
                 if(!params.has('page'))return sendJson(res,200,{ok:true,records:named});
                 const periodDays=slice.days?new Set(slice.days):null;
