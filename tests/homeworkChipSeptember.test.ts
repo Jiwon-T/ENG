@@ -41,7 +41,7 @@ test('숙제 칩: a student without the app gets a September 숙제 chip with no
   const f = registrationFirestore();
   f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'}); enrol(f, A);
   f.rows.set(`notionStudentMappings/${hashStudentKey(A)}`, {studentKey: A, notionStudentPageId: A, internalStudentId: 'int-a', studentDisplayName: '학생', sourceMode: 'firestore'});
-  f.rows.set('lessonReports/a1', {internalStudentId: 'int-a', reportIdentity: 'a1', lessonDateStart: '2026-09-28T14:00:00+09:00', attendance: '', attitude: '', homework: '최상', test: ''});
+  f.rows.set('lessonReports/a1', {internalStudentId: 'int-a', reportIdentity: 'a1', lessonDateStart: '2026-09-28T14:00:00+09:00', attendance: '출석', attitude: '', homework: '최상', test: ''});
   const out: any = await listPetPoints(f.db, {admin: true, academyId: 'main'}, OCT22);
-  assert.equal(out.students[0].earned, 40 * 3, 'lesson points ×3 for the coupon');
+  assert.equal(out.students[0].earned, 30 + 40 * 3, 'lesson points ×3 for the coupon (출석 as it is)');
 });

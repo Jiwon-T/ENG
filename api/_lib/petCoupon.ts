@@ -4,7 +4,7 @@
 import {normalizeNotionPageId as uuid, isNotionPageId} from './notionPageId.js';
 import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
-import {PET_STATES, applyCouponExtras, claimStudyRewards, couponEarnedIn, earnedIn, initialPetState, monthEarned, noteInbox, pendingStudyRewards, petSummary, prevMonth, rollDay, seoulDay, settleLessons, type ServerPetState} from './pet.js';
+import {PET_STATES, type CouponExtra, applyCouponExtras, claimStudyRewards, couponEarnedIn, earnedIn, initialPetState, monthEarned, noteInbox, pendingStudyRewards, petSummary, prevMonth, rollDay, seoulDay, settleLessons, type ServerPetState} from './pet.js';
 import {lessonRows} from './lessonRewardRows.js';
 import {COUPON_BOOST, PET_COUPON, countsForMonth, medalLabel, passAllows, petItem, silverMedal, type CouponTier} from '../../src/lib/petCatalog.js';
 
@@ -41,11 +41,11 @@ function homeworkRate(extra?: {hwCounted?: number; hwDone?: number} | null) {
   const counted = Number(extra?.hwCounted) || 0, done = Number(extra?.hwDone) || 0;
   return counted ? {done, counted, rate: Math.floor(done / counted * 100), ok: done / counted >= COUPON_BOOST.homeworkRate} : null;
 }
-function monthState(month: string, earned: number, list: PetCoupon[], extra?: {hwCounted?: number; hwDone?: number} | null) {
+function monthState(month: string, earned: number, list: PetCoupon[], extra?: CouponExtra | null) {
   const u = used(list), left = Math.max(0, earned - u.points), hasFull = list.some(c => (c.tier ?? 'full') === 'full'), homework = homeworkRate(extra);
   const options = (tiered(month) ? PET_COUPON.tiers : [tierOf('full')]).map(t => ({id: t.id as CouponTier, points: t.points, won: t.won,
     ready: left >= t.points && u.won + t.won <= PET_COUPON.monthWon && !(t.id === 'full' && hasFull) && homework?.ok !== false}));
-  return {earned, spent: u.points, left, won: u.won, tiered: tiered(month), options, homework, requested: list.length > 0, paid: list.length > 0 && list.every(c => Boolean(c.paidAt)),
+  return {earned, spent: u.points, left, won: u.won, tiered: tiered(month), options, homework, extra: extra || null, requested: list.length > 0, paid: list.length > 0 && list.every(c => Boolean(c.paidAt)),
     coupons: list.map(c => ({tier: (c.tier ?? 'full') as CouponTier, won: c.won ?? PET_COUPON.monthWon, paid: Boolean(c.paidAt)}))};
 }
 export function couponView(s: ServerPetState, eligible: boolean, list: PetCoupon[] = [], last?: PetCoupon[]) {
@@ -167,7 +167,7 @@ export async function listPetPoints(db: any, actor: any, now = Date.now()) {
       // the coupons the admin may ask for offline now (단계 쿠폰 from November)
       options: monthState(month, earned, byKey.get(key) || [], o.all.couponExtra?.[month]).options.filter(x => x.ready).map(x => ({id: x.id, won: x.won})), homework: homeworkRate(o.all.couponExtra?.[month]),
       // this month's 포인트 내역 (what the gauge is made of), with what is still waiting
-      ledger: (o.all.ledger || []).filter(x => countsForMonth(x.day, month))};
+      ledger: (o.all.ledger || []).filter(x => countsForMonth(x.day, month)), extra: o.all.couponExtra?.[month] || null};
   }))).filter(Boolean) as {key: string; name: string; points: number; earned: number; requested: boolean; app: string; waiting: number; options: {id: CouponTier; won: number}[]; ledger: any[]}[];
   return {month, goal: PET_COUPON.goal, students: students.sort((a, b) => b.earned - a.earned || a.name.localeCompare(b.name, 'ko'))};
 }
@@ -265,7 +265,7 @@ export async function teacherStudentCoupon(db: any, actor: any, keyInput: unknow
     const o = await owedPoints(db, key, now); if (!o) return {linked: false};
     const list = (await db.collection(PET_COUPONS).where('studentKey', '==', key).get()).docs.map((d: any) => d.data() as PetCoupon).filter((c: PetCoupon) => c.month === month);
     return {linked: false, offline: true, month, goal: PET_COUPON.goal, earned: monthEarned(o.all), points: Number(o.all.points || 0), requested: list.length > 0, paid: list.length > 0 && list.every(c => Boolean(c.paidAt)),
-      coupons: list.map(c => ({won: c.won ?? PET_COUPON.monthWon, paid: Boolean(c.paidAt)})), ledger: (o.all.ledger || []).filter(x => countsForMonth(x.day, month))};
+      coupons: list.map(c => ({won: c.won ?? PET_COUPON.monthWon, paid: Boolean(c.paidAt)})), ledger: (o.all.ledger || []).filter(x => countsForMonth(x.day, month)), extra: o.all.couponExtra?.[month] || null};
   }
   const [raw, list] = await Promise.all([db.collection(PET_STATES).doc(uid).get().then((s: any) => s.data()), readMonthCoupons(db, uid, month)]);
   const s = raw ? rollDay(raw, now) as ServerPetState : null;
@@ -273,7 +273,7 @@ export async function teacherStudentCoupon(db: any, actor: any, keyInput: unknow
   const o = await owedPoints(db, key, now).catch(() => null);
   return {linked: true, month, goal: PET_COUPON.goal, earned: o ? monthEarned(o.all) : s ? monthEarned(s) : 0, points: s ? Number(s.points || 0) : 0, requested: list.length > 0, paid: list.length > 0 && list.every(c => Boolean(c.paidAt)),
     coupons: list.map(c => ({won: c.won ?? PET_COUPON.monthWon, paid: Boolean(c.paidAt)})),
-    ledger: (s?.ledger || []).filter(x => countsForMonth(x.day, month))};
+    ledger: (s?.ledger || []).filter(x => countsForMonth(x.day, month)), extra: (o ? o.all : s)?.couponExtra?.[month] || null};
 }
 /** 지급 완료 (or undo it). */
 export async function markCouponPaid(db: any, actor: any, input: any) {

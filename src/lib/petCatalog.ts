@@ -114,8 +114,8 @@ export const passAllows = (item: { pass?: 'pet' | 'premium' } | undefined, plan:
  *  get that month's 금메달 to place in their room. In the first season the points held when counting began count too. */
 export const PET_COUPON = { name: '이달의 장학 쿠폰', goal: 10_000, firstSeason: '2026-10', maxDecor: 24, /** last month's coupon may still be asked for until this day of the new month (a lesson's points count for its own month) */ graceDays: 3,
   /** 단계 쿠폰 (from tiersFrom): 6,000P → 5천 원 (those 6,000P are used; what is left keeps counting), 10,000P → 1만 원; at
-   *  most monthWon a month. Before it: one 1만 원 coupon at the goal. */
-  tiersFrom: '2026-11', monthWon: 10_000, tiers: [{ id: 'half', points: 6_000, won: 5_000 }, { id: 'full', points: 10_000, won: 10_000 }] } as const;
+   *  most monthWon a month (from October, the first season: decided 2026-10-21). Before it: one 1만 원 coupon at the goal. */
+  tiersFrom: '2026-10', monthWon: 10_000, tiers: [{ id: 'half', points: 6_000, won: 5_000 }, { id: 'full', points: 10_000, won: 10_000 }] } as const;
 export type CouponTier = 'half' | 'full';
 /** 장학 쿠폰 누적 보완 (doing well counts more; the coupon count only — the points to spend stay as they are): a lesson
  *  whose 숙제·테스트·태도 are all 상 이상 ('없는 날'·'미확인' left out) has those three ×3 (출석 stays ×1); a 자습 day with 태도

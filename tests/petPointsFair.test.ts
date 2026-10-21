@@ -48,7 +48,7 @@ test('오프라인 신청: the admin asks for a student who reached the coupon �
   const list: any = await listPetPoints(f.db, admin, OCT22);
   const noApp = list.students.find((s: any) => s.name === '앱없는 학생');
   assert.equal(noApp.earned >= 10_000, true);
-  assert.deepEqual(noApp.options, [{id: 'full', won: 10_000}], 'October: the one 1만 원 coupon');
+  assert.deepEqual(noApp.options, [{id: 'half', won: 5_000}, {id: 'full', won: 10_000}], 'October has 단계 쿠폰 too: 5천 원 or 1만 원');
   const out: any = await requestCouponOffline(f.db, admin, {studentKey: A}, OCT22);
   assert.deepEqual([out.coupon.uid, out.coupon.offline, out.coupon.requestedBy, out.coupon.won], [null, true, 'boss', 10_000]);
   assert.equal(f.rows.has(`petCoupons/k${A.replace(/-/g, '')}_2026-10`), true);

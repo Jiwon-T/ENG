@@ -20,7 +20,12 @@ export interface MedalSpot { id: string; x: number; y: number }
  *  1만 원 at 10,000P, at most 1만 원 a month). */
 export interface CouponMonth { earned: number; spent?: number; left?: number; won?: number; tiered?: boolean; requested: boolean; paid: boolean;
   options?: { id: 'half' | 'full'; points: number; won: number; ready: boolean }[]; coupons?: { tier: 'half' | 'full'; won: number; paid: boolean }[];
-  /** 숙제 통과율 (80% to ask for a coupon; 중상 이상 = 통과); null: no 숙제 평가 this month */ homework?: { done: number; counted: number; rate: number; ok: boolean } | null }
+  /** 숙제 통과율 (80% to ask for a coupon; 중상 이상 = 통과); null: no 숙제 평가 this month */ homework?: { done: number; counted: number; rate: number; ok: boolean } | null;
+  /** 장학 쿠폰 누적 보완 (the coupon count only) */ extra?: CouponExtraView | null }
+/** What the 보완 is made of (api/_lib/pet couponExtras): 잘한 수업 ×3, 자습 days, 숙제 runs, 한 달 개근. */
+export interface CouponExtraView { points: number; lesson: number; boosted?: number; study: number; studyDays: number; homeworkRuns: number; bestRuns: number; perfect: number; pending?: number;
+  days?: { day: string; kind: 'lesson' | 'study' | 'hwRun' | 'bestRun'; points: number }[]; perfects?: { month: string; base: number; noLate: number; diligent: number; lates: number; final: boolean }[];
+  now?: { sessions: number; absences: number; lates: number } }
 export interface CouponView extends CouponMonth { eligible: boolean; month: string; label: string; goal: number;
   /** last month's, in the first days of a month (its lessons' points count for it) */ last?: CouponMonth & { month: string; label: string; until: string } }
 /** 포인트 내역: one line a day, kind and what it was for. */

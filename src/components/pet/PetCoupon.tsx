@@ -1,6 +1,6 @@
 import { type ReactNode, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { countsForMonth, isSilverMedal, medalLabel, PET_COUPON, silverMedal, towerDecor } from '../../lib/petCatalog';
-import type { CouponMonth, CouponView, LedgerItem, MedalSpot } from '../../lib/petService';
+import { COUPON_BOOST, countsForMonth, isSilverMedal, medalLabel, PET_COUPON, silverMedal, towerDecor } from '../../lib/petCatalog';
+import type { CouponExtraView, CouponMonth, CouponView, LedgerItem, MedalSpot } from '../../lib/petService';
 import { DECOR_ART } from './TowerDecorArt';
 
 // 이달의 장학 쿠폰 and its 금메달: the goal gauge on the pet home, the 쿠폰 shop tab, and the medals placed in the room
@@ -33,23 +33,29 @@ const Placed = ({ id, size }: { id: string; size: number }) => towerDecor(id) ? 
 
 /** 펫 홈: how far this month's points are from the coupon (shown to students linked to the academy). */
 /** 포인트 내역 kinds: colour, icon and name (the bar under the gauge and each line). */
-const KINDS: Record<LedgerItem['kind'], { color: string; icon: string; name: string }> = {
-  class: { color: '#e0587a', icon: '🏫', name: '수업' }, study: { color: '#efa23a', icon: '📚', name: '앱 공부' }, cert: { color: '#7f77dd', icon: '✅', name: '선생님 인증' },
+type Kind = LedgerItem['kind'] | 'bonus';
+const KINDS: Record<Kind, { color: string; icon: string; name: string }> = {
+  class: { color: '#e0587a', icon: '🏫', name: '수업' }, bonus: { color: '#993556', icon: '🎟️', name: '쿠폰 보너스' }, study: { color: '#efa23a', icon: '📚', name: '앱 공부' }, cert: { color: '#7f77dd', icon: '✅', name: '선생님 인증' },
   adventure: { color: '#5dcaa5', icon: '🗺️', name: '모험' }, etc: { color: '#cbd5e1', icon: '✨', name: '그 밖' },
 };
+/** A day's 보완 line in the 내역 (the coupon count only). */
+const BONUS_LABEL = { lesson: "잘한 수업 3배 (숙제·시험·태도 모두 '상' 이상)", study: "자습 (태도 '상' 이상인 날)", hwRun: "숙제 '상' 이상 3연속", bestRun: "숙제 '최상' 2연속" } as const;
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const dayTitle = (day: string) => { const d = new Date(`${day}T12:00:00+09:00`); return `${d.getMonth() + 1}월 ${d.getDate()}일 (${DAYS[d.getDay()]})`; };
 /** 이번 달 내역: what this month's points came from — a bar by kind, then (folded) a line per day and kind, newest first. */
-export function PointsHistory({ coupon, ledger, defaultOpen = false }: { coupon: Pick<CouponView, 'month' | 'earned'>; ledger: LedgerItem[]; defaultOpen?: boolean }) {
+export function PointsHistory({ coupon, ledger, extra, defaultOpen = false }: { coupon: Pick<CouponView, 'month' | 'earned'>; ledger: LedgerItem[]; extra?: CouponExtraView | null; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen), [days, setDays] = useState(5);
-  const mine = ledger.filter(x => countsForMonth(x.day, coupon.month));
-  const byKind = new Map<LedgerItem['kind'], number>();
+  // the 보완 (×3, 자습, 숙제 runs: a line on its day; 개근 in the bar only) is part of the count, not of the points held
+  const bonusDays = (extra?.days || []).filter(x => countsForMonth(x.day, coupon.month));
+  const mine: { day: string; kind: Kind; label: string; points: number }[] = [...ledger.filter(x => countsForMonth(x.day, coupon.month)), ...bonusDays.map(x => ({ day: x.day, kind: 'bonus' as const, label: BONUS_LABEL[x.kind], points: x.points }))];
+  const byKind = new Map<Kind, number>();
   for (const x of mine) byKind.set(x.kind, (byKind.get(x.kind) || 0) + x.points);
+  const bonusRest = Math.max(0, (extra?.points || 0) - bonusDays.reduce((n, x) => n + x.points, 0)); if (bonusRest) byKind.set('bonus', (byKind.get('bonus') || 0) + bonusRest);
   // points counted before the 내역 began (the first season's points held, older records)
-  const rest = coupon.earned - mine.reduce((sum, x) => sum + x.points, 0); if (rest > 0) byKind.set('etc', (byKind.get('etc') || 0) + rest);
-  const parts = (Object.keys(KINDS) as LedgerItem['kind'][]).map(k => [k, byKind.get(k) || 0] as const).filter(([, n]) => n > 0);
-  const lines = new Map<string, { day: string; kind: LedgerItem['kind']; labels: string[]; points: number }>();
-  for (const x of mine) { const key = x.kind === 'class' ? `${x.day}|class|${x.label}` : `${x.day}|${x.kind}`, l = lines.get(key) || { day: x.day, kind: x.kind, labels: [], points: 0 }; if (x.label && !l.labels.includes(x.label)) l.labels.push(x.label); l.points += x.points; lines.set(key, l); }
+  const rest = coupon.earned - mine.reduce((sum, x) => sum + x.points, 0) - bonusRest; if (rest > 0) byKind.set('etc', (byKind.get('etc') || 0) + rest);
+  const parts = (Object.keys(KINDS) as Kind[]).map(k => [k, byKind.get(k) || 0] as const).filter(([, n]) => n > 0);
+  const lines = new Map<string, { day: string; kind: Kind; labels: string[]; points: number }>();
+  for (const x of mine) { const key = x.kind === 'class' || x.kind === 'bonus' ? `${x.day}|${x.kind}|${x.label}` : `${x.day}|${x.kind}`, l = lines.get(key) || { day: x.day, kind: x.kind, labels: [], points: 0 }; if (x.label && !l.labels.includes(x.label)) l.labels.push(x.label); l.points += x.points; lines.set(key, l); }
   for (const [key, l] of lines) if (!l.points) lines.delete(key); // a 수정 that went back and forth
   const grouped = [...new Set([...lines.values()].map(l => l.day))].sort().reverse();
   if (!parts.length) return null;
@@ -80,12 +86,42 @@ export function CouponGauge({ coupon, onShop, ledger = [] }: { coupon: CouponVie
     </div>
     <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-[#f6e3e6]"><div className="h-full rounded-full bg-[#efa23a]" style={{ width: `${pct}%` }} />{half > 0 && <span className="absolute top-0 h-full w-0.5 bg-white" style={{ left: `${half / coupon.goal * 100}%` }} title="6,000P · 5천 원" />}</div>
     {coupon.tiered && <p className="mt-1 flex justify-between text-[10px] text-slate-400"><span>6,000P · 5천 원</span><span>10,000P · 1만 원</span></p>}
-    {coupon.homework && !coupon.homework.ok && <p className="mt-1.5 rounded-lg bg-[#fff6e6] px-2 py-1 text-[11px] font-bold text-[#8a5a12]">숙제 통과율 {coupon.homework.rate}% · 80% 이상이면 쿠폰을 신청할 수 있어요 ('중상' 이상이 통과)</p>}
+    {coupon.homework && (coupon.homework.ok ? <p className="mt-1.5 text-[11px] text-slate-500">숙제 통과율 <b className="rounded bg-[#eaf3de] px-1 font-bold text-[#27500a]">{coupon.homework.rate}% · 80% 넘었어요</b> <span className="text-slate-400">('중상' 이상 {coupon.homework.counted}번 중 {coupon.homework.done}번)</span></p>
+      : <p className="mt-1.5 rounded-lg bg-[#fff6e6] px-2 py-1 text-[11px] font-bold text-[#8a5a12]">숙제 통과율 {coupon.homework.rate}% · 80% 이상이면 쿠폰을 신청할 수 있어요 ('중상' 이상이 통과)</p>)}
+    <CouponBonus extra={coupon.extra} earned={coupon.earned} />
     {ready ? <button type="button" onClick={onShop} className="mt-2 flex w-full items-center gap-2 rounded-xl bg-[#fff6e6] px-3 py-2 text-left text-xs font-bold text-[#8a5a12]"><span className="flex-1">{coupon.requested ? '쿠폰을 한 장 더 받을 수 있어요!' : '이번 달 쿠폰을 받을 수 있어요!'}</span><span>상점 가기 ›</span></button>
       : coupon.requested ? <p className="mt-1.5 text-[11px] text-slate-500">{coupon.paid ? '선생님이 쿠폰을 주셨어요.' : '선생님이 곧 쿠폰을 주실 거예요.'}{coupon.tiered && (coupon.won || 0) < PET_COUPON.monthWon ? ` 남은 ${won(coupon.left ?? 0)}P로 6,000P를 채우면 5천 원을 한 번 더 받아요.` : ''} 메달은 방 꾸미기에서 놓을 수 있어요.</p>
       : <p className="mt-1.5 text-[11px] text-slate-400">이번 달 1일부터 모은 포인트예요 (써도 줄지 않아요) · {coupon.tiered ? '한 달 최대 1만 원' : '쿠폰은 한 달에 1장'}</p>}
-    <PointsHistory coupon={coupon} ledger={ledger} />
+    <PointsHistory coupon={coupon} ledger={ledger} extra={coupon.extra} />
   </section>;
+}
+
+/** 쿠폰 보너스: what the 보완 added to this month's count — 잘한 수업 3배, 자습, 숙제 runs, 한 달 개근 (grey until the
+ *  month is over). The points held are not touched. */
+export function CouponBonus({ extra, earned }: { extra?: CouponExtraView | null; earned: number }) {
+  if (!extra) return null;
+  const B = COUPON_BOOST, mon = (m: string) => `${Number(m.slice(5))}월`, many = (extra.perfects || []).length > 1;
+  const rows: { name: string; sub?: string; points: number; later?: boolean }[] = [];
+  if (extra.lesson > 0) rows.push({ name: '잘한 수업 3배', sub: `숙제·시험·태도 모두 '상' 이상인 수업${extra.boosted ? ` ${extra.boosted}번` : ''} (출석은 그대로)`, points: extra.lesson });
+  if (extra.study > 0) rows.push({ name: `자습 ${extra.studyDays}일`, sub: `태도 '상' 이상인 날만 · 하루 ${B.studyDay * B.lessonTimes}P`, points: extra.study });
+  if (extra.homeworkRuns > 0) rows.push({ name: `숙제 '상' 이상 3연속 × ${extra.homeworkRuns}`, points: extra.homeworkRuns * B.homeworkRun.points });
+  if (extra.bestRuns > 0) rows.push({ name: `숙제 '최상' 2연속 × ${extra.bestRuns}`, points: extra.bestRuns * B.bestRun.points });
+  for (const p of extra.perfects || []) {
+    const at = many ? `${mon(p.month)} ` : '';
+    rows.push({ name: `${at}한 달 개근`, sub: `수업 ${B.minSessions}번 이상 · 결석 0${p.lates ? ` · 지각 ${p.lates}번 (-${Math.round(B.latePenalty * 100 * p.lates)}%)` : ''}`, points: p.base, later: !p.final });
+    if (p.noLate) rows.push({ name: `${at}지각 없는 개근`, points: p.noLate, later: !p.final });
+    if (p.diligent) rows.push({ name: `${at}성실 개근`, sub: '숙제 미제출 0번', points: p.diligent, later: !p.final });
+  }
+  // saved before the parts were kept (made again at the next settling)
+  if (!extra.perfects) { if (extra.perfect) rows.push({ name: '한 달 개근', points: extra.perfect }); if (extra.pending) rows.push({ name: '한 달 개근', points: extra.pending, later: true }); }
+  const now = extra.now, toward = !(extra.perfects || []).some(p => !p.final) && now ? now.absences ? '이번 달은 결석이 있어 개근 보너스가 없어요' : `한 달 개근까지 수업 ${Math.min(now.sessions, B.minSessions)}/${B.minSessions}번 · 결석 없이` : '';
+  if (!rows.length && !toward) return null;
+  return <div className="mt-2 rounded-xl bg-[#fdf6f8] px-3 py-2 text-xs text-[#5e1e2a]">
+    <p className="flex justify-between gap-2 border-b border-[#f3d5da] pb-1"><span>받은 포인트 <span className="text-[10px] text-slate-400">수업·앱 학습·원정대·탑</span></span><b className="font-bold tabular-nums">{won(Math.max(0, earned - extra.points))}</b></p>
+    {rows.map((r, i) => <p key={i} className={`flex justify-between gap-2 border-b border-[#f6e3e6] py-1 last:border-0 ${r.later ? 'text-slate-400' : ''}`}><span className="min-w-0">{r.name}{r.later && <span className="ml-1 rounded bg-[#faeeda] px-1 text-[10px] text-[#633806]">달이 끝나면 확정</span>}{r.sub && <span className="block text-[10px] text-slate-400">{r.sub}</span>}</span><b className="flex-none font-bold tabular-nums">+{won(r.points)}</b></p>)}
+    {toward && <p className="pt-1 text-[10px] text-slate-400">{toward}</p>}
+    <p className="pt-1 text-[10px] text-slate-400">상점에서 쓰는 포인트는 그대로예요. 3배·자습·보너스는 장학 쿠폰 누적에만 더해져요.</p>
+  </div>;
 }
 
 /** 상점 › 쿠폰: ask for this month's coupon (no points are taken) and see the medals. */

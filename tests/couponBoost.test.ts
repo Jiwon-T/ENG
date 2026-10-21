@@ -41,10 +41,10 @@ test('보완: 한 달 개근 — 8+ class sessions, no 결석; 30% less a 지각
 
 test('보완: September counts for October (first season); the coupon count adds it, the points to spend do not', () => {
   const s = initialPetState(OCT22); s.points = 100; s.earned = {month: '2026-10', points: 100};
-  applyCouponExtras(s, [...lessons('2026-09', 8), row('2026-09-03', {studied: true, attitude: '상'})], OCT22);
+  applyCouponExtras(s, [...lessons('2026-09', 8), row('2026-09-03', {studied: true, attitude: '상'}), row('2026-09-04', {attendance: '출석', attitude: '상'})], OCT22);
   assert.deepEqual(Object.keys(s.couponExtra!), ['2026-10']);
   const extra = s.couponExtra!['2026-10'];
-  assert.equal(extra.points, 15 * 2 + 90 + 2000, '태도 상 ×3, a 자습 day, 개근 + no 지각 + 성실');
+  assert.equal(extra.points, 15 * 2 + 90 + 2000, '태도 상 ×3 (the lesson attended; the 자습 record with no 출결 is not tripled), a 자습 day, 개근 + no 지각 + 성실');
   assert.equal(monthEarned(s), 100 + extra.points);
   earnPoints(s, 30, 'class', '출석', '2026-10-21');
   assert.deepEqual([s.earnedBy, s.points], [{'2026-10': 130}, 100], 'never baked into what was earned');
@@ -79,4 +79,18 @@ test('쿠폰 자격: under 80% 숙제 제출률 no coupon can be asked for (the 
   lesson('b4', '2026-10-13', '상'); lesson('b5', '2026-10-15', '최상'); lesson('b6', '2026-10-17', '상');
   row = (await listPetPoints(f.db, admin, OCT22)).students[0];
   assert.deepEqual([row.homework.rate, row.homework.ok, row.options.length > 0], [80, true, true], '4 of 5: 80%');
+});
+
+test('보완 내역: what it is made of — tripled lessons, a line a day (×3, 자습, 숙제 runs) adding up, 개근 parts by month, this month toward 개근', () => {
+  const e = couponExtras([
+    ...lessons('2026-09', 8, i => i === 0 ? {attendance: '지각'} : {}),
+    row('2026-10-02', {attendance: '출석', attitude: '상', homework: '상', test: '최상', session: true, studied: true}),
+    row('2026-10-05', {attendance: '출석', homework: '상', session: true}), row('2026-10-07', {attendance: '결석', homework: '상', session: true}),
+  ], '2026-10-22')['2026-10'];
+  assert.equal(e.boosted, 2, 'lessons attended whose graded chips are all 상 이상 (the 결석 one is not tripled)');
+  assert.deepEqual(e.days!.map(d => [d.day, d.kind]), [['2026-10-02', 'lesson'], ['2026-10-05', 'lesson'], ['2026-10-02', 'study'], ['2026-10-07', 'hwRun']]);
+  assert.equal(e.days!.reduce((n, d) => n + d.points, 0), e.lesson + e.study + e.homeworkRuns * 500 + e.bestRuns * 300, 'the lines add up to all but 개근');
+  assert.deepEqual(e.perfects, [{month: '2026-09', base: 700, noLate: 0, diligent: 500, lates: 1, final: true}]);
+  assert.deepEqual(e.now, {sessions: 2, absences: 1, lates: 0});
+  assert.equal(e.points, e.lesson + e.study + 500 + 700 + 500);
 });

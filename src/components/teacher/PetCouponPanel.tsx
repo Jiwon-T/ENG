@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import {Check,Undo2} from 'lucide-react';
 import WorkspaceDialog from './WorkspaceDialog';
-import {PointsHistory} from '../pet/PetCoupon';
+import {CouponBonus,PointsHistory} from '../pet/PetCoupon';
 import type {LedgerItem} from '../../lib/petService';
 import {askConfirm} from './ConfirmDialog';
 import {maskedName} from '../../lib/rankNames';
@@ -79,7 +79,7 @@ export function PetPointsOverview({request,act,canRequest=false,onRequested}:{ke
   </button>
    {canRequest&&s.key&&(s.options||[]).length>0&&<div className="mb-1 flex flex-wrap items-center gap-1.5 pl-1 text-[11px] text-amber-700"><span aria-hidden="true">🎟️</span>신청할 수 있어요{(s.options||[]).map(o=><button key={o.id} type="button" className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-0.5 font-bold" onClick={()=>void offline(s,o)}>{won(o.won)}원 오프라인 신청</button>)}</div>}
    {/* the gauge's 내역, as the student sees it */}
-   {openRow===i&&<div className="mb-2 rounded-lg bg-[#fffafb] px-3 pb-2">{s.key&&<RankNickname name={s.name} value={nicks[s.key]||''} save={saveNick(s)}/>}<PointsHistory coupon={{month:data.month,earned:s.earned}} ledger={s.ledger||[]} defaultOpen/>{!s.earned&&<p className="pt-2 text-[11px] text-slate-400">이번 달 모은 포인트가 아직 없어요.</p>}</div>}
+   {openRow===i&&<div className="mb-2 rounded-lg bg-[#fffafb] px-3 pb-2">{s.key&&<RankNickname name={s.name} value={nicks[s.key]||''} save={saveNick(s)}/>}<CouponBonus extra={s.extra} earned={s.earned}/><PointsHistory coupon={{month:data.month,earned:s.earned}} ledger={s.ledger||[]} extra={s.extra} defaultOpen/>{!s.earned&&<p className="pt-2 text-[11px] text-slate-400">이번 달 모은 포인트가 아직 없어요.</p>}</div>}
   </div>)}
   {!query.trim()&&shown.length>10&&<button type="button" className="mt-1 w-full text-center text-xs font-bold text-[#8b2f40]" onClick={()=>setAll(!all)}>{all?'접기':`전체 ${shown.length}명 보기`}</button>}
  </div>;
@@ -92,34 +92,12 @@ export default function PetCouponPanel({busy,request,act,autoLoad=false}:{busy:b
  useEffect(()=>{if(autoLoad)void act(()=>load());},[]);
  const months=useMemo(()=>[...new Set((rows||[]).map(r=>r.month))],[rows]),shown=month||months[0]||'';
  const list=(rows||[]).filter(r=>r.month===shown),waiting=list.filter(r=>!r.paidAt).length;
- // 대기 포인트 모두 넣기: what the 수업 일지 give linked students but their accounts don't hold yet, paid as 반영 pays them
- const [ver,setVer]=useState(0);
- const settle=()=>act(async()=>{
-  const w=await request('read:waiting-points');
-  if(!w?.students){await askConfirm({title:w?.failed?`${w.failed}명은 확인하지 못했어요`:'대기 포인트가 없어요',message:w?.failed?'잠시 후 다시 눌러 주세요. 확인한 학생 중에는 대기 포인트가 없어요.':'모든 연결 학생의 포인트가 수업 일지대로 들어가 있어요.',confirmText:'확인',icon:'check'});return;}
-  if(!await askConfirm({title:`${w.students}명에게 대기 포인트 ${Number(w.points).toLocaleString('ko-KR')}P를 넣을까요?`,message:(w.failed?`${w.failed}명은 확인하지 못해 이번에는 빠져요(잠시 후 다시 눌러 주세요). `:'')+'수업 반영 때와 같은 방식으로 지금 바로 넣어요. 같은 수업은 두 번 주지 않고, 펫이 없는 학생은 포인트 통장을 만들어 넣어요. 학생이 다음에 앱을 열면 놓친 보상으로 보여요.',confirmText:'모두 넣기',icon:'check'}))return;
-  const r=await request('settle-waiting',{});
-  await askConfirm({title:`${r.students}명에게 ${Number(r.points).toLocaleString('ko-KR')}P를 넣었어요`,message:r.failed?`${r.failed}명은 넣지 못했어요. 잠시 후 다시 눌러 주세요.`:'목록의 대기 표시가 사라졌어요.',confirmText:'확인',icon:'check'});
-  setVer(v=>v+1);
- });
- // 예전 포인트 조정 (하루 300P): once; the list first (who and how much), then taken back
- const legacy=()=>act(async()=>{
-  const w=await request('read:legacy-points');
-  const held=(w?.heldBack||[]).length?` 기록이 너무 많은 ${w.heldBack.length}명(${w.heldBack.join(', ')})은 보류했어요.`:'';
-  if(!w?.students?.length){await askConfirm({title:'조정할 예전 포인트가 없어요',message:'예전 포인트가 모두 하루 300P 제한 안에 있거나, 이미 조정했어요.'+held,confirmText:'확인',icon:'check'});return;}
-  const list=<ul className="max-h-60 overflow-y-auto text-sm">{w.students.map((s:any,i:number)=><li key={i} className="flex justify-between gap-2 border-b border-slate-100 py-1"><span className="truncate">{s.name}</span><span className="text-xs text-slate-500">보유 {won(s.held)}P · 예전 {won(s.legacy)}P → 인정 {won(s.allowed)}P ({s.days}일 × 300P) · <b className="text-rose-700">−{won(s.take)}P</b></span></li>)}</ul>;
-  if(!await askConfirm({title:`${w.students.length}명에게서 예전 포인트 ${won(w.total)}P를 조정할까요?`,message:'기기에 저장하던 시절(하루 제한 없음) 포인트를, 앱 학습 기록이 있는 날마다 하루 300P씩 인정하고 넘친 만큼 보유 포인트와 이번 달 쿠폰 누적에서 빼요. 그 시절 기록이 없는 학생은 조정하지 않아요.'+held+' 0P 아래로는 빼지 않고, 학생 포인트 내역에 \'예전 포인트 조정\'으로 남아요. 한 번만 할 수 있어요.',content:list,confirmText:'조정하기',tone:'danger'}))return;
-  const r=await request('legacy-points-apply',{});
-  await askConfirm({title:`${r.students}명에게서 ${won(r.total)}P를 조정했어요`,message:r.failed?`${r.failed}명은 조정하지 못했어요. 잠시 후 다시 눌러 주세요.`:'쿠폰 누적과 순위가 새 포인트로 바뀌어요.',confirmText:'확인',icon:'check'});
-  setVer(v=>v+1);
- });
  const paid=(c:PetCouponRow,value:boolean)=>act(async()=>{await request('coupon-paid',{id:c.id,paid:value});await load();});
  return <section className="panel rv">
   <div className="rv-head"><h2>이달의 장학 쿠폰{rows&&<small>{list.length}장{waiting?` · 지급 전 ${waiting}`:''}</small>}</h2>
    {months.length>1&&<select aria-label="달" value={shown} onChange={e=>setMonth(e.target.value)}>{months.map(m=><option key={m} value={m}>{m.replace('-','년 ')}월</option>)}</select>}</div>
   <p className="mt-1 text-xs text-slate-500">채움 학원 학생이 한 달에 모은 포인트가 1만 P를 넘으면 신청할 수 있어요 (포인트는 줄지 않아요). 앱이 없거나 불편한 학생은 아래 목록에서 오프라인으로 신청해요.</p>
-  {autoLoad&&<div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" className="small-button" disabled={busy} onClick={()=>void settle()}>대기 포인트 모두 넣기</button><button type="button" className="small-button" disabled={busy} onClick={()=>void legacy()}>예전 포인트 조정 (하루 300P)</button><span className="text-[11px] text-slate-400">수업 일지대로 받을 포인트 중 아직 학생 계정에 안 들어간 것(대기)을 지금 넣어요</span></div>}
-  {autoLoad&&<PetPointsOverview key={ver} request={request} act={act} canRequest onRequested={load}/>}
+  {autoLoad&&<PetPointsOverview request={request} act={act} canRequest onRequested={load}/>}
   {rows&&(list.length?<ul className="mt-2">{list.map(c=><CouponLine key={c.id} c={c} busy={busy} onPaid={paid}/>)}</ul>:<p className="mt-2 text-sm text-slate-500">아직 신청한 학생이 없어요.</p>)}
  </section>;
 }

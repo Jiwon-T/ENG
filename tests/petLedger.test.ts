@@ -89,7 +89,7 @@ test('학생 관리 › 장학 쿠폰: a teacher sees the students they have; th
   assert.deepEqual(await names({admin: true, academyId: 'main', scopes: []}), ['김하늘', '박서준']);
 });
 
-test('단계 쿠폰 (11월부터): 6,000P → 5천 원 (6,000P used, the rest keeps counting), 10,000P → 1만 원, at most 1만 원 a month', async () => {
+test('단계 쿠폰 (10월부터): 6,000P → 5천 원 (6,000P used, the rest keeps counting), 10,000P → 1만 원, at most 1만 원 a month', async () => {
   const NOV10 = Date.parse('2026-11-10T05:00:00Z');
   const make = (earned: number) => { const f = registrationFirestore(); const s: any = rollDay({...initialPetState(NOV10), earned: {month: '2026-11', points: earned}} as any, NOV10); f.rows.set('petStates/kid', s); return f; };
   // 12,000P: 5천 원, then another 5천 원 (12,000 = 6,000 × 2), then no more (1만 원 a month)
@@ -108,8 +108,11 @@ test('단계 쿠폰 (11월부터): 6,000P → 5천 원 (6,000P used, the rest ke
   await assert.rejects(requestCoupon(g.db, 'kid', 'key', NOV10, undefined, 'half'), /COUPON_TAKEN/);
   // 5,999P: not yet; 5천 원 after 1만 원 is not possible either way
   await assert.rejects(requestCoupon(make(5_999).db, 'kid', 'key', NOV10, undefined, 'half'), /COUPON_NOT_YET/);
-  // October (before 단계 쿠폰): one 1만 원 coupon; 'half' is read as the one coupon
+  // September (before 단계 쿠폰): one 1만 원 coupon; October has both
+  const SEP15 = Date.parse('2026-09-15T05:00:00Z');
   view = couponView(rollDay(structuredClone(initialPetState(OCT31)), OCT31), true, []);
+  assert.deepEqual(view.options.map((o: any) => o.id), ['half', 'full']);
+  view = couponView(rollDay(structuredClone(initialPetState(SEP15)), SEP15), true, []);
   assert.deepEqual(view.options.map((o: any) => o.id), ['full']);
 });
 
