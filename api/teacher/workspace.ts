@@ -85,8 +85,17 @@ async function readDraftsPage(db:any,actor:any,pageNo:number,sizeInput:number,fo
 export default async function handler(req: IncomingMessage,res:ServerResponse){
     const params=new URL(req.url||'','http://localhost').searchParams;
     if(params.get('__cron')==='lesson-migration')return handleLessonMigrationCron(req,res);
+    if(params.get('__cron')==='makeup-push')return handleMakeupPushCron(req,res);
     if(params.get('__hook')==='new-signups')return handleSignupHook(req,res);
     return handleWorkspace(req,res);
+}
+/** 08:00 KST (Vercel Cron, Authorization: Bearer CRON_SECRET): today's 보강 alerts to students who turned 알림 on. */
+export async function handleMakeupPushCron(req: IncomingMessage,res:ServerResponse,initialize=getFirebaseAdmin,now=Date.now()){
+    const secret=process.env.CRON_SECRET||'',header=req.headers.authorization||'';
+    if(secret.length<16||!timingSafeCompare(header,'Bearer '+secret))return sendJson(res,401,{ok:false,error:'UNAUTHORIZED'});
+    try{const {db}=initialize();const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date(now));
+        const r=await (await import('../_lib/pushSend.js')).sendMakeupMorning(db,today);return sendJson(res,200,{ok:true,...r});}
+    catch(error:any){console.warn('MAKEUP_PUSH_CRON_FAILED',{error:String(error?.message||'').slice(0,80)});return sendJson(res,500,{ok:false,error:'MAKEUP_PUSH_FAILED',retry:'next-daily-run'});}
 }
 /** Daily scheduler entry (Vercel Cron sends Authorization: Bearer CRON_SECRET). The path keeps its old name so the cron setting needs no change. */
 export async function handleLessonMigrationCron(req: IncomingMessage,res:ServerResponse,initialize=getFirebaseAdmin){
@@ -527,7 +536,10 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(!current||!canAccessOwned(actor,current.ownerUid,current.academyId))throw new Error('FORBIDDEN');
             assertLessonComplete(current.data);
             const result=await (await import('../_lib/appLesson.js')).publishAppLesson(db,actor,id,body.revision??current.revision);
-            return sendJson(res,200,{ok:true,stage:result.stage,pageId:result.record?.notionPageId||null,record:result.record});
+            // '학생에게 알림 보내기' in the 반영 확인 창: sent now; a failed send never fails the 반영.
+            const {isLessonPushKind}=await import('../../src/lib/lessonPush.js');
+            const pushed=isLessonPushKind(body.notify)&&!result.alreadyPublished?await (await import('../_lib/pushSend.js')).sendLessonPush(db,current.data,id,body.notify).catch(()=>0):0;
+            return sendJson(res,200,{ok:true,stage:result.stage,pageId:result.record?.notionPageId||null,record:result.record,pushed});
         }
         if(body.action==='publish')throw new Error('LESSON_APP_REQUIRED');
         if (body.action === 'previous-lesson') {

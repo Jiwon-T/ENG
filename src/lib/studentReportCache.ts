@@ -23,6 +23,8 @@ export const studentReportCache = createReportCache();
 export function loadStudentResource<T>(uid: string, resource: 'lesson-reports' | 'schedules', token: () => Promise<string>): Promise<T> {
   return studentReportCache.read(uid, resource, async () => {
     const result = await safeFetchJson<T>(`/api/student/${resource}`, { headers: { Authorization: `Bearer ${await token()}` } });
+    // An account not linked to a student yet has no records: empty lists (marked), not a failure.
+    if ((result.data as any)?.error === 'STUDENT_REPORT_NOT_LINKED') return { reports: [], schedules: [], subjects: [], unlinked: true } as T;
     if (!result.ok || !result.data) throw new Error('불러오지 못했습니다. 다시 시도해 주세요.');
     return result.data;
   });

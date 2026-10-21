@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/lesson-migration",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/makeup-push",
+      "schedule": "0 23 * * *"
     }
   ],
   "redirects": [
@@ -33,6 +37,10 @@
     {
       "source": "/api/cron/lesson-migration",
       "destination": "/api/teacher/workspace?__cron=lesson-migration"
+    },
+    {
+      "source": "/api/cron/makeup-push",
+      "destination": "/api/teacher/workspace?__cron=makeup-push"
     },
     {
       "source": "/api/hooks/new-signups",

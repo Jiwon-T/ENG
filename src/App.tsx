@@ -1,4 +1,5 @@
 import { studentReportCache } from './lib/studentReportCache';
+import { PushMenuRow } from './components/PushOptIn';
 import React, { useState, useEffect, Suspense, lazy, Component } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
@@ -538,6 +539,7 @@ export default function App() {
                 </div>
               </div>
 
+              {isPWAInstalled && profile?.role === 'student' && user && <PushMenuRow uid={user.uid} />}
               {/* PWA Promotion */}
               {!isPWAInstalled && (
                 <div className="p-6">

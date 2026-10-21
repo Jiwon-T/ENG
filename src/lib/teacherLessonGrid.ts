@@ -53,8 +53,9 @@ export async function processLessonRows<R extends {
                 update(row.id, { revision: saved.record?.revision ?? (row.revision || 0) + 1, stage: 'draft', savedData: structuredClone(saved.record?.data ?? row.data), data:saved.record?.data ?? row.data, error: undefined });
             }
             if (mode === 'publish') {
-                const result = await request('publish', { id: row.id });
-                update(row.id, { stage: result.stage || 'processing', error: result.warning });
+                const notify = (row as any).notify;
+                const result = await request('publish', { id: row.id, ...(notify ? { notify } : {}) });
+                update(row.id, { stage: result.stage || 'processing', error: result.warning, ...(typeof result.record?.publishedAssignment === 'string' ? { publishedAssignment: result.record.publishedAssignment } : {}) });
             }
             succeeded++;
         }

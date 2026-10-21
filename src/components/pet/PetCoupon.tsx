@@ -1,5 +1,5 @@
 import { type ReactNode, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { COUPON_BOOST, countsForMonth, isSilverMedal, medalLabel, PET_COUPON, silverMedal, towerDecor } from '../../lib/petCatalog';
+import { COUPON_BOOST, countsForMonth, isSilverMedal, medalLabel, PET_COUPON, PET_TEST_DAY, silverMedal, towerDecor } from '../../lib/petCatalog';
 import type { CouponExtraView, CouponMonth, CouponView, LedgerItem, MedalSpot } from '../../lib/petService';
 import { DECOR_ART } from './TowerDecorArt';
 
@@ -113,15 +113,21 @@ export function CouponBonus({ extra, earned }: { extra?: CouponExtraView | null;
     if (p.noLate) rows.push({ name: `${at}지각 없는 개근`, points: p.noLate, later: !p.final });
     if (p.diligent) rows.push({ name: `${at}성실 개근`, sub: '숙제 미제출 0번', points: p.diligent, later: !p.final });
   }
+  for (const p of extra.testPerfects || []) {
+    const at = (extra.testPerfects || []).length > 1 ? `${mon(p.month)} ` : '';
+    rows.push({ name: `${at}누적 테스트 개근상`, sub: `테스트 ${p.days}번 모두 출석${p.lates ? ` · 지각 ${p.lates}번 (-${Math.round(PET_TEST_DAY.latePenalty * 100 * p.lates)}%)` : ''}`, points: p.base, later: !p.final });
+  }
   // saved before the parts were kept (made again at the next settling)
-  if (!extra.perfects) { if (extra.perfect) rows.push({ name: '한 달 개근', points: extra.perfect }); if (extra.pending) rows.push({ name: '한 달 개근', points: extra.pending, later: true }); }
+  if (!extra.perfects && !extra.testPerfects) { if (extra.perfect) rows.push({ name: '한 달 개근', points: extra.perfect }); if (extra.pending) rows.push({ name: '한 달 개근', points: extra.pending, later: true }); }
   // the 11+ exception is never told ahead (no 보강 asked for to reach it): a month with a 결석 shows nothing toward 개근
   const now = extra.now, toward = !(extra.perfects || []).some(p => !p.final) && now ? now.absences ? '' : `한 달 개근까지 수업 ${Math.min(now.sessions, B.minSessions)}/${B.minSessions}번 · 결석 없이` : '';
-  if (!rows.length && !toward) return null;
+  const t = extra.testNow, testToward = !(extra.testPerfects || []).some(p => !p.final) && t && !t.absences ? `누적 테스트 개근까지 테스트 ${Math.min(t.days, PET_TEST_DAY.minDays)}/${PET_TEST_DAY.minDays}번 · 결석 없이` : '';
+  if (!rows.length && !toward && !testToward) return null;
   return <div className="mt-2 rounded-xl bg-[#fdf6f8] px-3 py-2 text-xs text-[#5e1e2a]">
     <p className="flex justify-between gap-2 border-b border-[#f3d5da] pb-1"><span>받은 포인트 <span className="text-[10px] text-slate-400">수업·앱 학습·원정대·탑</span></span><b className="font-bold tabular-nums">{won(Math.max(0, earned - extra.points))}</b></p>
     {rows.map((r, i) => <p key={i} className={`flex justify-between gap-2 border-b border-[#f6e3e6] py-1 last:border-0 ${r.later ? 'text-slate-400' : ''}`}><span className="min-w-0">{r.name}{r.later && <span className="ml-1 rounded bg-[#faeeda] px-1 text-[10px] text-[#633806]">달이 끝나면 확정</span>}{r.sub && <span className="block text-[10px] text-slate-400">{r.sub}</span>}</span><b className="flex-none font-bold tabular-nums">+{won(r.points)}</b></p>)}
     {toward && <p className="pt-1 text-[10px] text-slate-400">{toward}</p>}
+    {testToward && <p className="pt-1 text-[10px] text-slate-400">{testToward}</p>}
     <p className="pt-1 text-[10px] text-slate-400">포인트는 그대로예요. 3배·자습·보너스는 쿠폰 누적에만 더해져요.</p>
   </div>;
 }

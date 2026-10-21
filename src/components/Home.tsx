@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { PushHomeCard } from './PushOptIn';
 import { auth } from '../lib/firebase';
 import { loadStudentResource } from '../lib/studentReportCache';
 import { readRecentLearning, type RecentLearning } from '../lib/recentLearning';
@@ -119,6 +120,7 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
           {recent && onResume && <button type="button" onClick={() => onResume(recent)} className={row}><span className={rowIcon}><PlayCircle size={15} className={rowSvg} aria-hidden="true" /></span><span className="min-w-0 flex-1 truncate">이어하기 · {recent.title} · 범위 {recent.chunk + 1}</span><ChevronRight size={16} className={rowArrow} aria-hidden="true" /></button>}
         </section>
 
+        {userRole === 'student' && userUid && <PushHomeCard uid={userUid} />}
         {userRole === 'student' && !studentLinked && onLinked && <button type="button" onClick={() => setLinkOpen(true)} className="mt-3 flex min-h-[48px] w-full items-center gap-2 rounded-2xl bg-[#f5a3a8] px-4 text-left text-sm font-bold text-[#5e1e2a] shadow-sm shadow-[#f5a3a840]"><KeyRound size={17} aria-hidden="true" /><span className="flex-1">학원 연결하고 리포트 받기</span><ChevronRight size={17} aria-hidden="true" /></button>}
 
         <div className="mt-3 grid grid-cols-2 gap-2.5 md:mt-4 md:grid-cols-4 md:gap-4">

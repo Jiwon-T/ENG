@@ -25,7 +25,8 @@ export interface CouponMonth { earned: number; spent?: number; left?: number; wo
 /** What the 보완 is made of (api/_lib/pet couponExtras): 잘한 수업 ×3, 자습 days, 숙제 runs, 한 달 개근. */
 export interface CouponExtraView { points: number; lesson: number; boosted?: number; study: number; studyDays: number; homeworkRuns: number; bestRuns: number; perfect: number; pending?: number;
   days?: { day: string; kind: 'lesson' | 'study' | 'hwRun' | 'bestRun'; points: number }[]; perfects?: { month: string; base: number; noLate: number; diligent: number; lates: number; forgiven?: number; final: boolean }[];
-  now?: { sessions: number; absences: number; lates: number } }
+  now?: { sessions: number; absences: number; lates: number };
+  /** 누적 테스트 개근상 (4+ test days all attended) and this month so far */ testPerfects?: { month: string; days: number; lates: number; base: number; final: boolean }[]; testNow?: { days: number; absences: number; lates: number } }
 export interface CouponView extends CouponMonth { eligible: boolean; month: string; label: string; goal: number;
   /** last month's, in the first days of a month (its lessons' points count for it) */ last?: CouponMonth & { month: string; label: string; until: string } }
 /** 포인트 내역: one line a day, kind and what it was for. */

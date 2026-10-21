@@ -91,7 +91,7 @@ test('shortcuts: Ctrl/⌘+S saves, Ctrl/⌘+Enter publishes; the grid asks befor
  const grid=fs.readFileSync(new URL('../src/components/teacher/TeacherLessonGrid.tsx',import.meta.url),'utf8');
  // Ctrl/⌘+Enter and the 반영 button both ask first (the question shows the 학부모·학생 preview), then publish that one row.
  assert.match(grid,/gridPublish\.current=editorOpen&&active\?\(\)=>\{const row=rows\[activeStudent\];if\(!row\|\|row\.pending\|\|row\.loading\|\|isRecordBusy\(row\.id\)\|\|!gridCanSubmit\(row\)\)return;void publishRow\(row\);\}:null;/);
- assert.match(grid,/const publishRow=\(row:any\)=>confirmLessonPublish\(row\.data,[^\n]*\.then\(ok=>\{if\(ok\)void submitRows\('publish',\[row\.id\]\);\}\);/);
+ assert.match(grid,/const publishRow=\(row:any\)=>confirmLessonPublish\(row\.data,[^\n]*,row\)\.then\(ok=>\{if\(!ok\)return;notifyFor\.current\.set\(row\.id,ok\.notify\);void submitRows\('publish',\[row\.id\]\);\}\);/);
  assert.match(grid,/disabled=\{!gridCanSubmit\(row\)\} onClick=\{\(\) => void publishRow\(row\)\}>/);
  const confirm=fs.readFileSync(new URL('../src/components/teacher/lessonPublishConfirm.tsx',import.meta.url),'utf8');
  assert.match(confirm,/title:'리포트에 반영할까요\?'[^\n]*content:preview/);

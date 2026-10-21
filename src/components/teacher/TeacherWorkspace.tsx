@@ -342,10 +342,11 @@ export default function TeacherWorkspace({ onNavigate, initialTab }: {
 
     const latestLessonJob=[...jobs].reverse().find(job=>job.keys.includes('lesson-editor:'+autoVersion.current)||Boolean(draftId&&job.keys.includes('lesson-record:'+draftId)));
     async function submitSingleLesson(mode:'save'|'publish'){
-        if(mode==='publish'&&!await confirmLessonPublish(lesson,students.find((s:any)=>s.studentKey===lesson.studentKey)?.studentDisplayName||'학생'))return;
+        const confirmed=mode==='publish'?await confirmLessonPublish(lesson,students.find((s:any)=>s.studentKey===lesson.studentKey)?.studentDisplayName||'학생',currentDraft):{};
+        if(!confirmed)return;
         const token=autoVersion.current;savingLesson.current=true;
         try{
-            const outcome=await submitLesson({mode,id:draftId||newLessonId.current,revision,data:lesson,record:currentDraft,request,onSaved:saved=>{
+            const outcome=await submitLesson({mode,id:draftId||newLessonId.current,revision,data:lesson,record:currentDraft,request,notify:confirmed.notify,onSaved:saved=>{
                 if(token!==autoVersion.current)return;
                 setSavedPulse({id:saved.id,at:Date.now()});setDraftId(saved.id);setRevision(saved.record?.revision);if(saved.record){const shown=compactLessonInput(saved.record.data);loadedLesson.current=JSON.stringify(shown);setLesson(shown);}setMessage('앱에 저장했습니다.');
             }});

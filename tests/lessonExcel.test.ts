@@ -15,9 +15,9 @@ test('export naming and real calendar validation match the reference',()=>{
  assert.equal(validLessonDay('2026-02-30'),false);assert.equal(validLessonDay('2024-02-29'),true);
  assert.ok(!lessonExcelFilename(day,'../T:*').includes('/'));
 });
-test('cells preserve homework, optional exam scope, special notes and no-class meaning',()=>{
+test('cells keep homework, special notes and no-class meaning; 시험범위 and the 선생님 메모 stay out',()=>{
  const r=record('a','18:50'),cells=lessonExcelCells(r);
- assert.equal(cells[0],'1용죽 이현준');assert.match(cells[3],/과제: 숙제\n시험범위: 1과/);assert.equal(cells[5],'상담');
+ assert.equal(cells[0],'1용죽 이현준');assert.match(cells[3],/과제: 숙제/);assert.doesNotMatch(cells[3],/시험범위|선생님 메모/);assert.equal(cells[5],'상담');
  r.data.classSession='없음';assert.equal(lessonExcelCells(r)[1],'.','no lesson: a dot');
 });
 test('real workbook preserves reference styles, literal strings, all rows and chronological order',async()=>{

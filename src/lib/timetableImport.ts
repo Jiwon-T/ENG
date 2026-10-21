@@ -2,6 +2,7 @@
 // export) read back into the teacher's classes. Cells are free text written by hand, so the reader is forgiving (no space
 // before names, blank lines, 오전/오후 or none). Nothing is saved here: planImport only proposes; the dialog saves.
 import {gradeOf,GRADE_ORDER} from './schoolGrade';
+import {studentSubjectCampus} from './campus';
 
 export interface SheetCells {weekday:number;lesson:string;study:string;test:string}
 export interface ParsedLine {weekday:number;start:string;end:string;names:string[]}
@@ -85,13 +86,19 @@ export async function readSheetCells(file:ArrayBuffer|Uint8Array):Promise<SheetC
 export interface NameMatch {raw:string;key:string|null;options:string[]}
 export interface PlanLine {weekday:number;start:string;end:string;grade:string;names:NameMatch[];study:{start:string;end:string;names:string[]}[];tests:{weekday:number;start:string;end:string;names:string[]}[]}
 export interface PlanClass {
- /** An existing class of mine, or null for a new one. */
- classId:string|null;name:string;status:'same'|'changed'|'new';changes:string[];
+ /** An existing class of mine, or null for a new one ('new:N' in `key`, for its fields). */
+ classId:string|null;key?:string;name:string;status:'same'|'changed'|'new';changes:string[];
  lines:PlanLine[];
  /** What would be saved (save-class data); null for 'same'. */
  data:any|null;revision:number;notionEditedAt?:string;
 }
-export interface ImportPlan {classes:PlanClass[];skipped:number;unknown:NameMatch[];counts:{lessons:number;study:number;tests:number}}
+/** A class of mine the sheet has no lesson line for. 'moved': every student has a lesson on the sheet in another class
+ *  (the class was split or merged), so stopping it is suggested; 'missing': not on the sheet at all, left as it is unless
+ *  the teacher stops it. `data` is what 중단 saves. */
+export interface PlanOther {classId:string;name:string;reason:'moved'|'missing';students:string[];movedTo:string[];slots:string[];data:any;revision:number;notionEditedAt?:string}
+/** What the teacher may set on a new class before saving (name, campus, subject). */
+export interface NewClassFields {name?:string;campus?:string|null;subject?:string}
+export interface ImportPlan {classes:PlanClass[];others:PlanOther[];skipped:number;unknown:NameMatch[];counts:{lessons:number;study:number;tests:number}}
 
 const DAY_NAMES=['일','월','화','수','목','금','토'];
 const shortOf=(name:string)=>name.replace(/\s*\(.*\)\s*$/,'').trim();
@@ -111,9 +118,12 @@ const clean=(slot:any)=>JSON.stringify({w:slot.weekday,s:slot.start,e:slot.end,k
  * - Names: one exact student → chosen; several or none → `choices[raw]` (a key, or '' to leave out) decides.
  * - A lesson line goes to my class with exactly those students (its slot that weekday gets the time and 자습); otherwise a
  *   new class (lines with the same students share it). 자습 joins the student's lesson that weekday; a Test line joins the
- *   class that has its students, as a 3차시 line. Lines without names are skipped; classes not on the sheet stay as they are.
+ *   class that has its students, as a 3차시 line — one written for students of several classes is split, each student to
+ *   their own class. Lines without names are skipped.
+ * - Classes of mine with no line on the sheet come back as `others` (stopping one is the teacher's choice; the dialog saves it).
+ * - `newNames`/`newFields` (by 'new:N'): the name, campus and subject the teacher gave a new class.
  */
-export function planImport(cells:SheetCells[],data:any,choices:Record<string,string>={},newNames:Record<string,string>={}):ImportPlan{
+export function planImport(cells:SheetCells[],data:any,choices:Record<string,string>={},newNames:Record<string,string>={},newFields:Record<string,NewClassFields>={}):ImportPlan{
  const students=(data.students||[]).map((s:any)=>({key:s.studentKey as string,short:shortOf(String(s.studentDisplayName||'')),name:String(s.studentDisplayName||'')}));
  const nameOf=(key:string)=>students.find((s:any)=>s.key===key)?.name||'';
  const unknown=new Map<string,NameMatch>();
@@ -144,12 +154,14 @@ export function planImport(cells:SheetCells[],data:any,choices:Record<string,str
   if(!g){g={keys,lines:[],existing:mine.find((c:any)=>same(c.students||[],keys))||null};groups.push(g);}
   g.lines.push(line);
  }
- // Test (3차시): to the group with all its students (else the one with the first student).
+ // Test (3차시): to the group with all its students; else split, each student to their own group (the first that has them).
  for(const c of cells)for(const e of parseEntries(c.test,c.weekday)){
   counts.tests++;
   const keys=[...new Set(e.names.map(raw=>resolve(raw).key).filter(Boolean) as string[])];if(!keys.length)continue;
-  const g=groups.find(g=>keys.every(k=>g.keys.includes(k)))||groups.find(g=>g.keys.includes(keys[0]));
-  if(g){const target=g.lines[0];const test=target.tests.find(t=>t.weekday===e.weekday&&t.start===e.start&&t.end===e.end);if(test)test.names=[...new Set([...test.names,...keys.filter(k=>g.keys.includes(k))])];else target.tests.push({weekday:e.weekday,start:e.start,end:e.end,names:keys.filter(k=>g.keys.includes(k))});}
+  const whole=groups.find(g=>keys.every(k=>g.keys.includes(k)));
+  const parts=whole?[whole]:[...new Set(keys.map(k=>groups.find(g=>g.keys.includes(k))).filter(Boolean) as typeof groups)];
+  for(const g of parts){const names=keys.filter(k=>g.keys.includes(k)&&(whole||groups.find(x=>x.keys.includes(k))===g)),target=g.lines[0];
+   const test=target.tests.find(t=>t.weekday===e.weekday&&t.start===e.start&&t.end===e.end);if(test)test.names=[...new Set([...test.names,...names])];else target.tests.push({weekday:e.weekday,start:e.start,end:e.end,names});}
  }
  const subjectFor=(keys:string[])=>{const scopes=data.teachingScopes||data.scopes||[];const subjects=keys.map(k=>scopes.find((s:any)=>s.studentKey===k)?.subject).filter(Boolean);return subjects.includes('영어')||!subjects.length?'영어':subjects[0];};
  const classes:PlanClass[]=groups.map((g,index)=>{
@@ -158,10 +170,12 @@ export function planImport(cells:SheetCells[],data:any,choices:Record<string,str
   const tidy=(s:any)=>{const out:any={...s};if(!out.study?.length)delete out.study;else out.study=out.study.map((b:any)=>{const x={...b};if(!x.students)delete x.students;return x;});if(!out.students)delete out.students;return out;};
   if(!g.existing){
    const grade=[...new Set(g.lines.map(l=>l.grade).filter(Boolean))].join('·'),first=students.find((s:any)=>s.key===g.keys[0])?.short||'학생';
-   const auto=`${grade?grade+' ':''}${first}${g.keys.length>1?` 외 ${g.keys.length-1}명`:''}반`,key=`new:${index}`;
-   const name=(newNames[key]??auto).trim()||auto;
-   return {classId:null,name,status:'new',changes:g.lines.map(l=>`${DAY_NAMES[l.weekday]} ${l.start}~${l.end}`),lines:g.lines,revision:0,
-    data:{name,status:'진행 중',subject:subjectFor(g.keys),campus:null,students:g.keys,slots:[...lessonSlots,...testSlots].map(tidy),books:[]}};
+   const auto=`${grade?grade+' ':''}${first}${g.keys.length>1?` 외 ${g.keys.length-1}명`:''}반`,key=`new:${index}`,set=newFields[key]||{};
+   const name=(set.name??newNames[key]??auto).trim()||auto,subject=set.subject||subjectFor(g.keys);
+   // campus: the teacher's pick, else the one campus every student takes this subject at
+   const campuses=[...new Set(g.keys.map(k=>studentSubjectCampus(data.students,k,subject)))],campus=set.campus!==undefined?set.campus:campuses.length===1?campuses[0]:null;
+   return {classId:null,key,name,status:'new',changes:g.lines.map(l=>`${DAY_NAMES[l.weekday]} ${l.start}~${l.end}`),lines:g.lines,revision:0,
+    data:{name,status:'진행 중',subject,campus,students:g.keys,slots:[...lessonSlots,...testSlots].map(tidy),books:[]}};
   }
   // An existing class: the sheet's weekdays take the lesson slot of that weekday (time and 자습), and the 3차시 lines on the
   // sheet's test weekdays; every other slot stays as it was.
@@ -180,9 +194,22 @@ export function planImport(cells:SheetCells[],data:any,choices:Record<string,str
   const slots=[...next.filter(o=>!(o.kind==='test'&&testDays.has(o.weekday))),...newTests.map(t=>{const was=keptTests.find(o=>o.start===t.start&&o.end===t.end);return was?{...(was.id?{id:was.id}:{}),...(was.status?{status:was.status}:{}),...t}:t;})];
   const changed=changes.length>0;
   return {classId:c.id,name:c.name,status:changed?'changed':'same',changes,lines:g.lines,revision:c.revision||0,notionEditedAt:c.notionEditedAt,
-   data:changed?{name:c.name,status:c.status||'진행 중',subject:c.subject||'영어',campus:c.campus||null,students:c.students||[],slots:slots.slice(0,14),
-    books:(c.books||[]).map((b:any)=>({...(b.id?{id:b.id}:{}),...(b.linkedPlanId?{linkedPlanId:b.linkedPlanId}:{}),...(b.progress?{progress:b.progress}:{}),title:b.title,status:b.status}))}:null};
+   data:changed?saved(c,{slots:slots.slice(0,14)}):null};
  });
- return {classes,skipped,unknown:[...unknown.values()],counts};
+ // My classes the sheet has no line for: suggest 중단 when all their students are now in other classes on the sheet.
+ const used=new Set(groups.map(g=>g.existing?.id).filter(Boolean)),onSheet=new Set(groups.flatMap(g=>g.keys));
+ const others:PlanOther[]=mine.filter((c:any)=>!used.has(c.id)).map((c:any)=>{
+  const keys:string[]=c.students||[],moved=keys.length>0&&keys.every(k=>onSheet.has(k));
+  const movedTo=classes.filter((_,i)=>groups[i].keys.some(k=>keys.includes(k))).map(p=>p.name); // classes[i] is groups[i]
+  return {classId:c.id,name:c.name,reason:moved?'moved':'missing',students:keys,movedTo,
+   slots:(c.slots||[]).filter((s:any)=>s.kind!=='test'&&s.status!=='중단').map((s:any)=>`${DAY_NAMES[s.weekday]} ${s.start}`),
+   data:saved(c,{status:'중단'}),revision:c.revision||0,notionEditedAt:c.notionEditedAt};
+ });
+ return {classes,others,skipped,unknown:[...unknown.values()],counts};
+}
+/** A class of mine as save-class takes it (books: only the saved fields), with some fields changed. */
+function saved(c:any,change:any){
+ return {name:c.name,status:c.status||'진행 중',subject:c.subject||'영어',campus:c.campus||null,students:c.students||[],slots:c.slots||[],
+  books:(c.books||[]).map((b:any)=>({...(b.id?{id:b.id}:{}),...(b.linkedPlanId?{linkedPlanId:b.linkedPlanId}:{}),...(b.progress?{progress:b.progress}:{}),title:b.title,status:b.status})),...change};
 }
 const toMin=(t:string)=>{const [h,m]=t.split(':').map(Number);return h*60+m;};

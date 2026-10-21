@@ -93,7 +93,9 @@ async function changePublicLesson(db: any, actor: any, idInput: unknown, revisio
             ...(old.sourceMode !== 'firestore' ? { appTakeoverBaseRevision: revision } : {}),
             stage: archive ? 'archived' : 'published', archived: archive, deleteRequested: false,
             appProjectionId: target.id, appPublishedRevision: version, directReportRevision: version,
-            lastSubmittedRevision: version, failureCode: null, reportPublishedAt: now, updatedAt: now };
+            lastSubmittedRevision: version, failureCode: null, reportPublishedAt: now, updatedAt: now,
+            // the 과제 students saw at this 반영: the next 반영's '학생에게 알림 보내기' starts on only when it changed
+            ...(archive ? {} : { publishedAssignment: String(old.data?.assignment || '').trim() }) };
         const projected = archive ? null : { ...prior, ...directLessonReport(id, record, mapping,
             prior || { reportIdentity: source || id }), notionPageId: source ? normalizeNotionPageId(source) : null,
             appLessonId: id, academyId: actor.academyId, sourceMode: 'firestore' };

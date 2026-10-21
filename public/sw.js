@@ -47,3 +47,21 @@ self.addEventListener('fetch', event => {
   );
 });
 
+// 과제·보강 알림: a push from FCM (notification and/or data fields). One tag per lesson, so a later change replaces the
+// earlier alert instead of piling up; a tap opens (or focuses) the app at the link.
+self.addEventListener('push', event => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch (e) { d = {}; }
+  const n = d.notification || {}, data = d.data || {};
+  const title = n.title || data.title || '채움';
+  const options = { body: n.body || data.body || '', tag: data.tag || undefined, renotify: Boolean(data.tag), icon: '/android-icon-192x192.png', badge: '/android-icon-96x96.png', data: { link: (d.fcmOptions && d.fcmOptions.link) || data.link || '/' } };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const link = new URL((event.notification.data && event.notification.data.link) || '/', self.location.origin).href;
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) if (c.url.startsWith(self.location.origin) && 'focus' in c) { if ('navigate' in c && c.url !== link) c.navigate(link).catch(() => {}); return c.focus(); }
+    return self.clients.openWindow(link);
+  }));
+});

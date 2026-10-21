@@ -46,6 +46,8 @@ export default function LearningReport() {
   });
   const [studentLessonReports, setStudentLessonReports] = useState<StudentLessonReportDTO[]>([]);
   const [reportLoad, setReportLoad] = useState('loading');
+  // The account is not linked to a student yet: the lists are empty, not failed.
+  const [unlinked, setUnlinked] = useState(false);
   const [scheduleLoad, setScheduleLoad] = useState('loading');
   const [reloadLists, setReloadLists] = useState(0);
   const [studentSchedules, setStudentSchedules] = useState<StudentScheduleDTO[]>([]);
@@ -247,7 +249,7 @@ export default function LearningReport() {
     setReportLoad('loading'); setScheduleLoad('loading');
     const token = () => user.getIdToken();
     loadStudentResource<{reports: StudentLessonReportDTO[]; subjects?: SubjectEnrollment[]}>(user.uid, 'lesson-reports', token).then(result => {
-      if (live && auth.currentUser?.uid === user.uid) { setStudentLessonReports(result.reports); setEnrollments(result.subjects || []); setReportLoad('ready'); }
+      if (live && auth.currentUser?.uid === user.uid) { setStudentLessonReports(result.reports); setEnrollments(result.subjects || []); setUnlinked(Boolean((result as any).unlinked)); setReportLoad('ready'); }
     }).catch(() => { if (live) setReportLoad('failed'); });
     loadStudentResource<{schedules: StudentScheduleDTO[]}>(user.uid, 'schedules', token).then(result => {
       if (live && auth.currentUser?.uid === user.uid) { setStudentSchedules(result.schedules); setScheduleLoad('ready'); }
@@ -555,6 +557,7 @@ export default function LearningReport() {
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 py-5 md:py-6">
 
+      {unlinked && <p role="status" className="text-sm text-slate-500 mb-3">아직 계정이 학생 기록과 연결되지 않았어요. 연결되면 수업 숙제와 일정이 여기에 보여요.</p>}
       {(reportLoad !== 'ready' || scheduleLoad !== 'ready') && <p role="status" className="text-sm text-slate-500 mb-3">{reportLoad === 'failed' || scheduleLoad === 'failed' ? <>일부 기록을 불러오지 못했습니다. <button className="underline" onClick={retryLists}>다시 불러오기</button></> : '과제·일정을 불러오는 중…'}</p>}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => { setSubjectFilter(''); setLessonPage(1); setSchedulePage(1); setAssignmentPage(1); }} className={`px-3 py-2 rounded-xl text-sm font-bold ${!subjectFilter ? 'bg-indigo-600 text-white' : 'bg-white border'}`}>전체 과목</button>

@@ -4,7 +4,7 @@
 import {keepsNameHidden} from '../../src/lib/rankNames.js';
 import {
   PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_CHARACTERS, PET_DAILY_STUDY_POINTS, PET_ENERGY_ITEMS_PER_DAY, PET_FRIEND_LEVEL, PET_MAX_ENERGY, PET_MAX_LEVEL, PET_MAX_PETS, PET_REVIVES_PER_DAY,
-  PET_ATTITUDE_REWARD, COUPON_BOOST, PET_COUPON, PET_LATE_REWARD, PET_REWARD_WINDOW_DAYS, LESSON_REWARD_FROM, LESSON_REWARD_LOCK_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob, type PetGearLook} from '../../src/lib/petCatalog.js';
+  PET_ATTITUDE_REWARD, COUPON_BOOST, PET_COUPON, PET_LATE_REWARD, PET_TEST_DAY, PET_REWARD_WINDOW_DAYS, LESSON_REWARD_FROM, LESSON_REWARD_LOCK_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob, type PetGearLook} from '../../src/lib/petCatalog.js';
 
 export const PET_STATES = 'petStates';
 export interface ServerPhrase { original: string; remembered: string; learnedAtLevel: number; evolvedVersions: Record<string, string> }
@@ -296,11 +296,15 @@ export function homeworkGrades(reports: {id: string; date: string; subject: stri
   return out;
 }
 /** One lesson report as the 수업 보상 reads it. `testPaper`: 종이 시험 (else 앱). */
-export interface LessonRewardRow { id: string; date: string; attendance: string; homework: string; test: string; testPaper: boolean; attitude: string }
+export interface LessonRewardRow { id: string; date: string; attendance: string; homework: string; test: string; testPaper: boolean; attitude: string; /** a 누적 테스트 날 (one row a day) */ testDay?: boolean }
+/** 누적 테스트 출석 보너스: +50P, 지각 80%. */
+export const testDayReward = (late: boolean) => late ? {points: Math.round(PET_TEST_DAY.bonus.points * PET_TEST_DAY.lateRate), xp: Math.round(PET_TEST_DAY.bonus.xp * PET_TEST_DAY.lateRate)} : {...PET_TEST_DAY.bonus};
+const TEST_DAY_FROM = (date: string) => String(date || '').slice(0, 10) >= PET_TEST_DAY.from;
 /** What a lesson's 일지 is worth now: 출석 (지각 less), its 숙제 평가, 시험 평가 and 태도 — each from the grade written there. */
 export function lessonRewardParts(r: Omit<LessonRewardRow, 'id' | 'date'>) {
   const parts: {label: string; points: number; xp: number}[] = [];
   if (ATTENDED(r.attendance)) parts.push(/지각/.test(r.attendance) ? {label: '지각', ...PET_LATE_REWARD} : {label: '출석', ...PET_ATTENDANCE_REWARD});
+  if (r.testDay && ATTENDED(r.attendance)) parts.push({label: '누적 테스트 출석', ...testDayReward(/지각/.test(r.attendance))});
   const hw = PET_HOMEWORK_REWARD[r.homework]; if (hw) parts.push({label: `숙제 ${r.homework}`, ...hw});
   const test = PET_TEST_REWARD[r.testPaper ? 'paper' : 'app'][r.test]; if (test) parts.push({label: `시험(${r.testPaper ? '종이' : '앱'}) ${r.test}`, ...test});
   const attitude = PET_ATTITUDE_REWARD[r.attitude]; if (attitude) parts.push({label: `태도 ${r.attitude}`, ...attitude});
@@ -341,10 +345,10 @@ export function settleLessons(s: ServerPetState, rows: LessonRewardRow[], now = 
   for (const [id, paid] of Object.entries(s.lessonPaid || {})) if (!seen.has(id)) net += settleLessonReward(s, id, paid.d, null, now) || 0;
   return net;
 }
-type StudyReward = {id: string; kind: 'attendance' | 'assignment' | 'homework' | 'test' | 'attitude'; grade?: string; paper?: boolean; /** the lesson's day (숙제: the lesson that graded it) */ day?: string;
+type StudyReward = {id: string; kind: 'attendance' | 'assignment' | 'homework' | 'test' | 'attitude' | 'testDay'; grade?: string; paper?: boolean; /** the lesson's day (숙제: the lesson that graded it) */ day?: string;
   /** older than the 30-day window (놓친 수업 보상): one '지난 수업 보상' line, counted for this month */ late?: boolean};
 /** 공부 보상 waiting: attended lessons, graded 숙제 and 테스트 평가 (중 and above) from the last 30 days not yet rewarded. */
-export function pendingStudyRewards(s: ServerPetState, reports: {id: string; date: string; attendance: string; homework?: string; homeworkGrade?: string; gradedAt?: string; gradedBy?: string; test?: string; testPaper?: boolean; attitude?: string}[], now = Date.now()) {
+export function pendingStudyRewards(s: ServerPetState, reports: {id: string; date: string; attendance: string; homework?: string; homeworkGrade?: string; gradedAt?: string; gradedBy?: string; test?: string; testPaper?: boolean; attitude?: string; testDay?: boolean}[], now = Date.now()) {
   // the last 30 days as before, and older lessons back to LESSON_BACKPAY_FROM never paid (놓친 수업 보상)
   const recent = seoulDay(now - PET_REWARD_WINDOW_DAYS * 86_400_000), from = LESSON_BACKPAY_FROM < recent ? LESSON_BACKPAY_FROM : recent, today = seoulDay(now), out: StudyReward[] = [];
   const inWindow = (date?: string) => { const day = String(date || '').slice(0, 10); return Boolean(day) && day >= from && day <= today; };
@@ -358,7 +362,7 @@ export function pendingStudyRewards(s: ServerPetState, reports: {id: string; dat
   // October, while September's lines are kept, for days since the student's 내역 began (points from before it have no
   // line), and not for a student with a 지난 수업 보상 line (that one hides the days)
   const ledger = s.ledger || [], since = ledger.map(x => x.day).sort()[0] || '9999', repair = s.day.slice(0, 7) === PET_COUPON.firstSeason && !ledger.some(x => x.label === '지난 수업 보상');
-  const LINE: Record<string, RegExp> = {attendance: /^(출석|지각)$/, assignment: /^숙제 /, homework: /^숙제 /, test: /^시험/, attitude: /^(수업 )?태도/};
+  const LINE: Record<string, RegExp> = {attendance: /^(출석|지각)$/, assignment: /^숙제 /, homework: /^숙제 /, test: /^시험/, attitude: /^(수업 )?태도/, testDay: /^누적 테스트/};
   const lost = (kind: string, date?: string) => { const day = String(date || '').slice(0, 10); return repair && day >= since && day.slice(0, 7) === prevMonth(PET_COUPON.firstSeason) && !ledger.some(x => x.kind === 'class' && x.day === day && LINE[kind].test(x.label)); };
   for (const r of reports) {
     const paid = s.rewarded[r.id] || [], done = paid.filter(kind => !lost(kind, kind === 'assignment' ? r.gradedAt : r.date));
@@ -366,6 +370,7 @@ export function pendingStudyRewards(s: ServerPetState, reports: {id: string; dat
     if (r.homeworkGrade && PET_HOMEWORK_REWARD[r.homeworkGrade] && inWindow(r.gradedAt) && old(r.gradedAt) && !done.includes('assignment')) out.push({id: r.id, kind: 'assignment', grade: r.homeworkGrade, day: String(r.gradedAt).slice(0, 10), ...late(r.gradedAt)});
     if (r.homework && PET_HOMEWORK_REWARD[r.homework] && !graders.has(r.id) && inWindow(r.date) && old(r.date) && !done.includes('homework')) out.push({id: r.id, kind: 'homework', grade: r.homework, day: String(r.date).slice(0, 10), ...late(r.date)});
     if (r.test && PET_TEST_REWARD.paper[r.test] && inWindow(r.date) && old(r.date) && !done.includes('test')) out.push({id: r.id, kind: 'test', grade: r.test, paper: Boolean(r.testPaper), day: String(r.date).slice(0, 10), ...late(r.date)});
+    if (r.testDay && TEST_DAY_FROM(r.date) && inWindow(r.date) && old(r.date) && ATTENDED(r.attendance) && !done.includes('testDay')) out.push({id: r.id, kind: 'testDay', day: String(r.date).slice(0, 10), ...(/지각/.test(r.attendance) ? {grade: '지각'} : {}), ...late(r.date)});
     if (r.attitude && PET_ATTITUDE_REWARD[r.attitude] && inWindow(r.date) && old(r.date) && !done.includes('attitude')) out.push({id: r.id, kind: 'attitude', grade: r.attitude, day: String(r.date).slice(0, 10), ...late(r.date)});
   }
   return out;
@@ -373,12 +378,12 @@ export function pendingStudyRewards(s: ServerPetState, reports: {id: string; dat
 export function claimStudyRewards(s: ServerPetState, pending: StudyReward[]) {
   let points = 0, xp = 0;
   for (const p of pending) {
-    const r = p.kind === 'attendance' ? (p.grade === '지각' ? PET_LATE_REWARD : PET_ATTENDANCE_REWARD) : p.kind === 'test' ? PET_TEST_REWARD[p.paper ? 'paper' : 'app'][p.grade || ''] : p.kind === 'attitude' ? PET_ATTITUDE_REWARD[p.grade || ''] : PET_HOMEWORK_REWARD[p.grade || ''];
+    const r = p.kind === 'testDay' ? testDayReward(p.grade === '지각') : p.kind === 'attendance' ? (p.grade === '지각' ? PET_LATE_REWARD : PET_ATTENDANCE_REWARD) : p.kind === 'test' ? PET_TEST_REWARD[p.paper ? 'paper' : 'app'][p.grade || ''] : p.kind === 'attitude' ? PET_ATTITUDE_REWARD[p.grade || ''] : PET_HOMEWORK_REWARD[p.grade || ''];
     if (!r) continue;
     points += r.points; xp += r.xp; s.rewarded[p.id] = [...new Set([...(s.rewarded[p.id] || []), p.kind])];
     // each counts for its lesson's month and shows in the 포인트 내역 on that day; 놓친 수업 보상 (older than 30 days) is one
     // '지난 수업 보상' line today, counted for this month's coupon
-    const label = p.late ? '지난 수업 보상' : p.kind === 'attendance' ? (p.grade === '지각' ? '지각' : '출석') : p.kind === 'assignment' || p.kind === 'homework' ? `숙제 ${p.grade}` : p.kind === 'test' ? `시험(${p.paper ? '종이' : '앱'}) ${p.grade}` : '수업 태도';
+    const label = p.late ? '지난 수업 보상' : p.kind === 'testDay' ? '누적 테스트 출석' : p.kind === 'attendance' ? (p.grade === '지각' ? '지각' : '출석') : p.kind === 'assignment' || p.kind === 'homework' ? `숙제 ${p.grade}` : p.kind === 'test' ? `시험(${p.paper ? '종이' : '앱'}) ${p.grade}` : '수업 태도';
     earnPoints(s, r.points, 'class', label, p.late ? s.day : p.day);
   }
   s.points += points; const {leveledUp} = addXP(s, xp);
@@ -454,9 +459,11 @@ export interface CouponExtra { points: number; lesson: number; study: number; st
   /** the 보완 by day, for the 내역: a lesson's ×3 part, a 자습 day, a 숙제 run */ days?: {day: string; kind: 'lesson' | 'study' | 'hwRun' | 'bestRun'; points: number}[];
   /** 한 달 개근 by month: 개근 (less 30% a 지각), 지각 없는, 성실; `final` once the month is over */ perfects?: {month: string; base: number; noLate: number; diligent: number; lates: number; /** a 결석 let pass (11+ attended) */ forgiven?: number; final: boolean}[];
   /** this month so far, toward 개근 */ now?: {sessions: number; absences: number; lates: number};
+  /** 누적 테스트 개근상 by month (4+ test days, all attended; 30% less a 지각); `final` once the month is over */ testPerfects?: {month: string; days: number; lates: number; base: number; final: boolean}[];
+  /** this month so far, toward 누적 테스트 개근 (a test day with no 일지 is a 결석) */ testNow?: {days: number; absences: number; lates: number};
   /** 숙제 통과율: 평가 written ('없는 날'·'미확인' left out) and 중상 이상 (통과) among them */ hwCounted?: number; hwDone?: number }
 /** A 수업 일지 as the 보완 reads it: `session` a class session (수업 시간 written), `studied` a 자습 that day. */
-export interface CouponRow { date: string; attendance: string; homework: string; test: string; testPaper: boolean; attitude: string; subject?: string; session?: boolean; studied?: boolean }
+export interface CouponRow { date: string; attendance: string; homework: string; test: string; testPaper: boolean; attitude: string; subject?: string; session?: boolean; studied?: boolean; testDay?: boolean }
 const SKIP_HOMEWORK = (h: string) => !h || h === '없는 날' || h === '미확인';
 export function couponExtras(rows: CouponRow[], today: string): Record<string, CouponExtra> {
   const B = COUPON_BOOST, cur = today.slice(0, 7), out: Record<string, CouponExtra> = {};
@@ -469,7 +476,7 @@ export function couponExtras(rows: CouponRow[], today: string): Record<string, C
     const e = at(day(r).slice(0, 7)), chips = [r.homework, r.test, r.attitude].filter(c => !SKIP_HOMEWORK(c));
     // ×3 only for a lesson attended (출석·지각·보강 출석) and done well all round: 숙제·테스트·태도 상 이상 (출석 stays as it is)
     if (ATTENDED(r.attendance) && chips.length && chips.every(GOOD)) {
-      const more = (B.lessonTimes - 1) * lessonRewardParts(r).filter(p => p.label !== '출석' && p.label !== '지각').reduce((n, p) => n + p.points, 0);
+      const more = (B.lessonTimes - 1) * lessonRewardParts(r).filter(p => p.label !== '출석' && p.label !== '지각' && !p.label.startsWith('누적 테스트')).reduce((n, p) => n + p.points, 0);
       if (more) { e.lesson += more; e.boosted = (e.boosted || 0) + 1; (e.days ||= []).push({day: day(r), kind: 'lesson', points: more}); }
     }
     if (!SKIP_HOMEWORK(r.homework)) { e.hwCounted = (e.hwCounted || 0) + 1; if (GOOD(r.homework) || r.homework === '중상') e.hwDone = (e.hwDone || 0) + 1; }
@@ -502,6 +509,15 @@ export function couponExtras(rows: CouponRow[], today: string): Record<string, C
       const p = {month, base: Math.round(B.perfect * Math.max(0, 1 - B.latePenalty * marks)), noLate: marks ? 0 : B.perfectNoLate, diligent: inMonth.some(r => r.homework === '미제출') ? 0 : B.diligent, lates, ...(forgiven ? {forgiven} : {}), final: month < cur};
       const amount = p.base + p.noLate + p.diligent; (e.perfects ||= []).push(p);
       if (p.final) e.perfect += amount; else e.pending = (e.pending || 0) + amount;
+    }
+    // 누적 테스트 개근 (test days apart from the lessons): 4+ test days in the month, none missed (결석 or no 일지)
+    const tests = inMonth.filter(r => r.testDay && TEST_DAY_FROM(r.date)), testLates = tests.filter(r => ATTENDED(r.attendance) && /지각/.test(r.attendance)).length;
+    const missed = tests.filter(r => !ATTENDED(r.attendance)).length;
+    if (tests.length && month === cur) e.testNow = {days: tests.length, absences: missed, lates: testLates};
+    if (tests.length >= PET_TEST_DAY.minDays && !missed) {
+      const p = {month, days: tests.length, lates: testLates, base: Math.round(PET_TEST_DAY.perfect * Math.max(0, 1 - PET_TEST_DAY.latePenalty * testLates)), final: month < cur};
+      (e.testPerfects ||= []).push(p);
+      if (p.final) e.perfect += p.base; else e.pending = (e.pending || 0) + p.base;
     }
   }
   for (const e of Object.values(out)) e.points = e.lesson + e.study + e.homeworkRuns * B.homeworkRun.points + e.bestRuns * B.bestRun.points + e.perfect;

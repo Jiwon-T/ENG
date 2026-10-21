@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Medal } from 'lucide-react';
 import { AI_PLANS } from '../lib/aiPlans';
-import { PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_DAILY_STUDY_POINTS, PET_STUDY_RATES } from '../lib/petCatalog';
+import { PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_DAILY_STUDY_POINTS, PET_STUDY_RATES, PET_TEST_DAY } from '../lib/petCatalog';
 import type { PetSummary } from '../lib/petService';
 import { CouponBonus } from './pet/PetCoupon';
 
@@ -18,6 +18,7 @@ export function PassBadge({ pass }: { pass?: PetSummary['pass'] }) {
 const won = (n: number) => n.toLocaleString('ko-KR');
 const WAYS: [string, string][] = [
   ['수업 출석', `+${PET_ATTENDANCE_REWARD.points}P`],
+  ['누적 테스트 날 출석 (출석 포함)', `+${PET_ATTENDANCE_REWARD.points + PET_TEST_DAY.bonus.points}P`],
   ['숙제 (선생님 평가 중 이상)', `+${PET_HOMEWORK_REWARD['중'].points}~${PET_HOMEWORK_REWARD['최상'].points}P`],
   ['단어 시험 정답 1개', `+${PET_STUDY_RATES['vocab-test'].points}P`],
   ['오답 복습 1개', `+${PET_STUDY_RATES['review-confirm'].points}P`],

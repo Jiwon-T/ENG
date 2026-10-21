@@ -20,3 +20,13 @@ test('가져오기 › a name not in the app: 원장님·관리자 can register 
   assert.doesNotMatch(teacher, /새 학생 등록/);
   assert.equal((teacher.match(/원장님께 등록을 요청해 주세요/g) || []).length, 1);
 });
+
+test('가져오기 › a split class: 중단 suggested and ticked; a new class shows its name, campus and subject to set', () => {
+  const split: any = {uid: 'me', teachingScopes: [], students: [{studentKey: k(1), studentDisplayName: '김민준 (용인중1)'}, {studentKey: k(4), studentDisplayName: '박하늘 (고덕중2)'}],
+    classes: [{id: 'c9', name: '합반', status: '진행 중', ownerUid: 'me', students: [k(1), k(4)], slots: [{weekday: 5, start: '16:00', end: '17:20', kind: 'lesson'}]}]};
+  const html = renderToStaticMarkup(<TimetableImport fileName="10월 시간표.xlsx" cells={[{weekday: 1, lesson: '4:10~5:30\n김민준', study: '', test: ''}, {weekday: 2, lesson: '4:10~5:30\n박하늘', study: '', test: ''}]} data={split} request={async () => ({})} onSaved={() => {}} onClose={() => {}}/>);
+  assert.match(html, /중단 제안/); assert.match(html, /학생 2명이 모두 다른 반으로 옮겨요/);
+  assert.match(html, /type="checkbox" checked=""/);
+  assert.match(html, /2개 반 저장 · 1개 반 중단/);
+  assert.equal((html.match(/aria-label="캠퍼스"/g) || []).length, 2); assert.equal((html.match(/aria-label="과목"/g) || []).length, 2);
+});

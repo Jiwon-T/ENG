@@ -79,7 +79,8 @@ export default function TeacherLessonGrid({ headingActions,data, busy, request, 
     const setRow = (id: string, patch: Partial<Row>) => setRows(previous => previous.map(r => r.id === id ? { ...r, ...patch,...(patch.savedData&&patch.stage==='draft'?{savedAt:Date.now()}: {}) } : r));
     const setField = (id: string, key: string, value: any,manual=true) => {if(pendingRows.current.has(id))return;dismissNotice();setRows(previous => previous.map(r => r.id === id ? { ...r, error: undefined,touched:[...(r.touched||[]),...(manual?[key]:[])],data: r.savedData?editedSessionNumbers(withAutoTestGrade(r.data,withStudyDefaults({...r.data,[key]:value},key),key),r.savedData,[...(r.touched||[]),...(manual?[key]:[])],r.sessionRecords||[]):r.sessionRecords?autoSessionNumbers(withAutoTestGrade(r.data,withStudyDefaults({...r.data,[key]:value},key),key),r.sessionRecords,[...(r.touched||[]),...(manual?[key]:[])],Boolean(r.savedData)||r.stage!=='new').data:withAutoTestGrade(r.data,withStudyDefaults({...r.data,[key]:value},key),key) } : r));};
     async function run(mode: 'save' | 'publish', ids: string[]) {
-        const chosen = rows.filter(r => ids.includes(r.id)&&!r.loading);
+        const chosen = rows.filter(r => ids.includes(r.id)&&!r.loading).map(r => mode === 'publish' ? { ...r, notify: notifyFor.current.get(r.id) } : r);
+        if (mode === 'publish') for (const id of ids) notifyFor.current.delete(id);
         const { succeeded, failed } = await processLessonRows(chosen, mode, request, setRow);
         setNotice(`${mode === 'save' ? '저장' : '반영 요청'} ${succeeded}건${failed ? ` · 실패 ${failed}건 — 해당 학생의 안내를 확인해 주세요.` : ''}`);
         await refresh();
@@ -129,7 +130,9 @@ export default function TeacherLessonGrid({ headingActions,data, busy, request, 
     const checkStatus=() => act(async () => { const fresh = await request('read:draft-records',{ids:rows.map(r=>r.id).join(','),force:'1'}); setRows(previous => previous.map(row => { const saved = fresh.records.find((d: any) => d.id === row.id); return saved ? { ...row, revision: saved.revision, stage: saved.stage, savedData: saved.data,publishStartedAt:saved.publishStartedAt,notionWrite:saved.notionWrite } : row; })); await refresh(); });
     gridSave.current=editorOpen&&active?()=>{const row=rows[activeStudent];if(row&&!row.pending&&!row.loading&&!isRecordBusy(row.id))void submitRows('save',[row.id]);}:null;
     // 반영: always asked first, with the 학부모·학생 report preview in the question.
-    const publishRow=(row:any)=>confirmLessonPublish(row.data,data.students.find((s:any)=>s.studentKey===row.data.studentKey)?.studentDisplayName||'학생').then(ok=>{if(ok)void submitRows('publish',[row.id]);});
+    const publishRow=(row:any)=>confirmLessonPublish(row.data,data.students.find((s:any)=>s.studentKey===row.data.studentKey)?.studentDisplayName||'학생',row).then(ok=>{if(!ok)return;notifyFor.current.set(row.id,ok.notify);void submitRows('publish',[row.id]);});
+    // '학생에게 알림 보내기' chosen in each row's 반영 확인 창, sent with that row's 반영.
+    const notifyFor=useRef(new Map<string,string|undefined>());
     // Ctrl/⌘+Enter: publish the open student after the same confirm as the single editor.
     gridPublish.current=editorOpen&&active?()=>{const row=rows[activeStudent];if(!row||row.pending||row.loading||isRecordBusy(row.id)||!gridCanSubmit(row))return;void publishRow(row);}:null;
     const rowDirty=(r:any)=>r.savedData?JSON.stringify(r.data)!==JSON.stringify(r.savedData):Boolean(r.touched?.length);

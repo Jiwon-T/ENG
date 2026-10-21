@@ -183,7 +183,7 @@ export async function owedPoints(db: any, key: string, now: number, strict = fal
   const linked = Boolean(uid && user?.role === 'student' && !user.disabled && typeof user.notionStudentKey === 'string' && isNotionPageId(user.notionStudentKey) && uuid(user.notionStudentKey) === key);
   const raw = linked ? (await db.collection(PET_STATES).doc(uid!).get()).data() : null;
   const held: ServerPetState = raw ? rollDay(raw, now) : {...initialPetState(now), points: 0};
-  const read = lessonRows(db, mapping.internalStudentId, linked ? uid : null), rows = strict ? await read : await read.catch(() => []);
+  const read = lessonRows(db, mapping.internalStudentId, linked ? uid : null, null, key), rows = strict ? await read : await read.catch(() => []);
   const all = structuredClone(held);
   if (rows.length) { claimStudyRewards(all, pendingStudyRewards(all, rows, now)); settleLessons(all, rows, now); applyCouponExtras(all, rows, now); }
   return {linked, uid: linked ? uid : null, user, hadPet: Boolean(raw), held: Number(held.points || 0), all, rows, saved: raw ? held : null};

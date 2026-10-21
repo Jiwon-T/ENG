@@ -9,7 +9,7 @@ import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 import { PetService, type AiTalkView, CouponView, type MedalSpot, type PetState } from '../../lib/petService';
 import {
-  PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_LATE_REWARD, PET_HOMEWORK_REWARD_TEXT, PET_TEST_REWARD_TEXT, PET_ATTITUDE_REWARD, PET_CHARACTERS, PET_FRIEND_LEVEL, PET_ITEMS, PET_MAX_LEVEL, PET_MAX_PETS, PET_STUDY_RATES, petStageLabel,
+  PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_LATE_REWARD, PET_TEST_DAY, PET_HOMEWORK_REWARD_TEXT, PET_TEST_REWARD_TEXT, PET_ATTITUDE_REWARD, PET_CHARACTERS, PET_FRIEND_LEVEL, PET_ITEMS, PET_MAX_LEVEL, PET_MAX_PETS, PET_STUDY_RATES, petStageLabel,
   cleanPetSpeech, petEmojiLimit, petIdleLine, petItem, petStage, xpNeeded, PET_EXPEDITION, PET_WORD_FEED, type PetItem, PET_JOB3, petAura, passAllows
 } from '../../lib/petCatalog';
 import { AI_PLANS, PASS_NOTE } from '../../lib/aiPlans';
@@ -297,7 +297,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
             <ul className="mt-2 space-y-2 text-xs text-slate-600">
               {([
                 ['📚', '공부', `단어 테스트 1문제 ${PET_STUDY_RATES['vocab-test'].points}P · 단어장 퀴즈 ${PET_STUDY_RATES['wordbook-quiz'].points}P · 오답 복습 ${PET_STUDY_RATES['review-confirm'].points}P (하루 최대 ${won(state.today.studyCap)}P)`],
-                ['🏫', '수업', `출석 +${PET_ATTENDANCE_REWARD.points}P (지각 ${PET_LATE_REWARD.points}P) · 숙제는 다음 수업 선생님 평가로 ${PET_HOMEWORK_REWARD_TEXT} · 테스트 평가: 종이 시험지 ${PET_TEST_REWARD_TEXT('paper')}, 앱 테스트 ${PET_TEST_REWARD_TEXT('app')} · 수업 태도 ${Object.entries(PET_ATTITUDE_REWARD).map(([g, r]) => `${g} +${r.points}`).join(' · ')}P (하루 한도와 별도) · 선생님이 일지를 반영하면 바로 들어오고, 평가가 바뀌면 포인트도 맞춰져요(수업 7일 뒤 고정)`],
+                ['🏫', '수업', `출석 +${PET_ATTENDANCE_REWARD.points}P (지각 ${PET_LATE_REWARD.points}P) · 누적 테스트 날 출석 보너스 +${PET_TEST_DAY.bonus.points}P 더 (지각 ${Math.round(PET_TEST_DAY.bonus.points * PET_TEST_DAY.lateRate)}P) · 숙제는 다음 수업 선생님 평가로 ${PET_HOMEWORK_REWARD_TEXT} · 테스트 평가: 종이 시험지 ${PET_TEST_REWARD_TEXT('paper')}, 앱 테스트 ${PET_TEST_REWARD_TEXT('app')} · 수업 태도 ${Object.entries(PET_ATTITUDE_REWARD).map(([g, r]) => `${g} +${r.points}`).join(' · ')}P (하루 한도와 별도) · 선생님이 일지를 반영하면 바로 들어오고, 평가가 바뀌면 포인트도 맞춰져요(수업 7일 뒤 고정)`],
                 ['✅', '선생님 인증', '내가 만든 워크북 풀이 · 지문 분석지 회독 · 변형 문제를 선생님께 인증받으면 포인트 (하루 5건까지)'],
                 ['🗺️', '원정대', `스테이지 첫 클리어 +${PET_EXPEDITION.bonus.clear}P · ★2·★3 처음 +${PET_EXPEDITION.bonus.star2}P씩 · 파티 원정대 보상은 한 주 최대 ${PET_PARTY.weeklyCap}P`],
                 ['⚡', '기운', '매일 다시 가득 차요 · 기운 간식은 하루 두 번까지 · 다 쓰면 탈진: 몬스터로 깨워요 (하루 한 번)'],
