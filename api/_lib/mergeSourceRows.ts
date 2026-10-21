@@ -8,7 +8,8 @@ export function mergeNotionRows(local:any[],remote:any[]){
  const used=new Set<any>(),result:any[]=[];
  for(const source of remote){
   const page=normalize(source.notionPageId);
-  const cached=local.find(r=>page&&normalize(r.notionPageId)===page)||local.find(r=>!r.notionPageId&&markers.get(normalize(source.appRecordId))===1&&normalize(r.id)===normalize(source.appRecordId)&&r.ownerUid===source.ownerUid&&r.academyId===source.academyId&&r.data&&source.data&&normalize(r.data.studentKey)===normalize(source.data.studentKey)&&r.data.subject===source.data.subject);
+  // the same app document on both sides (a class made in the app: the managed list reads teacherClasses too) is one row
+  const cached=local.find(r=>page&&normalize(r.notionPageId)===page)||local.find(r=>!page&&r.id&&r.id===source.id)||local.find(r=>!r.notionPageId&&markers.get(normalize(source.appRecordId))===1&&normalize(r.id)===normalize(source.appRecordId)&&r.ownerUid===source.ownerUid&&r.academyId===source.academyId&&r.data&&source.data&&normalize(r.data.studentKey)===normalize(source.data.studentKey)&&r.data.subject===source.data.subject);
   if(cached)used.add(cached);if(cached?.archived)continue;
   const pending=['pending','failed','syncing'].includes(cached?.notionSyncStage)||(cached?.data&&['draft','failed','publishing','processing','notion_saved','report_published_notion_pending','reflection_pending'].includes(cached.stage)&&cached.revision>0)||Boolean(cached?.notionWrite&&cached?.stage==='published');
   // An app-owned row (taken over, published or restored in the app) keeps its own values; the migrated copy is only the link.

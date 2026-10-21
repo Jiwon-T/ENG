@@ -4,7 +4,7 @@ import {doc,getDoc} from 'firebase/firestore';
 import {auth,db} from '../../lib/firebase';
 import {saveBlob,printFooter} from '../../lib/printFrame';
 import {addCalendarDays,koreanDay,mondayOfWeek} from '../../lib/teacherWeekCalendar';
-import {buildTimetableExcel,timetableFilename,timetableSheet,type TimetableBase,type TimetableSheet} from '../../lib/timetableSheet';
+import {buildTimetableExcel,isLessonTime,timetableFilename,timetableSheet,type TimetableBase,type TimetableSheet} from '../../lib/timetableSheet';
 import {PrintPage,PrintPortal} from '../print/PrintSheet';
 import {readSheetCells,type SheetCells} from '../../lib/timetableImport';
 import TimetableImport from './TimetableImport';
@@ -16,7 +16,7 @@ const savedName=()=>{try{return localStorage.getItem(NAME_KEY);}catch{return nul
 /** The printed sheet: the same table as the Excel file (A4 landscape). */
 function TimetablePrintTable({sheet}:{sheet:TimetableSheet}){
  return <table className="tt-sheet"><thead><tr><th/>{sheet.days.map(d=><th key={d.date}>{d.label}</th>)}</tr></thead>
-  <tbody>{([['수업','lesson'],['자습\n(1,2차시)','study'],['Test\n(3차시)','test']] as const).map(([label,key])=><tr key={key} className={`tt-row-${key}`}><th>{label}</th>{sheet.days.map(d=><td key={d.date}>{d[key].join('\n')}</td>)}</tr>)}</tbody></table>;
+  <tbody>{([['수업','lesson'],['자습\n(1,2차시)','study'],['Test\n(3차시)','test']] as const).map(([label,key])=><tr key={key} className={`tt-row-${key}`}><th>{label}</th>{sheet.days.map(d=><td key={d.date}>{key==='lesson'?d.lesson.map((line,i)=><span key={i}>{i>0&&'\n'}{isLessonTime(line)?<b>{line}</b>:line}</span>):d[key].join('\n')}</td>)}</tr>)}</tbody></table>;
 }
 
 /**

@@ -23,6 +23,7 @@ import { readTowerHall, recordTowerHall } from '../petTowerHall.js';
 import { PET_RANKINGS, myPetRank, readRankProfile, readRankings, refreshRankings } from '../petRanking.js';
 import { MONTH_RANK_DOC, keepsNameHidden, monthRankingSnapshot, readMonthRanking, studentRealName } from '../petMonthRanking.js';
 import { PET_TOWERS, syncTowerDecor, syncGearLooks, syncGearInbox, gearLookFor, takeJob3, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
+import { claimQuestBox, markWrongReviewed, noteQuest, questView, readQuestRecords } from '../petQuests.js';
 import { couponStudentKey, couponView, placeDecor, readCoupon, readCouponView, requestCoupon, syncOfflineMedals } from '../petCoupon.js';
 import { PET_EXPEDITIONS, chooseJob, chooseJob2, finishStage, initialExpedition, levelOk, petProgress, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
 
@@ -42,7 +43,7 @@ const MESSAGES: Record<string, string> = {
   PET_JOB3_LOCKED: '3차 전직은 2차 전직한 Lv.150 친구가 채움의 탑 50층을 깨면 할 수 있어요.',
   PET_JOB_BAD: '검사나 마법사 중에서 골라 주세요.', PET_JOB_TAKEN: '이 친구는 이미 전직했어요.', PET_JOB_LOCKED: '5장 설산의 왕관 스테이지를 이 친구와 통과하면 1차 전직할 수 있어요.', PET_JOB2_BAD: '이 친구의 직업에 맞는 갈래를 골라 주세요.', PET_JOB2_LOCKED: '1차 전직한 친구와 7장 꿈의 정원의 왕관 스테이지를 통과하면 2차 전직할 수 있어요.',
   PET_NOT_ENOUGH_POINTS: '포인트가 부족해요!', PET_ENERGY_ITEM_USED: '기운 회복 간식은 하루에 두 번까지 먹을 수 있어요!', PET_EXHAUSTED: '펫이 탈진했어요. 몬스터를 먹여야 깨어나요!', PET_NOT_EXHAUSTED: '몬스터는 기운을 다 써서 탈진했을 때만 먹일 수 있어요.', PET_REVIVE_USED: '몬스터는 하루에 한 번만 먹일 수 있어요.', PET_TIRED: '펫이 너무 지쳤어요. 기운을 회복시켜 주세요!',
-  PET_ITEM_NOT_FOUND: '없는 물건이에요.', PET_ITEM_NOT_OWNED: '먼저 상점에서 사 주세요.', PET_ALREADY_CHOSEN: '이미 친구를 골랐어요.', PET_BAD_NAME: '이름을 입력해 주세요.',
+  PET_ITEM_NOT_FOUND: '없는 물건이에요.', PET_ITEM_NOT_OWNED: '먼저 상점에서 사 주세요.', PET_BAG_EMPTY: '가방에 남은 간식이 없어요.', QUEST_CLAIMED: '오늘 간식 상자는 이미 열었어요.', QUEST_NOT_DONE: '오늘 할 일을 3개 다 하면 열 수 있어요.', PET_ALREADY_CHOSEN: '이미 친구를 골랐어요.', PET_BAD_NAME: '이름을 입력해 주세요.',
   FEED_NO_BOOKS: '단어장을 한 번 공부하면 시작할 수 있어요. 학습 세트에서 단어장을 공부해 보세요!', FEED_STALE: '다른 화면에서 진행이 바뀌었어요. 최신 상태로 불러올게요.', FEED_BAD_CHOICE: '카드를 다시 골라 주세요.', FEED_NO_RUN: '진행 중인 게임이 없어요.', FEED_OTHER_RUN: '하던 판이 있어요. 먼저 끝내거나 그만둬 주세요.', EXPEDITION_BAD_STAGE: '없는 스테이지예요.', EXPEDITION_LOCKED: '앞 스테이지를 먼저 통과해 주세요.', EXPEDITION_LEVEL: '대표 펫 레벨이 더 높아야 갈 수 있어요.',
   RANK_STALE: '순위가 새로 바뀌었어요. 순위를 다시 열어 주세요.', NAME_REAL: '실명이 들어 있는 이름이에요.', RANK_BUILDING: '순위를 만드는 중이에요. 잠시 후 다시 열어 주세요.', PARTY_NICK_LENGTH: '이름은 2~10자로 정해 주세요.', PARTY_NICK_CONTACT: '이름에 연락처나 주소는 쓸 수 없어요.', PARTY_NICK_BANNED: '이 이름은 다시 쓸 수 없어요. 다른 이름을 정해 주세요.', PARTY_NEED_NICK: '먼저 원정대 이름과 이 펫의 모험가 별칭을 정해 주세요.', NAME_TAKEN: '이미 같은 이름을 쓰는 친구가 있어요. 그래도 이 이름으로 할까요?', PARTY_NICK_WARNED: '관리자가 이름을 바꿔 달라고 했어요. 새 이름을 정해 주세요.',
   PARTY_ONE_A_WEEK: '파티는 한 주에 한 팀만 들어갈 수 있어요.', PARTY_BAD_INPUT: '모집글을 다시 골라 주세요.', PARTY_CLOSED: '이번 주 모집이 끝난 팀이에요.', PARTY_FULL: '자리가 다 찼어요.', PARTY_NOT_MEMBER: '이 팀의 팀원이 아니에요.', PARTY_BAD_VOTE: '투표할 수 없어요.', PARTY_VOTE_TOO_SOON: '2명 팀은 상대가 3일 이상 쉬었을 때만 내보낼 수 있어요.', PARTY_NOT_FOUND: '팀을 찾을 수 없어요.',
@@ -247,13 +248,14 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       // progress (reads only; the ranking snapshot is used as it is, rebuilt here only when over 6 hours old).
       // the lessons' points come in by themselves when the app opens (no button to press)
       const claimed = await autoClaimStudy(db, uid, now).catch(() => { console.warn('PET_AUTO_CLAIM_FAILED'); return 0; });
-      const [st, pass, couponKey] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection('aiPasses').doc(uid).get(), couponStudentKey(db, uid).catch(() => null)]);
+      const [st, pass, couponKey, records] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection('aiPasses').doc(uid).get(), couponStudentKey(db, uid).catch(() => null), readQuestRecords(db, uid, now)]);
       const plan = activePlan(pass.data(), seoulDay(now)), state = st.exists ? rollDay(st.data(), now) : null;
       const coupon = couponKey && state ? await readCouponView(db, uid, state, true) : null;
       // A failed ranking read leaves `rank` out (not null = 'no place yet', shown as –위), so the chip waits for the next
       // visit. rankTeacher: the place is in the ranking with the teachers (the chip opens that view).
       const rank = await myPetRank(db, uid, now, Boolean(state)).then(r => ({rank: r.rank, ...(r.teacher ? {rankTeacher: true} : {})}), () => { console.warn('PET_RANK_FAILED'); return {}; });
       return sendJson(res, 200, {ok: true, hasPet: st.exists, points: state ? Number(state.points || 0) : 0, pass: plan === 'free' ? null : {plan, until: String(pass.data()?.until || '')},
+        quests: questView(state, records, now),
         coupon: coupon ? {earned: coupon.earned, goal: coupon.goal, requested: coupon.requested, extra: coupon.extra || null} : null, ...(claimed ? {claimed} : {}), ...rank,
         // 쌓인 포인트 알림 (shown once as a popup, then inbox-seen)
         ...(state?.inbox?.length ? {inbox: state.inbox} : {})});
@@ -291,6 +293,11 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     if (action === 'award') { const source = String(body.source || ''); if (!Object.hasOwn(PET_STUDY_RATES, source)) return fail('PET_BAD_SOURCE'); return done(await change(db, uid, now, s => awardStudy(s, source as any, body.count))); }
     if (action === 'inbox-seen') return done(await change(db, uid, now, s => { s.inbox = []; }));
     if (action === 'claim-study') { const reports = await studyReports(db, uid); return done(await change(db, uid, now, s => { const r = claimStudyRewards(s, pendingStudyRewards(s, reports, now)); return reports.length ? {...r, points: r.points + settleLessons(s, reports, now)} : r; }), {pendingRewards: 0}); }
+    // 오늘 할 일: open today's 간식 상자 (all three done); a snack from the 가방 is given like a bought one, without points
+    if (action === 'quest-claim') { const rec = await readQuestRecords(db, uid, now); const out = await change(db, uid, now, s => claimQuestBox(s, rec, now)); return done(out, {quests: questView(out.state, rec, now)}); }
+    // 오답 복습: the server marks the answer reviewed (the student's own, not reviewed yet), and only then it counts
+    if (action === 'review-mark') { const marked = await markWrongReviewed(db, uid, String(body.sessionId || ''), String(body.word || '')); return marked ? done(await change(db, uid, now, s => { noteQuest(s, 'review'); return {marked: true}; })) : sendJson(res, 200, {ok: true, result: {marked: false}}); }
+    if (action === 'snack-use') return done(await change(db, uid, now, s => buyItem(s, String(body.itemId || ''), true)));
     if (action === 'buy') return done(await change(db, uid, now, s => { const id = String(body.itemId || ''), r = buyItem(s, id); if (body.wear === true) wearItem(s, id); return r; }));
     // 이달의 장학 쿠폰 (no points are taken) and placing the 금메달 in a room.
     if (action === 'coupon-request') { const key = await couponStudentKey(db, uid); if (!key) return fail('COUPON_NOT_ELIGIBLE', 403); const out = await requestCoupon(db, uid, key, now, body.month, body.tier); return done({state: out.state, result: {month: out.coupon.month}}, {coupon: await readCouponView(db, uid, out.state, true)}); }
@@ -346,6 +353,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       // Party: a word answered right for the first time (sentences and boards don't count toward the boss).
       if (party && !r.repeat && !r.pending && r.correct && q && !q.retry && ['meaning', 'listen', 'spell', undefined].includes(q.type)) r.party = addContribution(party, uid, q.key, petLook(s), now);
       // The last answer of a stage game settles the stage here, once (a resent answer comes back as `repeat`).
+      if (!r.repeat && g.run?.finished) noteQuest(s, 'feed');
       if (!r.repeat && g.run?.finished && g.run.stage) r.expedition = finishStage(e, s, g.run.stage, runSummary(g.run).stars, g.run.slot);
       return r;
     }));

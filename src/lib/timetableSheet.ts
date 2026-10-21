@@ -72,6 +72,11 @@ export function timetableFilename(sheet:TimetableSheet){
 
 const xml=(value:string)=>value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const cell=(ref:string,style:number,value='')=>value?`<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xml(value)}</t></is></c>`:`<c r="${ref}" s="${style}"/>`;
+/** A 수업 line that starts a lesson ("4:10~5:30 (중1)"), bold on the sheet; the names under it are not. */
+export const isLessonTime=(line:string)=>/^\d{1,2}:\d{2}~\d{1,2}:\d{2}/.test(line);
+// the academy's sheet: 10pt 맑은 고딕, the time lines bold (rich text runs in one cell)
+const RUN='<sz val="10"/><color theme="1"/><rFont val="맑은 고딕"/><family val="3"/><charset val="129"/><scheme val="minor"/>';
+const lessonCell=(ref:string,style:number,lines:string[])=>lines.length?`<c r="${ref}" s="${style}" t="inlineStr"><is>${lines.map((line,i)=>`<r><rPr>${isLessonTime(line)?'<b/>':''}${RUN}</rPr><t xml:space="preserve">${xml(line+(i<lines.length-1?'\n':''))}</t></r>`).join('')}</is></c>`:cell(ref,style);
 const COLUMNS=['C','D','E','F','G','H','I'];
 /** Rows grow with the longest cell (the template's heights are the minimum), 13.5pt a line. */
 const height=(min:number,cells:string[][])=>Math.max(min,Math.max(0,...cells.map(lines=>lines.length))*13.5+8);
@@ -88,7 +93,7 @@ export async function buildTimetableExcel(template:ArrayBuffer|Uint8Array,sheet:
   `<row r="3">${cell('B3',1)}${sheet.days.map((d,i)=>cell(`${COLUMNS[i]}3`,2,d.label)).join('')}</row>`,
   ...([['수업','lesson',3,174.65],['자습\n(1,2차시)','study',6,125.25],['Test\n(3차시)','test',6,108.75]] as const).map(([label,key,style,min],k)=>{
    const r=4+k,lines=sheet.days.map(d=>d[key]);
-   return `<row r="${r}" ht="${height(min,lines).toFixed(2)}" customHeight="1">${cell(`B${r}`,style,label)}${lines.map((l,i)=>cell(`${COLUMNS[i]}${r}`,4,l.join('\n'))).join('')}</row>`;
+   return `<row r="${r}" ht="${height(min,lines).toFixed(2)}" customHeight="1">${cell(`B${r}`,style,label)}${lines.map((l,i)=>key==='lesson'?lessonCell(`${COLUMNS[i]}${r}`,4,l):cell(`${COLUMNS[i]}${r}`,4,l.join('\n'))).join('')}</row>`;
   }),
  ];
  if(!/<sheetData\s*\/>|<sheetData>[\s\S]*?<\/sheetData>/.test(source))throw Error('시간표 서식 파일을 읽지 못했어요.');

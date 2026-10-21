@@ -191,7 +191,9 @@ export function planImport(cells:SheetCells[],data:any,choices:Record<string,str
   const keptTests=next.filter(o=>o.kind==='test'&&testDays.has(o.weekday));
   const newTests=testSlots.map(tidy);
   if(keptTests.length!==newTests.length||keptTests.some(o=>!newTests.some(t=>clean(t)===clean(o))))changes.push(...[...testDays].map(d=>`${DAY_NAMES[d]} 테스트 바뀜`));
-  const slots=[...next.filter(o=>!(o.kind==='test'&&testDays.has(o.weekday))),...newTests.map(t=>{const was=keptTests.find(o=>o.start===t.start&&o.end===t.end);return was?{...(was.id?{id:was.id}:{}),...(was.status?{status:was.status}:{}),...t}:t;})];
+  // an old test keeps its id (and status) only on the same weekday and time, and only once: two slots never share an id
+  const reused=new Set<any>();
+  const slots=[...next.filter(o=>!(o.kind==='test'&&testDays.has(o.weekday))),...newTests.map(t=>{const was=keptTests.find(o=>!reused.has(o)&&o.weekday===t.weekday&&o.start===t.start&&o.end===t.end);if(was)reused.add(was);return was?{...(was.id?{id:was.id}:{}),...(was.status?{status:was.status}:{}),...t}:t;})];
   const changed=changes.length>0;
   return {classId:c.id,name:c.name,status:changed?'changed':'same',changes,lines:g.lines,revision:c.revision||0,notionEditedAt:c.notionEditedAt,
    data:changed?saved(c,{slots:slots.slice(0,14)}):null};

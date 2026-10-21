@@ -46,6 +46,17 @@ test('round trip: a sheet exported from the app reads back as "그대로" for ev
   assert.deepEqual(plan.unknown, []);
 });
 
+test('a new test at the same time as an old one on another day: the old id stays on its own day only (no shared id)', () => {
+  const data = base();
+  const cells: SheetCells[] = [
+    {weekday: 1, lesson: '4:10~5:30\n김민준, 이서연', study: '', test: ''},
+    {weekday: 2, lesson: '', study: '', test: '5:30~6:30 김민준, 이서연'},
+    {weekday: 4, lesson: '', study: '', test: '5:30~6:30 김민준'},
+  ];
+  const slots = planImport(cells, data).classes.find(c => c.classId === 'c1')!.data.slots.filter((s: any) => s.kind === 'test');
+  assert.deepEqual(slots.map((s: any) => [s.weekday, s.id]), [[2, 's3'], [4, undefined]], 'the 화 test keeps s3; the new 목 test gets its own id when saved');
+});
+
 test('a Test line for students of several classes is split: each student to their own class, nobody dropped', () => {
   const data = base();
   const cells: SheetCells[] = [

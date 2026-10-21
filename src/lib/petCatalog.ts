@@ -20,6 +20,22 @@ export const PET_FRIEND_LEVEL = 100;
 export const PET_MAX_ENERGY = 100;
 /** 기운 회복 간식 (커피·에너지드링크): this many a day, never for a pet at 0 기운 (탈진). */
 export const PET_ENERGY_ITEMS_PER_DAY = 2;
+/** 오늘 할 일 (home): three a day — 단어 테스트, 오답 복습 (단어장 공부 when fewer than `reviewNeed` wrong answers wait),
+ *  and a pet word game. All three done: a 간식 상자 (snacks into the bag, no points — kept off the points economy); every
+ *  `streakDays` days in a row a 특별 상자. */
+export const PET_QUESTS = {
+  reviewNeed: 5,
+  list: {
+    test: { label: '단어 테스트 1번', need: 1, go: 'vocab' },
+    review: { label: '오답 복습 5개', need: 5, go: 'report' },
+    study: { label: '단어장 공부 1번', need: 1, go: 'vocab' },
+    feed: { label: '펫과 단어 먹이 주기·원정대 1판', need: 1, go: 'pet' },
+  },
+  box: { pick: ['cookie', 'macaron', 'cake'], count: 2, energy: 'coffee' },
+  special: { items: ['candy', 'candy', 'cake', 'energy_drink'] },
+  streakDays: 5,
+} as const;
+export type PetQuestId = keyof typeof PET_QUESTS.list;
 /** 탈진 회복 '몬스터': once a day, only at 0 기운. */
 export const PET_REVIVES_PER_DAY = 1;
 /** One more pet each time a pet reaches PET_FRIEND_LEVEL; one of each kind at most. */

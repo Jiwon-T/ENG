@@ -151,6 +151,7 @@ test('pet API: login required; the state lives on the server and users.petStats 
   assert.equal(bought.out.state.points, 70);
   const award = await call('POST', {action: 'award', source: 'vocab-test', count: 50}, deps);
   assert.equal(award.out.result.points, PET_DAILY_STUDY_POINTS);
+  assert.equal((await call('POST', {action: 'quest-claim'}, deps)).out.error, 'QUEST_NOT_DONE', '오늘 할 일: a test alone does not open the 간식 상자');
   const poor = await call('POST', {action: 'buy', itemId: 'mori_girl'}, deps);
   assert.equal(poor.status, 400); assert.equal(poor.out.message, '포인트가 부족해요!');
 
@@ -329,11 +330,13 @@ test('pet summary (home chip and pass badge): points and the pass in force, noth
   const f = registrationFirestore(), deps: any = {verify: async () => ({uid: 'kid'}), db: () => f.db, now: () => NOW};
   const get = async () => { let out: any; const req: any = {method: 'GET', url: '/api/student?__endpoint=pet&summary=1', headers: {authorization: 'Bearer t'}};
     await handlePet(req, {setHeader() {}, end(v: string) { out = JSON.parse(v); }, statusCode: 0} as any, deps); return out; };
-  assert.deepEqual(await get(), {ok: true, hasPet: false, points: 0, pass: null, coupon: null, rank: null});
+  const first = await get(), {quests, ...rest} = first;
+  assert.deepEqual(rest, {ok: true, hasPet: false, points: 0, pass: null, coupon: null, rank: null});
+  assert.deepEqual(quests.items.map((i: any) => i.id), ['test', 'study', 'feed'], '오늘 할 일 comes along (no wrong answers: 단어장 공부)');
   assert.equal(f.rows.has('petStates/kid'), false, 'no pet is made by looking');
   const s = initialPetState(NOW); s.points = 1240; f.rows.set('petStates/kid', s);
   f.rows.set('aiPasses/kid', {plan: 'premium', until: '2026-10-14'});
-  assert.deepEqual(await get(), {ok: true, hasPet: true, points: 1240, pass: {plan: 'premium', until: '2026-10-14'}, coupon: null, rank: null}, 'not a 장학 쿠폰 student: no coupon; no chosen pet: no place');
+  assert.deepEqual((({quests: _q, ...r}) => r)(await get()), {ok: true, hasPet: true, points: 1240, pass: {plan: 'premium', until: '2026-10-14'}, coupon: null, rank: null}, 'not a 장학 쿠폰 student: no coupon; no chosen pet: no place');
   f.rows.set('aiPasses/kid', {plan: 'pet', until: '2026-10-13'});
   assert.equal((await get()).pass, null, 'an ended pass shows no badge');
 });

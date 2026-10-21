@@ -1,6 +1,7 @@
 import ExamMaterialCatalog from '../exam/ExamMaterialCatalog';
 import OptionalMark from './OptionalMark';
 import { WordbookCache } from '../../lib/wordbookCache';
+import { prefetchedBookWords } from '../../lib/wordbookPrefetch';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, Plus, Search, Trash2, Edit3, FileSpreadsheet, X, CheckCircle2, Circle, GripVertical, FileText, Download, Layers, ArrowUp, ArrowDown, Calendar, CheckSquare, Square, Sliders, Check } from 'lucide-react';
@@ -47,7 +48,7 @@ const noWritingTest = (type?: string) => type === 'grammar-cramming' || type ===
 
 /** `quick` (바로 출력 from the 수업 일지): only the 시험지 or 단어장 출력 window, opened on that book and DAYs; closing it
  *  calls `onQuickClose`. */
-export interface WordbookQuick { wordbookId: string; mode: 'test' | 'print'; startDay?: number; endDay?: number; studentName?: string }
+export interface WordbookQuick { wordbookId: string; mode: 'test' | 'print'; startDay?: number; endDay?: number; studentName?: string; /** the book as the chip read it: opened without waiting for the whole list */ wordbook?: Wordbook }
 export default function WordbookManager({ category = 'word', quick, onQuickClose }: { category?: SetCategory; quick?: WordbookQuick; onQuickClose?: () => void }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [selectedWordbook, setSelectedWordbook] = useState<Wordbook | null>(null);
@@ -275,13 +276,17 @@ export default function WordbookManager({ category = 'word', quick, onQuickClose
     if(!id){setWords([]);setLoadedBookId('');return;}
     const cached=wordCache.current.get(id);
     if(cached){setWords(cached);setLoadedBookId(id);}else{setWords([]);setLoadedBookId('');}
+    // 바로 출력: words read ahead while the teacher picked 시험지 or 단어장 출력 fill in until the live read comes
+    let live=false,closed=false;
+    if(!cached)prefetchedBookWords(id)?.then(items=>{if(live||closed)return;const sorted=[...items].sort((a,b)=>(a.order??0)-(b.order??0));wordCache.current.put(id,sorted);setWords(sorted);setLoadedBookId(id);}).catch(()=>{});
     const q=query(collection(db,`wordbooks/${id}/words`),orderBy('order','asc'));
     const unsubscribe=onSnapshot(q,{includeMetadataChanges:true},snapshot=>{
       if(snapshot.metadata.fromCache&&snapshot.empty)return;
+      live=true;
       const fetched=snapshot.docs.map(d=>({id:d.id,...d.data()} as Word));
       fetched.sort((a,b)=>(a.order??0)-(b.order??0));wordCache.current.put(id,fetched);setWords(fetched);setLoadedBookId(id);setWordLoadError('');
     },()=>{setLoadedBookId(id);setWordLoadError('단어를 불러오지 못했습니다. 목록으로 돌아가 다시 열어 주세요.');});
-    return unsubscribe;
+    return ()=>{closed=true;unsubscribe();};
   },[selectedWordbook?.id]);
 
   // 바로 출력: pick the book once the list is in, then open its window on the memo's DAYs (the start, then the end given
@@ -289,7 +294,7 @@ export default function WordbookManager({ category = 'word', quick, onQuickClose
   const quickOpened = useRef(false);
   useEffect(() => {
     if (!quick || selectedWordbook) return;
-    const wb = allWordbooks.find(b => b.id === quick.wordbookId); if (wb) setSelectedWordbook(wb);
+    const wb = allWordbooks.find(b => b.id === quick.wordbookId) || (quick.wordbook?.id === quick.wordbookId && (quick.wordbook.createdBy === auth.currentUser?.uid || auth.currentUser?.email === 'lizzieshere1@gmail.com') ? quick.wordbook : undefined); if (wb) setSelectedWordbook(wb);
   }, [quick, allWordbooks, selectedWordbook]);
   useEffect(() => {
     if (!quick || quickOpened.current || !selectedWordbook || selectedWordbook.id !== quick.wordbookId || loadedBookId !== quick.wordbookId) return;

@@ -18,7 +18,8 @@ export interface ServerPet { slot: number; character: string; name: string; /** 
 export interface ServerPetState {
   version: 1; points: number; inventory: string[]; /** before 여러 마리: what pet 1 wore */ clothing?: string | null; accessory?: string | null; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: ServerPet[];
-  day: string; today: { studyPoints: number; energyItems?: number; /** before 2/day */ energyItem?: boolean; /** 몬스터 today */ revives?: number; /** 선생님 인증 paid today */ certs?: number };
+  day: string; today: { studyPoints: number; energyItems?: number; /** before 2/day */ energyItem?: boolean; /** 몬스터 today */ revives?: number; /** 선생님 인증 paid today */ certs?: number;
+    /** 오늘 할 일 done so far (counted whatever today's three are) and whether today's 간식 상자 was opened */ quest?: Partial<Record<string, number>>; questClaimed?: boolean };
   rewarded: Record<string, string[]>; updatedAt: number;
   /** 이달의 장학 쿠폰: points earned in `month` ('YYYY-MM', Korea time). */ earned?: { month: string; points: number };
   /** Earned by month (this month and last): a lesson's points count for the month of the lesson. */ earnedBy?: Record<string, number>;
@@ -32,6 +33,8 @@ export interface ServerPetState {
   lessonPaid?: Record<string, { p: number; x: number; d: string }>;
   /** 쌓인 포인트 알림: 수업 보상 that came in (or changed) without the student, shown once when the app opens. */
   inbox?: InboxLine[];
+  /** 가방: snacks from 간식 상자 (item id → count), given to the pet without points. */ snacks?: Record<string, number>;
+  /** 오늘 할 일 days in a row: the last day all three were done and how many days in a row (a 특별 상자 every 5). */ questStreak?: { day: string; n: number };
 }
 export interface InboxLine { day: string; label: string; points: number }
 export const seoulDay = (at = Date.now()) => new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Seoul'}).format(new Date(at));
@@ -182,16 +185,18 @@ export function awardStudy(s: ServerPetState, source: PetStudySource, count: num
 }
 const STUDY_LABEL: Record<string, string> = {'vocab-test': '단어 테스트', 'wordbook-quiz': '단어 퀴즈', 'wordbook-match': '매치 게임', 'wordbook-flashcard': '플래시카드', 'review-confirm': '오답 복습', 'review-round': '오답 복습'};
 
-export function buyItem(s: ServerPetState, id: string) {
+/** `fromBag`: a snack from the 가방 (간식 상자) instead of points; the daily limits are the same. */
+export function buyItem(s: ServerPetState, id: string, fromBag = false) {
   const item = petItem(id); if (!item) throw Error('PET_ITEM_NOT_FOUND');
+  if (fromBag && (item.category !== 'consumable' || !(s.snacks?.[id]! > 0))) throw Error('PET_BAG_EMPTY');
   const pet = currentPet(s);
   if (item.category !== 'consumable' && s.inventory.includes(id)) return {message: '이미 가지고 있어요.'};
   if (item.reward || item.pass) throw Error('PET_ITEM_NOT_FOUND');
   // 탈진 (0 기운): only 몬스터 wakes the pet (once a day); 커피·에너지드링크 wait until then.
   if (item.revive) { if (pet.energy > 0) throw Error('PET_NOT_EXHAUSTED'); if ((s.today.revives || 0) >= PET_REVIVES_PER_DAY) throw Error('PET_REVIVE_USED'); }
   else if (item.energy) { if (pet.energy <= 0) throw Error('PET_EXHAUSTED'); if (energyItemsUsed(s) >= PET_ENERGY_ITEMS_PER_DAY) throw Error('PET_ENERGY_ITEM_USED'); }
-  if (s.points < item.price) throw Error('PET_NOT_ENOUGH_POINTS');
-  s.points -= item.price;
+  if (fromBag) { s.snacks![id] -= 1; if (!s.snacks![id]) delete s.snacks![id]; }
+  else { if (s.points < item.price) throw Error('PET_NOT_ENOUGH_POINTS'); s.points -= item.price; }
   if (item.category === 'consumable') {
     if (item.revive) { pet.energy = Math.min(pet.maxEnergy, item.energy || 0); s.today.revives = (s.today.revives || 0) + 1; return {message: '몬스터를 마시고 번쩍 깨어났어요!'}; }
     if (item.energy) { pet.energy = Math.min(pet.maxEnergy, pet.energy + item.energy); s.today.energyItems = energyItemsUsed(s) + 1; delete s.today.energyItem; return {message: '기운이 나요! 기운 회복!'}; }
@@ -445,7 +450,7 @@ export const parseAi = (text: string) => { try { return JSON.parse(text); } catc
 /** What the browser sees: everything but the bookkeeping. */
 export function publicPetState(s: ServerPetState) {
   const pet = currentPet(s);
-  return {ledger: s.ledger || [], englishTalk: Boolean(s.englishTalk), medals: s.medals || [], towerDecor: s.towerDecor || [], decor: s.decor || {}, points: s.points, inventory: s.inventory, clothing: pet.clothing, accessories: pet.accessories, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
+  return {snacks: s.snacks || {}, ledger: s.ledger || [], englishTalk: Boolean(s.englishTalk), medals: s.medals || [], towerDecor: s.towerDecor || [], decor: s.decor || {}, points: s.points, inventory: s.inventory, clothing: pet.clothing, accessories: pet.accessories, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
     today: {studyPoints: s.today.studyPoints, studyCap: PET_DAILY_STUDY_POINTS, energyItemsLeft: Math.max(0, PET_ENERGY_ITEMS_PER_DAY - energyItemsUsed(s)), revivesLeft: Math.max(0, PET_REVIVES_PER_DAY - (s.today.revives || 0))}, stage: petStage(pet.level)};
 }
 /** For the teacher screens: the highest-level pet and how many live here. */

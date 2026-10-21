@@ -415,7 +415,8 @@ export default function LearningReport() {
     setProcessingId(id);
     setReviewConfirmItem(null);
     try {
-      await markIncorrectAnswerReviewed(ans.sessionId, ans.word);
+      // marked by the server (counts for 오늘 할 일); on the device only when the server could not
+      if (!await PetService.reviewMark(ans.sessionId, ans.word)) await markIncorrectAnswerReviewed(ans.sessionId, ans.word);
       if (auth.currentUser) {
         void PetService.award('review-confirm', 1);
       }
@@ -507,7 +508,7 @@ export default function LearningReport() {
       // Automatically mark as reviewed if answered correctly in the review quiz
       const word = reviewWords[currentReviewIndex];
       if (word.sessionId) {
-        markIncorrectAnswerReviewed(word.sessionId, word.word).catch(console.error);
+        void PetService.reviewMark(word.sessionId, word.word).then(ok => ok ? undefined : markIncorrectAnswerReviewed(word.sessionId, word.word)).catch(console.error);
       }
     }
     

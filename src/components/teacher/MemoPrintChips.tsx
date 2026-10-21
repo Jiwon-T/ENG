@@ -4,19 +4,25 @@ import { FileText, X } from 'lucide-react';
 import { auth, db } from '../../lib/firebase';
 import { matchesKoreanSearch } from '../../lib/koreanSearch';
 import { memoPicks, type MemoBook, type MemoPick } from '../../lib/memoWordbooks';
+import { prefetchBookWords, prefetchWordbookManager } from '../../lib/wordbookPrefetch';
 
 // 바로 출력 칩 (수업 일지): a memo line naming a word book and its DAYs, or starting with "단어:", gives a chip under it;
 // the chip opens that book's 시험지 or 단어장 출력 right here (the 학습 세트 screen's own windows), so the teacher stays
 // on the 수업 일지.
 const WordbookManager = lazy(() => import('./WordbookManager'));
 
-/** The teacher's word books (the 학습 세트 › 단어장 list), read once a visit. */
-let booksOnce: Promise<MemoBook[]> | null = null;
+/** A word book as the chip keeps it: the stored book too, so the window opens it without reading the whole list again. */
+type Book = MemoBook & { data?: any };
+/** The teacher's word books (the 학습 세트 › 단어장 list), read once a visit — per account (another sign-in reads its own). */
+let booksOnce: { uid: string; read: Promise<Book[]> } | null = null;
 function teacherBooks() {
   const user = auth.currentUser; if (!user) return Promise.resolve([]);
-  return booksOnce ||= getDocs(user.email === 'lizzieshere1@gmail.com' ? query(collection(db, 'wordbooks')) : query(collection(db, 'wordbooks'), where('createdBy', '==', user.uid)))
-    .then(s => s.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(b => (b.category || (b.type === 'irregular' ? 'grammar' : 'word')) === 'word' && !b.deletedAt).map(b => ({ id: b.id, title: String(b.title || '단어장') })))
-    .catch(() => { booksOnce = null; return []; });
+  if (booksOnce?.uid === user.uid) return booksOnce.read;
+  const read = getDocs(user.email === 'lizzieshere1@gmail.com' ? query(collection(db, 'wordbooks')) : query(collection(db, 'wordbooks'), where('createdBy', '==', user.uid)))
+    .then(s => s.docs.map(d => ({ id: d.id, ...d.data() } as any)).filter(b => (b.category || (b.type === 'irregular' ? 'grammar' : 'word')) === 'word' && !b.deletedAt).map(b => ({ id: b.id, title: String(b.title || '단어장'), data: b })))
+    .catch(() => { if (booksOnce?.read === read) booksOnce = null; return [] as Book[]; });
+  booksOnce = { uid: user.uid, read };
+  return read;
 }
 const dayText = (p: MemoPick) => p.start === null ? '' : p.start === p.end ? ` · Day ${p.start}` : ` · Day ${p.start}~${p.end}`;
 
@@ -26,6 +32,9 @@ export default function MemoPrintChips({ text, studentName, preset }: { text: st
   const wants = /단어\s*:|\bday\s*\d/i.test(text || '');
   useEffect(() => { if (wants && !books.length) void teacherBooks().then(setBooks); }, [wants]); // eslint-disable-line react-hooks/exhaustive-deps
   const { picks, ask } = useMemo(() => wants ? memoPicks(text, books) : { picks: [], ask: null }, [text, books, wants]);
+  // a chip shown: the 학습 세트 window's code comes ahead, so 시험지 만들기 does not wait for it
+  const shown = Boolean(picks.length || ask);
+  useEffect(() => { if (shown) prefetchWordbookManager(); }, [shown]);
   if (!picks.length && !ask) return null;
   const chip = 'inline-flex max-w-full items-center gap-1 truncate rounded-full border px-2 py-0.5 text-[11px] font-bold';
   return <div className="mt-1 flex flex-wrap gap-1">
@@ -40,8 +49,10 @@ export default function MemoPrintChips({ text, studentName, preset }: { text: st
  *  the memo's DAYs (the start, and the end the memo gave or the next DAY). */
 function QuickPrint({ pick, studentName, onClose }: { pick: MemoPick; studentName?: string; onClose: () => void }) {
   const [book, setBook] = useState<MemoBook | null>(pick.books.length === 1 ? pick.books[0] : null), [q, setQ] = useState(''), [mode, setMode] = useState<'test' | 'print' | null>(null);
+  // the book chosen: its words are read while 시험지 or 단어장 출력 is picked
+  useEffect(() => { if (book) void prefetchBookWords(book.id).catch(() => {}); }, [book?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const list = pick.books.filter(b => !q.trim() || matchesKoreanSearch(b.title, q.trim())).slice(0, 30);
-  if (book && mode) return <Suspense fallback={null}><WordbookManager quick={{ wordbookId: book.id, mode, startDay: pick.start ?? undefined, endDay: pick.end ?? undefined, studentName }} onQuickClose={onClose} /></Suspense>;
+  if (book && mode) return <Suspense fallback={null}><WordbookManager quick={{ wordbookId: book.id, wordbook: (book as Book).data, mode, startDay: pick.start ?? undefined, endDay: pick.end ?? undefined, studentName }} onQuickClose={onClose} /></Suspense>;
   return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
     <div role="dialog" aria-label="바로 출력" className="w-full max-w-sm rounded-3xl bg-white p-5 text-slate-800 shadow-2xl" onClick={e => e.stopPropagation()}>
       <div className="flex items-center justify-between"><b className="text-sm font-black">{book ? book.title : '학습 세트 고르기'}</b><button type="button" onClick={onClose} aria-label="닫기" className="rounded-full p-1 hover:bg-slate-100"><X size={16} /></button></div>

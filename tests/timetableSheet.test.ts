@@ -74,7 +74,7 @@ test('Excel: the academy template filled in, rows taller for long cells, no data
   assert.match(xml, /<c r="C2" s="0" t="inlineStr"><is><t xml:space="preserve">10월 시간표<\/t>/);
   assert.match(xml, /<c r="I2" s="9" t="inlineStr"><is><t xml:space="preserve">이지원 T<\/t>/);
   assert.match(xml, /<c r="C3" s="2" t="inlineStr"><is><t xml:space="preserve">월<\/t>/);
-  assert.match(xml, /<c r="C4" s="4" t="inlineStr"><is><t xml:space="preserve">4:10~5:30 \(중1\)\n김민준, 이서연/);
+  assert.match(xml, /<c r="C4" s="4" t="inlineStr"><is><r><rPr><b\/><sz val="10"\/>[^]*?<t xml:space="preserve">4:10~5:30 \(중1\)\n<\/t><\/r><r><rPr><sz val="10"\/>[^]*?<t xml:space="preserve">김민준, 이서연/, 'the 수업 time line bold (as the academy sheet), the names not');
   assert.match(xml, /<c r="B5" s="6" t="inlineStr"><is><t xml:space="preserve">자습\n\(1,2차시\)<\/t>/);
   assert.match(xml, /줄 0 &amp; &lt;특수&gt;/);
   assert.match(xml, /<row r="4" ht="413\.00" customHeight="1">/, '30 lines: 30 × 13.5 + 8');
