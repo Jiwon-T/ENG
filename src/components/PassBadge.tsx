@@ -36,13 +36,13 @@ export function RankChip({ rank, onOpen }: { rank: number | null; onOpen: () => 
 /** The home screen's points chips, on the date line under the greeting: 포인트 (what the shop takes) and, for 장학 쿠폰
  *  students, 쿠폰 누적 (counted apart: lesson points ×3, 자습, 보너스) with a small ring for how far it is. Each opens its own
  *  panel under the nearest positioned parent (Home: the date line), right-aligned so it stays on a phone screen. */
-export function PetPointsChip({ points, onPet, coupon }: { points: number; onPet: () => void; coupon?: PetSummary['coupon'] }) {
+export function PetPointsChip({ points, onPet, onCoupon, coupon }: { points: number; onPet: () => void; /** 쿠폰 자세히 (else onPet) */ onCoupon?: () => void; coupon?: PetSummary['coupon'] }) {
   const [open, setOpen] = useState<'points' | 'coupon' | null>(null), close = () => setOpen(null);
   const chip = 'flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-bold', pct = coupon ? Math.min(100, Math.floor(coupon.earned / coupon.goal * 100)) : 0;
   const panel = 'absolute right-0 top-full z-40 mt-2 w-72 rounded-2xl border border-[#f3e6e8] bg-white p-3.5 text-[#5e1e2a] shadow-lg';
-  const buttons = (go: string) => <div className="mt-2.5 flex gap-1.5">
+  const buttons = (go: string, then = onPet) => <div className="mt-2.5 flex gap-1.5">
     <button type="button" onClick={close} className="flex-1 rounded-xl border border-[#f3d5da] py-2 text-xs font-bold text-[#8b2f40]">닫기</button>
-    <button type="button" onClick={() => { close(); onPet(); }} className="flex-[2] rounded-xl bg-[#d26272] py-2 text-xs font-bold text-white">{go}</button>
+    <button type="button" onClick={() => { close(); then(); }} className="flex-[2] rounded-xl bg-[#d26272] py-2 text-xs font-bold text-white">{go}</button>
   </div>;
   return <span>
     <span className="flex items-center gap-1.5">
@@ -67,7 +67,7 @@ export function PetPointsChip({ points, onPet, coupon }: { points: number; onPet
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#f8ead2]" aria-hidden="true"><div className="h-full rounded-full bg-[#efa23a]" style={{ width: `${Math.min(100, coupon.earned / coupon.goal * 100)}%` }} /></div>
       <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">{coupon.requested ? '이번 달 장학 쿠폰을 신청했어요.' : '포인트와 따로 쌓여요 · 잘한 수업은 3배로!'}</p>
       <CouponBonus extra={coupon.extra} earned={coupon.earned} />
-      {buttons('쿠폰 자세히')}
+      {buttons('쿠폰 자세히', onCoupon || onPet)}
     </div>}
   </span>;
 }

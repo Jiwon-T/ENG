@@ -9,6 +9,7 @@ import { AI_PLANS, PASS_NOTE } from '../src/lib/aiPlans.js';
 import { bundleQuestionSets, listQuestionSets, makeQuestionSet, readQuestionSet } from './_lib/questionSets.js';
 import { editQuestion, redoQuestion } from './_lib/questionEdits.js';
 import { myAssignedSets, openAttempt, saveAttempt, submitAttempt } from './_lib/questionAttempts.js';
+import { closeQuestionReport, listQuestionReports, reportQuestion } from './_lib/questionReports.js';
 import { readWorkbookHistory, saveWorkbookVersion } from './_lib/teacherWorkbook.js';
 import { PASSAGE_MESSAGES, askPassagePart, editPassagePart, listPassages, openPassage, passageActor, passageWordsPart, readPassage, setPassageInfo } from './_lib/passage.js';
 export { AI_MODEL, generateAi };
@@ -90,6 +91,10 @@ export async function handlePassage(req: IncomingMessage, res: ServerResponse, d
             : action === 'attempt-save' ? await saveAttempt(db, actor, body, now)
             : action === 'attempt-submit' ? await submitAttempt(db, actor, body, now, request => deps.generate(request, 'generator'))
             : action === 'assigned-list' ? await myAssignedSets(db, actor)
+            // 문제 신고: anyone who sees the question; the admin lists and closes them
+            : action === 'question-report' ? await reportQuestion(db, actor, body, now)
+            : action === 'question-reports' ? await listQuestionReports(db, actor)
+            : action === 'question-report-close' ? await closeQuestionReport(db, actor, body, now)
             // 워크북 (학생도): the blanks and orders used before for this passage, and this version's (for 선생님 인증)
             : action === 'workbook-history' ? await readWorkbookHistory(db, actor, body?.key)
             : action === 'workbook-save' ? await saveWorkbookVersion(db, actor, {key: body?.key, title: body?.title, blanks: body?.blanks, orders: body?.orders}, now)

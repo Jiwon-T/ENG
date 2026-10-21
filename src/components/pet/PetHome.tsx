@@ -13,13 +13,14 @@ import {
   cleanPetSpeech, petEmojiLimit, petIdleLine, petItem, petStage, xpNeeded, PET_EXPEDITION, PET_WORD_FEED, type PetItem, PET_JOB3, petAura, passAllows
 } from '../../lib/petCatalog';
 import { AI_PLANS, PASS_NOTE } from '../../lib/aiPlans';
-import { ACCESSORY_SLOTS, PET_JOB2, PET_JOBS, PET_PARTY, petJobLabel, PET_TOWER, accessorySlot, petGearView, wornAccessories } from '../../lib/petCatalog';
+import { ACCESSORY_SLOTS, PET_COUPON, PET_JOB2, PET_JOBS, PET_PARTY, petJobLabel, PET_TOWER, accessorySlot, petGearView, wornAccessories } from '../../lib/petCatalog';
 import { PetCharacter } from './PetCharacters';
 import type { FeedRunView } from './WordFeed';
 import type { ExpeditionView } from './ExpeditionMap';
 import { SCENE, STARS, SceneArt } from './PetScenes';
 import { MonsterCan } from './MonsterCan';
 import { CouponGauge, CouponShop, MedalBox, MedalLayer } from './PetCoupon';
+import { PetPointsChip } from '../PassBadge';
 // The full-screen games load when opened (the pet room shows first).
 const WordFeed = lazy(() => import('./WordFeed'));
 const ExpeditionMap = lazy(() => import('./ExpeditionMap'));
@@ -206,7 +207,9 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-md px-4 pb-28">
         {/* The app's top bar already has '‹ 🏠' and the name; the points go into its right side. */}
-        {pointsSlot ? createPortal(<span className="flex items-center gap-1 rounded-full border border-[#f3d5da] bg-white px-2.5 py-1 text-xs font-bold text-[#8b2f40]" aria-label={`포인트 ${won(state.points)}P`}><span className="h-2 w-2 rounded-full bg-[#e07a87]" aria-hidden="true" />{won(state.points)}P</span>, pointsSlot)
+        {pointsSlot ? createPortal(<span className="relative"><PetPointsChip points={state.points} coupon={coupon?.eligible ? { earned: coupon.earned, goal: coupon.goal, requested: coupon.requested, extra: coupon.extra } : null}
+          onPet={() => { setTab('shop'); setTrial(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          onCoupon={() => { setTab('home'); window.setTimeout(() => document.querySelector(`[aria-label="${PET_COUPON.name}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); }} /></span>, pointsSlot)
           : <header className="flex items-center justify-between py-3"><button type="button" onClick={onBack} className="flex items-center gap-0.5 text-sm font-bold text-[#8b2f40]"><ChevronLeft size={18} aria-hidden="true" />홈</button><span className="text-xs font-bold text-[#8b2f40]">{won(state.points)}P</span></header>}
         <div className="h-3" aria-hidden="true" />
 

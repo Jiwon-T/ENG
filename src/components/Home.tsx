@@ -70,7 +70,7 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
     {id: 'exam', title: '시험기간', description: '학교별 내신 대비', icon: FileText, beta: false},
     {id: 'sentence', title: '문장 세트', description: '문장 배열과 낭독', icon: MessageSquare, beta: false},
     {id: 'grammar', title: '문법 세트', description: '핵심 문법 연습', icon: GraduationCap, beta: false},
-    {id: 'pet', title: '나만의 펫', description: '먹이 주기 · 원정대', icon: Dog, beta: true},
+    {id: 'pet', title: '나만의 펫', description: '먹이 주기 · 원정대', icon: Dog, beta: false},
     {id: 'report', title: '학습 리포트', description: '과제 · 일정 · 성적', icon: BarChart3, beta: false},
   ];
   const extras = [

@@ -90,8 +90,20 @@ test('원정대 문장 세트 by grade: 초등 → 초등, unknown → 중1, tea
   assert.deepEqual(view.sets.map((x: any) => x.id), ['s1']);
   await assert.rejects(() => saveExpeditionSettings(f.db, admin, { sentences: { 중2: 'w1' } }), /BAD_REQUEST/);
   const saved = await saveExpeditionSettings(f.db, admin, { sentences: { 중2: 's1', 고3: 's1' } });
-  assert.deepEqual([saved.sentences['중2'], saved.sentences['중1'], saved.sentences['초등']], ['s1', '', '']);
-  assert.equal((await saveExpeditionSettings(f.db, admin, { sentences: { 초등: 's1' } })).sentences['초등'], 's1', '초등 can be set');
+  assert.deepEqual([saved.sentences['중2'], saved.sentences['중1'], saved.sentences['초등']], [['s1'], [], []]);
+  assert.deepEqual((await saveExpeditionSettings(f.db, admin, { sentences: { 초등: 's1' } })).sentences['초등'], ['s1'], '초등 can be set');
   const older = await saveExpeditionSettings(f.db, admin, { sentences: { 중1: '', 중2: 's1', 중3: '', 고1: '', 고2: '', 고3: '' } });
-  assert.equal(older.sentences['초등'], 's1', 'an older screen leaving out 초등 keeps it');
+  assert.deepEqual(older.sentences['초등'], ['s1'], 'an older screen leaving out 초등 keeps it');
+});
+test('원정대 문장 세트: up to two sets for each grade (like the 탑 단어장); one set saved before still reads', async () => {
+  const f = registrationFirestore(), admin = { admin: true, academyId: 'main', uid: 'admin' };
+  for (const id of ['s1', 's2', 's3']) f.rows.set(`wordbooks/${id}`, { title: id, category: 'sentence', type: 'sentence' });
+  f.rows.set('petExpeditionSettings/main', { sentences: { 중2: 's1' } });
+  assert.deepEqual((await readExpeditionSettings(f.db, admin)).sentences['중2'], ['s1'], 'one set saved as a string before');
+  const two = await saveExpeditionSettings(f.db, admin, { sentences: { 중2: ['s1', 's2'], 고1: ['s3', 's3'] } });
+  assert.deepEqual([two.sentences['중2'], two.sentences['고1']], [['s1', 's2'], ['s3']], 'two sets; the same set twice is one');
+  assert.deepEqual((await readExpeditionSettings(f.db, admin)).sentences['중2'], ['s1', 's2']);
+  await assert.rejects(() => saveExpeditionSettings(f.db, admin, { sentences: { 중2: ['s1', 's2', 's3'] } }), /BAD_REQUEST/, 'three are too many');
+  const src = (await import('node:fs')).readFileSync(new URL('../src/components/teacher/ExpeditionSentenceSettingsPanel.tsx', import.meta.url), 'utf8');
+  assert.match(src, /\{\[0,1\]\.map\(i=><select key=\{i\} aria-label=\{`\$\{g\} \$\{i\+1\}번째 문장 세트`\}/, 'two pickers for each grade');
 });

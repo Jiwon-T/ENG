@@ -1,5 +1,5 @@
 import {useMemo,useRef,useState,type ReactNode} from 'react';
-import {Bot,Calculator,Gauge,History,MessageSquareText,Castle,Swords,Ticket,UserCog,Users,Wallet,type LucideIcon} from 'lucide-react';
+import {Bot,Calculator,Flag,Gauge,History,MessageSquareText,Castle,Ticket,UserCog,Users,Wallet,type LucideIcon} from 'lucide-react';
 import TeacherManager from './TeacherManager';
 import TuitionCalculator from './TuitionCalculator';
 import TeacherPayroll from './TeacherPayroll';
@@ -12,6 +12,7 @@ import PetCouponPanel from './PetCouponPanel';
 import PetTowerSettingsPanel from './PetTowerSettingsPanel';
 import ExpeditionSentenceSettingsPanel from './ExpeditionSentenceSettingsPanel';
 import AiUsagePanel from './AiUsagePanel';
+import QuestionReportsPanel from './QuestionReportsPanel';
 import {createUnsavedGuard} from '../../lib/unsavedGuard';
 import {askDiscard} from './ConfirmDialog';
 
@@ -38,16 +39,16 @@ export default function AdminDashboard({data,request,act,busy,refresh}:Props){
    {id:'payroll',label:'선생님 정산',icon:Wallet,hint:'이번 달 정산·비율'},
    {id:'users',label:'앱 사용자',icon:UserCog,hint:'선생님 권한·이름·탈퇴',adminOnly:true},
    {id:'templates',label:'문자 템플릿',icon:MessageSquareText,hint:'보호자 문자 문구',adminOnly:true},
-   {id:'guild',label:'원정대 이름·별칭',icon:Swords,hint:'원정대 이름·모험가 별칭 확인·경고',adminOnly:true},
    {id:'coupon',label:'장학 쿠폰',icon:Ticket,hint:'이달의 장학 쿠폰 신청·지급',adminOnly:true},
-   // 탑 단어장 and 원정대 문장 세트 on one screen (a shorter menu).
-   {id:'tower',label:'탑·원정대 세트',icon:Castle,hint:'채움의 탑과 원정대 학습 범위',adminOnly:true},
+   // 탑 단어장, 원정대 문장 세트 and 원정대 이름·별칭 on one screen (a shorter menu).
+   {id:'tower',label:'탑·원정대',icon:Castle,hint:'학습 범위 · 원정대 이름·별칭',adminOnly:true},
    {id:'ai',label:'AI 사용량',icon:Bot,hint:'AI 호출 횟수·추정 금액',adminOnly:true},
+   {id:'reports',label:'문제 신고',icon:Flag,hint:'변형 문제 신고 · 신고율',adminOnly:true},
    {id:'history',label:'관리 기록',icon:History,hint:'누가 언제 무엇을 바꿨는지'},
   ]:[]),
   {id:'check',label:'점검',icon:Gauge,hint:'요청 속도 확인'},
  ].filter((s:Section)=>!s.adminOnly||data.admin);
- const [active,setActive]=useState(()=>{const id=remembered().replace(/^sentences$/,'tower');return sections.some(s=>s.id===id)?id:'teachers';});
+ const [active,setActive]=useState(()=>{const id=remembered().replace(/^(sentences|guild)$/,'tower');return sections.some(s=>s.id===id)?id:'teachers';});
  const current=sections.find(s=>s.id===active)||sections[0];
  const guardRef=useRef<ReturnType<typeof createUnsavedGuard>|null>(null);
  if(!guardRef.current)guardRef.current=createUnsavedGuard(message=>askDiscard(message,{discardText:'버리고 이동'}),UNSAVED);
@@ -61,10 +62,10 @@ export default function AdminDashboard({data,request,act,busy,refresh}:Props){
   users:<AppUserManager busy={busy} request={request} act={act} refresh={refresh} autoLoad/>,
   templates:<AppTemplateManager busy={busy} request={request} act={act} autoLoad onDirty={markDirty}/>,
   history:<AdminHistoryPanel busy={busy} request={request} act={act} autoLoad/>,
-  guild:<GuildNicknamePanel busy={busy} request={request} act={act} autoLoad/>,
   coupon:<PetCouponPanel busy={busy} request={request} act={act} autoLoad/>,
-  tower:<div className="grid gap-3"><PetTowerSettingsPanel busy={busy} request={request} act={act} autoLoad/><ExpeditionSentenceSettingsPanel busy={busy} request={request} act={act} autoLoad/></div>,
+  tower:<div className="grid gap-3"><PetTowerSettingsPanel busy={busy} request={request} act={act} autoLoad/><ExpeditionSentenceSettingsPanel busy={busy} request={request} act={act} autoLoad/><GuildNicknamePanel busy={busy} request={request} act={act} autoLoad/></div>,
   ai:<AiUsagePanel busy={busy} request={request} act={act} autoLoad/>,
+  reports:<QuestionReportsPanel busy={busy} act={act} autoLoad/>,
   check:<section className="panel rv"><SpeedCheckPanel/></section>,
  };
  return <div className="admin-dash">

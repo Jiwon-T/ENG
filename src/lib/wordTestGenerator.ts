@@ -1,4 +1,4 @@
-import { Document, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, HeightRule, SectionType, PageOrientation } from 'docx';
+import { Document, Footer, Packer, Paragraph, TextRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, HeightRule, SectionType, PageOrientation } from 'docx';
 import { saveAs } from 'file-saver';
 import { COMPLEMENT_QUIZ_DATA } from './grammarSets';
 import { buildMultipleChoiceItems } from './multipleChoiceItems';
@@ -1100,19 +1100,9 @@ export const generateWordbookTable = async (
           },
         },
       },
+      // 지원T at the bottom right of every page (no more '지원T' at the top left of the first page)
+      footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: '지원T', size: 18, color: '999999' })] })] }) },
       children: [
-        // Header Text (지원T)
-        new Paragraph({
-          alignment: AlignmentType.LEFT,
-          children: [
-            new TextRun({
-              text: "지원T",
-              size: 20,
-              color: "666666", // Natural grey
-            }),
-          ],
-          spacing: { after: 200 },
-        }),
         // Title
         new Paragraph({
           alignment: AlignmentType.CENTER,

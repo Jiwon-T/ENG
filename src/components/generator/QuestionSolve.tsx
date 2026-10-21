@@ -3,6 +3,7 @@ import { ArrowLeft, Check, CloudCheck, X } from 'lucide-react';
 import { passageCall } from '../../lib/passageApi';
 import { CIRCLED, LETTERS5 } from '../../lib/questionMaker';
 import CertRequest from '../student/CertRequest';
+import ReportButton from './ReportButton';
 
 // 변형 문제 풀기: one question at a time; each choice is saved on the server (나갔다 와도 남아요), 채점 once at the end,
 // then the result with the right answers and explanations. The server never sends the answers before grading.
@@ -60,7 +61,7 @@ export default function QuestionSolve({ setId, assignmentId, onBack, backLabel =
         const q = attempt.questions.find(x => x.index === r.index);
         return <li key={r.index} className="py-2.5 text-xs">
           <p className="flex items-center gap-1.5 font-bold text-slate-700">{r.ok ? <Check size={14} className="text-emerald-600" aria-label="맞음" /> : <X size={14} className="text-rose-600" aria-label="틀림" />}{byIndex.get(r.index)}. {q?.label}
-            {r.type !== 'choice' && !r.pairs && r.type !== 'compose' && <span className="font-medium text-slate-500"> · 정답 {r.mark}{!r.ok && typeof r.given === 'number' ? ` (내 답 ${CIRCLED[r.given - 1]})` : ''}</span>}</p>
+            {r.type !== 'choice' && !r.pairs && r.type !== 'compose' && <span className="font-medium text-slate-500"> · 정답 {r.mark}{!r.ok && typeof r.given === 'number' ? ` (내 답 ${CIRCLED[r.given - 1]})` : ''}</span>}<span className="ml-auto"><ReportButton {...which} index={r.index} /></span></p>
           {r.type === 'compose' && Array.isArray(r.right) && <div className="mt-1 space-y-0.5 pl-5 text-slate-600"><p>정답 {r.right[0]}</p><p className={r.ok ? '' : 'font-bold text-rose-700'}>내 답 {Array.isArray(r.given) ? r.given[0] : ''}</p>{r.check?.reason && <p className="text-slate-500">{r.check.by === 'none' ? '' : '확인: '}{r.check.reason}</p>}</div>}
           {r.pairs && <p className="mt-1 pl-5 text-slate-600">{r.pairs.map((p, k) => <span key={k} className={`mr-2 ${p.ok ? '' : 'font-bold text-rose-700'}`}>{p.label || LETTERS[k]} {p.right}{p.ok ? '' : ` (내 답 ${p.given || '-'})`}</span>)}</p>}
           {r.explanation && <p className="mt-1 whitespace-pre-line pl-5 text-slate-500">{r.explanation}</p>}

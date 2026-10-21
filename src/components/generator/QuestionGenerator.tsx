@@ -10,6 +10,7 @@ import { sheetQuestions } from '../../lib/questionSheet';
 import { CIRCLED, MAX_TYPES, QUESTION_TYPES, WRITTEN_TYPES, typeLabel, type MadeQuestion, type QuestionType } from '../../lib/questionMaker';
 import SampleModal, { SampleButton } from '../SampleModal';
 import QuestionTools from './QuestionTools';
+import ReportButton from './ReportButton';
 import { sampleQuestions } from '../../lib/samples';
 
 // 변형 문제 만들기 (Beta): a pasted passage or one from the 지문 보관함 → questions. The app-made types (순서 배열·문장
@@ -140,7 +141,7 @@ export default function QuestionGenerator({ initialPassage, initialTypes, initia
     <p className="mb-3 text-[11px] text-slate-400 print:hidden">{shortDate(set.createdAt)} · {set.questions.length}문제{left !== null ? ` · 이번 달 ${left}번 더 만들 수 있어요` : ''}</p>
     {skipped.length > 0 && <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 print:hidden">{skipped.map(s => `${typeLabel(s.type)}: ${s.reason}`).join(' · ')}</p>}
     <div className="space-y-3">{set.questions.map((q, i) => <Question key={`${q.id}${i}${(q as any).rev || ''}`} q={q} n={i + 1} showAnswer={answers}
-      tools={q.type !== 'workbook' && <QuestionTools<QuestionSet> q={q} setId={set.id} index={i} bundle={set.kind === 'bundle'} onChanged={(next, l) => { setSet(next); if (l !== null) setLeft(l); setMessage(`${i + 1}번 문제를 바꿨어요.`); }} />} />)}</div>
+      tools={q.type !== 'workbook' && <span className="inline-flex items-center gap-1"><ReportButton setId={set.id} index={i} /><QuestionTools<QuestionSet> q={q} setId={set.id} index={i} bundle={set.kind === 'bundle'} onChanged={(next, l) => { setSet(next); if (l !== null) setLeft(l); setMessage(`${i + 1}번 문제를 바꿨어요.`); }} /></span>} />)}</div>
   </div>;
 
   return <div className="mx-auto max-w-3xl px-4 pb-10 pt-4 md:px-6 md:pt-8">

@@ -45,7 +45,10 @@ import { wordbookPrintDays, wordbookPrintPlan, type WordbookPrintMode } from '..
  *  four concept words, so those sets print 객관식 only. */
 const noWritingTest = (type?: string) => type === 'grammar-cramming' || type === 'relative-grammar';
 
-export default function WordbookManager({ category = 'word' }: { category?: SetCategory }) {
+/** `quick` (바로 출력 from the 수업 일지): only the 시험지 or 단어장 출력 window, opened on that book and DAYs; closing it
+ *  calls `onQuickClose`. */
+export interface WordbookQuick { wordbookId: string; mode: 'test' | 'print'; startDay?: number; endDay?: number; studentName?: string }
+export default function WordbookManager({ category = 'word', quick, onQuickClose }: { category?: SetCategory; quick?: WordbookQuick; onQuickClose?: () => void }) {
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [selectedWordbook, setSelectedWordbook] = useState<Wordbook | null>(null);
   const [words, setWords] = useState<Word[]>([]);
@@ -142,7 +145,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
     selectionMode: 'range' as 'random' | 'range',
     unitSize: 40,
     // 'registered': the DAY each word was saved with (any size); 'count': every unitSize words.
-    dayMode: 'count' as WordbookPrintMode,
+    dayMode: 'registered' as WordbookPrintMode,
     startDay: 1,
     endDay: 1,
     shuffleVerbs: false
@@ -175,7 +178,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
     endDay: 1,
     unitSize: 40,
     // 'registered': the DAY/UNIT each word was saved with (any size); 'count': every N words.
-    mode: 'count' as WordbookPrintMode
+    mode: 'registered' as WordbookPrintMode
   });
 
   const sensors = useSensors(
@@ -281,6 +284,27 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
     return unsubscribe;
   },[selectedWordbook?.id]);
 
+  // 바로 출력: pick the book once the list is in, then open its window on the memo's DAYs (the start, then the end given
+  // or the next DAY), and hand back when the window closes.
+  const quickOpened = useRef(false);
+  useEffect(() => {
+    if (!quick || selectedWordbook) return;
+    const wb = allWordbooks.find(b => b.id === quick.wordbookId); if (wb) setSelectedWordbook(wb);
+  }, [quick, allWordbooks, selectedWordbook]);
+  useEffect(() => {
+    if (!quick || quickOpened.current || !selectedWordbook || selectedWordbook.id !== quick.wordbookId || loadedBookId !== quick.wordbookId) return;
+    quickOpened.current = true;
+    const unitSize = selectedWordbook.defaultUnitSize || (quick.mode === 'test' ? 10 : 40), days = wordbookPrintDays(words, 'registered', unitSize, getWordDay).map(x => x.day);
+    const startDay = quick.startDay && days.includes(quick.startDay) ? quick.startDay : days[0] || 1;
+    const endDay = quick.endDay && days.includes(quick.endDay) && quick.endDay >= startDay ? quick.endDay : quick.startDay && quick.endDay === undefined ? startDay : days[days.indexOf(startDay) + 1] ?? startDay;
+    if (quick.mode === 'print') { setPrintConfig({ mode: 'registered', unitSize, startDay, endDay }); setIsPrintModalOpen(true); return; }
+    setTestPaperConfig(c => ({ ...c, title: selectedWordbook.title, unitSize, dayMode: 'registered', startDay, endDay, studentName: quick.studentName || c.studentName,
+      subtitle: dayRangeLabel(startDay, endDay),
+      quizType: noWritingTest(selectedWordbook.type) && c.quizType === 'standard' ? 'multiple-choice' : c.quizType }));
+    setIsTestPaperModalOpen(true);
+  }, [quick, selectedWordbook, loadedBookId, words]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (quick && quickOpened.current && !isTestPaperModalOpen && !isPrintModalOpen) onQuickClose?.(); }, [quick, isTestPaperModalOpen, isPrintModalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (isExampleModalOpen && currentWordForExamples && selectedWordbook) {
       const examplesRef = collection(db, `wordbooks/${selectedWordbook.id}/words/${currentWordForExamples.id}/examples`);
@@ -306,6 +330,8 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
 
   // 단어장 출력하기: how a day is written beside each word ('Day 3', or 'UNIT 03' for a set saved by UNIT).
   const printDayLabel = (day: number) => units.has(day) ? unitLabel(day, units.get(day), true) : `Day ${day}`;
+  // The test paper's 회차/부제, two digits throughout: 'Day 01', 'Day 01-02' ('UNIT 01-02' for UNITs).
+  const dayRangeLabel = (start: number, end: number) => { const two = (n: number) => String(n).padStart(2, '0'), first = units.has(start) ? printDayLabel(start) : `Day ${two(start)}`; return start === end ? first : `${first}-${two(end)}`; };
 
   const currentDays = React.useMemo(() => {
     if (words.length === 0) return [1];
@@ -548,13 +574,17 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
   const handleAutoSplitDays = async (size: number) => {
     if (!selectedWordbook || words.length === 0 || size < 1) return;
     try {
-      const batch = writeBatch(db);
-      words.forEach((w, idx) => {
-        const assignedDay = Math.floor(idx / size) + 1;
-        const wordRef = doc(db, `wordbooks/${selectedWordbook.id}/words`, w.id);
-        batch.update(wordRef, { day: assignedDay, order: idx });
-      });
-      await batch.commit();
+      // Every word gets its DAY again, whatever it had (a book with DAYs is split anew too). Firestore takes at most 500
+      // writes a batch, so a big book goes in parts; the book's DAY당 단어 수 becomes this size.
+      for (let start = 0; start < words.length; start += 400) {
+        const batch = writeBatch(db);
+        words.slice(start, start + 400).forEach((w, k) => {
+          const idx = start + k, wordRef = doc(db, `wordbooks/${selectedWordbook.id}/words`, w.id);
+          batch.update(wordRef, { day: Math.floor(idx / size) + 1, order: idx });
+        });
+        await batch.commit();
+      }
+      await updateDoc(doc(db, 'wordbooks', selectedWordbook.id), { defaultUnitSize: size });
       setIsDayManagementOpen(false);
       alert(`전체 ${words.length}개 단어를 DAY당 ${size}개씩 총 ${Math.ceil(words.length / size)}개 DAY로 일괄 분할했습니다.`);
     } catch (error) {
@@ -1509,7 +1539,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
     }
 
     try {
-      const range = printConfig.startDay === printConfig.endDay ? printDayLabel(printConfig.startDay) : `${printDayLabel(printConfig.startDay)}~${printConfig.endDay}`;
+      const range = dayRangeLabel(printConfig.startDay, printConfig.endDay);
       await generateWordbookTable(
         `${selectedWordbook.title} (${range})`,
         selectedWords,
@@ -1566,7 +1596,9 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
   };
 
   return (
-    <div className="wordbook-manager space-y-6">
+    <div className={quick ? 'wordbook-manager wordbook-quick' : 'wordbook-manager space-y-6'}>
+      {/* 바로 출력: only the window shows (the rest of the 학습 세트 screen stays hidden) */}
+      {quick && <style>{'.wordbook-quick>:not(.fixed){display:none!important}'}</style>}
       {moveToastMessage && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -1761,15 +1793,15 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
                   </button>}
                   <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => {
-                      // A book saved with its own DAYs picks by them (each DAY its own size), from its first DAY.
-                      const registered = words.some(w => Number(w.day) > 0), unitSize = selectedWordbook.defaultUnitSize || 10;
-                      const days = wordbookPrintDays(words, registered ? 'registered' : 'count', unitSize, getWordDay);
+                      // '등록된 DAY 그대로' by default (each DAY its own size; a book without DAYs is split by its default size), from its first DAY.
+                      const unitSize = selectedWordbook.defaultUnitSize || 10;
+                      const days = wordbookPrintDays(words, 'registered', unitSize, getWordDay);
                       const keep = days.some(x => x.day === testPaperConfig.startDay) && days.some(x => x.day === testPaperConfig.endDay);
                       setTestPaperConfig({
                         ...testPaperConfig,
                         title: selectedWordbook.title,
                         unitSize,
-                        dayMode: registered ? 'registered' : 'count',
+                        dayMode: 'registered',
                         ...(keep ? {} : {startDay: days[0]?.day || 1, endDay: days[0]?.day || 1}),
                         quizType: noWritingTest(selectedWordbook.type) && testPaperConfig.quizType === 'standard' ? 'multiple-choice' : testPaperConfig.quizType
                       });
@@ -1783,11 +1815,10 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
                   <button disabled={wordsLoading || Boolean(wordLoadError)} 
                     onClick={() => {
                       if (selectedWordbook) {
-                        // A book saved with its own DAYs (or UNITs) prints by them by default, all of them.
-                        const registered = words.some(w => Number(w.day) > 0);
+                        // '등록된 DAY 그대로' by default (a book without DAYs is split by its default size), all of them.
                         const unitSize = selectedWordbook.defaultUnitSize || 40;
-                        const days = wordbookPrintDays(words, registered ? 'registered' : 'count', unitSize, getWordDay);
-                        setPrintConfig({ mode: registered ? 'registered' : 'count', unitSize, startDay: days[0]?.day || 1, endDay: days[days.length - 1]?.day || 1 });
+                        const days = wordbookPrintDays(words, 'registered', unitSize, getWordDay);
+                        setPrintConfig({ mode: 'registered', unitSize, startDay: days[0]?.day || 1, endDay: days[days.length - 1]?.day || 1 });
                         setIsPrintModalOpen(true);
                       }
                     }}
@@ -2988,9 +3019,9 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }} 
             animate={{ scale: 1, opacity: 1 }} 
-            className="teacher-modal-shell max-w-lg w-full bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh]"
+            className="teacher-modal-shell max-w-lg w-full bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[94vh]"
           >
-            <div className="flex justify-between items-center p-8 pb-4 border-b border-slate-50">
+            <div className="flex justify-between items-center px-8 pt-6 pb-3 border-b border-slate-50">
               <h2 className="text-xl font-black text-slate-900">
                 {category === 'grammar' ? '문법 시험지/퀴즈 만들기' : '단어 시험지 만들기'}
               </h2>
@@ -2999,9 +3030,9 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-8 pt-4 no-scrollbar">
-              <div className="space-y-4 mb-6">
-                <div className="flex flex-col gap-4 mb-4">
+            <div className="flex-1 overflow-y-auto px-8 pt-4 pb-4 no-scrollbar">
+              <div className="space-y-4">
+                <div className="flex flex-col gap-4">
                   <div className="flex bg-slate-100 p-1 rounded-xl flex-wrap gap-1">
                     {!noWritingTest(selectedWordbook?.type) && <button
                       onClick={() => setTestPaperConfig({ ...testPaperConfig, quizType: 'standard' })}
@@ -3173,9 +3204,11 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
                               <select
                                 value={testPaperConfig[key]}
                                 onChange={(e) => {
-                                  const day = Number(e.target.value);
-                                  const startDay = key === 'startDay' ? day : Math.min(day, testPaperConfig.startDay), endDay = key === 'endDay' ? day : Math.max(day, testPaperConfig.endDay);
-                                  setTestPaperConfig({ ...testPaperConfig, startDay, endDay, subtitle: startDay === endDay ? printDayLabel(startDay) : `${printDayLabel(startDay)}-${String(endDay).padStart(2, '0')}` });
+                                  const day = Number(e.target.value), list = wordbookPrintDays(words, testPaperConfig.dayMode, testPaperConfig.unitSize, getWordDay).map(x => x.day);
+                                  // a new start takes the DAY after it as the end (the last DAY stays itself); the end can be changed after
+                                  const next = list[list.indexOf(day) + 1] ?? day;
+                                  const startDay = key === 'startDay' ? day : Math.min(day, testPaperConfig.startDay), endDay = key === 'endDay' ? day : next;
+                                  setTestPaperConfig({ ...testPaperConfig, startDay, endDay, subtitle: dayRangeLabel(startDay, endDay) });
                                 }}
                                 className="w-full p-2.5 bg-white border border-blue-100 rounded-lg focus:ring-4 focus:ring-blue-100 outline-none font-bold text-sm"
                               >
@@ -3346,7 +3379,7 @@ export default function WordbookManager({ category = 'word' }: { category?: SetC
               </div>
             </div>
 
-            <div className="p-8 pt-0 flex gap-3">
+            <div className="px-8 pb-6 pt-2 flex gap-3">
               <button onClick={() => setIsTestPaperModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm">취소</button>
               <button 
                 onClick={handleGenerateTestPaper} 
