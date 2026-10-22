@@ -3,7 +3,7 @@ import { PLUS, PLUS_ORDER, plusBack, plusFx, plusSlot } from './petGearArtPlus';
 
 // 장비 겹쳐 그리기: each worn place is drawn over the pet (120×130 grid), in its own tier's look — 견습 → 이끼 숲 → 수정 동굴 →
 // 모래 신전 → 얼음 성채 → 마도사, more detail as it goes up; from 수정 동굴 the gems twinkle, then capes sway, snow falls and
-// runes turn (.pg-* classes in index.css, stopped by 움직임 줄이기). 검사 and 마법사 look different; a pet without a job picks one.
+// runes turn (.pg-* classes in index.css, stopped by 움직임 줄이기). 검사 and 마법사 look different (before the job, 검사); the 견습 몽둥이 (weapon tier 0) is a club for both.
 // Markup only from these fixed numbers (no user text), drawn as SVG strings.
 export type GearArtStyle = 'knight' | 'mage';
 export type GearLook = Partial<Record<TowerGearSlot, number>>;
@@ -59,7 +59,11 @@ const knight = {
   glove(L: number, x: number) { const d = TIERS[L].dark; return `<ellipse cx="${x}" cy="104" rx="7" ry="6.5" fill="${d}" stroke="${d}"/>`; },
   weapon(L: number) {
     const { dark: d, trim: tr } = TIERS[L];
-    if (L === 0) return '<path d="M93 104 Q96 70 106 50 Q112 48 110 56 Q102 76 99 106Z" fill="#d6a46c" stroke="#7a4a22" stroke-width="1.2"/>';
+    // 견습 몽둥이: a wooden club (a long rounded head on a gripped handle), leaning out from the right paw
+    if (L === 0) return '<g transform="rotate(16 98 92)"><rect x="95.5" y="74" width="5.5" height="34" rx="2.4" fill="#b9834f" stroke="#7a4a22" stroke-width="1.1"/>'
+      + '<path d="M98.2 40 C108 40 109 52 107 64 C106 72 103 77 98.2 77 C93.4 77 90.4 72 89.4 64 C87.4 52 88.4 40 98.2 40 Z" fill="#d6a46c" stroke="#7a4a22" stroke-width="1.3"/>'
+      + '<path d="M93 52 q2.5 -1.5 4 1 M100 62 q2.5 -1.5 4 1 M95 69 q2 -1 3.5 .8" stroke="#7a4a22" stroke-width=".9" fill="none"/>'
+      + '<path d="M95.5 96 h5.5 M95.5 100 h5.5 M95.5 104 h5.5" stroke="#7a4a22" stroke-width="1"/></g>';
     const blade = L < 5 ? '#f1f5f9' : '#1f1534', edge = L < 5 ? d : tr, top = 50 - L * 2, g: string[] = [];
     g.push(`<path d="M95 106 L${r1(109 - L * .4)} ${top} L${r1(113 + L * .3)} ${top + 1} L99 107Z" fill="${blade}" stroke="${edge}" stroke-width="1.3"/>`);
     if (L >= 3) g.push(`<path d="M98 100 L110.5 ${top + 6}" stroke="${tr}" stroke-width="1" opacity=".9"/>`);
@@ -165,7 +169,7 @@ export function gearArt(style: GearArtStyle, look: GearLook, helmetY = 0, id = '
   } else {
     if (a !== null) out.push(cape(a));
     if (b !== null) out.push(piece('boots', b, () => mage.boots(b)));
-    if (w !== null) out.push(piece('weapon', w, () => mage.weapon(w)));
+    if (w !== null) out.push(piece('weapon', w, () => w === 0 ? knight.weapon(0) : mage.weapon(w))); // 견습 몽둥이: a club
     if (a !== null) out.push(piece('armor', a, () => mage.armor(a)));
     if (sh !== null) out.push(piece('shoulder', sh, () => mage.shoulder(sh)));
     if (gl !== null) out.push(piece('gloves', gl, () => mage.gloves(gl)));
@@ -182,5 +186,5 @@ const PIECE_BOX: Record<GearArtStyle, Record<TowerGearSlot, string>> = {
 /** One piece on its own (the gear icon): its drawing and the box around it. */
 export function gearPiece(style: GearArtStyle, slot: TowerGearSlot, tier: number, id = `ic${style}${slot}${tier}`) {
   const art = slot === 'gloves' && style === 'knight' && tier < 6 ? knight.glove(tier, 34) : gearArt(style, { [slot]: tier }, 0, id);
-  return { svg: art, box: PIECE_BOX[style][slot] };
+  return { svg: art, box: slot === 'weapon' && tier === 0 ? PIECE_BOX.knight.weapon : PIECE_BOX[style][slot] };
 }

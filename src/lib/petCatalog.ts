@@ -446,10 +446,11 @@ export function gearLookOf(equip: Partial<Record<TowerGearSlot, string>>): PetGe
   const sets = TOWER_GEAR_SLOTS.map(s => towerGear(String(equip[s.id] || ''))?.set);
   return { look, full: sets.every(t => t !== undefined && t === sets[0]) ? sets[0]! : null };
 }
-/** What the pet shows (null: 👁 off or nothing worn). 검사 → 검사 모양, 마법사 → 마법사 모양; before the job, the look picked. */
+/** What the pet shows (null: 👁 off or nothing worn). 마법사 → 마법사 모양; 검사 and before the job → 검사 모양 (the 견습 몽둥이
+ *  is a club either way; an old 모양 choice made before the job no longer changes it). */
 export function petGearView(pet: { job?: PetJob | null; gear?: PetGearLook | null; gearShow?: boolean; gearStyle?: PetJob | null } | null | undefined): PetGearView | null {
   if (!pet || pet.gearShow === false || !pet.gear || !Object.keys(pet.gear.look || {}).length) return null;
-  return { style: (pet.job || pet.gearStyle) === 'wizard' ? 'mage' : 'knight', look: pet.gear.look, full: pet.gear.full ?? null };
+  return { style: pet.job === 'wizard' ? 'mage' : 'knight', look: pet.gear.look, full: pet.gear.full ?? null };
 }
 /** 탑 장식: the first clear of each zone's boss floor gives that zone's room decoration (once a student, never in the
  *  shop), placed in the room like the 금메달 (the same 꾸미기); ten, one for each zone (floors 10–100). */

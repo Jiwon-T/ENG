@@ -19,12 +19,12 @@ test('장비 모양: the worn tower gear is copied onto the pet, by tier (견습
   assert.equal(currentPet(s).gear!.look.weapon, undefined);
 });
 
-test('👁 장비 보이기: off shows the outfit only; before the job the student picks 검사 or 마법사 모양', () => {
+test('👁 장비 보이기: off shows the outfit only; before the job the gear is 검사 모양 (the 견습 몽둥이 a club), an old 모양 choice aside', () => {
   const s = initialPetState(NOW), pet = currentPet(s);
   pet.gear = {look: {weapon: 0}, full: null};
   assert.equal(petGearView(pet)!.style, 'knight');
   assert.deepEqual(setGearShow(s, undefined, 'wizard'), {gearShow: true, gearStyle: 'wizard'});
-  assert.equal(petGearView(pet)!.style, 'mage');
+  assert.equal(petGearView(pet)!.style, 'knight', 'a 모양 picked before the job no longer changes it');
   setGearShow(s, false, undefined); assert.equal(petGearView(pet), null);
   assert.throws(() => setGearShow(s, true, 'knight'), /PET_BAD_ACTION/);
   pet.job = 'swordsman';
