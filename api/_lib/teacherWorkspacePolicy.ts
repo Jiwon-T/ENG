@@ -152,6 +152,7 @@ export function assertLessonComplete(input: unknown) {
     if (d.selfStudy === '없음' && (d.selfStudyRound !== null && d.selfStudyRound !== 0 || d.selfStudyStart || d.selfStudyEnd || d.selfStudyMore.length)) throw new Error('SELF_STUDY_REQUIRED');
     // Every 자습 piece needs both times, in order, without overlapping the one before.
     if (d.selfStudy === '있음' && d.selfStudyMore.some((p, i) => !TIME.test(p.start) || !TIME.test(p.end) || p.end <= p.start || p.start < (i ? d.selfStudyMore[i - 1].end : d.selfStudyEnd))) throw new Error('SELF_STUDY_REQUIRED');
-    if (d.selfStudy === '있음' && (d.selfStudyRound === null || d.selfStudyRound <= 0 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(d.selfStudyStart) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(d.selfStudyEnd) || d.selfStudyEnd <= d.selfStudyStart)) throw new Error('SELF_STUDY_REQUIRED');
+    // 결석: the 자습 round may stay 0 like the lesson round (a 3차시 테스트 day, 자습 only, absent before any 자습 counted)
+    if (d.selfStudy === '있음' && (d.selfStudyRound === null || (!absent && d.selfStudyRound <= 0) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(d.selfStudyStart) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(d.selfStudyEnd) || d.selfStudyEnd <= d.selfStudyStart)) throw new Error('SELF_STUDY_REQUIRED');
     return d.classSession === '없음' ? { ...d, start: '', end: '', round: null } : d;
 }

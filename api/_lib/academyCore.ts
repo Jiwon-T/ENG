@@ -156,7 +156,8 @@ export async function readCoreEnrollmentSummaries(db:any,actor:any){
  }return result;
 }
 export async function coreRegistrationOptions(db:any,actor:any){
- manage(actor);const profiles=(await db.collection('teacherWorkspaceAccess').where('academyId','==','main').limit(101).get()).docs;if(profiles.length>100)throw Error('CORE_CUTOVER_LIMIT');
+ // 신입생 등록: any teacher of the academy picks the 담당 선생님·반 (assertIntakeAccess)
+ if(actor.academyId!=='main')throw Error('FORBIDDEN');const profiles=(await db.collection('teacherWorkspaceAccess').where('academyId','==','main').limit(101).get()).docs;if(profiles.length>100)throw Error('CORE_CUTOVER_LIMIT');
  const teachers=[];for(const d of profiles){const p=d.data();if(p.disabled||!p.notionTeacherPageId)continue;const u=(await db.collection('users').doc(d.id).get()).data();if(d.id!==process.env.ADMIN_UID&&!p.offline&&!['teacher','principal'].includes(u?.role))continue; // offline: added without an app account
   const r=valid((await refFor(db,'teachers',p.notionTeacherPageId).get()).data(),'teachers');if(r.pointer.teacherUid!==d.id||choice(r.fields.properties['상태'])!=='재직')continue;
   teachers.push({uid:d.id,name:name(r),subjects:(r.fields.properties['담당 과목']?.multi_select||[]).map((v:any)=>v.name)});

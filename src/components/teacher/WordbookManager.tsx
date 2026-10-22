@@ -149,7 +149,8 @@ export default function WordbookManager({ category = 'word', quick, onQuickClose
     dayMode: 'registered' as WordbookPrintMode,
     startDay: 1,
     endDay: 1,
-    shuffleVerbs: false
+    // 단어 순서 랜덤: on unless the teacher unticks it
+    shuffleVerbs: true
   });
 
   // Merge Wordbooks states

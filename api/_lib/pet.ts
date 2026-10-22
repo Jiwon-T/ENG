@@ -19,7 +19,7 @@ export interface ServerPetState {
   version: 1; points: number; inventory: string[]; /** before 여러 마리: what pet 1 wore */ clothing?: string | null; accessory?: string | null; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: ServerPet[];
   day: string; today: { studyPoints: number; energyItems?: number; /** before 2/day */ energyItem?: boolean; /** 몬스터 today */ revives?: number; /** 선생님 인증 paid today */ certs?: number;
-    /** 오늘 할 일 done so far (counted whatever today's three are) and whether today's 간식 상자 was opened */ quest?: Partial<Record<string, number>>; questClaimed?: boolean };
+    /** 오늘 할 일 done so far (counted whatever today's three are) and whether today's 간식 상자 was opened */ quest?: Partial<Record<string, number>>; questClaimed?: boolean; /** 응원 스티커 that gave XP today */ stickers?: number; /** 간식 선물 given today */ gifts?: number };
   rewarded: Record<string, string[]>; updatedAt: number;
   /** 이달의 장학 쿠폰: points earned in `month` ('YYYY-MM', Korea time). */ earned?: { month: string; points: number };
   /** Earned by month (this month and last): a lesson's points count for the month of the lesson. */ earnedBy?: Record<string, number>;
@@ -34,6 +34,8 @@ export interface ServerPetState {
   /** 쌓인 포인트 알림: 수업 보상 that came in (or changed) without the student, shown once when the app opens. */
   inbox?: InboxLine[];
   /** 가방: snacks from 간식 상자 (item id → count), given to the pet without points. */ snacks?: Record<string, number>;
+  /** 목표 물건: the 특별 item the student is saving up for (shown at the top of the pet screen) */ goal?: string;
+  /** 방 구경: the room is closed to friends (no visits, no stickers; the 순위 still shows the pet). */ roomHidden?: boolean;
   /** 오늘 할 일 days in a row: the last day all three were done and how many days in a row (a 특별 상자 every 5). */ questStreak?: { day: string; n: number };
 }
 export interface InboxLine { day: string; label: string; points: number }
@@ -208,7 +210,7 @@ export function buyItem(s: ServerPetState, id: string, fromBag = false) {
 
 /** `plan`: the person's AI plan today, for a pass-only room (looked up by the caller only for those). */
 export function equipItem(s: ServerPetState, id: string, plan = 'free') {
-  const item = petItem(id); if (!item || item.category === 'consumable') throw Error('PET_ITEM_NOT_FOUND');
+  const item = petItem(id); if (!item || item.category === 'consumable' || item.category === 'decor') throw Error('PET_ITEM_NOT_FOUND');
   if (item.pass) { if (!passAllows(item, plan)) throw Error('PET_PASS_ITEM'); }
   else if (id !== 'default' && !s.inventory.includes(id)) throw Error('PET_ITEM_NOT_OWNED');
   const pet = currentPet(s);
@@ -450,7 +452,7 @@ export const parseAi = (text: string) => { try { return JSON.parse(text); } catc
 /** What the browser sees: everything but the bookkeeping. */
 export function publicPetState(s: ServerPetState) {
   const pet = currentPet(s);
-  return {snacks: s.snacks || {}, ledger: s.ledger || [], englishTalk: Boolean(s.englishTalk), medals: s.medals || [], towerDecor: s.towerDecor || [], decor: s.decor || {}, points: s.points, inventory: s.inventory, clothing: pet.clothing, accessories: pet.accessories, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
+  return {goal: s.goal && petItem(s.goal)?.special && !s.inventory.includes(s.goal) ? s.goal : null, roomHidden: Boolean(s.roomHidden), snacks: s.snacks || {}, ledger: s.ledger || [], englishTalk: Boolean(s.englishTalk), medals: s.medals || [], towerDecor: s.towerDecor || [], decor: s.decor || {}, points: s.points, inventory: s.inventory, clothing: pet.clothing, accessories: pet.accessories, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
     today: {studyPoints: s.today.studyPoints, studyCap: PET_DAILY_STUDY_POINTS, energyItemsLeft: Math.max(0, PET_ENERGY_ITEMS_PER_DAY - energyItemsUsed(s)), revivesLeft: Math.max(0, PET_REVIVES_PER_DAY - (s.today.revives || 0))}, stage: petStage(pet.level)};
 }
 /** For the teacher screens: the highest-level pet and how many live here. */

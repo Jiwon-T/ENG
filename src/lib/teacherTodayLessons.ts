@@ -36,6 +36,21 @@ export function todayLessons(data:any,date:string,schedules:any[]=[],reflected:a
  const copies=reflected.filter(r=>r.date===date&&r.kind!=='상담'&&['예정','변경','완료'].includes(r.status)&&!sources.has((r.notionPageId||r.appScheduleId||'').replace(/-/g,''))).map(r=>({id:`reflected:${r.id}`,title:r.title||'예정 수업',kind:scheduleKindLabel(r.kind||'일정'),session:sessionOfKind(r.kind||''),subject:r.subject,date,start:r.start,end:r.end,students:visible(r.students,r.subject)} as TodayLesson));
  return [...regular,...events,...copies].filter(r=>r.students.length&&r.start&&r.end).sort((a,b)=>a.start.localeCompare(b.start)||a.title.localeCompare(b.title));
 }
+export interface TodayConsult {id:string;title:string;start:string;end:string;students:string[];place?:string}
+/** The day's 상담 for the today list's reminder cards (not a lesson: no 일지, so not among todayLessons) — with or
+ *  without students (a 신입생 is not registered yet): mine, or one naming students I teach. */
+export function todayConsults(data:any,date:string,schedules:any[]=[],reflected:any[]=[]):TodayConsult[] {
+ const permitted=(key:string,subject:string)=>data.admin||(data.teachingScopes||data.scopes||[]).some((s:any)=>s.studentKey===key&&s.subject===subject);
+ const visible=(students:string[],subject:string)=>[...new Set(students||[])].filter(key=>permitted(key,subject));
+ const live=(status:string)=>['예정','변경','완료'].includes(status),sources=new Set(schedules.map(r=>(r.notionPageId||r.id||'').replace(/-/g,'')));
+ const rows=[
+  ...schedules.filter(r=>!r.archived&&!r.deleteRequested&&r.data?.date===date&&r.data.kind==='상담'&&live(r.data.status)).map(r=>({id:`consult:${r.id}`,own:r.ownerUid===data.uid,title:r.data.title||'상담',start:r.data.start,end:r.data.end,students:visible(r.data.students,r.data.subject),place:r.data.place||''})),
+  ...reflected.filter(r=>r.date===date&&r.kind==='상담'&&live(r.status)&&!sources.has((r.notionPageId||r.appScheduleId||'').replace(/-/g,''))).map(r=>({id:`consult:reflected:${r.id}`,own:r.ownerUid===data.uid,title:r.title||'상담',start:r.start,end:r.end,students:visible(r.students,r.subject),place:r.place||''})),
+ ];
+ return rows.filter(r=>(r.own||r.students.length)&&r.start&&r.end).map(({own,...r})=>r).sort((a,b)=>a.start.localeCompare(b.start)||a.title.localeCompare(b.title));
+}
+/** The name a 상담 title gives for the 신입생 form ('김동하 학생 상담' → '김동하'); '' when it names nobody ('신입생 상담'). */
+export const consultName=(title:string)=>{const name=String(title||'').replace(/\s*(?:신입생|학생|학부모|입학)?\s*상담.*$/,'').trim();return /신입생|\d|^$/.test(name)?'':name.slice(0,30);};
 export const previousLessonAssessmentFields=['attendance','attitude','homework','test','correct','total','wrong','scorePercent','testName','extraTests','examCorrect','examTotal','examWrong','examScorePercent'] as const;
 export const previousLessonFields=['round','selfStudyRound','content','assignment','examScope',...previousLessonAssessmentFields] as const;
 export function applyPreviousLesson<T extends Record<string,any>>(current:T,seed:T,previous:any,touched:Iterable<string>=[]):T {

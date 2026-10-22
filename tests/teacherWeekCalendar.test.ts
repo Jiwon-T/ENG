@@ -23,3 +23,10 @@ test('reflected group schedules expose only assigned recipients and preserve exc
  assert.equal(scoped.length,1);assert.deepEqual(scoped[0].students,['one']);assert.equal(scoped[0].date,'2026-10-05');assert.equal(scoped[0].start,'00:30');
  const all=teacherReflectedSchedules(records,mappings,{admin:true,scopes:[]});assert.equal(all.length,2);assert.deepEqual(all[0].students,['one','two']);assert.equal(all[1].status,'취소');
 });
+test('an app-only schedule shows once: its published copy (appScheduleId, no Notion page) is hidden behind the record',()=>{
+ const record={id:'sched-1',notionPageId:null,data:{date:'2026-10-22',title:'개인 보강',start:'19:40',end:'21:00',subject:'영어',students:['s1'],kind:'보강',status:'예정'}};
+ const copy={id:'sched1:active',notionPageId:null,appScheduleId:'sched-1',date:'2026-10-22',title:'개인 보강',start:'19:40',end:'21:00',subject:'영어',students:['s1'],kind:'보강',status:'예정'};
+ const other={...copy,id:'sched2:active',appScheduleId:'sched-2'};
+ const day=weeklyBoardEvents('2026-10-22',[record],[],[copy,other]).find(d=>d.day==='2026-10-22')!;
+ assert.deepEqual(day.events.map(e=>`${e.type}:${e.id}`),['schedule:sched-1','reflected:sched2:active'],'another teacher\'s app schedule still shows as a copy');
+});

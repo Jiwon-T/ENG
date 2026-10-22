@@ -1,8 +1,8 @@
-import {assertRegistrationAccess, type RegistrationActor, type StudentRegistration} from './teacherStudentRegistration.js';
+import {assertIntakeAccess, type RegistrationActor, type StudentRegistration} from './teacherStudentRegistration.js';
 import {coreActive,coreRegistrationOptions} from './academyCore.js';
 import type {RegistrationOptions} from '../../src/lib/studentRegistration.js';
 export async function registrationAssignmentOptions(db:any,actor:RegistrationActor):Promise<RegistrationOptions> {
-    assertRegistrationAccess(actor);
+    assertIntakeAccess(actor);
     if(!await coreActive(db,actor))throw Error('CORE_NOT_READY');
     return coreRegistrationOptions(db,actor);
 }
@@ -10,7 +10,7 @@ export interface ResolvedAssignments {teachers:Record<string,string>;classIds:st
 export async function resolveRegistrationAssignments(db:any,actor:RegistrationActor,value:StudentRegistration):Promise<ResolvedAssignments> {
     const selected=value.enrollments.filter(row=>row.teacherUid || row.classIds.length);
     if(!selected.length)return {teachers:{},classIds:[]};
-    assertRegistrationAccess(actor);
+    assertIntakeAccess(actor);
     if(actor.academyId!=='main')throw Error('NOTION_REGISTRATION_SOURCE_REQUIRED');
     if(!await coreActive(db,actor))throw Error('CORE_NOT_READY');
     {

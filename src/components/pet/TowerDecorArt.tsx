@@ -149,4 +149,66 @@ export const DECOR_ART: Record<string, ReactNode> = {
     {gem(0, -18, 2.6, '#fde68a', '#fff7cc')}
     {spark(-24, -42, .3)}{spark(26, -40, 1.2)}
   </g>,
+  // 특별 소품 (상점 특별, 목표 물건): drawn with more care than the rest — they cost the most.
+  fountain: <g transform="translate(30 40)">
+    <ellipse cy="31" rx="27" ry="5" fill="#000" opacity=".12" />
+    <path d="M-26 22 Q0 32 26 22 L26 27 Q0 37 -26 27Z" fill="#94a3b8" stroke="#475569" strokeWidth=".8" />
+    {[-20, -10, 0, 10, 20].map(x => <path key={x} d={`M${x} ${25 - Math.abs(x) * .08} v4`} stroke="#64748b" strokeWidth=".6" />)}
+    <ellipse cy="22" rx="26" ry="6.5" fill="#e2e8f0" stroke="#475569" strokeWidth=".9" /><ellipse cy="22" rx="22.5" ry="4.8" fill="#38bdf8" />
+    <ellipse cy="22.6" rx="20" ry="3.6" fill="#7dd3fc" /><path d="M-14 22 q3 -1.4 6 0 M4 23 q3 -1.4 6 0" stroke="#e0f2fe" strokeWidth=".7" fill="none" />
+    <circle cx="-12" cy="23" r="1.5" fill="#fbbf24" stroke="#b45309" strokeWidth=".4" /><circle cx="13" cy="22" r="1.3" fill="#fde047" stroke="#b45309" strokeWidth=".4" /><circle cx="6" cy="24" r="1.1" fill="#fbbf24" stroke="#b45309" strokeWidth=".4" />
+    <path d="M-5 21 L-3.5 0 H3.5 L5 21Z" fill="#f1f5f9" stroke="#475569" strokeWidth=".8" /><path d="M-3 18 h6 M-2.6 10 h5.2 M-2.2 3 h4.4" stroke="#cbd5e1" strokeWidth=".7" />
+    <path d="M-4.6 6 q4.6 2 9.2 0" stroke="#94a3b8" strokeWidth=".6" fill="none" />
+    <ellipse cy="0" rx="14" ry="3.8" fill="#e2e8f0" stroke="#475569" strokeWidth=".8" /><ellipse cy="0" rx="11.5" ry="2.6" fill="#38bdf8" /><ellipse cy=".4" rx="9.5" ry="1.8" fill="#bae6fd" />
+    {[-11, -5.5, 0, 5.5, 11].map(x => <path key={x} d={`M${x} 2.4 q-.6 1.6 0 3`} stroke="#94a3b8" strokeWidth=".5" fill="none" />)}
+    <path d="M-1.8 -1 L-1.2 -12 H1.2 L1.8 -1Z" fill="#f1f5f9" stroke="#475569" strokeWidth=".6" />
+    <ellipse cy="-13" rx="5.5" ry="1.8" fill="#e2e8f0" stroke="#475569" strokeWidth=".6" /><ellipse cy="-13" rx="4" ry="1.1" fill="#7dd3fc" />
+    <circle cy="-17" r="2.6" fill="#f8fafc" stroke="#475569" strokeWidth=".6" /><path d="M-1 -18 q1 -1 2 0" stroke="#cbd5e1" strokeWidth=".5" fill="none" />
+    <path d="M0 -19.6 Q-9 -32 -16 -1 M0 -19.6 Q9 -32 16 -1" stroke="#38bdf8" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+    <path d="M0 -19.6 Q-5 -27 -8 -13 M0 -19.6 Q5 -27 8 -13" stroke="#bae6fd" strokeWidth=".8" fill="none" strokeLinecap="round" />
+    <path d="M0 -19.6 V-28" stroke="#7dd3fc" strokeWidth="1.2" strokeLinecap="round" />
+    {[[-16, -1, 0], [16, -1, .5], [-8, -13, .25], [8, -13, .8], [-21, 18, 1.1], [21, 18, .35], [0, -29, .6]].map(([x, y, d], i) => <circle key={i} className="dx-drip" style={{ animationDelay: `${d}s` }} cx={x} cy={y} r={i > 4 ? .9 : 1.1} fill="#38bdf8" />)}
+    {spark(-22, -16, 0, '#e0f2fe')}{spark(22, -22, 1, '#ffffff', 1.8)}{spark(-6, -32, .5, '#e0f2fe', 1.4)}
+    <path d="M-27 24 q-4 -2 -3 -6 q3 1 3 6 M27 24 q4 -3 2 -7 q-3 2 -2 7" fill="#65a30d" /><circle cx="-29" cy="18" r="1.3" fill="#f9a8d4" /><circle cx="29" cy="17" r="1.3" fill="#fde68a" />
+  </g>,
+  grand_piano: <g transform="translate(30 40)">
+    <ellipse cy="33" rx="27" ry="3.5" fill="#000" opacity=".14" />
+    <path d="M-25 2 L-21 -16 Q-19 -26 -8 -26 Q8 -26 20 -14 Q27 -6 25 2Z" fill="#111827" stroke="#030712" strokeWidth=".9" />
+    <path d="M-21 -16 Q-19 -24 -8 -24 Q7 -24 18 -13" stroke="#374151" strokeWidth="1.2" fill="none" />
+    <path d="M-17 -12 Q2 -18 20 -6" stroke="#d4a017" strokeWidth=".6" fill="none" /><path d="M-15 -8 Q2 -14 18 -3" stroke="#a16207" strokeWidth=".5" fill="none" />
+    <path d="M-21 -16 L-12 -36 L-5 -25Z" fill="#1f2937" stroke="#030712" strokeWidth=".7" /><path d="M-12 -36 L-8 -25" stroke="#6b7280" strokeWidth=".6" />
+    <path d="M-14 -31 L-9 -26" stroke="#374151" strokeWidth=".5" /><path d="M-11 -25 L-14 -14" stroke="#9ca3af" strokeWidth=".7" />
+    <rect x="-25" y="2" width="50" height="11" rx="1.6" fill="#0b0f19" stroke="#030712" strokeWidth=".7" /><path d="M-24 3 h48" stroke="#374151" strokeWidth=".6" />
+    <rect x="-23" y="4" width="46" height="6.4" fill="#f8fafc" stroke="#cbd5e1" strokeWidth=".4" />
+    {Array.from({ length: 15 }, (_, i) => <path key={i} d={`M${-23 + (i + 1) * 46 / 16} 4 v6.4`} stroke="#cbd5e1" strokeWidth=".35" />)}
+    {[0, 1, 3, 4, 5, 7, 8, 10, 11, 12, 14].map(i => <rect key={i} x={-23 + (i + 1) * 46 / 16 - .9} y="4" width="1.8" height="3.8" rx=".3" fill="#111827" />)}
+    <rect x="-6" y="-2" width="12" height="4" rx=".8" fill="#fef3c7" stroke="#a16207" strokeWidth=".5" /><path d="M-4 -.6 h3 M-4 .8 h5 M2 -.6 h2" stroke="#78350f" strokeWidth=".4" />
+    <path d="M-22 13 V30 M22 13 V30 M4 13 V25" stroke="#111827" strokeWidth="2.8" strokeLinecap="round" />
+    <path d="M-23.5 29.5 h3 M20.5 29.5 h3" stroke="#d4a017" strokeWidth="1.6" strokeLinecap="round" />
+    <path d="M0 26 h8 M2 26 v2 M6 26 v2" stroke="#d4a017" strokeWidth="1" />
+    <rect x="-12" y="22" width="16" height="3.4" rx="1.2" fill="#7f1d1d" stroke="#450a0a" strokeWidth=".5" /><path d="M-10 25.4 v4.6 M2 25.4 v4.6" stroke="#450a0a" strokeWidth="1.2" />
+    <path d="M14 -10 Q16 -6 20 -6" stroke="#fde68a" strokeWidth=".6" fill="none" opacity=".7" />
+    <g className="dx-bob"><path d="M20 -30 v-7 l5 -1.5 v7" stroke="#f472b6" strokeWidth="1" fill="none" /><ellipse cx="19" cy="-30" rx="1.6" ry="1.2" fill="#f472b6" /><ellipse cx="24" cy="-31.5" rx="1.6" ry="1.2" fill="#f472b6" /></g>
+    <g className="dx-bob" style={{ animationDelay: '1.2s' }}><path d="M-25 -32 v-6" stroke="#a78bfa" strokeWidth="1" /><ellipse cx="-26" cy="-32" rx="1.6" ry="1.2" fill="#a78bfa" /><path d="M-25 -38 q3 1 2 4" stroke="#a78bfa" strokeWidth=".9" fill="none" /></g>
+    {spark(6, -32, .4, '#fde68a', 1.6)}{spark(26, -20, 1.3, '#ffffff', 1.4)}
+  </g>,
+  star_tent: <g transform="translate(30 40)">
+    <ellipse cy="31" rx="29" ry="4" fill="#000" opacity=".14" />
+    <g opacity=".35"><circle className="pg-pulse" cy="14" r="14" fill="#fde68a" /></g>
+    <path d="M0 -34 L28 30 H-28Z" fill="#4338ca" stroke="#1e1b4b" strokeWidth="1" />
+    <path d="M0 -34 L13 30 H0Z" fill="#3730a3" /><path d="M0 -34 L-14 30" stroke="#6366f1" strokeWidth=".6" />
+    <path d="M-28 30 Q-14 26 0 30 Q14 26 28 30" stroke="#a5b4fc" strokeWidth=".9" fill="none" />
+    {[-22, -15, -8, 8, 15, 22].map((x, i) => <path key={i} d={`M${x} 30 l1.6 3 -3.2 0z`} fill={i % 2 ? '#f9a8d4' : '#fde68a'} />)}
+    <path d="M0 -6 L-11 30 H11Z" fill="#fde68a" /><path d="M0 -6 L-6 30 H6Z" fill="#fef3c7" />
+    <path d="M0 -6 L-11 30 M0 -6 L11 30" stroke="#1e1b4b" strokeWidth=".8" />
+    <path d="M0 -6 Q-9 6 -15 30" stroke="#6366f1" strokeWidth="2" fill="none" /><path d="M0 -6 Q9 6 15 30" stroke="#6366f1" strokeWidth="2" fill="none" />
+    <circle cx="-13" cy="18" r="1.1" fill="#facc15" stroke="#a16207" strokeWidth=".4" /><circle cx="13" cy="18" r="1.1" fill="#facc15" stroke="#a16207" strokeWidth=".4" />
+    <g transform="translate(0 22)"><path d="M-3.5 4 L-2.5 -2 H2.5 L3.5 4Z" fill="#f59e0b" stroke="#78350f" strokeWidth=".5" /><circle cy="-3.5" r="2.4" fill="#fffbeb" /><g opacity=".6"><circle className="pg-pulse" cy="-3.5" r="4" fill="#fde68a" /></g></g>
+    <path d="M-22 0 q2 -1 3 1 M18 -4 q2 -1 3 1" stroke="#a5b4fc" strokeWidth=".6" fill="none" />
+    {[[-14, -2, 0, 2], [10, -16, .6, 2.2], [17, 6, 1.2, 1.8], [-7, -20, 1.6, 1.6], [-19, 14, .9, 1.6]].map(([x, y, d, r], i) => <path key={i} className="pg-tw" style={{ animationDelay: `${d}s` }} d={`M${x} ${y - r} L${x + r * .35} ${y - r * .3} L${x + r} ${y} L${x + r * .35} ${y + r * .3} L${x} ${y + r} L${x - r * .35} ${y + r * .3} L${x - r} ${y} L${x - r * .35} ${y - r * .3}Z`} fill="#fde047" />)}
+    <path d="M0 -34 V-44" stroke="#1e1b4b" strokeWidth="1" /><path className="pg-sway" d="M0 -44 L9 -41.5 L0 -39Z" fill="#f472b6" stroke="#9d174d" strokeWidth=".4" />
+    <path d="M-28 30 L-33 34 M28 30 L33 34" stroke="#78350f" strokeWidth="1" /><circle cx="-33" cy="34" r=".9" fill="#78350f" /><circle cx="33" cy="34" r=".9" fill="#78350f" />
+    <path d="M-30 31 q-2 -3 0 -5 q2 2 0 5 M30 31 q2 -3 0 -5 q-2 2 0 5" fill="#4d7c0f" />
+    {spark(-24, -26, .2, '#e0e7ff')}{spark(24, -30, 1, '#ffffff', 1.8)}
+  </g>,
 };

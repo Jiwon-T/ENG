@@ -215,28 +215,6 @@ export async function deleteAssignment(id: string) {
   }
 }
 
-export async function markIncorrectAnswerReviewed(sessionId: string, word: string) {
-  const sessionRef = doc(db, 'studySessions', sessionId);
-  try {
-    const sessionDoc = await getDoc(sessionRef);
-    if (!sessionDoc.exists()) return;
-    
-    const data = sessionDoc.data();
-    const incorrectAnswers = data.incorrectAnswers || [];
-    
-    const updated = incorrectAnswers.map((ans: any) => {
-      if (ans.word === word) {
-        return { ...ans, isReviewed: true };
-      }
-      return ans;
-    });
-    
-    await updateDoc(sessionRef, { incorrectAnswers: updated });
-  } catch (error) {
-    console.error('Failed to mark incorrect answer as reviewed:', error);
-    throw error;
-  }
-}
 export async function recordStudySession(data: {
   uid: string;
   wordbookId: string;

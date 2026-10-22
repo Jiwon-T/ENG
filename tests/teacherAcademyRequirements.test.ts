@@ -66,3 +66,11 @@ test('lesson content is required for publication, including absence and self-stu
  }
  assert.equal(workspaceError(Error('LESSON_CONTENT_REQUIRED'),'publish').body.message,'수업 내용을 입력해 주세요.');
 });
+
+test('3차시 테스트 날 (수업 없이 자습만) 결석: 자습 0회차로도 반영돼요; 출석이면 1회차 이상이어야 해요',()=>{
+ const testDay={...lesson,classSession:'없음',start:'',end:'',round:null,selfStudy:'있음',selfStudyStart:'18:00',selfStudyEnd:'19:00',selfStudyRound:0,attendance:'결석',content:'결석 (3차시 테스트)'};
+ assert.equal(assertLessonComplete(testDay).selfStudyRound,0);
+ assert.equal(assertLessonComplete({...testDay,attendance:'보강 결석'}).selfStudyRound,0);
+ assert.throws(()=>assertLessonComplete({...testDay,attendance:'출석'}),/SELF_STUDY_REQUIRED/,'present: the round counts');
+ assert.throws(()=>assertLessonComplete({...testDay,selfStudyRound:null}),/SELF_STUDY_REQUIRED/,'the round is still asked');
+});

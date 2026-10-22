@@ -104,13 +104,14 @@ export async function requestCoupon(db: any, uid: string, studentKey: string, no
   });
 }
 
-/** 꾸미기: where the medals and 탑 장식 sit in one room (only ones the student has, each once, inside the room). */
+/** 꾸미기: where the medals, 탑 장식 and 특별 소품 sit in one room (only ones the student has, each once, inside the room). */
 export function placeDecor(s: ServerPetState, backgroundInput: unknown, itemsInput: unknown, plan: string = 'free') {
   const background = String(backgroundInput || '');
   // a room the student has, or a 패스 room while that pass is on
   if (background !== 'default' && !s.inventory.includes(background) && !passAllows(petItem(background), plan)) throw Error('PET_BAD_ACTION');
   if (!Array.isArray(itemsInput) || itemsInput.length > PET_COUPON.maxDecor) throw Error('PET_BAD_ACTION');
-  const owned = new Set([...(s.medals || []), ...(s.towerDecor || [])]), seen = new Set<string>();
+  // 금메달, 탑 장식, and the 특별 소품 bought (분수대 …)
+  const owned = new Set([...(s.medals || []), ...(s.towerDecor || []), ...s.inventory.filter(id => petItem(id)?.category === 'decor')]), seen = new Set<string>();
   const clamp = (v: unknown) => { const n = Number(v); if (!Number.isFinite(n)) throw Error('PET_BAD_ACTION'); return Math.round(Math.max(0, Math.min(100, n)) * 10) / 10; };
   const items = itemsInput.map((it: any) => {
     const id = String(it?.id || ''); if (!owned.has(id) || seen.has(id)) throw Error('PET_BAD_ACTION'); seen.add(id);

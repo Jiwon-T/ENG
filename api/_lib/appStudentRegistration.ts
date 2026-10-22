@@ -1,6 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
-import {assertRegistrationAccess,studentRegistrationSchema,studentRegistrationTitle} from './teacherStudentRegistration.js';
+import {assertIntakeAccess,studentRegistrationSchema,studentRegistrationTitle} from './teacherStudentRegistration.js';
 import {registrationStudentProperties,registrationEnrollmentProperties} from './teacherStudentRegistrationNotion.js';
 import {DIRECTORY_ROWS,DIRECTORY_HISTORY,directoryRowKey,directorySourceKey} from './academyDirectorySource.js';
 import {hashStudentKey,generateInternalStudentId} from './security.js';
@@ -8,12 +8,12 @@ import {writeAssignmentStart} from './assignmentStarts.js';
 const digest=(value:any)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 /** Finalize one saved new-student intake. No Notion dependency or account creation. */
 export async function commitAppStudentRegistration(db:any,actor:any,idInput:unknown,revisionInput:unknown){
- assertRegistrationAccess(actor);if(actor.academyId!=='main')throw Error('FORBIDDEN');
+ assertIntakeAccess(actor);if(actor.academyId!=='main')throw Error('FORBIDDEN');
  const id=z.string().regex(/^[a-f0-9]{64}$/).parse(idInput),revision=z.number().int().positive().parse(revisionInput),studentKey=randomUUID(),enrollmentId=randomUUID(),internalStudentId=generateInternalStudentId('app:main:'+studentKey),ref=db.collection('teacherStudentRegistrations').doc(id);
  return db.runTransaction(async(tx:any)=>{
   const authority=(await tx.get(db.collection('academyCoreAuthority').doc('main'))).data(),classesAuthority=(await tx.get(db.collection('academyClassAuthority').doc('main'))).data();
   if(!authority?.active||!classesAuthority?.active)throw Error('CORE_NOT_READY');
-  const current=(await tx.get(ref)).data();if(!current)throw Error('REGISTRATION_NOT_FOUND');assertRegistrationAccess(actor,current);
+  const current=(await tx.get(ref)).data();if(!current)throw Error('REGISTRATION_NOT_FOUND');assertIntakeAccess(actor,current);
   if(current.revision!==revision)throw Error('REGISTRATION_CONFLICT');
   if(current.sourceMode==='firestore'&&current.studentKey&&current.syncStatus==='synced')return {id,revision,syncStatus:'synced',studentKey:current.studentKey,sourceMode:'firestore',alreadySynced:true};
   if(current.notionStudentPageId||current.studentCreateAttempted||current.enrollmentCreateAttempted||current.syncLeaseUntil>Date.now()||['syncing','uncertain','synced'].includes(current.syncStatus))throw Error('REGISTRATION_SOURCE_CONFLICT');

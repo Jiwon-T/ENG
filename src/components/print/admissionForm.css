@@ -1,0 +1,23 @@
+/* 입학원서: 채움학원's paper form (A4 portrait), printed apart from the screen like the other print pages. */
+.admission-sheet { box-sizing: border-box; width: 210mm; min-height: 297mm; padding: 0 0 8mm; color: #2d3a40; background: #fff; font-size: 10pt; line-height: 1.45; break-after: page; page-break-after: always; }
+.admission-sheet:last-child { break-after: auto; page-break-after: auto; }
+.admission-band { display: flex; align-items: center; justify-content: space-between; height: 33mm; padding-left: 17mm; background: linear-gradient(90deg, #a8d7dd 0%, #cfe9ec 55%, #e7f5f6 100%); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.admission-band h1 { margin: 0; font-size: 34pt; font-weight: 800; letter-spacing: 1mm; color: #fff; }
+.admission-band img { height: 33mm; background: #fff; padding: 1mm 3mm; box-sizing: border-box; }
+.admission-stripe { height: 1.6mm; margin-top: 1.4mm; background: #aad5db; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.admission-sheet h2 { margin: 7mm 10mm 2.5mm; font-size: 13pt; font-weight: 800; color: #0b8eaa; }
+.admission-table { width: calc(100% - 20mm); margin: 0 10mm; border-collapse: collapse; table-layout: fixed; }
+.admission-table th, .admission-table td { border: 0.5pt solid #b0c4b9; height: 8.6mm; padding: 0.8mm 2mm; vertical-align: middle; word-break: keep-all; overflow-wrap: anywhere; }
+.admission-table th { background: #e8f3f7; color: #4a5a60; font-weight: 600; text-align: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.admission-table th.admission-sub { font-weight: 500; font-size: 9.5pt; }
+.admission-table td { text-align: left; }
+.admission-pre { white-space: pre-line; vertical-align: top !important; font-size: 9.5pt; }
+.admission-tall td { height: 19mm; }
+.admission-mid th, .admission-mid td { height: 13.5mm; }
+.admission-notes th, .admission-notes td { height: 26mm; }
+.admission-consent { margin: 3mm 10mm 0; font-size: 9.5pt; }
+.admission-consent p { margin: 0 0 1.6mm; }
+.admission-center { text-align: center; }
+.admission-agree { display: flex; gap: 6mm; } .admission-agree span:first-child { flex: 1; }
+.admission-date { margin-top: 5mm !important; text-align: center; } .admission-date span { display: inline-block; min-width: 14mm; text-align: center; }
+.admission-sign { text-align: center; } .admission-sign span { display: inline-block; min-width: 50mm; text-align: center; }

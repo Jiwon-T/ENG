@@ -2,14 +2,14 @@
 // (which shows). Changing a price or a rate here changes both.
 export type PetCharacterType = 'unicorn' | 'mymelody' | 'haemi' | 'molang' | 'mang_bear' | 'hodu';
 export type PetStage = 'baby' | 'child' | 'teen' | 'adult' | 'master';
-export type PetItemCategory = 'clothing' | 'accessory' | 'background' | 'consumable';
+export type PetItemCategory = 'clothing' | 'accessory' | 'background' | 'consumable' | 'decor';
 /** Accessories are worn one per place, all places at once (a hat, glasses, a scarf and a sword together). */
 export type AccessorySlot = 'head' | 'eyes' | 'neck' | 'hand';
 export const ACCESSORY_SLOTS: { id: AccessorySlot; label: string }[] = [{ id: 'head', label: '머리' }, { id: 'eyes', label: '눈' }, { id: 'neck', label: '목' }, { id: 'hand', label: '손' }];
 /** `reward`: earned on the 원정대 (never sold in the shop). `slot`: where an accessory is worn. `revive`: only for a pet
  *  with no 기운 left (탈진), once a day, apart from the two 기운 간식. */
 /** `pass`: a pass-only room (looks only; never bought): 'pet' for any pass, 'premium' for the 프리미엄 패스. */
-export interface PetItem { id: string; name: string; price: number; icon: string; category: PetItemCategory; xp?: number; energy?: number; reward?: boolean; slot?: AccessorySlot; revive?: boolean; pass?: 'pet' | 'premium' }
+export interface PetItem { id: string; name: string; price: number; icon: string; category: PetItemCategory; xp?: number; energy?: number; reward?: boolean; slot?: AccessorySlot; revive?: boolean; pass?: 'pet' | 'premium'; /** 특별 (목표 물건): the shop's 특별 tab, with how far the points are */ special?: boolean }
 
 export const PET_CHARACTERS: { id: PetCharacterType; name: string }[] = [
   { id: 'unicorn', name: '다롱' }, { id: 'mymelody', name: '아롱' }, { id: 'haemi', name: '해미' }, { id: 'molang', name: '말랑' }, { id: 'mang_bear', name: '고미' }, { id: 'hodu', name: '호두' },
@@ -36,6 +36,20 @@ export const PET_QUESTS = {
   streakDays: 5,
 } as const;
 export type PetQuestId = keyof typeof PET_QUESTS.list;
+/** 방 구경 (동물농장 style): friends visit a room from the 순위 (later 이웃, 방명록, 검색). A visit counts once a day per
+ *  friend (never your own room); a 응원 스티커 is one of these fixed phrases, one a day per room, no points for anyone —
+ *  the one who sticks it gets a little pet XP, `xpPerDay` times a day. */
+export const PET_ROOM = {
+  stickers: [
+    { id: 'best', label: '최고야' }, { id: 'together', label: '같이 공부하자' }, { id: 'medal', label: '금메달 멋져' },
+    { id: 'tower', label: '탑 응원해' }, { id: 'cute', label: '펫 귀여워' }, { id: 'cheer', label: '오늘도 화이팅' },
+  ],
+  stickerXp: 5, xpPerDay: 5,
+  /** 이웃 kept at most, and 이번 주 인기 방 shown */ neighborsMax: 30, popular: 3,
+  /** 간식 선물: food only (an energy snack would get round the 2-a-day limit), bought with my points or from my 가방, into the
+   *  friend's 가방; one a day per room, `giftsPerDay` a day; the giver's pet gets `giftXp` */ gifts: ['cookie', 'macaron', 'cake', 'candy'], giftsPerDay: 3, giftXp: 10,
+} as const;
+export type PetRoomSticker = typeof PET_ROOM.stickers[number]['id'];
 /** 탈진 회복 '몬스터': once a day, only at 0 기운. */
 export const PET_REVIVES_PER_DAY = 1;
 /** One more pet each time a pet reaches PET_FRIEND_LEVEL; one of each kind at most. */
@@ -114,6 +128,12 @@ export const PET_ITEMS: PetItem[] = [
   { id: 'abyss_greatsword', name: '심연의 대검', price: 0, icon: '🌑', category: 'accessory', slot: 'hand', reward: true },
   { id: 'dawn_staff', name: '여명의 지팡이', price: 0, icon: '🌅', category: 'accessory', slot: 'hand', reward: true },
   { id: 'dusk_tome', name: '그믐달 마도서', price: 0, icon: '📖', category: 'accessory', slot: 'hand', reward: true },
+  // 특별 (목표 물건, 2026-10-22): dear on purpose — something to save up for (looks only; the 장학 쿠폰 count is not touched).
+  // Room things are placed like the 금메달 (꾸미기); 오로라 언덕 is a room.
+  { id: 'fountain', name: '분수대', price: 2500, icon: '⛲', category: 'decor', special: true },
+  { id: 'grand_piano', name: '그랜드 피아노', price: 4000, icon: '🎹', category: 'decor', special: true },
+  { id: 'star_tent', name: '별빛 텐트', price: 6000, icon: '⛺', category: 'decor', special: true },
+  { id: 'aurora_hill', name: '오로라 언덕', price: 10000, icon: '🌌', category: 'background', special: true },
   { id: 'cookie', name: '쿠키', price: 30, xp: 5, icon: '🍪', category: 'consumable' },
   { id: 'macaron', name: '마카롱', price: 50, xp: 10, icon: '🍭', category: 'consumable' },
   { id: 'cake', name: '딸기케이크', price: 60, xp: 15, icon: '🍰', category: 'consumable' },
@@ -440,6 +460,8 @@ export const TOWER_DECOR: { id: string; name: string; floor: number }[] = [
   { id: 'star_telescope', name: '별자리 망원경', floor: 90 }, { id: 'dragon_throne', name: '용왕의 왕좌', floor: 100 },
 ];
 export const towerDecor = (id: string) => TOWER_DECOR.find(d => d.id === id);
+/** A thing placed in the room (꾸미기) that is not a 금메달: a 탑 장식 or a bought 특별 소품. */
+export const roomDecor = (id: string): { id: string; name: string } | undefined => towerDecor(id) || (petItem(id)?.category === 'decor' ? petItem(id) : undefined);
 /** Treasure chests: floor 1 (at the entrance) and after each boss (that boss's own treasure). */
 export const TOWER_CHESTS: Record<number, { gear: string[]; potions: number; /** a job weapon: the one for the pet's job */ jobWeapon?: Record<PetJob, string>; /** 51~100층 bosses: 강화석 */ stones?: number }> = {
   1: { gear: ['apprentice_club'], potions: PET_TOWER.startPotions },

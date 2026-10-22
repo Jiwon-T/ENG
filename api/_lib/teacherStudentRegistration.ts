@@ -55,21 +55,32 @@ export function assertRegistrationAccess(actor: RegistrationActor, previous?:any
     if (!actor.academyId || !actor.uid) throw new Error('TEACHER_NOT_CONFIGURED');
     if (previous && previous.academyId !== actor.academyId) throw new Error('FORBIDDEN');
 }
+/** 신입생 등록 (상담·신입생 원서, 등록 확정, 재원생 전환): 원장님·관리자, and any teacher for the intakes they started — the
+ *  teacher who consults or will teach the student writes it to the end. A teacher's intake is a new student only: a subject
+ *  added to a registered student changes that student's enrollment, which stays with 원장님·관리자 (assertRegistrationAccess). */
+export function assertIntakeAccess(actor: RegistrationActor, previous?: any, purpose?: string) {
+    if (!actor.academyId || !actor.uid) throw new Error('TEACHER_NOT_CONFIGURED');
+    if (previous && previous.academyId !== actor.academyId) throw new Error('FORBIDDEN');
+    if (actor.admin || actor.principal) return;
+    // the teacher who started it, or one who joined it (같이 쓰기, intakeMatches.ts)
+    if (previous && previous.ownerUid !== actor.uid && !(previous.coWriters || []).includes(actor.uid)) throw new Error('FORBIDDEN');
+    if ((purpose ?? previous?.data?.purpose ?? 'new') !== 'new') throw new Error('FORBIDDEN');
+}
 export function registrationDocumentId(academyId:string, requestId:string) {
     return createHash('sha256').update(JSON.stringify([academyId,requestId])).digest('hex');
 }
 // Server-only input storage; the sync worker consumes an immutable revision.
 // Store the input and pending sync state atomically; never claim Notion completion here.
 export async function saveStudentRegistration(db:any, actor:RegistrationActor, input:unknown, requestId:unknown, expectedRevision?:number, writeId?:unknown, sourceMode?:'firestore') {
-    assertRegistrationAccess(actor);
     const key = z.string().uuid().parse(requestId);
     const value = studentRegistrationSchema.parse(input);
+    assertIntakeAccess(actor, undefined, value.purpose);
     const operation = z.string().uuid().parse(writeId ?? (expectedRevision === undefined ? key : randomUUID()));
     if (expectedRevision !== undefined) z.number().int().positive().parse(expectedRevision);
     const ref = db.collection('teacherStudentRegistrations').doc(registrationDocumentId(actor.academyId!,key));
     return db.runTransaction(async (transaction:any) => {
         const previous = (await transaction.get(ref)).data();
-        assertRegistrationAccess(actor,previous);
+        assertIntakeAccess(actor,previous,value.purpose);
         if(previous?.sourceMode==='firestore'&&sourceMode!=='firestore')throw Error('CORE_NOT_READY');
         if(sourceMode==='firestore'&&!(await transaction.get(db.collection('academyCoreAuthority').doc('main'))).data()?.active)throw Error('CORE_NOT_READY');
         if(previous?.residentAt)throw Error('REGISTRATION_ALREADY_RESIDENT');
@@ -86,7 +97,7 @@ export async function saveStudentRegistration(db:any, actor:RegistrationActor, i
         if (previous && (['syncing','uncertain','synced'].includes(previous.syncStatus) || previous.notionStudentPageId || previous.studentCreateAttempted || previous.enrollmentCreateAttempted)) throw new Error('REGISTRATION_SYNC_IN_PROGRESS');
         const revision = (previous?.revision || 0) + 1;
         transaction.set(ref, {
-            academyId:actor.academyId, ownerUid:previous?.ownerUid || actor.uid,
+            academyId:actor.academyId, ownerUid:previous?.ownerUid || actor.uid, ...(previous?.coWriters?.length?{coWriters:previous.coWriters}:{}),
             requestId:key, lastWriteId:operation, lastWriteBaseRevision:expectedRevision ?? null,
             data:value, title:studentRegistrationTitle(value), revision,
             createdAt:previous?.createdAt || Date.now(), updatedAt:Date.now(),
@@ -105,17 +116,18 @@ export function registrationSummary(id:string, record:any): RegistrationSummary 
         enrollments:(record.data?.enrollments || []).map((item:any)=>({subject:item.subject, status:item.status,startDate:item.startDate}))};
 }
 export async function listStudentRegistrations(db:any, actor:RegistrationActor) {
-    assertRegistrationAccess(actor);
+    assertIntakeAccess(actor);
     const result = await db.collection('teacherStudentRegistrations').where('academyId','==',actor.academyId).get();
-    return result.docs.filter((doc:any)=>doc.data().academyId === actor.academyId&&!doc.data().residentAt)
+    // a teacher sees the intakes they started or joined; 원장님·관리자 every one
+    return result.docs.filter((doc:any)=>doc.data().academyId === actor.academyId&&!doc.data().residentAt&&(actor.admin||actor.principal||doc.data().ownerUid===actor.uid||(doc.data().coWriters||[]).includes(actor.uid)))
         .map((doc:any)=>registrationSummary(doc.id,doc.data()))
         .sort((a:RegistrationSummary,b:RegistrationSummary)=>b.updatedAt-a.updatedAt || a.id.localeCompare(b.id));
 }
 /** Move only the intake-list state; preserve student, enrollment, accounts and report IDs. */
 export async function convertRegistrationToResident(db:any,actor:RegistrationActor,id:unknown,revision:unknown,verifyAdditional?:(key:string)=>Promise<any>){
-    assertRegistrationAccess(actor);
+    assertIntakeAccess(actor);
     const key=z.string().regex(/^[a-f0-9]{64}$/).parse(id),version=z.number().int().positive().parse(revision),ref=db.collection('teacherStudentRegistrations').doc(key);
-    const initial=(await ref.get()).data();if(!initial)throw Error('REGISTRATION_NOT_FOUND');assertRegistrationAccess(actor,initial);
+    const initial=(await ref.get()).data();if(!initial)throw Error('REGISTRATION_NOT_FOUND');assertIntakeAccess(actor,initial);
     if(initial.residentAt)return {id:key,studentKey:initial.studentKey||initial.notionStudentPageId||initial.data.existingStudentKey,alreadyConverted:true};
     const data=studentRegistrationSchema.parse(initial.data);
     if(data.purpose==='additional'){
@@ -124,7 +136,7 @@ export async function convertRegistrationToResident(db:any,actor:RegistrationAct
         if(enrolled.pending||data.enrollments.some(e=>!enrolled.subjects.some((s:any)=>s.subject===e.subject&&s.status==='등록')))throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
     }
     return db.runTransaction(async(tx:any)=>{
-        const current=(await tx.get(ref)).data();if(!current)throw Error('REGISTRATION_NOT_FOUND');assertRegistrationAccess(actor,current);
+        const current=(await tx.get(ref)).data();if(!current)throw Error('REGISTRATION_NOT_FOUND');assertIntakeAccess(actor,current);
         if(current.residentAt)return {id:key,studentKey:current.studentKey||current.notionStudentPageId||current.data.existingStudentKey,alreadyConverted:true};
         if(current.revision!==version||JSON.stringify(current.data)!==JSON.stringify(initial.data))throw Error('REGISTRATION_CONFLICT');
         if(data.purpose==='new'&&(data.intakeStage==='consultation'||current.syncStatus!=='synced'||!data.enrollments.some(e=>e.status==='등록')))throw Error('REGISTRATION_ENROLLMENT_REQUIRED');
@@ -137,11 +149,11 @@ export async function convertRegistrationToResident(db:any,actor:RegistrationAct
     });
 }
 export async function readStudentRegistration(db:any, actor:RegistrationActor, id:unknown) {
-    assertRegistrationAccess(actor);
+    assertIntakeAccess(actor);
     const key = z.string().regex(/^[a-f0-9]{64}$/).parse(id);
     const record = (await db.collection('teacherStudentRegistrations').doc(key).get()).data();
     if (!record) throw new Error('REGISTRATION_NOT_FOUND');
-    assertRegistrationAccess(actor,record);
+    assertIntakeAccess(actor,record);
     return {...registrationSummary(key,record),requestId:record.requestId,data:studentRegistrationSchema.parse(record.data)};
 }
 

@@ -11,6 +11,10 @@ import WorkspaceDialog from './WorkspaceDialog';
 import StudentRegistrationForm from './StudentRegistrationForm';
 import {askConfirm,askDiscard} from './ConfirmDialog';
 import {useLeaveProtection} from '../../lib/leaveProtection';
+import {INTAKE_PHOTO_RULES,shrinkFormPhoto} from '../../lib/intakePhotos';
+import {PrintPortal} from '../print/PrintSheet';
+import AdmissionFormSheet from '../print/AdmissionFormSheet';
+import '../print/admissionForm.css';
 interface PageResult extends ServerResult {ok:boolean;records:RegistrationSummary[];page:number;pages:number;total:number;counts?:Record<string,number>}
 interface ServerResult {ok:boolean;error?:string;message?:string;diagnosticId?:string;id?:string;revision?:number;syncStatus?:string;sourceMode?:string;record?:RegistrationRecord}
 async function request<T>(action:string, values:Record<string,unknown>={}) {
@@ -22,7 +26,7 @@ function responseMessage(result:{userMessage?:string;data?:{message?:string;diag
     return `${result.data?.message || result.userMessage || '처리하지 못했습니다. 다시 시도해 주세요.'}${result.data?.diagnosticId ? ` (오류 ID: ${result.data.diagnosticId})` : ''}`;
 }
 /** 상담·신입생 inside the student list: rows appear when the 신입생·상담 chip is on, or when the shared search matches; the 원서 opens in a dialog. */
-export default function StudentRegistrationManager({onSynced,students=[],coreMode=false,query='',active=false,startSignal=0,startName='',onCount}:{onSynced:()=>Promise<void>;coreMode?:boolean;students?:any[];query?:string;active?:boolean;startSignal?:number;/** The name to start the form with (시간표 엑셀 가져오기 › 새 학생 등록). */startName?:string;onCount?:(count:number)=>void}) {
+export default function StudentRegistrationManager({onSynced,students=[],coreMode=false,query='',active=false,startSignal=0,startName='',onCount,canAdditional=true}:{onSynced:()=>Promise<void>;/** 기존 학생 추가 과목 상담 (it changes a registered student's enrollment): 원장님·관리자 only */canAdditional?:boolean;coreMode?:boolean;students?:any[];query?:string;active?:boolean;startSignal?:number;/** The name to start the form with (시간표 엑셀 가져오기 › 새 학생 등록). */startName?:string;onCount?:(count:number)=>void}) {
     const [intake,setIntake]=useState('all'),[enrollmentKey,setEnrollmentKey]=useState('');
     const [page,setPage]=useState(1),[reload,setReload]=useState(0);
     const [list,setList]=useState<PageResult>({ok:true,records:[],page:1,pages:1,total:0});
@@ -35,6 +39,35 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
     const [locked,setLocked]=useState(false),[retrying,setRetrying]=useState(false);
     const intent=useRef<RegistrationSaveIntent | null>(null),writeBusy=useRef(false),generation=useRef(0);
     const [current,setCurrent]=useState<RegistrationSummary | null>(null);
+    // 입학원서 인쇄 (PDF로 저장): this 원서 as it is on screen, or a blank one to write by hand
+    const [printing,setPrinting]=useState<RegistrationInput | 'blank' | null>(null);
+    // 같은 학생 원서 (another teacher talked to this student too): shown while the 원서 is written; 같이 쓰기 opens that one
+    const [matches,setMatches]=useState<{id:string;title:string;writer:string;updatedAt:number;by:'phone'|'school';mine:boolean}[]>([]),[notSame,setNotSame]=useState<string[]>([]);
+    useEffect(()=>{
+        setMatches([]);if(!open||value.purpose==='additional'||value.name.trim().length<2)return;let live=true;
+        const timer=setTimeout(()=>{request<{ok:boolean;matches:typeof matches}>('student-registration-matches',{name:value.name,studentPhone:value.studentPhone||'',guardianPhone:value.guardianPhone||'',school:value.school||'',grade:value.grade||'',...(current?{exceptId:current.id}:{})})
+            .then(result=>{if(live&&result.ok&&result.data?.ok)setMatches(result.data.matches||[]);}).catch(()=>{});},400);
+        return()=>{live=false;clearTimeout(timer);};
+    },[open,value.name,value.studentPhone,value.guardianPhone,value.school,value.grade,value.purpose,current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    // 종이 원서 사진 (a saved 원서): the list, then one photo opened at a time
+    const [photos,setPhotos]=useState<{id:string;at:number}[]>([]),[viewing,setViewing]=useState(''),[photoBusy,setPhotoBusy]=useState(false),photoInput=useRef<HTMLInputElement>(null);
+    const loadPhotos=async(id:string)=>{const result=await request<{ok:boolean;photos:{id:string;at:number}[]}>('intake-photos',{id});if(result.ok&&result.data?.ok)setPhotos(result.data.photos||[]);};
+    useEffect(()=>{setPhotos([]);setViewing('');if(open&&current?.id)void loadPhotos(current.id).catch(()=>{});},[open,current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    const post=(body:Record<string,unknown>)=>teacherAuthenticatedRequest<ServerResult>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    async function addPhoto(file?:File){
+        if(!file||!current)return;setPhotoBusy(true);setFeedback('');
+        try{const photo=await shrinkFormPhoto(file),result=await post({action:'add-intake-photo',id:current.id,photo});if(!result.ok||!result.data?.ok)throw Error(responseMessage(result));await loadPhotos(current.id);}
+        catch(e:any){setFeedback(e?.message||'사진을 붙이지 못했어요.');}finally{setPhotoBusy(false);if(photoInput.current)photoInput.current.value='';}
+    }
+    async function openPhoto(id:string){setPhotoBusy(true);try{const result=await request<{ok:boolean;photo:string;message?:string;diagnosticId?:string}>('intake-photo',{photoId:id});if(!result.ok||!result.data?.ok)throw Error(responseMessage(result));setViewing(result.data.photo);}catch(e:any){setFeedback(e?.message||'사진을 열지 못했어요.');}finally{setPhotoBusy(false);}}
+    async function removePhoto(id:string){if(!current||!await askConfirm({title:'이 사진을 뺄까요?',message:'원서 내용은 그대로예요.',confirmText:'빼기',tone:'danger',icon:'trash'}))return;setPhotoBusy(true);try{const result=await post({action:'remove-intake-photo',photoId:id});if(!result.ok||!result.data?.ok)throw Error(responseMessage(result));await loadPhotos(current.id);}catch(e:any){setFeedback(e?.message||'사진을 빼지 못했어요.');}finally{setPhotoBusy(false);}}
+    async function joinMatch(id:string){
+        if(writeBusy.current)return;
+        if(dirty&&!await askDiscard(revision===undefined?'지금 쓴 내용은 저장되지 않아요. 같은 학생 원서를 열까요?':'저장하지 않은 수정이 있어요. 같은 학생 원서를 열까요?'))return;
+        const result=await teacherAuthenticatedRequest<ServerResult & {record?:RegistrationSummary}>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'join-student-registration',id})});
+        if(!result.ok||!result.data?.ok||!result.data.record){setFeedback(responseMessage(result));return;}
+        setDirty(false);setReload(n=>n+1);await edit(result.data.record as RegistrationSummary);
+    }
     useEffect(()=>{if(startSignal)start(startName);},[startSignal]); // eslint-disable-line react-hooks/exhaustive-deps
     useEffect(()=>{onCount?.(list.counts?.all??list.total??0);},[list]);
     useEffect(()=>{
@@ -117,6 +150,13 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
     }
     async function sync(record:RegistrationSummary) {
         if(writeBusy.current)return;
+        // 등록 확정 전: a student already on the list that looks like this one (another teacher may have registered them)
+        if(record.purpose!=='additional'&&['pending','failed'].includes(record.syncStatus)){
+            const found=await request<{ok:boolean;matches:{title:string;status:string;subjects:string[];by:'phone'|'school'}[]}>('student-registration-registered-matches',{id:record.id}).catch(()=>null);
+            const list=found?.ok&&found.data?.ok?found.data.matches||[]:[];
+            if(list.length&&!await askConfirm({title:'이미 학생 목록에 같은 학생이 있어요',message:`${list.map(m=>`${m.title}${m.status?` · ${m.status}`:''}${m.subjects.length?` ${m.subjects.join('·')}`:''} (${m.by==='phone'?'연락처가 같아요':'이름·학교·학년이 같아요'})`).join(', ')}. 같은 학생이면 새로 등록하지 말고, 과목 추가는 원장님·관리자께 요청해 주세요.`,confirmText:'그래도 새로 등록',tone:'danger',icon:'alert'}))return;
+            if(writeBusy.current)return;
+        }
         writeBusy.current=true;setBusy(true);setFeedback('');
         const current=generation.current,uid=auth.currentUser?.uid;
         try {
@@ -153,23 +193,28 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
             {listError ? <div role="alert" className="report-caption">{listError}<button type="button" className="small-button ml-2" onClick={()=>setReload(old=>old+1)}>다시 불러오기</button></div> : null}
             {!listError&&matched.map(record=>{const parts=record.title.match(/^(.*?)\s*\((.*)\)$/);const old=record.purpose!=='additional'&&record.syncStatus==='synced'&&record.enrollments.some(e=>e.status==='등록'&&e.startDate?.slice(0,7)<new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date()).slice(0,7));
                 return <button key={record.id} type="button" className="student-master-row student-intake-row" disabled={busy} onClick={()=>void edit(record)}><strong>{parts?.[1]||record.title}</strong>{parts&&<small>{parts[2]}</small>}<small>{record.enrollments.map(row=>`${row.subject} ${row.status}`).join(' · ')||'과목 미정'}</small><div><StatusBadge kind={record.intakeStage==='consultation'||record.purpose==='additional'?'editing':record.syncStatus==='synced'?'done':record.syncStatus==='failed'?'failed':'saved'} text={stageText(record)}/>{old&&<StatusBadge kind="saved" text="재원생 전환 필요"/>}</div></button>;})}
+            {active&&<div className="intake-print-row"><button type="button" className="small-button" onClick={()=>setPrinting('blank')}>빈 원서 인쇄</button></div>}
             {active&&!loading&&!listError&&!list.total ? <p className="report-caption">이 구분에 저장한 상담·신입생이 없습니다.</p> : null}
             {active&&list.pages>1 ? <div className="review-pagination"><button disabled={loading || list.page===1} onClick={()=>setPage(list.page-1)}>이전</button><span>{list.page} / {list.pages}</span><button disabled={loading || list.page===list.pages} onClick={()=>setPage(list.page+1)}>다음</button></div> : null}
         </div>}
         {feedback && !open ? <p role="status" className="report-caption">{feedback}</p> : null}
         <WorkspaceDialog open={open} title={revision===undefined?'입학·상담 원서 작성':'입학·상담 원서 조회·수정'} onClose={close}>
+            <div className="intake-print-row"><button type="button" className="small-button" onClick={()=>setPrinting(value)} title="인쇄 창에서 'PDF로 저장'을 고르면 파일이 돼요">원서 PDF·인쇄</button></div>
             {current&&revision!==undefined ? <div className="student-intake-actions"><span className="student-intake-status">{stageText(current)}</span>{actions(current)}</div> : null}
             {feedback ? <p role="status" className="text-sm text-slate-600 mb-3">{feedback}</p> : null}
             {retrying ? <p className="text-xs text-rose-600 mb-3">저장 결과가 불명확합니다. 입력을 유지한 채 같은 요청으로 다시 확인합니다.</p> : null}
             {optionsError ? <p role="status" className="text-xs text-rose-600 mb-3">{optionsError} <button type="button" className="small-button" onClick={()=>setOptionsReload(n=>n+1)}>담당·반 다시 불러오기</button></p> : !options ? <p role="status" className="text-xs mb-3">담당 선생님·반을 불러오는 중…</p> : null}
             {options ? <button type="button" className="small-button mb-3" disabled={busy} onClick={()=>setOptionsReload(n=>n+1)}>담당·반 목록 새로고침</button> : null}
             <fieldset disabled={busy||locked} className="grid sm:grid-cols-2 gap-3 mb-4">
-            <label>상담 유형<select value={value.purpose||'new'} onChange={e=>{setValue({...value,purpose:e.target.value as 'new'|'additional',existingStudentKey:null,intakeStage:'consultation'});setDirty(true);}}><option value="new">신규 학생 상담·등록</option><option value="additional">기존 학생 추가 과목 상담</option></select></label>
+            <label>상담 유형<select value={value.purpose||'new'} onChange={e=>{setValue({...value,purpose:e.target.value as 'new'|'additional',existingStudentKey:null,intakeStage:'consultation'});setDirty(true);}}><option value="new">신규 학생 상담·등록</option>{canAdditional&&<option value="additional">기존 학생 추가 과목 상담</option>}</select></label>
             {value.purpose==='additional' ? <label>기존 학생<select required value={value.existingStudentKey||''} onChange={e=>{const student=students.find(s=>s.studentKey===e.target.value);setValue({...value,existingStudentKey:e.target.value||null,name:student?.studentDisplayName||'',school:'',grade:''});setDirty(true);}}><option value="">학생 선택</option>{students.map(student=><option key={student.studentKey} value={student.studentKey}>{student.studentDisplayName}</option>)}</select></label> : <label>진행 상태<select value={value.intakeStage||'new'} onChange={e=>{setValue({...value,intakeStage:e.target.value as 'consultation'|'new'});setDirty(true);}}><option value="consultation">상담만 진행</option><option value="new">등록 첫 달 (신입생)</option></select></label>}
             </fieldset>
             {value.purpose==='additional' ? <p className="text-sm mb-3">기존 학생에 상담만 연결합니다. 학생·수강 행을 새로 만들지 않으며, 실제 수강 변경은 목록의 ‘기존 학생 수강 관리’에서 진행합니다.</p> : null}
+            {matches.filter(m=>!notSame.includes(m.id)).map(m=><div key={m.id} role="status" className="intake-match"><b>같은 학생 원서가 이미 있어요</b><span>{m.title} · {m.writer} 작성 · {new Date(m.updatedAt).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric'})} 수정 · {m.by==='phone'?'연락처가 같아요':'학교·학년이 같아요'}</span><span className="intake-match-actions"><button type="button" className="small-button" disabled={busy} onClick={()=>void joinMatch(m.id)}>{m.mine?'그 원서 열기':'이 원서로 같이 쓰기'}</button><button type="button" className="small-button" onClick={()=>setNotSame(list=>[...list,m.id])}>다른 학생이에요</button></span></div>)}
+            {current&&revision!==undefined?<div className="intake-photos"><span className="intake-photos-title">종이 원서 사진 {photos.length}장</span>{photos.map((ph,i)=><span key={ph.id} className="intake-photo"><button type="button" disabled={photoBusy} onClick={()=>void openPhoto(ph.id)}>사진 {i+1}</button><button type="button" className="intake-photo-remove" aria-label={`사진 ${i+1} 빼기`} disabled={photoBusy} onClick={()=>void removePhoto(ph.id)}>×</button></span>)}{photos.length<INTAKE_PHOTO_RULES.maxPhotos&&<button type="button" className="small-button" disabled={photoBusy||busy} onClick={()=>photoInput.current?.click()}>{photoBusy?'처리 중…':'+ 사진 추가'}</button>}<input ref={photoInput} type="file" accept="image/*" hidden aria-label="종이 원서 사진" onChange={e=>void addPhoto(e.target.files?.[0])}/></div>:<p className="intake-photos-note">원서를 저장하면 종이 원서 사진을 붙일 수 있어요.</p>}{viewing&&<div className="intake-photo-view" role="dialog" aria-label="종이 원서 사진" onClick={()=>setViewing('')}><img src={viewing} alt="종이 원서"/><span>누르면 닫혀요</span></div>}
             <StudentRegistrationForm options={options} value={value} disabled={locked} busy={busy} retrying={retrying} onChange={next=>{setValue(next);setDirty(true);}} onSubmit={()=>void save()}/>
         </WorkspaceDialog>
+        {printing&&<PrintPortal active orientation="portrait" onDone={()=>setPrinting(null)}><AdmissionFormSheet value={printing==='blank'?null:printing}/></PrintPortal>}
         {enrollmentKey&&<StudentEnrollmentEditor studentKey={enrollmentKey} onClose={()=>setEnrollmentKey('')} onSaved={()=>{setEnrollmentKey('');void onSynced().catch(()=>setFeedback('수강 변경은 완료됐지만 학생 목록을 다시 불러오지 못했습니다.'));setReload(n=>n+1);}}/>}
     </section>;
 }

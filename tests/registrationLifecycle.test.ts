@@ -23,6 +23,6 @@ test('additional consultation requires existing academy member and confirmed act
 });
 test('cross academy, regular teacher, stale revisions and failed conversion never hide the intake',async()=>{
  const f=registrationFirestore(),saved=await saveStudentRegistration(f.db,actor,input,requestId);Object.assign(f.rows.get('teacherStudentRegistrations/'+saved.id),{syncStatus:'synced',notionStudentPageId:student});f.rows.set('academyStudentMemberships/'+student,{academyId:'main'});
- for(const candidate of [{...actor,academyId:'other'},{...actor,principal:false}])await assert.rejects(convertRegistrationToResident(f.db,candidate,saved.id,1),/FORBIDDEN/);
+ for(const candidate of [{...actor,academyId:'other'},{...actor,principal:false,uid:'another-teacher'}])await assert.rejects(convertRegistrationToResident(f.db,candidate,saved.id,1),/FORBIDDEN/); // another teacher's intake
  await assert.rejects(convertRegistrationToResident(f.db,actor,saved.id,2),/REGISTRATION_CONFLICT/);f.failNextCommit();await assert.rejects(convertRegistrationToResident(f.db,actor,saved.id,1),/FIRESTORE_UNAVAILABLE/);assert.equal((await listStudentRegistrations(f.db,actor)).length,1);
 });

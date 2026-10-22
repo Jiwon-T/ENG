@@ -4,7 +4,7 @@
 // answers the server marks reviewed (review-mark), the word game from a run the server graded to the end. All three
 // done: a 간식 상자 into the 가방 (no points); 5 days in a row a 특별 상자.
 import { PET_QUESTS, type PetQuestId } from '../../src/lib/petCatalog.js';
-import { seoulDay, type ServerPetState } from './pet.js';
+import { initialPetState, PET_STATES, rollDay, seoulDay, type ServerPetState } from './pet.js';
 
 /** What the study records say about today: wrong answers waiting, 단어 테스트 and 단어장 공부 saved today. */
 export interface QuestRecords { wrongs: number; test: number; study: number }
@@ -67,16 +67,20 @@ export async function readQuestRecords(db: any, uid: string, now = Date.now()): 
     return out;
   } catch { console.warn('PET_QUEST_RECORDS_FAILED'); return {...NO_RECORDS}; }
 }
-/** 오답 복습 done on the server: the answer must be the student's own and not reviewed yet; it is marked reviewed here.
- *  Returns whether it was marked (false: already reviewed or not found). */
-export async function markWrongReviewed(db: any, uid: string, sessionId: string, word: string) {
-  const ref = db.collection('studySessions').doc(String(sessionId || '').slice(0, 200));
+/** 오답 복습 done on the server: the answer must be the student's own and not reviewed yet. It is marked reviewed and
+ *  counted for 오늘 할 일 in one transaction (never one without the other). Returns whether it was marked (false:
+ *  already reviewed or not found). */
+export async function markWrongReviewed(db: any, uid: string, sessionId: string, word: string, now = Date.now()) {
+  const ref = db.collection('studySessions').doc(String(sessionId || '').slice(0, 200)), petRef = db.collection(PET_STATES).doc(uid), userRef = db.collection('users').doc(uid);
   return db.runTransaction(async (tx: any) => {
-    const snap = await tx.get(ref), x = snap.data();
+    const [snap, pet, user] = await Promise.all([tx.get(ref), tx.get(petRef), tx.get(userRef)]), x = snap.data();
     if (!x || x.uid !== uid || !Array.isArray(x.incorrectAnswers)) return false;
     const i = x.incorrectAnswers.findIndex((a: any) => a?.word === word && !a.isReviewed);
     if (i < 0) return false;
+    const s: ServerPetState = rollDay(pet.exists ? pet.data() : initialPetState(now, user.data()?.petStats), now);
+    noteQuest(s, 'review'); s.updatedAt = now;
     tx.update(ref, {incorrectAnswers: x.incorrectAnswers.map((a: any) => a?.word === word ? {...a, isReviewed: true} : a)});
+    tx.set(petRef, s);
     return true;
   });
 }

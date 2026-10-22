@@ -389,3 +389,14 @@ test('탑 5단계 명예의 전당: boss floors keep the first clear and the few
   assert.deepEqual([plain.teacherView, plain.withTeachers, plain.floors[0].fewest.attacks], [true, false, 7]);
   assert.deepEqual([withT.withTeachers, withT.floors[0].first.nickname, withT.floors[0].fewest.nickname, withT.floors[0].fewest.teacher, withT.floors[0].fewest.attacks], [true, '별빛 해달', '선생님', true, 2]);
 });
+
+test('👁 장비 buttons stay after pressing them: a gear look not kept yet is worked out from the tower in every answer', async () => {
+  const f = registrationFirestore(), {s, t} = ready(20);
+  delete currentPet(s).gear; // gear from before the look was kept
+  f.rows.set('users/kid', {}); f.rows.set('petStates/kid', s); f.rows.set('petTowers/kid', t);
+  let out: any; const res: any = {setHeader() {}, end(v: string) { out = JSON.parse(v); }, statusCode: 0};
+  await handlePet({method: 'POST', headers: {authorization: 'Bearer t'}, body: {action: 'gear-show', style: 'wizard'}} as any, res, {verify: async () => ({uid: 'kid'}), db: () => f.db, generate: async () => '{}', now: () => NOW} as any);
+  assert.equal(out.state.pets[0].gearStyle, 'wizard');
+  assert.ok(Object.keys(out.state.pets[0].gear?.look || {}).length > 0, 'the gear look comes back with the answer');
+  assert.equal(f.rows.get('petStates/kid').pets[0].gear, undefined, 'still not saved (the tower keeps it on its next visit)');
+});

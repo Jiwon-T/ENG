@@ -1,5 +1,5 @@
 import { type ReactNode, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { COUPON_BOOST, countsForMonth, isSilverMedal, medalLabel, PET_COUPON, PET_TEST_DAY, silverMedal, towerDecor } from '../../lib/petCatalog';
+import { COUPON_BOOST, countsForMonth, isSilverMedal, medalLabel, PET_COUPON, PET_TEST_DAY, roomDecor, silverMedal } from '../../lib/petCatalog';
 import type { CouponExtraView, CouponMonth, CouponView, LedgerItem, MedalSpot } from '../../lib/petService';
 import { DECOR_ART } from './TowerDecorArt';
 
@@ -25,11 +25,15 @@ export function MedalArt({ month, size = 44 }: { month: string; size?: number })
 }
 
 /** 탑 장식 art: 이끼 화분 … 마도서 책장 (floors 10–50), 용암 화로 … 용왕의 왕좌 (60–100), in TowerDecorArt. */
-export function DecorArt({ id, size = 44 }: { id: string; size?: number }) {
-  return <svg viewBox="0 0 60 76" width={size} height={size * 76 / 60} role="img" aria-label={towerDecor(id)?.name || '장식'} style={{ overflow: 'visible' }}>{DECOR_ART[id] || null}</svg>;
+/** `fill`: as wide as its box (a room thing sized by the room's width). */
+export function DecorArt({ id, size = 44, fill = false }: { id: string; size?: number; fill?: boolean }) {
+  return <svg viewBox="0 0 60 76" {...(fill ? {} : { width: size, height: size * 76 / 60 })} role="img" aria-label={roomDecor(id)?.name || '장식'} style={fill ? { overflow: 'visible', display: 'block', width: '100%', height: 'auto' } : { overflow: 'visible' }}>{DECOR_ART[id] || null}</svg>;
 }
-/** One thing in the room: a 금메달 (by month) or a 탑 장식 (by id). */
-const Placed = ({ id, size }: { id: string; size: number }) => towerDecor(id) ? <DecorArt id={id} size={size * 1.1} /> : <MedalArt month={id} size={size} />;
+/** 탑 장식 · 특별 소품 in a room: this share of the room's width (about 56px on a phone), so a friend's smaller room window
+ *  shows them the same; 금메달 stay small badges (34px). */
+const ROOM_DECOR_WIDTH = '16%';
+/** One thing in the room: a 금메달 (by month), or a 탑 장식 · 특별 소품 (by id). */
+const Placed = ({ id, size }: { id: string; size: number }) => roomDecor(id) ? <DecorArt id={id} size={size * 1.1} /> : <MedalArt month={id} size={size} />;
 
 /** 펫 홈: how far this month's points are from the coupon (shown to students linked to the academy). */
 /** 포인트 내역 kinds: colour, icon and name (the bar under the gauge and each line). */
@@ -182,10 +186,10 @@ export function MedalLayer({ spots, editing, onMove }: { spots: MedalSpot[]; edi
     onMove(drag.current, Math.round(Math.max(4, Math.min(96, ((e.clientX - r.left) / r.width) * 100))), Math.round(Math.max(8, Math.min(90, ((e.clientY - r.top) / r.height) * 100))));
   };
   return <div ref={box} className={`absolute inset-0 ${editing ? 'z-30 touch-none' : 'pointer-events-none z-[4]'}`} onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
-    {spots.map(s => <span key={s.id} onPointerDown={editing ? e => { drag.current = s.id; (e.currentTarget.parentElement as HTMLElement).setPointerCapture(e.pointerId); } : undefined}
-      className={`absolute -translate-x-1/2 -translate-y-1/2 ${editing ? 'cursor-grab rounded-md outline-dashed outline-[1.5px] outline-offset-2 outline-[#d29a3a] active:cursor-grabbing' : ''}`} style={{ left: `${s.x}%`, top: `${s.y}%` }}>
-      <Placed id={s.id} size={34} />
-    </span>)}
+    {spots.map(s => { const decor = roomDecor(s.id); return <span key={s.id} onPointerDown={editing ? e => { drag.current = s.id; (e.currentTarget.parentElement as HTMLElement).setPointerCapture(e.pointerId); } : undefined}
+      className={`absolute -translate-x-1/2 -translate-y-1/2 ${editing ? 'cursor-grab rounded-md outline-dashed outline-[1.5px] outline-offset-2 outline-[#d29a3a] active:cursor-grabbing' : ''}`} style={{ left: `${s.x}%`, top: `${s.y}%`, ...(decor ? { width: ROOM_DECOR_WIDTH } : {}) }}>
+      {decor ? <DecorArt id={s.id} fill /> : <Placed id={s.id} size={34} />}
+    </span>; })}
   </div>;
 }
 
@@ -194,8 +198,8 @@ export function MedalBox({ medals, spots, busy, onToggle, onCancel, onSave }: { 
   const placed = new Set(spots.map(s => s.id));
   return <div className="border-t border-[#f3e6e8] bg-[#fffaf0] px-3 py-2.5">
     <div className="mb-1.5 flex items-center justify-between text-xs"><b className="font-black text-[#8a5a12]">장식함</b><span className="text-slate-500">눌러서 놓기·빼기 · 끌어서 옮기기</span></div>
-    <div className="flex gap-1.5 overflow-x-auto pb-1">{[...new Set(medals)].sort((a, b) => Number(Boolean(towerDecor(a))) - Number(Boolean(towerDecor(b))) || b.localeCompare(a)).map(m => <button key={m} type="button" aria-pressed={placed.has(m)} onClick={() => onToggle(m)} className={`flex flex-none flex-col items-center rounded-xl border px-2 py-1 text-[10px] font-bold ${placed.has(m) ? 'border-[#d29a3a] bg-white text-[#8a5a12]' : 'border-[#f0e2c8] bg-white/60 text-slate-500'}`}>
-      <Placed id={m} size={22} />{towerDecor(m)?.name || medalLabel(m)}{placed.has(m) ? ' · 놓음' : ''}
+    <div className="flex gap-1.5 overflow-x-auto pb-1">{[...new Set(medals)].sort((a, b) => Number(Boolean(roomDecor(a))) - Number(Boolean(roomDecor(b))) || b.localeCompare(a)).map(m => <button key={m} type="button" aria-pressed={placed.has(m)} onClick={() => onToggle(m)} className={`flex flex-none flex-col items-center rounded-xl border px-2 py-1 text-[10px] font-bold ${placed.has(m) ? 'border-[#d29a3a] bg-white text-[#8a5a12]' : 'border-[#f0e2c8] bg-white/60 text-slate-500'}`}>
+      <Placed id={m} size={22} />{roomDecor(m)?.name || medalLabel(m)}{placed.has(m) ? ' · 놓음' : ''}
     </button>)}</div>
     <div className="mt-2 flex justify-end gap-2">
       <button type="button" onClick={onCancel} className="rounded-xl border border-[#f3d5da] bg-white px-3 py-1.5 text-xs font-bold text-[#8b2f40]">취소</button>

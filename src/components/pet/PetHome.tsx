@@ -19,13 +19,14 @@ import type { FeedRunView } from './WordFeed';
 import type { ExpeditionView } from './ExpeditionMap';
 import { SCENE, STARS, SceneArt } from './PetScenes';
 import { MonsterCan } from './MonsterCan';
-import { CouponGauge, CouponShop, MedalBox, MedalLayer } from './PetCoupon';
+import { CouponGauge, CouponShop, DecorArt, MedalBox, MedalLayer } from './PetCoupon';
 import { PetPointsChip } from '../PassBadge';
 // The full-screen games load when opened (the pet room shows first).
 const WordFeed = lazy(() => import('./WordFeed'));
 const ExpeditionMap = lazy(() => import('./ExpeditionMap'));
 const GuildHall = lazy(() => import('./GuildHall'));
 const PetRanking = lazy(() => import('./PetRanking'));
+const FriendRooms = lazy(() => import('./FriendRooms'));
 const TowerView = lazy(() => import('./TowerView'));
 
 // 나만의 펫: white page, rose accents (the 선생님방 palette). Everything that changes the pet is decided by the server.
@@ -34,7 +35,7 @@ const TABS: { id: Tab; icon: string; label: string }[] = [{ id: 'home', icon: '�
 /** Shop order: cheapest first; expedition rewards (not for sale) at the end. */
 const byPrice = (items: readonly PetItem[]) => [...items].sort((a, b) => Number(Boolean(a.reward)) - Number(Boolean(b.reward)) || a.price - b.price);
 /** Shop and closet chips: 소품 split by where they're worn (머리·눈·목·손). */
-const SHOP_GROUPS: { id: string; label: string }[] = [{ id: 'all', label: '전체' }, { id: 'clothing', label: '옷' }, ...ACCESSORY_SLOTS, { id: 'background', label: '배경' }];
+const SHOP_GROUPS: { id: string; label: string }[] = [{ id: 'all', label: '전체' }, { id: 'clothing', label: '옷' }, ...ACCESSORY_SLOTS, { id: 'background', label: '배경' }, { id: 'special', label: '✨ 특별' }];
 const inGroup = (i: PetItem, g: string) => g === 'all' || i.category === g || (i.category === 'accessory' && accessorySlot(i.id) === g);
 /** Which chapter (or the job choice) gives an expedition item. */
 const rewardSource = (id: string) => { const c = PET_EXPEDITION.chapters.find(x => x.reward === id || x.gear?.includes(id)); if (c) return `${c.title} 완료 보상`; const job = Object.values(PET_JOBS).find(j => j.weapon === id); return job ? `7장 꿈의 정원에서 ${job.label}(으)로 전직하면` : '원정대 보상'; };
@@ -74,6 +75,8 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   const expeditionAsked = useRef(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [guildOpen, setGuildOpen] = useState(false), [rankOpen, setRankOpen] = useState(false);
+  // 친구 방: friends and 응원 스티커 in my room today (from opening the screen), and the 방명록 · 친구 찾기 sheet
+  const [roomToday, setRoomToday] = useState<{ visits: number; stickers: number; gifts?: number } | null>(null), [friendsOpen, setFriendsOpen] = useState(false);
   const [towerOpen, setTowerOpen] = useState(false);
   // Talks left this month, and the pet they were counted for (free plan: each pet has its own 150).
   const [aiTalk, setAiTalk] = useState<(AiTalkView & { slot: number }) | null>(null);
@@ -86,7 +89,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
   const say = (message: string) => { setToast(message); window.clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToast(''), 2800); };
   const load = useCallback(async () => {
     if (!user) return;
-    try { const r = await PetService.load(user.uid); loadedAt.current = Date.now(); setState(r.state); setPending(r.pendingRewards || 0); if (r.coupon) setCoupon(r.coupon); if (r.aiTalk) { const now = r.state.pets.find(p => p.slot === r.state.currentPetSlot); if (now) setAiTalk({ ...r.aiTalk, slot: now.slot }); } if ('run' in r) setFeedRun(r.run || null); if (r.expedition) setExpedition(r.expedition);
+    try { const r = await PetService.load(user.uid); loadedAt.current = Date.now(); setState(r.state); setPending(r.pendingRewards || 0); if (r.room) setRoomToday(r.room); if (r.coupon) setCoupon(r.coupon); if (r.aiTalk) { const now = r.state.pets.find(p => p.slot === r.state.currentPetSlot); if (now) setAiTalk({ ...r.aiTalk, slot: now.slot }); } if ('run' in r) setFeedRun(r.run || null); if (r.expedition) setExpedition(r.expedition);
       // The summary didn't come with the pet (an older server, a hiccup): ask for it on its own, once per visit to this
       // screen (not again on every return to the tab); the map loads its own state anyway.
       else if (!expeditionAsked.current) { expeditionAsked.current = true; void PetService.act('expedition-state').then((x: any) => { if (x.expedition) setExpedition(x.expedition); if ('run' in x) setFeedRun(x.run || null); }).catch(() => undefined); }
@@ -180,6 +183,25 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
     finally { setBusy(false); }
   };
   const feedResume = feedRun && !feedRun.finished;
+  // 꾸미기: the 금메달, 탑 장식 and 특별 소품 the student has; 목표 물건: the 특별 item saved up for (not bought yet)
+  const roomThings = [...(state.medals || []), ...(state.towerDecor || []), ...state.inventory.filter(id => petItem(id)?.category === 'decor')];
+  const goalItem = state.goal ? petItem(state.goal) : undefined;
+  /** 상점 › 특별: the 목표 물건, how far the points are, 목표로 정하기, and buying (asked first: they are dear). */
+  const specialShop = () => <ul className="space-y-2">{PET_ITEMS.filter(i => i.special).map(i => {
+    const has = owned(i.id), goal = state.goal === i.id, pct = Math.min(100, Math.round(state.points / i.price * 100)), room = i.category === 'background';
+    const buy = async () => { if (!await askConfirm({ title: `${i.name} 사기`, message: `${won(i.price)}P를 써요. 장학 쿠폰 누적은 줄지 않아요.`, confirmText: '사기' })) return; const r = await act('buy', { itemId: i.id, ...(room ? { wear: true } : {}) }); if (r) say(room ? `${i.name}(으)로 방을 바꿨어요!` : `${i.name}을(를) 샀어요! 꾸미기에서 방에 놓아요`); };
+    return <li key={i.id} className={`flex items-center gap-3 rounded-2xl border bg-white px-3 py-2.5 ${goal ? 'border-[#1d9e75]' : 'border-[#f3e6e8]'}`}>
+      <span className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-xl bg-[#f7f6fd]">{room ? <span className={`relative block h-full w-full ${SCENE[i.id] || ''}`}><SceneArt id={i.id} /></span> : <DecorArt id={i.id} size={46} />}</span>
+      <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">{i.name} <span className="text-[11px] font-bold text-slate-400">{room ? '배경' : '방 소품'}</span></b>
+        <span className="text-xs font-bold text-[#3c3489]">{won(i.price)}P</span>{!has && <span className="ml-1 text-[11px] text-slate-400">{state.points >= i.price ? '살 수 있어요' : `${won(i.price - state.points)}P 남음`}</span>}
+        {!has && <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-[#eef6ea]"><span className="block h-full rounded-full bg-[#1d9e75]" style={{ width: `${pct}%` }} /></span>}</span>
+      <span className="flex flex-none flex-col gap-1">{has ? (room && state.background !== i.id ? <button type="button" disabled={busy} onClick={() => void act('equip', { itemId: i.id })} className="rounded-lg border border-[#d26272] px-2.5 py-1 text-[11px] font-bold text-[#8b2f40]">방으로 쓰기</button>
+        : <span className="rounded-lg bg-[#f8f1f2] px-2 py-1 text-[11px] font-bold text-[#8b2f40]">{room ? '쓰는 중' : '가짐 · 꾸미기'}</span>)
+        : <><button type="button" disabled={busy || state.points < i.price} onClick={() => void buy()} className="rounded-lg bg-[#d26272] px-2.5 py-1 text-[11px] font-bold text-white disabled:opacity-40">사기</button>
+          <button type="button" disabled={busy} aria-pressed={goal} onClick={() => void act('goal-set', { itemId: goal ? null : i.id }).then(r => { if (r) say(goal ? '목표를 내려놨어요' : `${i.name}이(가) 목표예요! 펫 화면 위에서 볼 수 있어요`); })} className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${goal ? 'border-[#1d9e75] bg-[#eef6ea] text-[#27500a]' : 'border-[#d9e8d2] text-[#3b6d11]'}`}>{goal ? '🎯 목표' : '목표로'}</button>
+          {room && <button type="button" onClick={() => { setTrial(i.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-[10px] font-bold text-slate-500">미리 보기</button>}</>}</span>
+    </li>; })}
+    <li className="px-1 text-[11px] text-slate-400">특별 물건은 꾸밈만 바뀌어요. 사도 장학 쿠폰 누적은 그대로예요.</li></ul>;
   const claim = async () => { const r = await act('claim-study'); if (r) { setPending(0); say(`공부 보상 +${won(r.result?.points || 0)}P!`); } };
 
   const itemCard = (item: PetItem, mode: 'buy' | 'wear' | 'try') => {
@@ -226,11 +248,14 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
           </button>}
         </div>}
 
+        {goalItem && <button type="button" onClick={() => { setTab('shop'); setShopGroup('special'); setTrial(null); }} className="mb-2 flex w-full items-center gap-2 rounded-2xl border border-[#d9e8d2] bg-white px-3 py-1.5 text-left text-xs text-[#27500a]">
+          <span aria-hidden="true">🎯</span><span className="min-w-0 flex-1 truncate font-bold">{state.points >= goalItem.price ? `${goalItem.name}을(를) 살 수 있어요!` : `${goalItem.name}까지 ${won(goalItem.price - state.points)}P`}</span>
+          <span className="h-1.5 w-20 flex-none overflow-hidden rounded-full bg-[#eef6ea]"><span className="block h-full rounded-full bg-[#1d9e75]" style={{ width: `${Math.min(100, Math.round(state.points / goalItem.price * 100))}%` }} /></span></button>}
         <section aria-label="펫" className="overflow-hidden rounded-3xl border border-[#f3e6e8]">
           <div className={`relative flex min-h-[230px] flex-col items-center justify-end px-4 pb-4 pt-5 ${SCENE[look.background] || SCENE.default}`}>
             <SceneArt id={look.background} />
             <MedalLayer spots={decorEdit ?? (state.decor?.[look.background] || [])} editing={Boolean(decorEdit)} onMove={(id, x, y) => setDecorEdit(d => d && d.map(s => s.id === id ? { ...s, x, y } : s))} />
-            {!tried && !decorEdit && [...(state.medals || []), ...(state.towerDecor || [])].length > 0 && <button type="button" onClick={() => { setTrial(null); setDecorEdit(state.decor?.[state.background] || []); }} className="absolute left-3 top-3 z-20 rounded-full border border-[#f0d9b0] bg-white px-2.5 py-1 text-[11px] font-bold text-[#8a5a12]">🏅 꾸미기</button>}
+            {!tried && !decorEdit && roomThings.length > 0 && <button type="button" onClick={() => { setTrial(null); setDecorEdit(state.decor?.[state.background] || []); }} className="absolute left-3 top-3 z-20 rounded-full border border-[#f0d9b0] bg-white px-2.5 py-1 text-[11px] font-bold text-[#8a5a12]">🏅 꾸미기</button>}
             {tried && <span className="absolute left-3 top-3 z-20 rounded-full border border-[#f3d5da] bg-white px-2 py-0.5 text-[11px] font-bold text-[#b04a5a]">입어 보는 중</span>}
             {!tried && !decorEdit && Object.keys(pet.gear?.look || {}).length > 0 && <div className="absolute right-3 top-3 z-20 flex flex-col items-end gap-1">
               {/* 👁 장비 보이기: the tower gear over the outfit, or the outfit only (the gear's stats count either way) */}
@@ -248,7 +273,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
               <AnimatePresence>{hearts.map(id => <motion.span key={id} initial={{ opacity: 1, y: 0 }} animate={{ opacity: 0, y: -60 }} exit={{ opacity: 0 }} className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2"><Heart size={22} className="fill-[#e07a87] text-[#e07a87]" aria-hidden="true" /></motion.span>)}</AnimatePresence>
             </motion.button>
           </div>
-          {decorEdit && <MedalBox medals={[...(state.medals || []), ...(state.towerDecor || [])]} spots={decorEdit} busy={busy} onCancel={() => setDecorEdit(null)} onSave={() => void saveDecor()}
+          {decorEdit && <MedalBox medals={roomThings} spots={decorEdit} busy={busy} onCancel={() => setDecorEdit(null)} onSave={() => void saveDecor()}
             onToggle={id => setDecorEdit(d => !d ? d : d.some(s => s.id === id) ? d.filter(s => s.id !== id) : [...d, { id, x: 14 + (d.length * 13) % 72, y: 22 }])} />}
           <div className="border-t border-[#f3e6e8] bg-white px-4 py-3">
             <div className="flex items-center justify-center gap-2">
@@ -288,14 +313,23 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
             <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">{PET_TOWER.name}</b><span className="block text-xs text-slate-500">어려운 단어로 싸우며 한 층씩 올라가요</span></span>
             <span className="flex flex-none gap-1.5"><button type="button" onClick={() => setRankOpen(true)} className="rounded-xl border border-[#e4e0f5] px-3 py-2 text-xs font-bold text-[#3c3489]">🏅 순위</button><button type="button" onClick={() => setTowerOpen(true)} className="rounded-xl bg-[#534ab7] px-3.5 py-2 text-xs font-bold text-white">오르기</button></span>
           </section>
+          <section aria-label="친구 방" className="mt-3 flex items-center gap-3 rounded-2xl border border-[#e4e0f5] bg-white px-4 py-3">
+            <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#eeedfe] text-lg" aria-hidden="true">🏡</span>
+            <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">친구 방</b><span className="block text-xs text-slate-500">{roomToday?.visits ? `오늘 친구 ${roomToday.visits}명이 다녀갔어요${roomToday.stickers ? ` · 응원 ${roomToday.stickers}` : ''}${roomToday.gifts ? ` · 선물 ${roomToday.gifts}개 도착` : ''}` : '친구 방에 놀러 가서 응원하고 간식을 선물해요'}</span></span>
+            <button type="button" onClick={() => setFriendsOpen(true)} className="flex-none rounded-xl bg-[#534ab7] px-3.5 py-2 text-xs font-bold text-white">놀러 가기</button>
+          </section>
           <section aria-label="단어 먹이 주기" className="mt-3 flex items-center gap-3 rounded-2xl border border-[#f3e6e8] bg-white px-4 py-3">
             <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[#fef2f3] text-lg" aria-hidden="true">🍪</span>
             <span className="min-w-0 flex-1"><b className="block text-sm font-black text-[#5e1e2a]">단어 먹이 주기</b><span className="block text-xs text-slate-500">{feedResume ? `하던 곳이 저장돼 있어요 · ${feedRun!.index + 1}번째 문제부터` : `최근 공부한 단어장으로 ${PET_WORD_FEED.questions}문제 · 기운 ${PET_WORD_FEED.energy}`}</span></span>
             <button type="button" disabled={busy} onClick={() => void openFeed()} className="flex-none rounded-xl bg-[#e0587a] px-3.5 py-2 text-xs font-bold text-white disabled:opacity-60">{feedResume ? '이어 하기' : '시작'}</button>
           </section>
-          {/* How to earn points: one small card at the bottom, a row per way. */}
+          {/* How to earn points: three short lines, the details folded under 자세히 보기. */}
           <section aria-label="포인트 받는 법" className="rounded-2xl bg-[#fdf6f7] px-4 py-3">
             <h2 className="text-xs font-black text-[#8b2f40]">포인트 받는 법</h2>
+            <ul className="mt-2 space-y-1 text-xs text-slate-600">
+              {([['📚', '공부', `단어 테스트 · 퀴즈 · 오답 복습 (하루 최대 ${won(state.today.studyCap)}P)`], ['🏫', '수업', '출석 · 숙제 · 테스트 · 태도를 선생님이 반영하면 들어와요'], ['🗺️', '모험', '원정대 · 채움의 탑 · 오늘 할 일에서도 받아요']] as const).map(([icon, title, text]) => <li key={title} className="flex gap-2"><span aria-hidden="true">{icon}</span><span><b className="font-bold text-[#5e1e2a]">{title}</b> <span className="text-slate-500">{text}</span></span></li>)}
+            </ul>
+            <details className="mt-2 text-xs"><summary className="cursor-pointer font-bold text-[#8b2f40]">자세히 보기</summary>
             <ul className="mt-2 space-y-2 text-xs text-slate-600">
               {([
                 ['📚', '공부', `단어 테스트 1문제 ${PET_STUDY_RATES['vocab-test'].points}P · 단어장 퀴즈 ${PET_STUDY_RATES['wordbook-quiz'].points}P · 오답 복습 ${PET_STUDY_RATES['review-confirm'].points}P (하루 최대 ${won(state.today.studyCap)}P)`],
@@ -304,19 +338,20 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
                 ['🗺️', '원정대', `스테이지 첫 클리어 +${PET_EXPEDITION.bonus.clear}P · ★2·★3 처음 +${PET_EXPEDITION.bonus.star2}P씩 · 파티 원정대 보상은 한 주 최대 ${PET_PARTY.weeklyCap}P`],
                 ['⚡', '기운', '매일 다시 가득 차요 · 기운 간식은 하루 두 번까지 · 다 쓰면 탈진: 몬스터로 깨워요 (하루 한 번)'],
               ] as const).map(([icon, title, text]) => <li key={title} className="flex gap-2"><span aria-hidden="true">{icon}</span><span><b className="font-bold text-[#5e1e2a]">{title}</b> <span className="text-slate-500">{text}</span></span></li>)}
-            </ul>
+            </ul></details>
           </section>
           </>}
           {tab === 'snacks' && <div className="grid grid-cols-3 gap-2">{byPrice(PET_ITEMS.filter(i => i.category === 'consumable')).map(i => itemCard(i, 'buy'))}</div>}
-          {tab === 'closet' && (() => { const mine = PET_ITEMS.filter(i => i.category !== 'consumable' && owned(i.id)); return mine.length > 1 ? <>
+          {tab === 'closet' && (() => { const mine = PET_ITEMS.filter(i => i.category !== 'consumable' && i.category !== 'decor' && owned(i.id)); return mine.length > 1 ? <>
             {/* What each place has on now; tap a place to see only its items. */}
             <div className="mb-2 grid grid-cols-4 gap-1.5">{ACCESSORY_SLOTS.map(s => { const id = state.accessories?.[s.id]; return <button key={s.id} type="button" aria-pressed={closetGroup === s.id} onClick={() => setClosetGroup(closetGroup === s.id ? 'all' : s.id)} className={`rounded-xl border px-1.5 py-1.5 text-center text-[11px] ${closetGroup === s.id ? 'border-[#d26272] bg-[#fef2f3]' : 'border-[#f3e6e8] bg-white'}`}><span className="block text-slate-400">{s.label}</span><b className="block truncate font-bold text-[#5e1e2a]">{id ? `${petItem(id)?.icon} ${petItem(id)?.name}` : '—'}</b></button>; })}</div>
-            <div className="-mx-1 mb-2 flex gap-1 overflow-x-auto px-1">{SHOP_GROUPS.map(g => <button key={g.id} type="button" aria-pressed={closetGroup === g.id} onClick={() => setClosetGroup(g.id)} className={`flex-none rounded-xl px-3 py-1.5 text-xs font-bold ${closetGroup === g.id ? 'bg-[#fef2f3] text-[#8b2f40]' : 'text-slate-400'}`}>{g.label}</button>)}</div>
+            <div className="-mx-1 mb-2 flex gap-1 overflow-x-auto px-1">{SHOP_GROUPS.filter(g => g.id !== 'special').map(g => <button key={g.id} type="button" aria-pressed={closetGroup === g.id} onClick={() => setClosetGroup(g.id)} className={`flex-none rounded-xl px-3 py-1.5 text-xs font-bold ${closetGroup === g.id ? 'bg-[#fef2f3] text-[#8b2f40]' : 'text-slate-400'}`}>{g.label}</button>)}</div>
             <div className="grid grid-cols-3 gap-2">{mine.filter(i => inGroup(i, closetGroup)).map(i => itemCard(i, 'wear'))}</div></> : <p className="rounded-2xl border border-dashed border-[#f3d5da] px-4 py-6 text-center text-sm text-slate-500">아직 옷이 없어요. 상점에서 골라 보세요!</p>; })()}
           {tab === 'shop' && <>
             <div className="-mx-1 mb-2 flex gap-1 overflow-x-auto px-1">{(coupon?.eligible ? [...SHOP_GROUPS, { id: 'coupon', label: '🎟️ 쿠폰' }] : SHOP_GROUPS).map(g => <button key={g.id} type="button" aria-pressed={shopGroup === g.id} onClick={() => { setShopGroup(g.id); setTrial(null); }} className={`flex-none rounded-xl px-3 py-1.5 text-xs font-bold ${shopGroup === g.id ? 'bg-[#fef2f3] text-[#8b2f40]' : 'text-slate-400'}`}>{g.label}</button>)}</div>
             {shopGroup === 'coupon' && coupon?.eligible ? <CouponShop coupon={coupon} medals={state.medals || []} busy={busy} onRequest={(month, tier) => void askCoupon(month, tier)} />
-              : <div className="grid grid-cols-3 gap-2">{byPrice(PET_ITEMS.filter(i => i.category !== 'consumable' && inGroup(i, shopGroup) && i.id !== 'default')).map(i => itemCard(i, 'try'))}</div>}
+              : shopGroup === 'special' ? specialShop()
+              : <div className="grid grid-cols-3 gap-2">{byPrice(PET_ITEMS.filter(i => i.category !== 'consumable' && !i.special && inGroup(i, shopGroup) && i.id !== 'default')).map(i => itemCard(i, 'try'))}</div>}
             {tried?.pass && !owned(tried.id) ? <div className="sticky bottom-24 mt-3 flex items-center gap-2 rounded-2xl border border-[#f3d5da] bg-white px-3 py-2.5">
               <div className="min-w-0 flex-1 text-xs text-[#5e1e2a]"><b className="font-bold">{tried.icon} {tried.name}</b><span className="block text-[#993556]">{tried.pass === 'premium' ? '프리미엄 패스' : '펫 패스나 프리미엄 패스'}로 쓸 수 있는 방이에요 · 꾸밈만 바뀌어요</span></div>
               <button type="button" onClick={() => setTrial(null)} className="rounded-xl border border-[#f3d5da] px-3 py-1.5 text-xs font-bold text-[#8b2f40]">원래대로</button>
@@ -374,6 +409,7 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
       {towerOpen && <TowerView state={state} onState={setState} onClose={() => setTowerOpen(false)} />}
       {guildOpen && <GuildHall send={feedSend} onClose={() => setGuildOpen(false)} />}
       {rankOpen && <PetRanking send={feedSend} onClose={() => setRankOpen(false)} />}
+      {friendsOpen && <FriendRooms send={feedSend} onClose={() => setFriendsOpen(false)} />}
       {feedOpen && feedRun && <WordFeed run={feedRun} state={state} send={feedSend} onClose={() => setFeedOpen(false)} />}
       </Suspense>
 

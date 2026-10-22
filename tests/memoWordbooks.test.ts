@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {dayRange, memoPicks} from '../src/lib/memoWordbooks.js';
+import {dayRange, daySheets, memoPicks} from '../src/lib/memoWordbooks.js';
 
 const books = [{id: 'a', title: '능률VOCA 수능 필수'}, {id: 'b', title: '수능 2000'}, {id: 'c', title: '수특라 단어'}, {id: 'd', title: '수특라 영어독해'}];
 
@@ -15,4 +15,19 @@ test('바로 출력 칩: a line with DAYs names its book (short names, spaces le
   assert.deepEqual(memoPicks('서술형 숙제 해야함', books), {picks: [], ask: null}, 'no DAYs, no 단어: → no chip');
   assert.deepEqual(memoPicks('단어:', books), {picks: [], ask: {books: [], start: null, end: null}});
   assert.deepEqual(memoPicks('단어 : 능률 day 4', books).picks, [{books: [books[0]], start: 4, end: 4}]);
+});
+
+test('바로 출력 칩: every DAY of a list ("1,2,3,4" = "1~4"), sheets written apart, and a count after the DAYs left out', () => {
+  assert.deepEqual([dayRange('Day 1,2,3,4 차례'), dayRange('day 1~4'), dayRange('Day 1, 2, 3, 4'), dayRange('day 1-2 3개 틀림')], [{start: 1, end: 4}, {start: 1, end: 4}, {start: 1, end: 4}, {start: 1, end: 2}]);
+  assert.deepEqual(dayRange('Day 1~2, 3~4'), {start: 1, end: 4, groups: [{start: 1, end: 2}, {start: 3, end: 4}]});
+  assert.deepEqual(dayRange('day 1,2 3,4'), {start: 1, end: 4, groups: [{start: 1, end: 2}, {start: 3, end: 4}]});
+  assert.deepEqual(memoPicks('단어 : 능률 Day 1,2,3,4 차례', books).picks, [{books: [books[0]], start: 1, end: 4}], 'the screenshot case: 1~4, not 1~2');
+});
+
+test('나눠서: the memo\'s own sheets, else two DAYs a sheet; one sheet or no DAYs gives none to split', () => {
+  assert.deepEqual(daySheets({start: 1, end: 4}), [{start: 1, end: 2}, {start: 3, end: 4}]);
+  assert.deepEqual(daySheets({start: 1, end: 5}), [{start: 1, end: 2}, {start: 3, end: 4}, {start: 5, end: 5}]);
+  assert.deepEqual(daySheets({start: 1, end: 6, groups: [{start: 1, end: 3}, {start: 4, end: 6}]}), [{start: 1, end: 3}, {start: 4, end: 6}]);
+  assert.deepEqual(daySheets({start: 1, end: 2}), [{start: 1, end: 1}, {start: 2, end: 2}], 'just two DAYs: one DAY a sheet');
+  assert.deepEqual([daySheets({start: 5, end: 5}).length, daySheets({start: null, end: null}).length], [1, 0]);
 });

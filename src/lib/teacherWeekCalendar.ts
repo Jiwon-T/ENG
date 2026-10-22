@@ -5,10 +5,11 @@ export function calendarWeek(date: string) { const monday = mondayOfWeek(date); 
 export function weeklyBoardEvents(date: string, schedules: any[], classes: any[], reflected: any[] = []) {
     // App-only records have no Notion id (null): never read it without a fallback.
     const pageKey = (id: unknown) => typeof id === 'string' ? id.replace(/-/g, '') : '';
-    const days = calendarWeek(date), sources = new Set(schedules.map(s => pageKey(s.notionPageId)).filter(Boolean));
+    // A published copy is hidden when its record is listed: by its Notion page, or (app-only schedules) by the record id.
+    const days = calendarWeek(date), sources = new Set(schedules.flatMap(s => [pageKey(s.notionPageId), pageKey(s.id)]).filter(Boolean));
     return days.map(day => ({ day, events: [
             ...schedules.filter(s => s.data?.date === day).map(s => ({ id: s.id, type: 'schedule', title: s.data.title, start: s.data.start, end: s.data.end, subject: s.data.subject, students: s.data.students, kind: s.data.kind === '시험' ? '테스트' : s.data.kind, status: s.data.status, stage: s.stage, record: s })),
-            ...reflected.filter(s => s.date === day && !(pageKey(s.notionPageId) && sources.has(pageKey(s.notionPageId)))).map(s => ({ ...s, type: 'reflected', stage: 'published' })),
+            ...reflected.filter(s => s.date === day && ![pageKey(s.notionPageId), pageKey(s.appScheduleId)].some(k => k && sources.has(k))).map(s => ({ ...s, type: 'reflected', stage: 'published' })),
             ...classes.flatMap(c => (c.slots || []).filter((slot: any) => slot.weekday === new Date(`${day}T00:00:00Z`).getUTCDay()).map((slot: any, index: number) => ({ id: `regular-${c.id}-${index}`, type: 'regular', title: c.name, start: slot.start, end: slot.end, subject: c.subject, students: slot.students?.length ? slot.students : c.students, kind: slot.kind === 'test' ? '테스트' : '정규', status: '', stage: 'regular', record: c }))),
         ].sort((a, b) => String(a.start || '').localeCompare(String(b.start || '')) || String(a.title || '').localeCompare(String(b.title || ''))) }));
 }

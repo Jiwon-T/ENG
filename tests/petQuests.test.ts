@@ -72,10 +72,13 @@ test('오늘 할 일 records: 단어 테스트 / 단어장 공부 by the time Fi
 });
 
 test("오답 복습 marked on the server: only the student's own answer not reviewed yet", async () => {
-  let doc: any = {uid: 'kid', incorrectAnswers: [{word: 'apple'}, {word: 'pear', isReviewed: true}]};
-  const ref = {}, db: any = {collection: () => ({doc: () => ref}), runTransaction: (f: any) => f({get: async () => ({data: () => doc}), update: (_r: any, v: any) => { doc = {...doc, ...v}; }})};
-  assert.equal(await markWrongReviewed(db, 'kid', 's1', 'apple'), true);
+  let doc: any = {uid: 'kid', incorrectAnswers: [{word: 'apple'}, {word: 'pear', isReviewed: true}]}, pet: any = null;
+  const refs: any = {studySessions: {}, petStates: {}, users: {}}, db: any = {collection: (c: string) => ({doc: () => refs[c]}),
+    runTransaction: (f: any) => f({get: async (r: any) => r === refs.studySessions ? {data: () => doc} : r === refs.petStates ? {exists: Boolean(pet), data: () => structuredClone(pet)} : {data: () => ({})},
+      update: (_r: any, v: any) => { doc = {...doc, ...v}; }, set: (_r: any, v: any) => { pet = v; }})};
+  assert.equal(await markWrongReviewed(db, 'kid', 's1', 'apple', DAY(21)), true);
   assert.equal(doc.incorrectAnswers[0].isReviewed, true);
+  assert.equal(pet.today.quest.review, 1, 'counted in the same transaction');
   assert.equal(await markWrongReviewed(db, 'kid', 's1', 'apple'), false, 'already reviewed');
   assert.equal(await markWrongReviewed(db, 'kid', 's1', 'pear'), false);
   assert.equal(await markWrongReviewed(db, 'other', 's1', 'apple'), false, 'not their record');

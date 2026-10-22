@@ -9,6 +9,9 @@ import {shownName, studentRealName} from './realNames.js';
 import {maskedName} from '../../src/lib/rankNames.js';
 import {PET_TOWERS, climber, gearViewFor, type TowerState} from './petTower.js';
 import {PET_EXPEDITIONS, type ExpeditionState} from './petExpedition.js';
+import {neighborsOf, normCode, roomOwner, setNeighbor, stuckToday, todaysVisits, visitRoom, weeklyStickers} from './petRoom.js';
+import {matchesKoreanSearch} from '../../src/lib/koreanSearch.js';
+import {PET_ROOM} from '../../src/lib/petCatalog.js';
 import {petAura, wornAccessories, type PetGearView, type PetJob} from '../../src/lib/petCatalog.js';
 import {activePlan} from '../../src/lib/aiPlans.js';
 import {seoulDay} from './pet.js';
@@ -50,17 +53,26 @@ export async function buildRankings(db: any, now: number): Promise<RankSnapshot>
   // a 별칭, 원정대 이름 or pet name holding the student's real name shows only when they said yes to it (else the next name,
   // the pet's family-name-only label, or no 원정대 이름)
   const reals = new Map<string, string>(await Promise.all([...states.keys()].filter(uid => !teachers.has(uid)).map(async uid => [uid, await studentRealName(db, uid).catch(() => '')] as [string, string])));
-  for (const [uid, raw] of states) {
-    const s = rollDay(raw, now) as ServerPetState, t = towers.get(uid) as TowerState | undefined, g = guilds.get(uid) as GuildProfile | undefined, plan = activePlan(passes.get(uid) as any, today);
-    const real = reals.get(uid) || '', agreed = g?.realNameOk || [];
-    for (const p of s.pets.filter((x: ServerPet) => x.chosen)) pets.push({
-      uid, slot: p.slot, alias: shownName(shownAlias(g, p.slot) || (g?.nickname && !g.aliases && p.slot === s.currentPetSlot ? g.nickname : ''), real, agreed), guild: shownName(shownGuild(g), real, agreed),
-      name: shownName(p.name, real, p.realNameOk ? [norm(p.name)] : []) || maskedName(real), character: p.character, level: p.level,
-      clothing: p.clothing ?? null, accessories: wornAccessories(p), job: p.job || null, best: Number(t?.pets?.[String(p.slot)]?.best) || 0, stars: petStars(expeditions.get(uid), p.slot), teacher: teachers.has(uid),
-      aura: petAura(p), pass: plan === 'free' ? null : plan, gear: gearViewFor(p, t?.pets?.[String(p.slot)]),
-    });
-  }
+  for (const [uid, raw] of states) pets.push(...rankPetsOf(uid, raw, towers.get(uid), guilds.get(uid), expeditions.get(uid), activePlan(passes.get(uid) as any, today), reals.get(uid) || '', teachers.has(uid), now));
   return {builtAt: now, pets};
+}
+/** One student's chosen pets as the 순위 shows them (names as agreed: a real name only when said yes to). */
+function rankPetsOf(uid: string, raw: any, t: TowerState | undefined, g: GuildProfile | undefined, e: ExpeditionState | undefined, plan: string, real: string, teacher: boolean, now: number): RankPet[] {
+  const s = rollDay(raw, now) as ServerPetState, agreed = g?.realNameOk || [];
+  return s.pets.filter((x: ServerPet) => x.chosen).map((p: ServerPet) => ({
+    uid, slot: p.slot, alias: shownName(shownAlias(g, p.slot) || (g?.nickname && !g.aliases && p.slot === s.currentPetSlot ? g.nickname : ''), real, agreed), guild: shownName(shownGuild(g), real, agreed),
+    name: shownName(p.name, real, p.realNameOk ? [norm(p.name)] : []) || maskedName(real), character: p.character, level: p.level,
+    clothing: p.clothing ?? null, accessories: wornAccessories(p), job: p.job || null, best: Number(t?.pets?.[String(p.slot)]?.best) || 0, stars: petStars(e, p.slot), teacher,
+    aura: petAura(p), pass: plan === 'free' ? null : plan as 'pet' | 'premium', gear: gearViewFor(p, t?.pets?.[String(p.slot)]),
+  }));
+}
+/** One student's pets read now (a 방 코드 of someone who joined after the last snapshot). */
+async function liveRankPets(db: any, uid: string, now: number) {
+  const doc = (c: string) => db.collection(c).doc(uid).get().then((d: any) => d.data());
+  const [raw, t, g, e, pass, {teacher}] = await Promise.all([doc(PET_STATES), doc(PET_TOWERS), doc(PET_GUILD), doc(PET_EXPEDITIONS), doc('aiPasses'), climber(db, uid)]);
+  if (!raw) return [];
+  const real = teacher ? '' : await studentRealName(db, uid).catch(() => '');
+  return rankPetsOf(uid, raw, t, g, e, activePlan(pass, seoulDay(now)), real, teacher, now);
 }
 /** The snapshot, rebuilt when older than 10 minutes. One request rebuilds (a short lock taken in a transaction); others
  *  meanwhile get the last snapshot instead of reading everything again. */
@@ -134,16 +146,100 @@ export async function myPetRank(db: any, uid: string, now: number, hasPet = true
   return {rank: Math.min(...placed(pets.map(({p, index}) => ({key: [p.best, p.stars, p.level], index, uid: p.uid}))).filter(r => r.uid === uid).map(r => r.rank)), teacher};
 }
 
-/** One pet's room from the ranking, to look at: outfit, room background and the 금메달 placed there. Only a pet on the
- *  rows this viewer was shown (the same ranking: `kind`, `teachers`) can be opened. */
-export async function readRankProfile(db: any, viewer: string, atInput: unknown, idInput: unknown, kindInput: unknown, withTeachersInput: unknown, now: number) {
+/** The pet behind a 순위 row this viewer was shown (the same ranking: `kind`, `teachers`); RANK_STALE otherwise. */
+export async function rankTarget(db: any, viewer: string, atInput: unknown, idInput: unknown, kindInput: unknown, withTeachersInput: unknown, now: number) {
   const [{kind, withTeachers}, snap] = await Promise.all([options(db, viewer, kindInput, withTeachersInput), rankingSnapshot(db, now)]), id = Math.floor(Number(idInput)), p = snap.pets[id];
   if (Number(atInput) !== snap.builtAt || !p) throw Error('RANK_STALE');
   const shown = rankRows(snap, viewer, kind, withTeachers);
   if (![...shown.rows, ...shown.mine].some(r => r.id === id)) throw Error('RANK_STALE');
-  const [raw, tower] = await Promise.all([db.collection(PET_STATES).doc(p.uid).get().then((d: any) => d.data()), db.collection(PET_TOWERS).doc(p.uid).get().then((d: any) => d.data() as TowerState | undefined)]);
+  return p;
+}
+/** One pet's room from the ranking, to look at: outfit, room background and the 금메달 placed there. Only a pet on the
+ *  rows this viewer was shown (the same ranking: `kind`, `teachers`) can be opened. */
+export async function readRankProfile(db: any, viewer: string, atInput: unknown, idInput: unknown, kindInput: unknown, withTeachersInput: unknown, now: number) {
+  return profileOf(db, viewer, await rankTarget(db, viewer, atInput, idInput, kindInput, withTeachersInput, now), now);
+}
+/** A pet's room as a visitor sees it (and the visit counted). */
+async function profileOf(db: any, viewer: string, p: RankPet, now: number) {
+  const [raw, tower, kept, mine] = await Promise.all([db.collection(PET_STATES).doc(p.uid).get().then((d: any) => d.data()), db.collection(PET_TOWERS).doc(p.uid).get().then((d: any) => d.data() as TowerState | undefined),
+    p.uid === viewer ? [] : neighborsOf(db, viewer).catch(() => [] as string[]), p.uid === viewer ? null : db.collection(PET_STATES).doc(viewer).get().then((d: any) => d.data()).catch(() => null)]);
+  // 간식 선물: what I can give from here (my points, the food in my 가방, gifts left today)
+  const me = mine ? rollDay(mine, now) as ServerPetState : null;
+  const wallet = me ? {points: Number(me.points || 0), snacks: Object.fromEntries(PET_ROOM.gifts.map(id => [id, me.snacks?.[id] || 0]).filter(([, n]) => n)), giftsLeft: Math.max(0, PET_ROOM.giftsPerDay - (me.today.gifts || 0))} : null;
   const s = raw ? rollDay(raw, now) as ServerPetState : null, pet = s?.pets.find(x => x.slot === p.slot);
-  const background = s?.background || 'default';
-  return {label: p.alias || p.name, guild: p.guild || NO_GUILD, name: p.name, character: pet?.character || p.character, level: pet?.level || p.level, job: pet?.job || p.job,
-    clothing: pet ? pet.clothing ?? null : p.clothing, accessories: pet ? wornAccessories(pet) : p.accessories, aura: pet ? petAura(pet) : p.aura ?? null, gear: pet ? gearViewFor(pet, tower?.pets?.[String(pet.slot)]) : p.gear ?? null, pass: p.pass ?? null, background, decor: s?.decor?.[background] || [], medals: (s?.medals || []).filter(m => !/-s$/.test(m)).length, silver: (s?.medals || []).filter(m => /-s$/.test(m)).length, best: p.best, stars: p.stars, me: p.uid === viewer};
+  // 방 구경: a friend's room closed by its owner shows the pet only (no room, no visit); an open one counts the visit
+  // (closed or not is what the visit's own transaction read; a failed visit shows the pet only too)
+  const room = await visitRoom(db, p.uid, viewer, now).catch(() => { console.warn('PET_ROOM_VISIT_FAILED'); return null; });
+  const hidden = p.uid !== viewer && !room, background = hidden ? 'default' : s?.background || 'default';
+  return {hidden, room, ...(p.uid === viewer ? {roomHidden: Boolean(s?.roomHidden)} : {neighbor: kept.includes(p.uid), wallet}), label: p.alias || p.name, guild: p.guild || NO_GUILD, name: p.name, character: pet?.character || p.character, level: pet?.level || p.level, job: pet?.job || p.job,
+    clothing: pet ? pet.clothing ?? null : p.clothing, accessories: pet ? wornAccessories(pet) : p.accessories, aura: pet ? petAura(pet) : p.aura ?? null, gear: pet ? gearViewFor(pet, tower?.pets?.[String(pet.slot)]) : p.gear ?? null, pass: p.pass ?? null, background, decor: hidden ? [] : s?.decor?.[background] || [], medals: (s?.medals || []).filter(m => !/-s$/.test(m)).length, silver: (s?.medals || []).filter(m => /-s$/.test(m)).length, best: p.best, stars: p.stars, me: p.uid === viewer};
+}
+
+// ---- 방 구경 outside the 순위: 방명록 답방, 친구 찾기, 방 코드 ----
+/** The snapshot the 친구 방 screens read: the last one as it is (up to 6 hours; the 순위 rebuilds it), read once a request. */
+export const roomSnapshot = (db: any, now: number) => rankingSnapshot(db, now, RANKING_TTL, true);
+/** A student's pet to show for them (their best on the snapshot: floor → level). */
+const bestOf = (snap: RankSnapshot, uid: string) => snap.pets.map((p, index) => ({p, index})).filter(x => x.p.uid === uid).sort((a, b) => b.p.best - a.p.best || b.p.level - a.p.level)[0] || null;
+/** A room to open from a 방 코드 or from a 방명록 · 친구 찾기 line (`at` + `id` of the snapshot; any pet but a teacher's for a
+ *  student). RANK_STALE when the line is from an older snapshot; ROOM_NOT_FOUND for a code nobody has. */
+export async function roomTarget(db: any, viewer: string, body: any, now: number) {
+  const [snap, {teacher}] = await Promise.all([roomSnapshot(db, now), climber(db, viewer)]);
+  let hit: {p: RankPet; index: number} | null;
+  if (body?.code !== undefined) {
+    const owner = await roomOwner(db, body.code); if (!owner) throw Error('ROOM_NOT_FOUND');
+    // joined (or chose a pet) after the last snapshot: their pets read now, and the code itself names the room after
+    hit = bestOf(snap, owner);
+    if (!hit) { const live = (await liveRankPets(db, owner, now)).sort((a, b) => b.best - a.best || b.level - a.level)[0]; if (!live || (live.teacher && !teacher && live.uid !== viewer)) throw Error('ROOM_NOT_FOUND'); return {p: live, ref: {code: normCode(body.code)} as Record<string, unknown>}; }
+  } else { if (Number(body?.at) !== snap.builtAt) throw Error('RANK_STALE'); const id = Math.floor(Number(body?.id)); hit = snap.pets[id] ? {p: snap.pets[id], index: id} : null; }
+  if (!hit || (hit.p.teacher && !teacher && hit.p.uid !== viewer)) throw Error('ROOM_NOT_FOUND');
+  return {p: hit.p, ref: {at: snap.builtAt, id: hit.index} as Record<string, unknown>};
+}
+/** Open a room from a code or a 방명록 · 친구 찾기 line: the visitor's view, with the `ref` to leave a sticker by. */
+export async function openRoom(db: any, viewer: string, body: any, now: number) {
+  const {p, ref} = await roomTarget(db, viewer, body, now);
+  return {...await profileOf(db, viewer, p, now), ref};
+}
+const lineOf = (snap: RankSnapshot, x: {p: RankPet; index: number}, viewer: string) => ({at: snap.builtAt, id: x.index, label: x.p.alias || x.p.name, guild: x.p.guild || NO_GUILD, level: x.p.level, best: x.p.best, look: look(x.p), me: x.p.uid === viewer});
+/** 친구 찾기: pets whose 모험가 별칭 or 원정대 이름 matches (초성 too), or the room of a 방 코드 — not a teacher's for a student, not a
+ *  closed room. Up to 10. */
+export async function searchRooms(db: any, viewer: string, qInput: unknown, now: number) {
+  const q = String(qInput ?? '').trim().slice(0, 20); if (!q) return [];
+  const [snap, {teacher}] = await Promise.all([roomSnapshot(db, now), climber(db, viewer)]);
+  const owner = await roomOwner(db, q).catch(() => null), coded = owner ? bestOf(snap, owner) : null, byCode = coded && (teacher || !coded.p.teacher) ? coded : null;
+  const named = snap.pets.map((p, index) => ({p, index})).filter(x => (teacher || !x.p.teacher) && [x.p.alias, x.p.guild].some(n => n && matchesKoreanSearch(n, q)));
+  const list = [...(byCode ? [byCode] : []), ...named.filter(x => x.index !== byCode?.index)].slice(0, 15);
+  const states = await Promise.all([...new Set(list.map(x => x.p.uid))].map(async uid => [uid, (await db.collection(PET_STATES).doc(uid).get()).data()?.roomHidden === true] as const));
+  const closed = new Set(states.filter(([, h]) => h).map(([uid]) => uid));
+  const lines: any[] = list.filter(x => !closed.has(x.p.uid) || x.p.uid === viewer).slice(0, 10).map(x => lineOf(snap, x, viewer));
+  // a 방 코드 of someone not on the last snapshot yet: their pet read now, opened by the code
+  if (owner && !coded) {
+    const live = (await liveRankPets(db, owner, now)).sort((a, b) => b.best - a.best || b.level - a.level)[0];
+    const shut = live && (await db.collection(PET_STATES).doc(owner).get()).data()?.roomHidden === true && owner !== viewer;
+    if (live && (teacher || !live.teacher) && !shut) lines.unshift({code: normCode(q), label: live.alias || live.name, guild: live.guild || NO_GUILD, level: live.level, best: live.best, look: look(live), me: owner === viewer});
+  }
+  return lines;
+}
+/** 방명록: today's friends in my room, as their best pet's 별칭 · 원정대 이름 (a line to visit back), and the sticker. */
+export async function readGuestbook(db: any, owner: string, now: number, snapIn?: RankSnapshot) {
+  const [visits, snap] = await Promise.all([todaysVisits(db, owner, now), snapIn ?? roomSnapshot(db, now)]);
+  return visits.map(v => { const x = bestOf(snap, v.viewer); return {sticker: v.sticker || null, gift: v.gift || null, at: Math.max(v.stuckAt || 0, v.giftAt || 0, v.at || 0), ...(x ? lineOf(snap, x, owner) : {label: '이름 없는 모험가', guild: NO_GUILD})}; });
+}
+/** 이웃 on or off for the room a 순위 row or a 방명록 · 찾기 line opened (`via` 'room'). */
+export async function keepNeighbor(db: any, viewer: string, body: any, now: number) {
+  const p = body?.via === 'room' ? (await roomTarget(db, viewer, body, now)).p : await rankTarget(db, viewer, body?.at, body?.id, body?.kind, body?.teachers, now);
+  return {neighbor: await setNeighbor(db, viewer, p.uid, body?.keep === true)};
+}
+/** 친구 방 lists: my 이웃 (newest first; came to my room today, I left a sticker today) and 이번 주 인기 방 (응원 most this week;
+ *  no closed room, no teacher's pet for a student). */
+export async function readRoomLists(db: any, viewer: string, now: number, snapIn?: RankSnapshot) {
+  const [snap, {teacher}, kept, visits, weekly] = await Promise.all([snapIn ?? roomSnapshot(db, now), climber(db, viewer), neighborsOf(db, viewer), todaysVisits(db, viewer, now), weeklyStickers(db, now)]);
+  const came = new Set(visits.map(v => v.viewer)), stuck = await stuckToday(db, viewer, kept, now);
+  const neighbors = [...kept].reverse().map(uid => ({uid, x: bestOf(snap, uid)})).filter(n => n.x).map(n => ({...lineOf(snap, n.x!, viewer), cameToday: came.has(n.uid), stuckToday: stuck.has(n.uid)}));
+  // the most 응원 first, closed rooms skipped until 3 open ones are found (read a few at a time)
+  const ranked = weekly.map(w => ({...w, x: bestOf(snap, w.uid)})).filter(w => w.x && (teacher || !w.x.p.teacher)), popular: any[] = [];
+  for (let i = 0; i < ranked.length && popular.length < PET_ROOM.popular; i += 5) {
+    const batch = ranked.slice(i, i + 5), hidden = await Promise.all(batch.map(async w => (await db.collection(PET_STATES).doc(w.uid).get()).data()?.roomHidden === true));
+    batch.forEach((w, k) => { if (!hidden[k] && popular.length < PET_ROOM.popular) popular.push({...lineOf(snap, w.x!, viewer), stickers: w.n}); });
+  }
+  return {neighbors, popular};
 }

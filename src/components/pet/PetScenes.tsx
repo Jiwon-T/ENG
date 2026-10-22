@@ -117,6 +117,24 @@ const SCENES: Record<string, React.ReactNode> = {
     <g transform="translate(160 60)"><path d="M0 0 q-8 -8 -12 0 q4 8 12 0 q8 -8 12 0 q-4 8 -12 0" fill="#f7b8d4" /><path d="M0 -4 v8" stroke="#8b2f40" strokeWidth="1.2" /></g>
     <Star x={70} y={45} />
   </>,
+  // 특별 배경 (10,000P): the aurora moving slowly over the night hills, a small lit cabin and the stars.
+  aurora_hill: <>
+    <rect width="230" height="190" fill="#0b1026" /><rect width="230" height="110" fill="#111a3a" opacity=".6" />
+    <g fill="#fff"><circle cx="18" cy="16" r="1" /><circle cx="48" cy="34" r=".8" /><circle cx="76" cy="10" r="1.2" /><circle cx="122" cy="22" r=".8" /><circle cx="160" cy="8" r="1" /><circle cx="196" cy="28" r="1.2" /><circle cx="214" cy="12" r=".8" /><circle cx="140" cy="44" r=".7" /><circle cx="30" cy="52" r=".7" /></g>
+    <Star x={100} y={16} s={0.7} /><Star x={206} y={50} s={0.6} />
+    <g className="pg-sway" style={{ animationDuration: '9s' }}>
+      <path d="M-20 64 Q30 18 80 50 T170 38 T250 30 L250 58 Q200 70 160 62 T70 74 T-20 86Z" fill="#34d399" opacity=".38" />
+      <path d="M-20 78 Q40 40 100 68 T250 50 L250 70 Q190 84 130 78 T-20 96Z" fill="#a78bfa" opacity=".34" />
+      <path d="M-20 56 Q50 26 110 48 T250 22" fill="none" stroke="#6ee7b7" strokeWidth="2.2" opacity=".55" />
+      <path d="M-20 72 Q60 48 120 64 T250 46" fill="none" stroke="#c4b5fd" strokeWidth="1.6" opacity=".5" />
+    </g>
+    <circle cx="190" cy="34" r="10" fill="#fef9c3" /><circle cx="195" cy="30" r="9" fill="#111a3a" />
+    <path d="M0 132 Q50 104 110 124 T230 116 L230 190 L0 190Z" fill="#1e3a5f" />
+    <path d="M0 150 Q60 128 120 146 T230 140 L230 190 L0 190Z" fill="#14532d" /><path d="M0 166 Q70 152 140 164 T230 160 L230 190 L0 190Z" fill="#166534" />
+    <g transform="translate(44 140)"><path d="M-10 0 L0 -10 L10 0Z" fill="#7c2d12" /><rect x="-8" y="0" width="16" height="10" fill="#92400e" /><rect x="-3" y="3" width="5" height="4" fill="#fde68a" /><rect x="5" y="-12" width="2.4" height="5" fill="#57534e" /></g>
+    <g fill="#052e16"><path d="M172 150 l7 -18 7 18Z" /><path d="M184 154 l6 -15 6 15Z" /><path d="M198 152 l7 -20 7 20Z" /><path d="M12 162 l5 -13 5 13Z" /></g>
+    <g fill="#bbf7d0" opacity=".7"><circle cx="90" cy="170" r="1" /><circle cx="130" cy="176" r="1" /><circle cx="150" cy="168" r=".8" /></g>
+  </>,
 };
 
 export const hasSceneArt = (id: string | null | undefined) => Boolean(id && SCENES[id]);
@@ -127,6 +145,6 @@ export function SceneArt({ id, className = '' }: { id: string; className?: strin
 }
 
 /** The room colour under each background (white pets need a faint fill to show; solid colours only). */
-export const SCENE: Record<string, string> = { cherry_window: 'bg-[#fdf2f8]', night_sky: 'bg-[#1e1b4b]', seaside: 'bg-[#e0f2fe]', forest_cabin: 'bg-[#eef6ea]', coral_sea: 'bg-[#e8f3fb]', cloud_castle: 'bg-[#f3f0fb]', oasis: 'bg-[#fdf3e1]', snow_cabin: 'bg-[#eef4fb]', galaxy: 'bg-[#3d3a6b]', dream_garden: 'bg-[#fdf0f5]', default: 'bg-[#fdf6f7]', pink_cushion: 'bg-[#fff5f7]', bed: 'bg-[#f2f7fd]', desk: 'bg-[#fffaf1]', star_room: 'bg-[#1e1b4b]' };
+export const SCENE: Record<string, string> = { aurora_hill: 'bg-[#0b1026]', cherry_window: 'bg-[#fdf2f8]', night_sky: 'bg-[#1e1b4b]', seaside: 'bg-[#e0f2fe]', forest_cabin: 'bg-[#eef6ea]', coral_sea: 'bg-[#e8f3fb]', cloud_castle: 'bg-[#f3f0fb]', oasis: 'bg-[#fdf3e1]', snow_cabin: 'bg-[#eef4fb]', galaxy: 'bg-[#3d3a6b]', dream_garden: 'bg-[#fdf0f5]', default: 'bg-[#fdf6f7]', pink_cushion: 'bg-[#fff5f7]', bed: 'bg-[#f2f7fd]', desk: 'bg-[#fffaf1]', star_room: 'bg-[#1e1b4b]' };
 // Fixed star positions (not random on every render).
 export const STARS = Array.from({ length: 18 }, (_, i) => ({ top: (i * 37) % 100, left: (i * 61 + 13) % 100, size: 1 + (i % 3), delay: (i % 5) * 0.7 }));

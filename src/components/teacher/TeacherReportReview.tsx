@@ -24,10 +24,11 @@ interface Props {
     showStudentPicker?: boolean;
     embedded?:boolean;
     headerTarget?:string;
+    /** the tab to open on (상담 도우미: 성적) */initialSection?:'schedule'|'lessons'|'grades'|'online';
 }
 const date = (value: string) => new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', weekday: 'short' });
 export const UNSAVED_EVALUATION_MESSAGE='저장하지 않은 학습 성취도 평가가 있습니다. 버리고 이동할까요?';
-export default function TeacherReportReview({ students, initialStudentKey, showStudentPicker = true, embedded=false, headerTarget, onDirtyChange }: Props) {
+export default function TeacherReportReview({ students, initialStudentKey, showStudentPicker = true, embedded=false, headerTarget, onDirtyChange, initialSection }: Props) {
     // Moves inside the report (student, audience, subject, tab, page, refresh) would drop an unsaved evaluation: ask first.
     // Re-clicking the current choice is not a move and does not ask; the box clears the unsaved state itself when it goes.
     const onDirtyRef=useRef(onDirtyChange);onDirtyRef.current=onDirtyChange;
@@ -39,7 +40,7 @@ export default function TeacherReportReview({ students, initialStudentKey, showS
     const [headerElement,setHeaderElement]=useState<HTMLElement|null>(null);
     useEffect(()=>{setHeaderElement(headerTarget?document.getElementById(headerTarget):null);},[headerTarget]);
     const [studentKey, setStudentKey] = useState(initialStudentKey || ''), [audience, setAudience] = useState<'parent' | 'student'>('student');
-    const [data, setData] = useState<any>(null), [error, setError] = useState(''), [loading, setLoading] = useState(false), [refresh, setRefresh] = useState(0), [page, setPage] = useState(1), [schedulePage, setSchedulePage] = useState(1), [section, setSection] = useState<'schedule'|'lessons'|'grades'|'online'>(()=>{const initial=students.find(s=>s.studentKey===initialStudentKey);return initial&&!(initial.accountLinked??initial.linkedFirebaseUid)?'lessons':'online';}), [subject, setSubject] = useState('');
+    const [data, setData] = useState<any>(null), [error, setError] = useState(''), [loading, setLoading] = useState(false), [refresh, setRefresh] = useState(0), [page, setPage] = useState(1), [schedulePage, setSchedulePage] = useState(1), [section, setSection] = useState<'schedule'|'lessons'|'grades'|'online'>(()=>{if(initialSection)return initialSection;const initial=students.find(s=>s.studentKey===initialStudentKey);return initial&&!(initial.accountLinked??initial.linkedFirebaseUid)?'lessons':'online';}), [subject, setSubject] = useState('');
     const [onlineCursors,setOnlineCursors]=useState(['']),[onlinePage,setOnlinePage]=useState(0);
     const resetOnline=()=>{setOnlineCursors(old=>old.length===1&&old[0]===''?old:['']);setOnlinePage(0);};
     const [selectedReport,setSelectedReport]=useState('');

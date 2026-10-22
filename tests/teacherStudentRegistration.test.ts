@@ -54,9 +54,13 @@ test('노션 작업 전 입력 수정 및 원격 생성 후 입력 잠금',async
     db.rows.get(first.id).notionStudentPageId='existing-page';db.rows.get(first.id).syncStatus='failed';
     await assert.rejects(saveStudentRegistration(db,actor,input,requestId,2),/REGISTRATION_SYNC_IN_PROGRESS/);
 });
-test('일반 교사 등록 및 학원 변경 거절',async()=>{
-    const db=memoryDb();
-    await assert.rejects(saveStudentRegistration(db,{...actor,principal:false},input,requestId),/FORBIDDEN/);
+test('신입생 등록: 선생님도 작성 (본인 원서만), 기존 학생 추가 과목은 원장님·관리자; 학원 변경 거절',async()=>{
+    const db=memoryDb(),teacher={...actor,principal:false,uid:'teacher-1'};
+    const mine=await saveStudentRegistration(db,teacher,input,'cb123456-1234-4234-8234-123456789abd');
+    assert.equal(db.rows.get(mine.id).ownerUid,'teacher-1');
+    await assert.rejects(saveStudentRegistration(db,{...teacher,uid:'teacher-2'},{...input,school:'다른고'},'cb123456-1234-4234-8234-123456789abd',1),/FORBIDDEN/,'another teacher’s intake');
+    await assert.rejects(saveStudentRegistration(db,teacher,{...input,purpose:'additional',existingStudentKey:'11111111-1111-4111-8111-111111111111'},'cb123456-1234-4234-8234-123456789abe'),/FORBIDDEN/,'adding a subject to a registered student');
+    db.rows.clear();
     await assert.rejects(saveStudentRegistration(db,{...actor,academyId:null},input,requestId),/TEACHER_NOT_CONFIGURED/);
     const first=await saveStudentRegistration(db,actor,input,requestId);
     db.rows.get(first.id).academyId='academy-b';

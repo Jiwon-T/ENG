@@ -20,7 +20,8 @@ import { loadSentencesFor } from '../petSentences.js';
 import { PET_GAMES, answerRun, buildRun, initialGameState, loadFeedSource, publicRun, rollGameDay, runSummary, type FeedSentence, type FeedSource, type PetGameState } from '../petWordFeed.js';
 import { PET_GUILD, PET_NAMES, PET_PARTIES, addContribution, nameDocId, partyName, boardCard, checkNickname, createParty, initialGuild, joinParty, leaveParty, norm, normalizeGuild, petLook, publicParty, rankingRow, setAlias, setGuildName, settleParty, shownAlias, shownGuild, updateMemberNames, voteKick, weekOf, type GuildProfile, type Party } from '../petParty.js';
 import { readTowerHall, recordTowerHall } from '../petTowerHall.js';
-import { PET_RANKINGS, myPetRank, readRankProfile, readRankings, refreshRankings } from '../petRanking.js';
+import { PET_RANKINGS, keepNeighbor, myPetRank, openRoom, rankTarget, readGuestbook, readRankProfile, readRankings, readRoomLists, refreshRankings, roomSnapshot, roomTarget, searchRooms } from '../petRanking.js';
+import { PET_ROOMS, placeGift, placeSticker, roomCode, roomToday } from '../petRoom.js';
 import { MONTH_RANK_DOC, keepsNameHidden, monthRankingSnapshot, readMonthRanking, studentRealName } from '../petMonthRanking.js';
 import { PET_TOWERS, syncTowerDecor, syncGearLooks, syncGearInbox, gearLookFor, takeJob3, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
 import { claimQuestBox, markWrongReviewed, noteQuest, questView, readQuestRecords } from '../petQuests.js';
@@ -43,7 +44,7 @@ const MESSAGES: Record<string, string> = {
   PET_JOB3_LOCKED: '3차 전직은 2차 전직한 Lv.150 친구가 채움의 탑 50층을 깨면 할 수 있어요.',
   PET_JOB_BAD: '검사나 마법사 중에서 골라 주세요.', PET_JOB_TAKEN: '이 친구는 이미 전직했어요.', PET_JOB_LOCKED: '5장 설산의 왕관 스테이지를 이 친구와 통과하면 1차 전직할 수 있어요.', PET_JOB2_BAD: '이 친구의 직업에 맞는 갈래를 골라 주세요.', PET_JOB2_LOCKED: '1차 전직한 친구와 7장 꿈의 정원의 왕관 스테이지를 통과하면 2차 전직할 수 있어요.',
   PET_NOT_ENOUGH_POINTS: '포인트가 부족해요!', PET_ENERGY_ITEM_USED: '기운 회복 간식은 하루에 두 번까지 먹을 수 있어요!', PET_EXHAUSTED: '펫이 탈진했어요. 몬스터를 먹여야 깨어나요!', PET_NOT_EXHAUSTED: '몬스터는 기운을 다 써서 탈진했을 때만 먹일 수 있어요.', PET_REVIVE_USED: '몬스터는 하루에 한 번만 먹일 수 있어요.', PET_TIRED: '펫이 너무 지쳤어요. 기운을 회복시켜 주세요!',
-  PET_ITEM_NOT_FOUND: '없는 물건이에요.', PET_ITEM_NOT_OWNED: '먼저 상점에서 사 주세요.', PET_BAG_EMPTY: '가방에 남은 간식이 없어요.', QUEST_CLAIMED: '오늘 간식 상자는 이미 열었어요.', QUEST_NOT_DONE: '오늘 할 일을 3개 다 하면 열 수 있어요.', PET_ALREADY_CHOSEN: '이미 친구를 골랐어요.', PET_BAD_NAME: '이름을 입력해 주세요.',
+  PET_ITEM_NOT_FOUND: '없는 물건이에요.', PET_ITEM_NOT_OWNED: '먼저 상점에서 사 주세요.', PET_BAG_EMPTY: '가방에 남은 간식이 없어요.', QUEST_CLAIMED: '오늘 간식 상자는 이미 열었어요.', ROOM_STICKER_USED: '오늘은 이 방에 스티커를 붙였어요. 내일 또 붙일 수 있어요.', ROOM_HIDDEN: '방을 닫아 둔 친구예요.', ROOM_OWN: '내 방에는 스티커를 붙일 수 없어요.', ROOM_BAD_STICKER: '없는 스티커예요.', ROOM_NOT_FOUND: '그런 방을 찾지 못했어요. 방 코드를 다시 확인해 주세요.', ROOM_CODE_BUSY: '잠시 후 다시 해 주세요.', ROOM_NEIGHBORS_FULL: '이웃은 30명까지예요. 다른 이웃을 빼고 추가해 주세요.', ROOM_GIFT_USED: '오늘은 이 친구에게 선물했어요. 내일 또 줄 수 있어요.', ROOM_GIFTS_DONE: '선물은 하루 3번까지예요.', ROOM_BAD_GIFT: '선물할 수 없는 간식이에요.', ROOM_NO_PET: '아직 펫이 없는 친구예요.', ROOM_GIFT_BAG_FULL: '친구 가방에 이 간식이 가득 찼어요. 다른 간식을 골라 주세요.', QUEST_NOT_DONE: '오늘 할 일을 3개 다 하면 열 수 있어요.', PET_ALREADY_CHOSEN: '이미 친구를 골랐어요.', PET_BAD_NAME: '이름을 입력해 주세요.',
   FEED_NO_BOOKS: '단어장을 한 번 공부하면 시작할 수 있어요. 학습 세트에서 단어장을 공부해 보세요!', FEED_STALE: '다른 화면에서 진행이 바뀌었어요. 최신 상태로 불러올게요.', FEED_BAD_CHOICE: '카드를 다시 골라 주세요.', FEED_NO_RUN: '진행 중인 게임이 없어요.', FEED_OTHER_RUN: '하던 판이 있어요. 먼저 끝내거나 그만둬 주세요.', EXPEDITION_BAD_STAGE: '없는 스테이지예요.', EXPEDITION_LOCKED: '앞 스테이지를 먼저 통과해 주세요.', EXPEDITION_LEVEL: '대표 펫 레벨이 더 높아야 갈 수 있어요.',
   RANK_STALE: '순위가 새로 바뀌었어요. 순위를 다시 열어 주세요.', NAME_REAL: '실명이 들어 있는 이름이에요.', RANK_BUILDING: '순위를 만드는 중이에요. 잠시 후 다시 열어 주세요.', PARTY_NICK_LENGTH: '이름은 2~10자로 정해 주세요.', PARTY_NICK_CONTACT: '이름에 연락처나 주소는 쓸 수 없어요.', PARTY_NICK_BANNED: '이 이름은 다시 쓸 수 없어요. 다른 이름을 정해 주세요.', PARTY_NEED_NICK: '먼저 원정대 이름과 이 펫의 모험가 별칭을 정해 주세요.', NAME_TAKEN: '이미 같은 이름을 쓰는 친구가 있어요. 그래도 이 이름으로 할까요?', PARTY_NICK_WARNED: '관리자가 이름을 바꿔 달라고 했어요. 새 이름을 정해 주세요.',
   PARTY_ONE_A_WEEK: '파티는 한 주에 한 팀만 들어갈 수 있어요.', PARTY_BAD_INPUT: '모집글을 다시 골라 주세요.', PARTY_CLOSED: '이번 주 모집이 끝난 팀이에요.', PARTY_FULL: '자리가 다 찼어요.', PARTY_NOT_MEMBER: '이 팀의 팀원이 아니에요.', PARTY_BAD_VOTE: '투표할 수 없어요.', PARTY_VOTE_TOO_SOON: '2명 팀은 상대가 3일 이상 쉬었을 때만 내보낼 수 있어요.', PARTY_NOT_FOUND: '팀을 찾을 수 없어요.',
@@ -261,8 +262,15 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
         ...(state?.inbox?.length ? {inbox: state.inbox} : {})});
     }
     // A pass-only room after the pass ended shows the plain room in every response (the choice is kept for when it is back).
-    const shownState = async (st: ServerPetState) => {
-      const room = petItem(st.background);
+    // 장비 모습 not kept yet (gear from before it was kept): worked out from the tower for the answer only — in every
+    // answer, not just on opening, or the 👁 buttons went away after any action (검사·마법사 모양 too)
+    const withGear = async (st: ServerPetState) => {
+      if (!st.pets.some(p => p.gear === undefined)) return st;
+      const t = (await db.collection(PET_TOWERS).doc(uid).get().catch(() => null))?.data() as TowerState | undefined;
+      return {...st, pets: st.pets.map(p => p.gear === undefined ? {...p, gear: gearLookFor(p, t?.pets?.[String(p.slot)])} : p)};
+    };
+    const shownState = async (shown: ServerPetState) => {
+      const st = await withGear(shown), room = petItem(st.background);
       return publicPetState(room?.pass && !passAllows(room, await planOf(db, uid, now)) ? {...st, background: 'default'} : st);
     };
     if (req.method === 'GET') {
@@ -272,17 +280,17 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       await autoClaimStudy(db, uid, now, studied).catch(() => { console.warn('PET_AUTO_CLAIM_FAILED'); return 0; });
       // coupons asked offline before the student had the app: their medals go into the room now
       await couponStudentKey(db, uid).then(key => key ? syncOfflineMedals(db, uid, key, now) : 0).catch(() => { console.warn('PET_OFFLINE_MEDALS_FAILED'); return 0; });
-      const [snap, userSnap, g, e] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection('users').doc(uid).get(), db.collection(PET_GAMES).doc(uid).get(), db.collection(PET_EXPEDITIONS).doc(uid).get()]);
+      const [snap, userSnap, g, e, roomDoc] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection('users').doc(uid).get(), db.collection(PET_GAMES).doc(uid).get(), db.collection(PET_EXPEDITIONS).doc(uid).get(), db.collection(PET_ROOMS).doc(uid).get()]);
       const user = userSnap.data() || {}, s = rollDay(snap.exists ? snap.data() : initialPetState(now, user.petStats), now);
       // Study rewards, the 장학 쿠폰 and the talks left are independent: read together.
       const [reports, coupon, aiTalk] = await Promise.all([Promise.resolve(studied),
         couponStudentKey(db, uid).catch(() => null).then(key => readCouponView(db, uid, s, Boolean(key))),
         readPetTalk(db, uid, currentPet(s).slot, now).catch(() => null)]);
       const pending = pendingStudyRewards(s, reports, now);
-      // 장비 모습 not kept yet (gear from before it was kept): worked out from the tower for this answer only
-      if (s.pets.some(p => p.gear === undefined)) { const t = (await db.collection(PET_TOWERS).doc(uid).get()).data() as TowerState | undefined; for (const p of s.pets) if (p.gear === undefined) p.gear = gearLookFor(p, t?.pets?.[String(p.slot)]); }
       return sendJson(res, 200, {ok: true, state: await shownState(s), saved: snap.exists, pendingRewards: pending.length,
-        run: publicRun(g.data()?.run || null), aiTalk, expedition: publicExpedition(e.exists ? e.data() : initialExpedition(now), currentPet(s).level, currentPet(s).slot), coupon});
+        run: publicRun(g.data()?.run || null), aiTalk, expedition: publicExpedition(e.exists ? e.data() : initialExpedition(now), currentPet(s).level, currentPet(s).slot), coupon,
+        // 친구 방: friends and 응원 스티커 in my room today
+        room: roomToday(roomDoc.data(), seoulDay(now))});
     }
     if (req.method !== 'POST') return fail('PET_BAD_ACTION', 405);
     const body = await parseJsonBody(req).catch(() => ({}));
@@ -296,7 +304,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     // 오늘 할 일: open today's 간식 상자 (all three done); a snack from the 가방 is given like a bought one, without points
     if (action === 'quest-claim') { const rec = await readQuestRecords(db, uid, now); const out = await change(db, uid, now, s => claimQuestBox(s, rec, now)); return done(out, {quests: questView(out.state, rec, now)}); }
     // 오답 복습: the server marks the answer reviewed (the student's own, not reviewed yet), and only then it counts
-    if (action === 'review-mark') { const marked = await markWrongReviewed(db, uid, String(body.sessionId || ''), String(body.word || '')); return marked ? done(await change(db, uid, now, s => { noteQuest(s, 'review'); return {marked: true}; })) : sendJson(res, 200, {ok: true, result: {marked: false}}); }
+    if (action === 'review-mark') return sendJson(res, 200, {ok: true, result: {marked: await markWrongReviewed(db, uid, String(body.sessionId || ''), String(body.word || ''), now)}});
     if (action === 'snack-use') return done(await change(db, uid, now, s => buyItem(s, String(body.itemId || ''), true)));
     if (action === 'buy') return done(await change(db, uid, now, s => { const id = String(body.itemId || ''), r = buyItem(s, id); if (body.wear === true) wearItem(s, id); return r; }));
     // 이달의 장학 쿠폰 (no points are taken) and placing the 금메달 in a room.
@@ -399,6 +407,19 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     // 순위 (모험가·원정대) and one pet's room from it.
     if (action === 'rank-board') return sendJson(res, 200, {ok: true, ranking: body.kind === 'month' ? await readMonthRanking(db, uid, now) : await readRankings(db, uid, body.kind, body.teachers, now)});
     if (action === 'rank-refresh') return sendJson(res, 200, {ok: true, ...(body.kind === 'month' ? {at: (await monthRankingSnapshot(db, now)).builtAt} : await refreshRankings(db, now))});
+    // 방 구경: a 응원 스티커 in a friend's room (the 순위 row it was opened from), and closing or opening your own room
+    // (a room opened from the 순위 names its row; one opened by code, 방명록 or 친구 찾기 names its `ref`, via 'room')
+    if (action === 'room-sticker') { const p = body.via === 'room' ? (await roomTarget(db, uid, body, now)).p : await rankTarget(db, uid, body.at, body.id, body.kind, body.teachers, now); return sendJson(res, 200, {ok: true, result: await placeSticker(db, p.uid, uid, body.sticker, now)}); }
+    if (action === 'room-gift') { const p = body.via === 'room' ? (await roomTarget(db, uid, body, now)).p : await rankTarget(db, uid, body.at, body.id, body.kind, body.teachers, now); return sendJson(res, 200, {ok: true, result: await placeGift(db, p.uid, uid, body.item, body.fromBag === true, now)}); }
+    // 친구 방 (the pet screen): my 방 코드 and today's 방명록; 친구 찾기; a room by code or line; a new code
+    if (action === 'room-home') { const snap = await roomSnapshot(db, now); const [code, room, guestbook, lists] = await Promise.all([roomCode(db, uid), db.collection(PET_ROOMS).doc(uid).get(), readGuestbook(db, uid, now, snap), readRoomLists(db, uid, now, snap)]); return sendJson(res, 200, {ok: true, result: {code, today: roomToday(room.data(), seoulDay(now)), guestbook, ...lists}}); }
+    if (action === 'room-neighbor') return sendJson(res, 200, {ok: true, result: await keepNeighbor(db, uid, body, now)});
+    if (action === 'room-search') return sendJson(res, 200, {ok: true, result: {rows: await searchRooms(db, uid, body.q, now)}});
+    if (action === 'room-open') return sendJson(res, 200, {ok: true, profile: await openRoom(db, uid, body, now)});
+    if (action === 'room-code-new') return sendJson(res, 200, {ok: true, result: {code: await roomCode(db, uid, true)}});
+    // 목표 물건: a 특별 item to save up for (null: none)
+    if (action === 'goal-set') return done(await change(db, uid, now, s => { const id = body.itemId === null ? null : String(body.itemId || ''); if (id !== null && !petItem(id)?.special) throw Error('PET_ITEM_NOT_FOUND'); if (id) s.goal = id; else delete s.goal; return {goal: id}; }));
+    if (action === 'room-hide') return done(await change(db, uid, now, s => { s.roomHidden = body.hidden === true; return {roomHidden: s.roomHidden}; }));
     if (action === 'rank-profile') return sendJson(res, 200, {ok: true, profile: await readRankProfile(db, uid, body.at, body.id, body.kind, body.teachers, now)});
     if (action.startsWith('guild-') || action.startsWith('party-')) return handleGuild(action, body, db, uid, now, res, fail);
     if (action === 'rename') {

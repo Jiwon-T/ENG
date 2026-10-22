@@ -3,7 +3,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { FileText, X } from 'lucide-react';
 import { auth, db } from '../../lib/firebase';
 import { matchesKoreanSearch } from '../../lib/koreanSearch';
-import { memoPicks, type MemoBook, type MemoPick } from '../../lib/memoWordbooks';
+import { daySheets, memoPicks, type MemoBook, type MemoPick } from '../../lib/memoWordbooks';
 import { prefetchBookWords, prefetchWordbookManager } from '../../lib/wordbookPrefetch';
 
 // 바로 출력 칩 (수업 일지): a memo line naming a word book and its DAYs, or starting with "단어:", gives a chip under it;
@@ -35,11 +35,23 @@ export default function MemoPrintChips({ text, studentName, preset }: { text: st
   // a chip shown: the 학습 세트 window's code comes ahead, so 시험지 만들기 does not wait for it
   const shown = Boolean(picks.length || ask);
   useEffect(() => { if (shown) prefetchWordbookManager(); }, [shown]);
+  // 한번에 / 나눠서 per chip: the memo's own split first ("1~2, 3~4"), else 한번에 until the teacher picks 나눠서
+  const [split, setSplit] = useState<Record<number, boolean>>({});
   if (!picks.length && !ask) return null;
   const chip = 'inline-flex max-w-full items-center gap-1 truncate rounded-full border px-2 py-0.5 text-[11px] font-bold';
-  return <div className="mt-1 flex flex-wrap gap-1">
-    {picks.map((p, i) => <button key={i} type="button" onClick={() => setOpen(p)} className={`${chip} border-[#b5d4f4] bg-[#e6f1fb] text-[#0c447c]`} title="시험지·단어장 바로 출력">
-      <FileText size={11} aria-hidden="true" />{p.books.length === 1 ? p.books[0].title : `${p.books[0].title} 외 ${p.books.length - 1}개`}{dayText(p)}</button>)}
+  const seg = (on: boolean) => `px-2 py-0.5 ${on ? 'bg-slate-100 text-slate-700' : 'text-slate-400'}`;
+  return <div className="mt-1 flex flex-wrap items-center gap-1">
+    {picks.map((p, i) => {
+      const sheets = daySheets(p), apart = sheets.length >= 2 && (split[i] ?? Boolean(p.groups?.length)), title = p.books.length === 1 ? p.books[0].title : `${p.books[0].title} 외 ${p.books.length - 1}개`;
+      const parts: MemoPick[] = apart ? sheets.map(s => ({ ...p, start: s.start, end: s.end })) : [p];
+      return <span key={i} className="inline-flex max-w-full flex-wrap items-center gap-1">
+        {parts.map((part, k) => <button key={k} type="button" onClick={() => setOpen(part)} className={`${chip} border-[#b5d4f4] bg-[#e6f1fb] text-[#0c447c]`} title="시험지·단어장 바로 출력">
+          <FileText size={11} aria-hidden="true" />{k === 0 ? title : ''}{k === 0 ? dayText(part) : dayText(part).replace(/^ · /, '')}</button>)}
+        {sheets.length >= 2 && <span role="group" aria-label="시험지 나누기" className="inline-flex overflow-hidden rounded-full border border-slate-200 text-[11px] font-bold">
+          <button type="button" aria-pressed={!apart} onClick={() => setSplit(s => ({ ...s, [i]: false }))} className={seg(!apart)}>한번에</button>
+          <button type="button" aria-pressed={apart} onClick={() => setSplit(s => ({ ...s, [i]: true }))} className={seg(apart)}>나눠서</button></span>}
+      </span>;
+    })}
     {ask && <button type="button" onClick={() => setOpen({ ...ask, books })} className={`${chip} border-dashed border-slate-300 bg-white text-slate-500`}><FileText size={11} aria-hidden="true" />학습 세트 고르기{dayText(ask)}</button>}
     {open && <QuickPrint pick={open} studentName={studentName} onClose={() => setOpen(null)} />}
   </div>;

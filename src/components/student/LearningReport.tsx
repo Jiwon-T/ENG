@@ -4,7 +4,7 @@ import type { AcademicData, SubjectEnrollment } from '../../types/academic';
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart3, TrendingUp, BookOpen, CheckCircle2, Clock, Calendar, ClipboardList, ChevronLeft, ChevronRight, Gamepad2, XCircle, Play, RotateCcw, X, Trophy, ArrowRight, Trash2, Check, Sparkles, CalendarDays } from 'lucide-react';
-import { db, auth, handleFirestoreError, OperationType, markIncorrectAnswerReviewed } from '../../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { PetService } from '../../lib/petService';
 import { PET_HOMEWORK_REWARD_TEXT } from '../../lib/petCatalog';
 import { collection, query, where, onSnapshot, doc, getDoc, orderBy, limit, updateDoc, getDocs } from 'firebase/firestore';
@@ -415,13 +415,12 @@ export default function LearningReport() {
     setProcessingId(id);
     setReviewConfirmItem(null);
     try {
-      // marked by the server (counts for 오늘 할 일); on the device only when the server could not
-      if (!await PetService.reviewMark(ans.sessionId, ans.word)) await markIncorrectAnswerReviewed(ans.sessionId, ans.word);
-      if (auth.currentUser) {
+      // only the server marks it (counted for 오늘 할 일 in the same write); a failure leaves it to try again
+      const marked = await PetService.reviewMark(ans.sessionId, ans.word);
+      if (marked && auth.currentUser) {
         void PetService.award('review-confirm', 1);
       }
-      setRewardFeedback({ points: 8, xp: 15 });
-      setTimeout(() => setRewardFeedback(null), 3000);
+      if (marked) { setRewardFeedback({ points: 8, xp: 15 }); setTimeout(() => setRewardFeedback(null), 3000); }
     } catch (error) {
       console.error('Action failed:', error);
       alert('처리에 실패했습니다. 다시 시도해 주세요.');
@@ -508,7 +507,7 @@ export default function LearningReport() {
       // Automatically mark as reviewed if answered correctly in the review quiz
       const word = reviewWords[currentReviewIndex];
       if (word.sessionId) {
-        void PetService.reviewMark(word.sessionId, word.word).then(ok => ok ? undefined : markIncorrectAnswerReviewed(word.sessionId, word.word)).catch(console.error);
+        void PetService.reviewMark(word.sessionId, word.word).catch(console.error); // a failure leaves it in the list for next time
       }
     }
     

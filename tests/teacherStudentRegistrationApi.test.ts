@@ -52,7 +52,7 @@ test('다른 학원 읽기·일반 교사 쓰기·학원 위조 차단',async()=
     assert.deepEqual(await listStudentRegistrations(db,other),[]);
     await assert.rejects(readStudentRegistration(db,other,saved.id),/FORBIDDEN/);
     const read=await call(db,'GET',{action:'student-registration',id:saved.id},other);assert.equal(read.status,403);
-    const teacher=await call(db,'POST',{action:'save-student-registration',requestId,writeId,data:input},{...actor,principal:false});assert.equal(teacher.status,403);
+    const teacher=await call(db,'POST',{action:'save-student-registration',requestId,writeId,data:input},{...actor,principal:false,uid:'teacher-b'});assert.equal(teacher.status,403,'another teacher’s intake');
     const forged=await call(db,'POST',{action:'save-student-registration',requestId,writeId,data:input,academyId:'academy-b'});assert.equal(forged.status,400);
     assert.equal((await call(db,'GET',{action:'student-registration',id:'x'})).status,400);
 });
@@ -72,13 +72,14 @@ test('실제 저장 실패와 인증 실패를 성공으로 숨기지 않음',as
     assert.equal(workspaceError(Error('REGISTRATION_NOT_FOUND'),'student-registration-read').status,404);
 });
 
-test('새 담당·반 선택 액션은 일반 교사의 조회와 잘못된 배정을 원격 생성 전에 차단',async()=>{
+test('새 담당·반 선택: 선생님도 조회 (신입생 등록), 잘못된 배정은 원격 생성 전에 차단',async()=>{
     const {db,rows}=registrationFirestore();
     const original=globalThis.fetch;let remoteCalls=0;
     globalThis.fetch=async()=>{remoteCalls++;throw Error('NO_REMOTE_CALL_EXPECTED');};
     try {
-        assert.equal((await call(db,'GET',{action:'registration-options'},{...actor,principal:false})).status,403);
-        rows.set('academyCoreAuthority/main',{active:true});const before=rows.size;
+        rows.set('academyCoreAuthority/main',{active:true});
+        assert.equal((await call(db,'GET',{action:'registration-options'},{...actor,academyId:'main',principal:false})).status,200,'a teacher picks the 담당·반 for a 신입생');
+        const before=rows.size;
         const invalid=await call(db,'POST',{action:'save-student-registration',requestId,writeId,data:{...input,enrollments:[{...input.enrollments[0],teacherUid:'outside-teacher'}]}},{...actor,academyId:'main'});
         assert.notEqual(invalid.status,200);assert.equal(invalid.data.ok,false);assert.equal(rows.size,before);assert.equal(remoteCalls,0);
     } finally {globalThis.fetch=original;}
@@ -91,4 +92,16 @@ test('체크포인트 3에 저장한 초안의 새 선택 필드 기본값은 �
     for(const item of record.data.enrollments){delete item.teacherUid;delete item.classIds;}
     const replay=await saveStudentRegistration(db,actor,input,requestId,undefined,writeId);
     assert.equal(replay.alreadySaved,true);assert.equal(replay.revision,1);
+});
+
+test('신입생 등록 (선생님): 본인이 시작한 원서만 목록·조회·수정, 원장님은 전부; 다른 학원은 막힘',async()=>{
+    const {db}=registrationFirestore(),t1={...actor,principal:false,uid:'teacher-1'},t2={...actor,principal:false,uid:'teacher-2'};
+    const mine=await saveStudentRegistration(db,t1,input,'44444444-4444-4444-8444-444444444444');
+    const theirs=await saveStudentRegistration(db,t2,{...input,name:'다른 신입생'},'55555555-5555-4555-8555-555555555555');
+    assert.deepEqual((await listStudentRegistrations(db,t1)).map(r=>r.id),[mine.id]);
+    assert.equal((await listStudentRegistrations(db,actor)).length,2,'원장님 sees every intake');
+    assert.equal((await readStudentRegistration(db,t1,mine.id)).id,mine.id);
+    await assert.rejects(readStudentRegistration(db,t1,theirs.id),/FORBIDDEN/);
+    await assert.rejects(readStudentRegistration(db,{...t1,academyId:'academy-b'},mine.id),/FORBIDDEN/);
+    assert.equal((await call(db,'GET',{action:'student-registrations'},t1)).data.records.length,1);
 });
