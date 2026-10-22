@@ -1622,7 +1622,7 @@ export default function WordbookManager({ category = 'word', quick, onQuickClose
         </motion.div>
       )}
 
-      {category === 'exam' && <div hidden={Boolean(selectedWordbook)}><ExamMaterialCatalog books={allWordbooks} manage onOpen={setSelectedWordbook} onCreate={() => {setNewWbCategory('exam');setIsAddModalOpen(true);}} /></div>}
+      {category === 'exam' && <div hidden={Boolean(selectedWordbook)}><ExamMaterialCatalog books={allWordbooks} manage onOpen={setSelectedWordbook} onCreate={() => {setNewWbCategory('exam');setIsAddModalOpen(true);}} onBulkAdd={() => {setNewWbCategory('exam');setIsBulkAddOpen(true);}} /></div>}
       {!selectedWordbook ? Boolean(category === 'exam') ? null : (
         <DndContext
           sensors={sensors}
