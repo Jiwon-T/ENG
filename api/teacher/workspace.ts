@@ -174,6 +174,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const records=all.filter(r=>intake==='all'||group(r)===intake);
                 return sendJson(res,200,{ok:true,...pageRows(records,pageNumber(params.get('page')),8),counts:{all:all.length,consultation:all.filter(r=>group(r)==='consultation').length,new:all.filter(r=>group(r)==='new').length,additional:all.filter(r=>group(r)==='additional').length}});
             }
+            if(action==='registration-consult-schedule'){failureStage='consult-link';return sendJson(res,200,{ok:true,...await (await import('../_lib/consultLinks.js')).readConsultSchedule(db,actor,params.get('id'))});}
             // 종이 원서 사진: the list (no image), then one photo
             if(action==='intake-photos'||action==='intake-photo'){failureStage='intake-photos';const m=await import('../_lib/intakePhotos.js');return sendJson(res,200,{ok:true,...(action==='intake-photos'?await m.listIntakePhotos(db,actor,params.get('id')):await m.readIntakePhoto(db,actor,params.get('photoId')))});}
             // 등록 확정 전: students already on the list that look like this 원서's student
@@ -253,6 +254,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 }
                 return sendJson(res,200,{ok:true,...pageRows(status?filtered.filter((r:any)=>lessonStatus(r.stage)===status):filtered,pageNumber(params.get('page')),10),statusCounts:lessonStatusCounts(filtered),teachers:[...names].map(([uid,name])=>({uid,name})),range:slice.days?{from:slice.days.at(-1),to:slice.days[0]}:null});
             }
+            // 오늘 수업 숨기기 only (another device may have changed it): read again when the screen comes back, and every minute
+            if(action==='today-lesson-visibility'){const day=params.get('day')||'';return sendJson(res,200,{ok:true,hiddenTodayLessons:await readTodayVisibility(db,actor.uid,day)});}
             if(action==='schedule-records') {
                 const range=scheduleRange({day:params.get('day'),from:params.get('from'),to:params.get('to')});
                 const day=params.get('day');if(day&&!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new Error('INVALID_INPUT');
@@ -265,7 +268,9 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                     day?readTodayVisibility(db,actor.uid,day):Promise.resolve([]),day?readDayLessons(db,actor,day):Promise.resolve(undefined),
                 ]);
                 const records=local.docs.map(d=>({id:d.id,...d.data()}));
-                return sendJson(res,200,{ok:true,hiddenTodayLessons,...(dayLessons?{dayLessons}:{}),schedules:mergeNotionRows(records,remote).filter((r:any)=>!r.archived&&(!day||r.data?.date===day)),reflectedSchedules:teacherReflectedSchedules(reflected.map(d=>d.data()),mappings,actor).filter((r:any)=>!day||r.date===day)});
+                // 상담 일정: each 신입생's 원서 (작성 중, or the registered student)
+                const consultTies=records.some((r:any)=>r.consultLinks)?await (await import('../_lib/consultLinks.js')).consultTies(db,actor,records):{};
+                return sendJson(res,200,{ok:true,hiddenTodayLessons,consultTies,...(dayLessons?{dayLessons}:{}),schedules:mergeNotionRows(records,remote).filter((r:any)=>!r.archived&&(!day||r.data?.date===day)),reflectedSchedules:teacherReflectedSchedules(reflected.map(d=>d.data()),mappings,actor).filter((r:any)=>!day||r.date===day)});
             }
             if(action==='managed-record') {
                 const kind=z.enum(['lesson','academic','schedule','class','curriculum']).parse(params.get('kind'));
@@ -419,6 +424,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             return sendJson(res,200,{ok:true,...await discardStudentProfile(db,actor,v.studentKey,v.operationId)});
         }
         if(body.action==='add-intake-photo'||body.action==='remove-intake-photo'){failureStage='intake-photos';const m=await import('../_lib/intakePhotos.js');return sendJson(res,200,{ok:true,...(body.action==='add-intake-photo'?await m.addIntakePhoto(db,actor,body.id,body.photo):await m.removeIntakePhoto(db,actor,body.photoId))});}
+        if(body.action==='consult-schedule-from-registration'){failureStage='consult-link';const v=z.object({action:z.literal('consult-schedule-from-registration'),id:z.string().regex(/^[a-f0-9]{64}$/)}).strict().parse(body);return sendJson(res,200,{ok:true,...await (await import('../_lib/consultLinks.js')).createConsultSchedule(db,actor,v.id)});}
+        if(body.action==='link-consult-registration'){failureStage='consult-link';const {action:_a,...input}=body;return sendJson(res,200,{ok:true,...await (await import('../_lib/consultLinks.js')).linkConsultRegistration(db,actor,input)});}
         if(body.action==='join-student-registration'){failureStage='student-registration-join';const v=z.object({action:z.literal('join-student-registration'),id:z.string().regex(/^[a-f0-9]{64}$/)}).strict().parse(body);return sendJson(res,200,{ok:true,...await (await import('../_lib/intakeMatches.js')).joinStudentRegistration(db,actor,v.id)});}
         if (body.action === 'save-student-registration') {
             failureStage = 'student-registration-save';

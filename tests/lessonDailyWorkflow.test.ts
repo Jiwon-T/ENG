@@ -54,5 +54,13 @@ test('visibility action writes authenticated owner only and returns persisted se
  assert.equal(res.statusCode,200);assert.deepEqual(body.hiddenTodayLessons,['schedule:one']);
  assert.equal(f.rows.get('teacherTodayVisibility/teacher:'+d.date).ownerUid,'teacher');
 });
+test('숨기기, shared by every device: what one device hid is read back on another (the account and day only)',async()=>{
+ const f=registrationFirestore(),phone:any={uid:'teacher',admin:false,academyId:'main',scopes:[],db:f.db},laptop:any={...phone},other:any={...phone,uid:'other'};
+ const call=async(actor:any,req:any)=>{let body:any;const res:any={setHeader:()=>{},end:(v:string)=>body=JSON.parse(v)};await handleWorkspace(req,res,async()=>actor);return {status:res.statusCode,body};};
+ await call(phone,{method:'POST',body:{action:'today-lesson-visibility',date:d.date,eventId:'regular:class:0'}});
+ const read=await call(laptop,{method:'GET',url:'/api/teacher/workspace?action=today-lesson-visibility&day='+d.date,headers:{}});
+ assert.deepEqual([read.status,read.body.hiddenTodayLessons],[200,['regular:class:0']]);
+ assert.deepEqual((await call(other,{method:'GET',url:'/api/teacher/workspace?action=today-lesson-visibility&day='+d.date,headers:{}})).body.hiddenTodayLessons,[],'another teacher: their own list');
+});
 
 import {assertDraftEditable} from '../api/_lib/teacherWorkspacePolicy';

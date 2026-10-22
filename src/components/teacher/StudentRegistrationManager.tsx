@@ -26,7 +26,7 @@ function responseMessage(result:{userMessage?:string;data?:{message?:string;diag
     return `${result.data?.message || result.userMessage || '처리하지 못했습니다. 다시 시도해 주세요.'}${result.data?.diagnosticId ? ` (오류 ID: ${result.data.diagnosticId})` : ''}`;
 }
 /** 상담·신입생 inside the student list: rows appear when the 신입생·상담 chip is on, or when the shared search matches; the 원서 opens in a dialog. */
-export default function StudentRegistrationManager({onSynced,students=[],coreMode=false,query='',active=false,startSignal=0,startName='',onCount,canAdditional=true}:{onSynced:()=>Promise<void>;/** 기존 학생 추가 과목 상담 (it changes a registered student's enrollment): 원장님·관리자 only */canAdditional?:boolean;coreMode?:boolean;students?:any[];query?:string;active?:boolean;startSignal?:number;/** The name to start the form with (시간표 엑셀 가져오기 › 새 학생 등록). */startName?:string;onCount?:(count:number)=>void}) {
+export default function StudentRegistrationManager({onSynced,students=[],coreMode=false,query='',active=false,startSignal=0,startName='',startId='',onSavedNew,onClosed,onCount,canAdditional=true}:{/** the 원서 closed (not when 닫기 was cancelled) */onClosed?:()=>void;onSynced:()=>Promise<void>;/** with startSignal: open this saved 원서 instead of a new one */startId?:string;/** a new 원서's first save (상담 일정 ties it) */onSavedNew?:(id:string)=>void;/** 기존 학생 추가 과목 상담 (it changes a registered student's enrollment): 원장님·관리자 only */canAdditional?:boolean;coreMode?:boolean;students?:any[];query?:string;active?:boolean;startSignal?:number;/** The name to start the form with (시간표 엑셀 가져오기 › 새 학생 등록). */startName?:string;onCount?:(count:number)=>void}) {
     const [intake,setIntake]=useState('all'),[enrollmentKey,setEnrollmentKey]=useState('');
     const [page,setPage]=useState(1),[reload,setReload]=useState(0);
     const [list,setList]=useState<PageResult>({ok:true,records:[],page:1,pages:1,total:0});
@@ -61,6 +61,17 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
     }
     async function openPhoto(id:string){setPhotoBusy(true);try{const result=await request<{ok:boolean;photo:string;message?:string;diagnosticId?:string}>('intake-photo',{photoId:id});if(!result.ok||!result.data?.ok)throw Error(responseMessage(result));setViewing(result.data.photo);}catch(e:any){setFeedback(e?.message||'사진을 열지 못했어요.');}finally{setPhotoBusy(false);}}
     async function removePhoto(id:string){if(!current||!await askConfirm({title:'이 사진을 뺄까요?',message:'원서 내용은 그대로예요.',confirmText:'빼기',tone:'danger',icon:'trash'}))return;setPhotoBusy(true);try{const result=await post({action:'remove-intake-photo',photoId:id});if(!result.ok||!result.data?.ok)throw Error(responseMessage(result));await loadPhotos(current.id);}catch(e:any){setFeedback(e?.message||'사진을 빼지 못했어요.');}finally{setPhotoBusy(false);}}
+    // 상담 일정 (a saved 원서): the one it is tied to, or 상담 일정으로 남기기 (today, from now) when written without one
+    const [consultSchedule,setConsultSchedule]=useState<{id:string;title:string;date:string;start:string;end:string}|null|undefined>(undefined),[scheduling,setScheduling]=useState(false);
+    useEffect(()=>{setConsultSchedule(undefined);if(!open||!current?.id||current.purpose==='additional')return;let live=true;
+        request<{ok:boolean;schedule:any}>('registration-consult-schedule',{id:current.id}).then(result=>{if(live&&result.ok&&result.data?.ok)setConsultSchedule(result.data.schedule||null);}).catch(()=>{});
+        return()=>{live=false;};},[open,current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    async function keepAsSchedule(){
+        if(!current||scheduling)return;setScheduling(true);setFeedback('');
+        try{const result=await teacherAuthenticatedRequest<ServerResult & {schedule?:any;created?:boolean}>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'consult-schedule-from-registration',id:current.id})});
+            if(!result.ok||!result.data?.ok)throw Error(responseMessage(result));setConsultSchedule(result.data.schedule||null);setFeedback(result.data.created?'오늘 상담 일정을 만들고 이 원서와 묶었어요. 시간표·일정에서 시간을 고칠 수 있어요.':'이미 묶인 상담 일정이 있어요.');}
+        catch(e:any){setFeedback(e?.message||'상담 일정을 만들지 못했어요.');}finally{setScheduling(false);}
+    }
     async function joinMatch(id:string){
         if(writeBusy.current)return;
         if(dirty&&!await askDiscard(revision===undefined?'지금 쓴 내용은 저장되지 않아요. 같은 학생 원서를 열까요?':'저장하지 않은 수정이 있어요. 같은 학생 원서를 열까요?'))return;
@@ -68,7 +79,8 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
         if(!result.ok||!result.data?.ok||!result.data.record){setFeedback(responseMessage(result));return;}
         setDirty(false);setReload(n=>n+1);await edit(result.data.record as RegistrationSummary);
     }
-    useEffect(()=>{if(startSignal)start(startName);},[startSignal]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(()=>{if(!startSignal)return;if(startId)void openById(startId);else start(startName);},[startSignal]); // eslint-disable-line react-hooks/exhaustive-deps
+    async function openById(id:string){const result=await request<ServerResult & {record?:RegistrationSummary}>('student-registration',{id});if(result.ok&&result.data?.ok&&result.data.record){setOpen(true);await edit(result.data.record as RegistrationSummary);}else setFeedback(responseMessage(result));}
     useEffect(()=>{onCount?.(list.counts?.all??list.total??0);},[list]);
     useEffect(()=>{
         let live=true;const uid=auth.currentUser?.uid;
@@ -121,7 +133,7 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
     async function close() {
         if(writeBusy.current)return;
         if((dirty || intent.current) && !await (intent.current?askConfirm({title:'저장 결과를 확인하지 못했어요',message:'창을 닫은 뒤 목록을 새로고침해 저장 여부를 확인해 주세요.',confirmText:'닫기',icon:'alert'}):askDiscard('저장하지 않은 입력을 닫을까요?')))return;
-        generation.current++;intent.current=null;setCurrent(null);setOptions(undefined);setOpen(false);setValue(emptyRegistration());setKey('');setRevision(undefined);setRetrying(false);setFeedback('');setBusy(false);
+        generation.current++;intent.current=null;setCurrent(null);setOptions(undefined);setOpen(false);setValue(emptyRegistration());setKey('');setRevision(undefined);setRetrying(false);setFeedback('');setBusy(false);onClosed?.();
     }
     async function save() {
         if(writeBusy.current || (locked && !retrying))return;
@@ -138,6 +150,7 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
                 else {setRetrying(true);setLocked(true);}
                 throw new Error(responseMessage(result));
             }
+            if(revision===undefined)onSavedNew?.(result.data.id);
             intent.current=null;setRevision(result.data.revision);setDirty(false);setLocked(false);setRetrying(false);
             setFeedback(value.purpose==='additional'?'추가 과목 상담을 저장했습니다. 목록에서 기존 학생의 수강 관리로 이어갈 수 있습니다.':value.intakeStage==='consultation'?'상담 내용을 저장했습니다. 아직 학생 명부에는 등록하지 않았습니다.':coreMode?'등록 내용을 저장했습니다. 앱 등록 확정 후 등록 첫 달 목록에서 관리합니다.':'등록 내용을 저장했습니다. 등록 확정 후 등록 첫 달 목록에서 관리합니다.');setReload(old=>old+1);
         } catch(error) {
@@ -199,7 +212,7 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
         </div>}
         {feedback && !open ? <p role="status" className="report-caption">{feedback}</p> : null}
         <WorkspaceDialog open={open} title={revision===undefined?'입학·상담 원서 작성':'입학·상담 원서 조회·수정'} onClose={close}>
-            <div className="intake-print-row"><button type="button" className="small-button" onClick={()=>setPrinting(value)} title="인쇄 창에서 'PDF로 저장'을 고르면 파일이 돼요">원서 PDF·인쇄</button></div>
+            <div className="intake-print-row">{current&&revision!==undefined&&value.purpose!=='additional'&&consultSchedule!==undefined&&(consultSchedule?<span className="intake-consult-schedule" title="이 원서와 묶인 상담 일정">상담 일정 · {Number(consultSchedule.date?.slice(5,7))}/{Number(consultSchedule.date?.slice(8,10))} {consultSchedule.start}–{consultSchedule.end}</span>:<button type="button" className="small-button" disabled={scheduling||busy} onClick={()=>void keepAsSchedule()} title="오늘 날짜·지금 시간으로 상담 일정을 만들고 이 원서와 묶어요">{scheduling?'만드는 중…':'상담 일정으로 남기기'}</button>)}<button type="button" className="small-button" onClick={()=>setPrinting(value)} title="인쇄 창에서 'PDF로 저장'을 고르면 파일이 돼요">원서 PDF·인쇄</button></div>
             {current&&revision!==undefined ? <div className="student-intake-actions"><span className="student-intake-status">{stageText(current)}</span>{actions(current)}</div> : null}
             {feedback ? <p role="status" className="text-sm text-slate-600 mb-3">{feedback}</p> : null}
             {retrying ? <p className="text-xs text-rose-600 mb-3">저장 결과가 불명확합니다. 입력을 유지한 채 같은 요청으로 다시 확인합니다.</p> : null}

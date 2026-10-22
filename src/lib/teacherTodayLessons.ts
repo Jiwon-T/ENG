@@ -36,16 +36,23 @@ export function todayLessons(data:any,date:string,schedules:any[]=[],reflected:a
  const copies=reflected.filter(r=>r.date===date&&r.kind!=='상담'&&['예정','변경','완료'].includes(r.status)&&!sources.has((r.notionPageId||r.appScheduleId||'').replace(/-/g,''))).map(r=>({id:`reflected:${r.id}`,title:r.title||'예정 수업',kind:scheduleKindLabel(r.kind||'일정'),session:sessionOfKind(r.kind||''),subject:r.subject,date,start:r.start,end:r.end,students:visible(r.students,r.subject)} as TodayLesson));
  return [...regular,...events,...copies].filter(r=>r.students.length&&r.start&&r.end).sort((a,b)=>a.start.localeCompare(b.start)||a.title.localeCompare(b.title));
 }
-export interface TodayConsult {id:string;title:string;start:string;end:string;students:string[];place?:string}
+/** A 신입생 a 상담 일정 names, and its 원서 once tied (registrationId), the student once registered (studentKey). */
+export interface ConsultProspect {name:string;registrationId:string|null;studentKey:string|null}
+export interface TodayConsult {id:string;title:string;start:string;end:string;students:string[];place?:string;prospects:ConsultProspect[];scheduleId?:string}
 /** The day's 상담 for the today list's reminder cards (not a lesson: no 일지, so not among todayLessons) — with or
  *  without students (a 신입생 is not registered yet): mine, or one naming students I teach. */
-export function todayConsults(data:any,date:string,schedules:any[]=[],reflected:any[]=[]):TodayConsult[] {
+export function todayConsults(data:any,date:string,schedules:any[]=[],reflected:any[]=[],ties:Record<string,Record<string,{registrationId:string;studentKey:string|null}>>={}):TodayConsult[] {
  const permitted=(key:string,subject:string)=>data.admin||(data.teachingScopes||data.scopes||[]).some((s:any)=>s.studentKey===key&&s.subject===subject);
  const visible=(students:string[],subject:string)=>[...new Set(students||[])].filter(key=>permitted(key,subject));
  const live=(status:string)=>['예정','변경','완료'].includes(status),sources=new Set(schedules.map(r=>(r.notionPageId||r.id||'').replace(/-/g,'')));
  const rows=[
-  ...schedules.filter(r=>!r.archived&&!r.deleteRequested&&r.data?.date===date&&r.data.kind==='상담'&&live(r.data.status)).map(r=>({id:`consult:${r.id}`,own:r.ownerUid===data.uid,title:r.data.title||'상담',start:r.data.start,end:r.data.end,students:visible(r.data.students,r.data.subject),place:r.data.place||''})),
-  ...reflected.filter(r=>r.date===date&&r.kind==='상담'&&live(r.status)&&!sources.has((r.notionPageId||r.appScheduleId||'').replace(/-/g,''))).map(r=>({id:`consult:reflected:${r.id}`,own:r.ownerUid===data.uid,title:r.title||'상담',start:r.start,end:r.end,students:visible(r.students,r.subject),place:r.place||''})),
+  ...schedules.filter(r=>!r.archived&&!r.deleteRequested&&r.data?.date===date&&r.data.kind==='상담'&&live(r.data.status)).map(r=>{
+   // a 신입생 registered since (their 원서 has a student) and taught by me counts as a student of the 상담
+   const prospects:ConsultProspect[]=(r.data.prospects||[]).map((p:any)=>({name:p.name,registrationId:ties[r.id]?.[p.name]?.registrationId||null,studentKey:ties[r.id]?.[p.name]?.studentKey||null}));
+   const joined=prospects.filter(p=>p.studentKey&&permitted(p.studentKey,r.data.subject)).map(p=>p.studentKey!);
+   return {id:`consult:${r.id}`,scheduleId:r.id,own:r.ownerUid===data.uid,title:r.data.title||'상담',start:r.data.start,end:r.data.end,students:[...new Set([...visible(r.data.students,r.data.subject),...joined])],place:r.data.place||'',prospects:prospects.filter(p=>!joined.includes(p.studentKey!))};
+  }),
+  ...reflected.filter(r=>r.date===date&&r.kind==='상담'&&live(r.status)&&!sources.has((r.notionPageId||r.appScheduleId||'').replace(/-/g,''))).map(r=>({id:`consult:reflected:${r.id}`,own:r.ownerUid===data.uid,title:r.title||'상담',start:r.start,end:r.end,students:visible(r.students,r.subject),place:r.place||'',prospects:[] as ConsultProspect[]})),
  ];
  return rows.filter(r=>(r.own||r.students.length)&&r.start&&r.end).map(({own,...r})=>r).sort((a,b)=>a.start.localeCompare(b.start)||a.title.localeCompare(b.title));
 }

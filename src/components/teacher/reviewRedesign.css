@@ -937,7 +937,7 @@
 .teacher-workspace .today-consult-who{display:block;font-size:11px;color:#94a3b8}
 .teacher-workspace .today-consult-card.is-open{display:block;width:100%;text-align:left;cursor:pointer}
 .teacher-workspace .today-consult-card.is-open:hover{border-color:#94a3b8;background:#f8fafc}
-.teacher-workspace .today-consult-open{display:block;margin-top:2px;font-size:11px;font-weight:700;color:#0c447c}
+.teacher-workspace .today-consult-card .today-time-head{padding-right:0;flex-wrap:nowrap}.teacher-workspace .today-consult-kind{flex:none;padding:0 7px;border-radius:999px;background:#f1f5f9;font-size:11px;color:#64748b}.teacher-workspace .today-consult-open{margin-left:auto;font-size:11px;font-weight:700;color:#0c447c;white-space:nowrap}
 .teacher-workspace .today-consult-help{margin:0 0 8px;font-size:12px;color:#64748b}
 .teacher-workspace .intake-match{display:grid;gap:4px;margin:0 0 10px;padding:8px 10px;border:1px solid #fde68a;border-radius:12px;background:#fffbeb;font-size:12px;color:#92400e}
 .teacher-workspace .intake-match-actions{display:flex;flex-wrap:wrap;gap:6px}
@@ -949,7 +949,17 @@
 .teacher-workspace .intake-photo .intake-photo-remove{padding:0 7px;border-left:1px solid #e2e8f0;color:#b04a5a}
 .teacher-workspace .intake-photos .small-button{min-height:28px;padding:0 10px;font-size:12px}
 .teacher-workspace .intake-photos-note{margin:0 0 10px;font-size:11px;color:#94a3b8}
-.teacher-workspace .intake-print-row{display:flex;justify-content:flex-end;margin:0 0 8px}
+.teacher-workspace .lesson-editor-panel[hidden]{display:none!important}
+.teacher-workspace .consult-pane{align-self:stretch;min-width:0}
+.teacher-workspace .consult-pane-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px;padding-bottom:10px;border-bottom:1px solid #f1f5f9;color:#334155}
+.teacher-workspace .consult-pane-head h2{margin:0;font-size:16px;font-weight:800}
+.teacher-workspace .consult-pane-when{font-size:12px;color:#64748b}
+.teacher-workspace .consult-pane-pill{padding:1px 8px;border-radius:999px;background:#f1f5f9;font-size:11px;font-weight:700;color:#475569}.teacher-workspace .consult-pane-pill.is-new{background:#fffbeb;color:#92400e}
+.teacher-workspace .consult-pane-back{margin-left:auto;display:inline-flex;align-items:center;gap:4px;min-height:30px;padding:0 12px;font-size:12px}
+.teacher-workspace .today-consult-card.is-current{border-style:solid;border-color:#d26272;background:#fef2f3}
+.teacher-workspace .intake-print-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;margin:0 0 8px}.teacher-workspace .intake-consult-schedule{font-size:12px;color:#0c447c;font-weight:700}
+.student-combobox-add{display:block;width:100%;padding:9px 12px;border:0;border-top:1px solid #f1f5f9;background:#fffbeb;color:#92400e;font-size:13px;font-weight:700;text-align:left;cursor:pointer}
+.teacher-workspace .schedule-student-chip.is-prospect{border-color:#fde68a;background:#fffbeb}.teacher-workspace .schedule-student-chip.is-prospect small{font-size:10px;color:#92400e}
 .teacher-workspace .intake-print-row .small-button{min-height:30px;padding:0 12px;font-size:12px}
 .intake-photo-view{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:16px;background:rgba(15,23,42,.85);cursor:zoom-out}
 .intake-photo-view img{max-width:100%;max-height:calc(100vh - 64px);object-fit:contain;border-radius:8px;background:#fff}

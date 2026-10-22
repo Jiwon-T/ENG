@@ -136,10 +136,17 @@ export const teacherScheduleSchema = z.object({
     kind: z.preprocess(value => value === '시험' ? '테스트' : value, z.enum(['정규 수업', '보강', '휴강', '테스트', '자습', '상담', '기타'])),
     status: z.enum(['예정', '변경', '완료', '취소']),
     place: z.string().max(100), note: z.string().max(5000),
+    // 상담 only: 신입생 not on the student list yet (by name); their 원서 is tied to the 일정 apart from this data (consultLinks)
+    prospects: z.array(z.object({ name: z.string().trim().min(1).max(60) }).strict()).max(5).optional(),
 }).superRefine((value, ctx) => {
     const date = new Date(`${value.date}T00:00:00Z`);
     if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value.date || value.end <= value.start)
         ctx.addIssue({ code: 'custom', message: '날짜와 시작·종료 시간을 확인해 주세요.' });
+}).transform(value => {
+    // 신입생 names belong to a 상담 only (another kind drops them); one entry per name
+    if (value.prospects === undefined) return value;
+    const { prospects, ...rest } = value;
+    return value.kind === '상담' ? { ...rest, prospects: [...new Map(prospects.map(p => [p.name, p])).values()] } : rest;
 });
 
 export function assertLessonComplete(input: unknown) {
