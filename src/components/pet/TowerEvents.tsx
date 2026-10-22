@@ -5,6 +5,7 @@ import { TowerMonster } from './TowerMonster';
 import { Hall, TowerGearIcon } from './TowerHall';
 import { TowerDragon, TowerMerchant } from './TowerCharacters';
 import { MiniGameScreen } from './TowerMiniGames';
+import { SNEAK, sneakStep } from '../../lib/towerSneak';
 
 // What waits behind a door when it isn't a plain battle: the 떠돌이 상인, the 길 잃은 요정, the 수수께끼 석상, the 함정 바닥 and
 // the 잠든 몬스터 (a drag mini-game). Every result is decided by the server; these screens only ask.
@@ -76,40 +77,41 @@ function Question({ event, busy, send, title }: { event: TowerEventView; busy: b
   </div>;
 }
 
-/** 잠든 드래곤: drag the pet along the U path that dips under the dragon, slowly (at least 3 seconds); too fast, or a big
- *  jump, wakes it. The path is reported to the server, which checks the time and the pace before letting the pet past. */
-const SNEAK_SPEED = 0.28; // progress per second the browser allows (the server allows a little more)
+/** 잠든 드래곤: drag the pet along the U path that dips under the dragon. The pet only sneaks (towerSneak), so it lags
+ *  behind a quick finger; the 발소리 meter fills as the finger gets ahead and the dragon wakes only when it runs far ahead.
+ *  The path is reported to the server, which checks the time and the pace before letting the pet past. */
 const pathX = (p: number) => 4 + 88 * p, dipAt = (p: number) => Math.sin(Math.PI * Math.max(0, Math.min(1, (p - 0.22) / 0.56)));
 function Sleeping({ busy, pet, color, send, title }: { busy: boolean; pet: PetLook; color: number; send: Send; title: string }) {
   const track = useRef<HTMLDivElement>(null), last = useRef<{ p: number; t: number } | null>(null), start = useRef(0), samples = useRef<number[][]>([]), done = useRef(false);
-  const [p, setP] = useState(0), [state, setState] = useState<'ready' | 'drag' | 'woke' | 'out'>('ready'), [off, setOff] = useState(false);
+  const [p, setP] = useState(0), [state, setState] = useState<'ready' | 'drag' | 'woke' | 'out'>('ready'), [off, setOff] = useState(false), [noise, setNoise] = useState(0);
   const FLOOR = 34, DIP = 30, bottomAt = (q: number) => FLOOR - DIP * dipAt(q);
   // If the server refuses the walk (too quick, off the path), the mini-game starts over instead of getting stuck.
   const finish = (ok: boolean) => { if (done.current) return; done.current = true; setState(ok ? 'out' : 'woke'); window.setTimeout(async () => { const r = await send('sneak', ok ? { ok, samples: samples.current } : { ok }); if (!r && ok) { done.current = false; samples.current = []; start.current = 0; setP(0); setState('ready'); } }, 700); };
   const move = (e: ReactPointerEvent) => {
-    if (state !== 'drag' || !track.current || done.current) return;
-    const r = track.current.getBoundingClientRect(), np = Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width * 100 - 4) / 88)), now = performance.now();
+    if (state !== 'drag' || !track.current || done.current || !last.current) return;
+    const r = track.current.getBoundingClientRect(), finger = Math.max(0, Math.min(1, ((e.clientX - r.left) / r.width * 100 - 4) / 88)), now = performance.now();
     // Keep to the path: the finger has to stay near the dotted line (it dips under the dragon).
-    const pathY = r.bottom - bottomAt(np) - 30; if (Math.abs(e.clientY - pathY) > 70) { setOff(true); return; } setOff(false);
-    if (np <= p) { setP(np); return; }
-    const l = last.current!; if (np - l.p > 0.12) return finish(false);
-    if (now - l.t > 120) { if ((np - l.p) / ((now - l.t) / 1000) > SNEAK_SPEED) return finish(false); last.current = { p: np, t: now }; }
-    setP(np); samples.current.push([Math.round(now - start.current), Math.round(np * 1000) / 1000]);
-    if (np >= 0.94) finish(true);
+    const pathY = r.bottom - bottomAt(finger) - 30; if (Math.abs(e.clientY - pathY) > 90) { setOff(true); return; } setOff(false);
+    const step = sneakStep(last.current, finger, now); setNoise(step.ahead);
+    if (step.wake) return finish(false);
+    if (!step.next) return;
+    last.current = step.next; setP(step.next.p); samples.current.push([Math.round(now - start.current), Math.round(step.next.p * 1000) / 1000]);
+    if (step.next.p >= SNEAK.exit) finish(true);
   };
   const path = Array.from({ length: 41 }, (_, i) => { const q = i / 40; return `${i ? 'L' : 'M'}${pathX(q)} ${100 - (bottomAt(q) - 1) / 1.5}`; }).join(' ');
   return <div className="space-y-2">
     <Hall caption={title} tall>
       <div className="absolute bottom-[64px] left-1/2 -translate-x-1/2"><TowerDragon color={color} asleep={state !== 'woke'} size={176} />{state !== 'woke' ? <span className="absolute right-2 top-0 animate-pulse text-sm font-black text-[#cecbf6]">Zz</span> : <span className="absolute right-2 top-0 text-xl">❗</span>}</div>
-      <div ref={track} className="absolute inset-x-4 bottom-[30px] h-[150px] touch-none" onPointerMove={move} onPointerUp={() => { if (state === 'drag') setState('ready'); }}>
+      <div ref={track} className="absolute inset-x-4 bottom-[30px] h-[150px] touch-none" onPointerMove={move} onPointerUp={() => { if (state === 'drag') setState('ready'); setNoise(0); }}>
         <svg className="pointer-events-none absolute inset-0" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={path} fill="none" stroke="#fac775" strokeWidth="0.8" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" opacity=".7" /></svg>
         <span className="absolute bottom-[30px] right-0 rounded-md bg-[#3b6d11] px-1.5 py-0.5 text-[11px] font-bold text-white">출구 →</span>
-        <button type="button" disabled={busy || done.current} aria-label="펫을 길을 따라 천천히 끌어서 출구로" onPointerDown={e => { if (done.current) return; (e.currentTarget.parentElement as HTMLElement).setPointerCapture(e.pointerId); const now = performance.now(); if (!start.current) start.current = now; samples.current.push([Math.round(now - start.current), Math.round(p * 1000) / 1000]); last.current = { p, t: now }; setState('drag'); }}
+        <button type="button" disabled={busy || done.current} aria-label="펫을 길을 따라 천천히 끌어서 출구로" onPointerDown={e => { if (done.current) return; (e.currentTarget.parentElement as HTMLElement).setPointerCapture(e.pointerId); const now = performance.now(); if (!start.current) start.current = now; samples.current.push([Math.round(now - start.current), Math.round(p * 1000) / 1000]); last.current = { p, t: now }; setNoise(0); setState('drag'); }}
           className="absolute -translate-x-1/2 cursor-grab touch-none active:cursor-grabbing" style={{ left: `${pathX(p)}%`, bottom: bottomAt(p) - 30 }}>
           <PetCharacter character={pet.character as PetCharacterType} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet as any)} gear={petGearView(pet as any)} size={58} />
         </button>
       </div>
     </Hall>
-    <Box>{state === 'woke' ? '앗! 드래곤이 깼어요. 엄청나게 강한 상대예요!' : state === 'out' ? '휴, 드래곤 몰래 지나갔어요!' : off ? '점선 길을 따라가요. 드래곤 앞에서는 몸을 낮춰 아래로 지나가요.' : '드래곤이 자고 있어요. 펫을 점선 길을 따라 아주 천천히 끌어서 출구로 데려가요. 서두르면 깨요!'}</Box>
+    {state === 'drag' && <div className="flex items-center gap-2 px-1 text-[11px] font-bold text-[#5f5e5a]" aria-label="발소리"><span>발소리</span><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#f1efe8]"><div className={`h-full rounded-full transition-[width] ${noise > SNEAK.warnAhead ? 'bg-[#e24b4a]' : 'bg-[#639922]'}`} style={{ width: `${Math.min(100, noise / SNEAK.wakeAhead * 100)}%` }} /></div></div>}
+    <Box>{state === 'woke' ? '앗! 드래곤이 깼어요. 엄청나게 강한 상대예요!' : state === 'out' ? '휴, 드래곤 몰래 지나갔어요!' : off ? '점선 길을 따라가요. 드래곤 앞에서는 몸을 낮춰 아래로 지나가요.' : noise > SNEAK.warnAhead ? '쉿! 손이 너무 빨라요. 펫이 따라올 때까지 천천히…' : '드래곤이 자고 있어요. 펫을 점선 길을 따라 끌어서 출구로 데려가요. 펫은 살금살금만 걸어요. 손가락이 펫보다 너무 앞서가면 깨요!'}</Box>
   </div>;
 }

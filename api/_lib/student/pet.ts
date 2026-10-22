@@ -25,6 +25,7 @@ import { PET_ROOMS, placeGift, placeSticker, roomCode, roomToday } from '../petR
 import { MONTH_RANK_DOC, keepsNameHidden, monthRankingSnapshot, readMonthRanking, studentRealName } from '../petMonthRanking.js';
 import { PET_TOWERS, syncTowerDecor, syncGearLooks, syncGearInbox, gearLookFor, takeJob3, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
 import { claimQuestBox, markWrongReviewed, noteQuest, questView, readQuestRecords } from '../petQuests.js';
+import { buildTaskRun, listWordTasks, markTaskWords, studentWordTask } from '../petWordTasks.js';
 import { couponStudentKey, couponView, placeDecor, readCoupon, readCouponView, requestCoupon, syncOfflineMedals } from '../petCoupon.js';
 import { PET_EXPEDITIONS, chooseJob, chooseJob2, finishStage, initialExpedition, levelOk, petProgress, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
 
@@ -45,6 +46,7 @@ const MESSAGES: Record<string, string> = {
   PET_JOB_BAD: '검사나 마법사 중에서 골라 주세요.', PET_JOB_TAKEN: '이 친구는 이미 전직했어요.', PET_JOB_LOCKED: '5장 설산의 왕관 스테이지를 이 친구와 통과하면 1차 전직할 수 있어요.', PET_JOB2_BAD: '이 친구의 직업에 맞는 갈래를 골라 주세요.', PET_JOB2_LOCKED: '1차 전직한 친구와 7장 꿈의 정원의 왕관 스테이지를 통과하면 2차 전직할 수 있어요.',
   PET_NOT_ENOUGH_POINTS: '포인트가 부족해요!', PET_ENERGY_ITEM_USED: '기운 회복 간식은 하루에 두 번까지 먹을 수 있어요!', PET_EXHAUSTED: '펫이 탈진했어요. 몬스터를 먹여야 깨어나요!', PET_NOT_EXHAUSTED: '몬스터는 기운을 다 써서 탈진했을 때만 먹일 수 있어요.', PET_REVIVE_USED: '몬스터는 하루에 한 번만 먹일 수 있어요.', PET_TIRED: '펫이 너무 지쳤어요. 기운을 회복시켜 주세요!',
   PET_ITEM_NOT_FOUND: '없는 물건이에요.', PET_ITEM_NOT_OWNED: '먼저 상점에서 사 주세요.', PET_BAG_EMPTY: '가방에 남은 간식이 없어요.', QUEST_CLAIMED: '오늘 간식 상자는 이미 열었어요.', ROOM_STICKER_USED: '오늘은 이 방에 스티커를 붙였어요. 내일 또 붙일 수 있어요.', ROOM_HIDDEN: '방을 닫아 둔 친구예요.', ROOM_OWN: '내 방에는 스티커를 붙일 수 없어요.', ROOM_BAD_STICKER: '없는 스티커예요.', ROOM_NOT_FOUND: '그런 방을 찾지 못했어요. 방 코드를 다시 확인해 주세요.', ROOM_CODE_BUSY: '잠시 후 다시 해 주세요.', ROOM_NEIGHBORS_FULL: '이웃은 30명까지예요. 다른 이웃을 빼고 추가해 주세요.', ROOM_GIFT_USED: '오늘은 이 친구에게 선물했어요. 내일 또 줄 수 있어요.', ROOM_GIFTS_DONE: '선물은 하루 3번까지예요.', ROOM_BAD_GIFT: '선물할 수 없는 간식이에요.', ROOM_NO_PET: '아직 펫이 없는 친구예요.', ROOM_GIFT_BAG_FULL: '친구 가방에 이 간식이 가득 찼어요. 다른 간식을 골라 주세요.', QUEST_NOT_DONE: '오늘 할 일을 3개 다 하면 열 수 있어요.', PET_ALREADY_CHOSEN: '이미 친구를 골랐어요.', PET_BAD_NAME: '이름을 입력해 주세요.',
+  WORD_TASK_NOT_FOUND: '이 단어 과제를 찾지 못했어요. 선생님께 여쭤 보세요.', WORD_TASK_DONE: '이 과제의 단어를 모두 맞혔어요! 과제 완료예요.',
   FEED_NO_BOOKS: '단어장을 한 번 공부하면 시작할 수 있어요. 학습 세트에서 단어장을 공부해 보세요!', FEED_STALE: '다른 화면에서 진행이 바뀌었어요. 최신 상태로 불러올게요.', FEED_BAD_CHOICE: '카드를 다시 골라 주세요.', FEED_NO_RUN: '진행 중인 게임이 없어요.', FEED_OTHER_RUN: '하던 판이 있어요. 먼저 끝내거나 그만둬 주세요.', EXPEDITION_BAD_STAGE: '없는 스테이지예요.', EXPEDITION_LOCKED: '앞 스테이지를 먼저 통과해 주세요.', EXPEDITION_LEVEL: '대표 펫 레벨이 더 높아야 갈 수 있어요.',
   RANK_STALE: '순위가 새로 바뀌었어요. 순위를 다시 열어 주세요.', NAME_REAL: '실명이 들어 있는 이름이에요.', RANK_BUILDING: '순위를 만드는 중이에요. 잠시 후 다시 열어 주세요.', PARTY_NICK_LENGTH: '이름은 2~10자로 정해 주세요.', PARTY_NICK_CONTACT: '이름에 연락처나 주소는 쓸 수 없어요.', PARTY_NICK_BANNED: '이 이름은 다시 쓸 수 없어요. 다른 이름을 정해 주세요.', PARTY_NEED_NICK: '먼저 원정대 이름과 이 펫의 모험가 별칭을 정해 주세요.', NAME_TAKEN: '이미 같은 이름을 쓰는 친구가 있어요. 그래도 이 이름으로 할까요?', PARTY_NICK_WARNED: '관리자가 이름을 바꿔 달라고 했어요. 새 이름을 정해 주세요.',
   PARTY_ONE_A_WEEK: '파티는 한 주에 한 팀만 들어갈 수 있어요.', PARTY_BAD_INPUT: '모집글을 다시 골라 주세요.', PARTY_CLOSED: '이번 주 모집이 끝난 팀이에요.', PARTY_FULL: '자리가 다 찼어요.', PARTY_NOT_MEMBER: '이 팀의 팀원이 아니에요.', PARTY_BAD_VOTE: '투표할 수 없어요.', PARTY_VOTE_TOO_SOON: '2명 팀은 상대가 3일 이상 쉬었을 때만 내보낼 수 있어요.', PARTY_NOT_FOUND: '팀을 찾을 수 없어요.',
@@ -330,6 +332,21 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       const main = p.exists ? currentPet(rollDay(p.data(), now)) : {level: 1, slot: 1};
       return sendJson(res, 200, {ok: true, run: publicRun(g.data()?.run || null), expedition: publicExpedition(e.exists ? e.data() : initialExpedition(now), main.level, main.slot)});
     }
+    // 원정대 › 단어 과제: the student's tasks; a game of one (only its words, no energy; the same unfinished game resumes)
+    if (action === 'word-tasks') { const key = await couponStudentKey(db, uid).catch(() => null); return sendJson(res, 200, {ok: true, tasks: key ? await listWordTasks(db, key) : []}); }
+    if (action === 'feed-start' && typeof body.task === 'string' && body.task) {
+      const {id, task} = await studentWordTask(db, await couponStudentKey(db, uid).catch(() => null), body.task), restart = body.restart === true;
+      const current = (await db.collection(PET_GAMES).doc(uid).get()).data() as PetGameState | undefined, active = current?.run && !current.run.finished ? current.run : null;
+      if (active && !restart && active.task !== id) return fail('FEED_OTHER_RUN', 409);
+      const fresh = active && !restart ? null : buildTaskRun(id, task, now);
+      if (!fresh && !(active && !restart)) return fail('WORD_TASK_DONE');
+      return feedDone(await changeGame(db, uid, now, (_s, g) => {
+        const live = g.run && !g.run.finished ? g.run : null;
+        if (live && !restart) { if (live.task !== id) throw Error('FEED_OTHER_RUN'); return {resumed: true}; }
+        if (!fresh) throw Error('FEED_STALE');
+        g.run = fresh; return {resumed: false, energy: 0};
+      }));
+    }
     if (action === 'feed-start') {
       const stage = typeof body.stage === 'string' && body.stage ? body.stage : null, restart = body.restart === true;
       if (stage && !stageInfo(stage)) return fail('EXPEDITION_BAD_STAGE');
@@ -356,15 +373,19 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
         return {resumed: false, energy: PET_WORD_FEED.energy};
       }));
     }
-    if (action === 'feed-answer') return feedDone(await changeGame(db, uid, now, (s, g, e, party) => {
+    if (action === 'feed-answer') { let mark: {id: string; key: string} | null = null; const out = await changeGame(db, uid, now, (s, g, e, party) => {
       const index = Number(body.index), r: any = answerRun(g, s, String(body.runId || ''), index, {choice: body.choice === undefined ? undefined : Number(body.choice), text: typeof body.text === 'string' ? body.text.slice(0, 400) : undefined, correct: body.correct === true, pick: Array.isArray(body.pick) ? [Number(body.pick[0]), Number(body.pick[1])] : undefined}), q = g.run?.questions[index];
       // Party: a word answered right for the first time (sentences and boards don't count toward the boss).
       if (party && !r.repeat && !r.pending && r.correct && q && !q.retry && ['meaning', 'listen', 'spell', undefined].includes(q.type)) r.party = addContribution(party, uid, q.key, petLook(s), now);
       // The last answer of a stage game settles the stage here, once (a resent answer comes back as `repeat`).
       if (!r.repeat && g.run?.finished) noteQuest(s, 'feed');
       if (!r.repeat && g.run?.finished && g.run.stage) r.expedition = finishStage(e, s, g.run.stage, runSummary(g.run).stars, g.run.slot);
+      // 단어 과제: a word right the first time in this game counts toward the task
+      if (!r.repeat && !r.pending && r.correct && q && !q.retry && g.run?.task) mark = {id: g.run.task, key: q.key};
       return r;
-    }));
+    });
+    if (mark) { const m: {id: string; key: string} = mark; out.result.task = await markTaskWords(db, m.id, [m.key], now).catch(() => null); }
+    return feedDone(out); }
     if (action === 'choose-job') return feedDone(await changeGame(db, uid, now, (s, _g, e) => chooseJob(e, s, body.job)));
     if (action === 'choose-job2') return feedDone(await changeGame(db, uid, now, (s, _g, e) => chooseJob2(e, s, body.job2)));
     if (action === 'feed-quit') return feedDone(await changeGame(db, uid, now, (_s, g) => { g.run = null; return {quit: true}; }));

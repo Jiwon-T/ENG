@@ -12,7 +12,7 @@ import type { PetResponse, PetState } from '../../lib/petService';
 // question (this screen only shows what it gets back), and the same screen becomes a 원정대 stage later.
 export interface FeedQuestionView { type?: 'meaning' | 'listen' | 'spell' | 'match' | 'order' | 'read'; word: string; choices: string[]; retry: boolean; meaning?: string; hint?: string; letters?: string[]; pieces?: string[]; triesLeft?: number; words?: string[]; meanings?: string[]; matched?: number[]; mistakes?: number; answer?: number; choice?: number; correct?: boolean; points?: number }
 export interface StageOutcome { stage: string; boss?: boolean; stars: number; best: number; cleared: boolean; bonus: number; bonuses: string[]; paid?: Record<string, number>; unlocked: string | null; chapterReward: string | null; setGear?: string | null }
-export interface FeedRunView { id: string; stage?: string | null; finished: boolean; total: number; index: number; questions: FeedQuestionView[]; summary?: { correct: number; total: number; points: number; stars: number } }
+export interface FeedRunView { id: string; stage?: string | null; /** 단어 과제 game */ task?: string | null; finished: boolean; total: number; index: number; questions: FeedQuestionView[]; summary?: { correct: number; total: number; points: number; stars: number } }
 
 /** `title`: the 원정대 stage name; `onNext`: open the stage this one just unlocked. */
 export default function WordFeed({ run: initial, state, send, onClose, title, onNext }: { run: FeedRunView; state: PetState; send: (action: string, payload?: Record<string, unknown>) => Promise<PetResponse & { run?: FeedRunView }>; onClose: () => void; title?: string; onNext?: (stage: string) => void }) {
@@ -48,7 +48,7 @@ export default function WordFeed({ run: initial, state, send, onClose, title, on
   const again = async (quiet?: boolean) => {
     if (quiet === undefined && stageHasSound(run.stage)) { setQuietAsk(true); return; }
     setQuietAsk(false); setBusy(true); setNotice('');
-    try { const r = await send('feed-start', run.stage ? { stage: run.stage, quiet: quiet === true, noMic: !speechRecognitionClass() } : {}); if (r.run) { setRun(r.run); setShown(null); setOutcome(null); } } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); } finally { setBusy(false); }
+    try { const r = await send('feed-start', run.stage ? { stage: run.stage, quiet: quiet === true, noMic: !speechRecognitionClass() } : run.task ? { task: run.task } : {}); if (r.run) { setRun(r.run); setShown(null); setOutcome(null); } } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); } finally { setBusy(false); }
   };
 
   const answered = q?.answer !== undefined && shown !== null;

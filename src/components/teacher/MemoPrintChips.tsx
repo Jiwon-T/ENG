@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { FileText, X } from 'lucide-react';
 import { auth, db } from '../../lib/firebase';
+import { teacherAuthenticatedRequest } from '../../lib/teacherAuthenticatedRequest';
 import { matchesKoreanSearch } from '../../lib/koreanSearch';
 import { daySheets, memoPicks, type MemoBook, type MemoPick } from '../../lib/memoWordbooks';
 import { prefetchBookWords, prefetchWordbookManager } from '../../lib/wordbookPrefetch';
@@ -27,7 +28,7 @@ function teacherBooks() {
 const dayText = (p: MemoPick) => p.start === null ? '' : p.start === p.end ? ` · Day ${p.start}` : ` · Day ${p.start}~${p.end}`;
 
 /** `preset`: the books to match instead of reading them (the design preview). */
-export default function MemoPrintChips({ text, studentName, preset }: { text: string; studentName?: string; preset?: MemoBook[] }) {
+export default function MemoPrintChips({ text, studentName, studentKey, preset }: { text: string; studentName?: string; /** 원정대 과제로 내기 needs the student */ studentKey?: string; preset?: MemoBook[] }) {
   const [books, setBooks] = useState<MemoBook[]>(preset || []), [open, setOpen] = useState<MemoPick | null>(null);
   const wants = /단어\s*:|\bday\s*\d/i.test(text || '');
   useEffect(() => { if (wants && !books.length) void teacherBooks().then(setBooks); }, [wants]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -53,13 +54,35 @@ export default function MemoPrintChips({ text, studentName, preset }: { text: st
       </span>;
     })}
     {ask && <button type="button" onClick={() => setOpen({ ...ask, books })} className={`${chip} border-dashed border-slate-300 bg-white text-slate-500`}><FileText size={11} aria-hidden="true" />학습 세트 고르기{dayText(ask)}</button>}
-    {open && <QuickPrint pick={open} studentName={studentName} onClose={() => setOpen(null)} />}
+    {open && <QuickPrint pick={open} studentName={studentName} studentKey={studentKey} onClose={() => setOpen(null)} />}
   </div>;
 }
 
 /** Pick the book (when the memo did not name just one), then 시험지 or 단어장 출력: the 학습 세트 window opens on that book with
  *  the memo's DAYs (the start, and the end the memo gave or the next DAY). */
-function QuickPrint({ pick, studentName, onClose }: { pick: MemoPick; studentName?: string; onClose: () => void }) {
+interface TaskView { id: string; wordbookId: string; title: string; startDay: number; endDay: number; total: number; mastered: number; completedAt: number | null }
+/** 원정대 단어 과제: the student's tasks of this book, and giving this range as a new one. */
+function WordTaskRow({ book, pick, studentKey }: { book: MemoBook; pick: MemoPick; studentKey: string }) {
+  const [tasks, setTasks] = useState<TaskView[] | null>(null), [busy, setBusy] = useState(false), [note, setNote] = useState('');
+  const load = async () => { const r = await teacherAuthenticatedRequest<any>(auth, `/api/teacher/workspace?action=word-tasks&studentKey=${encodeURIComponent(studentKey)}`); if (r.ok && r.data?.ok) setTasks((r.data.tasks || []).filter((t: any) => t.wordbookId === book.id)); };
+  useEffect(() => { void load().catch(() => {}); }, [book.id, studentKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const give = async () => {
+    if (pick.start === null) return; setBusy(true); setNote('');
+    try {
+      const r = await teacherAuthenticatedRequest<any>(auth, '/api/teacher/workspace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'word-task-create', studentKey, wordbookId: book.id, startDay: pick.start, endDay: pick.end ?? pick.start }) });
+      if (!r.ok || !r.data?.ok) throw Error(r.data?.message || r.userMessage || '과제를 내지 못했어요.');
+      setNote(`원정대 과제로 냈어요 · ${r.data.task.total}단어`); await load();
+    } catch (e: any) { setNote(e?.message || '과제를 내지 못했어요.'); } finally { setBusy(false); }
+  };
+  const same = tasks?.find(t => t.startDay === pick.start && t.endDay === (pick.end ?? pick.start) && !t.completedAt);
+  return <div className="col-span-2">
+    <button type="button" disabled={busy || pick.start === null || Boolean(same)} onClick={() => void give()} className="w-full rounded-2xl border-2 border-[#1d9e75] bg-white py-2.5 text-sm font-bold text-[#0f6e56] disabled:opacity-50" title={pick.start === null ? '메모에 Day를 적으면 낼 수 있어요' : '이 범위 단어만 원정대에서 풀어요'}>{busy ? '내는 중…' : same ? '이 범위는 이미 과제로 냈어요' : '🗺️ 원정대 과제로 내기'}</button>
+    {note && <p className="mt-1 text-center text-[11px] font-bold text-[#0f6e56]">{note}</p>}
+    {tasks && tasks.length > 0 && <ul className="mt-2 space-y-0.5 text-[11px] text-slate-500">{tasks.slice(0, 4).map(t => <li key={t.id}>{t.completedAt ? '✅' : '🗺️'} Day {t.startDay === t.endDay ? t.startDay : `${t.startDay}~${t.endDay}`} · {t.mastered}/{t.total} 맞힘{t.completedAt ? ' · 완료' : ''}</li>)}</ul>}
+  </div>;
+}
+
+function QuickPrint({ pick, studentName, studentKey, onClose }: { pick: MemoPick; studentName?: string; studentKey?: string; onClose: () => void }) {
   const [book, setBook] = useState<MemoBook | null>(pick.books.length === 1 ? pick.books[0] : null), [q, setQ] = useState(''), [mode, setMode] = useState<'test' | 'print' | null>(null);
   // the book chosen: its words are read while 시험지 or 단어장 출력 is picked
   useEffect(() => { if (book) void prefetchBookWords(book.id).catch(() => {}); }, [book?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -76,6 +99,7 @@ function QuickPrint({ pick, studentName, onClose }: { pick: MemoPick; studentNam
       </> : <div className="mt-3 grid grid-cols-2 gap-2">
         <button type="button" onClick={() => setMode('test')} className="rounded-2xl bg-blue-500 py-3 text-sm font-bold text-white">시험지 만들기</button>
         <button type="button" onClick={() => setMode('print')} className="rounded-2xl border border-pink-200 bg-pink-50 py-3 text-sm font-bold text-pink-700">단어장 출력</button>
+        {studentKey && <WordTaskRow book={book} pick={pick} studentKey={studentKey} />}
         {pick.books.length > 1 && <button type="button" onClick={() => setBook(null)} className="col-span-2 text-xs font-bold text-slate-500">다른 학습 세트 고르기</button>}
       </div>}
     </div>

@@ -174,6 +174,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const records=all.filter(r=>intake==='all'||group(r)===intake);
                 return sendJson(res,200,{ok:true,...pageRows(records,pageNumber(params.get('page')),8),counts:{all:all.length,consultation:all.filter(r=>group(r)==='consultation').length,new:all.filter(r=>group(r)==='new').length,additional:all.filter(r=>group(r)==='additional').length}});
             }
+            // 원정대 단어 과제 (일지의 단어 칩): a student's tasks
+            if(action==='word-tasks'){failureStage='word-tasks';return sendJson(res,200,{ok:true,...await (await import('../_lib/petWordTasks.js')).teacherWordTasks(db,actor,params.get('studentKey'))});}
             if(action==='registration-consult-schedule'){failureStage='consult-link';return sendJson(res,200,{ok:true,...await (await import('../_lib/consultLinks.js')).readConsultSchedule(db,actor,params.get('id'))});}
             // 종이 원서 사진: the list (no image), then one photo
             if(action==='intake-photos'||action==='intake-photo'){failureStage='intake-photos';const m=await import('../_lib/intakePhotos.js');return sendJson(res,200,{ok:true,...(action==='intake-photos'?await m.listIntakePhotos(db,actor,params.get('id')):await m.readIntakePhoto(db,actor,params.get('photoId')))});}
@@ -424,6 +426,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             return sendJson(res,200,{ok:true,...await discardStudentProfile(db,actor,v.studentKey,v.operationId)});
         }
         if(body.action==='add-intake-photo'||body.action==='remove-intake-photo'){failureStage='intake-photos';const m=await import('../_lib/intakePhotos.js');return sendJson(res,200,{ok:true,...(body.action==='add-intake-photo'?await m.addIntakePhoto(db,actor,body.id,body.photo):await m.removeIntakePhoto(db,actor,body.photoId))});}
+        if(body.action==='word-task-create'||body.action==='word-task-remove'){failureStage='word-tasks';const m=await import('../_lib/petWordTasks.js');const {action:_a,...input}=body;return sendJson(res,200,{ok:true,...(body.action==='word-task-create'?await m.createWordTask(db,actor,input):await m.removeWordTask(db,actor,body.id))});}
         if(body.action==='consult-schedule-from-registration'){failureStage='consult-link';const v=z.object({action:z.literal('consult-schedule-from-registration'),id:z.string().regex(/^[a-f0-9]{64}$/)}).strict().parse(body);return sendJson(res,200,{ok:true,...await (await import('../_lib/consultLinks.js')).createConsultSchedule(db,actor,v.id)});}
         if(body.action==='link-consult-registration'){failureStage='consult-link';const {action:_a,...input}=body;return sendJson(res,200,{ok:true,...await (await import('../_lib/consultLinks.js')).linkConsultRegistration(db,actor,input)});}
         if(body.action==='join-student-registration'){failureStage='student-registration-join';const v=z.object({action:z.literal('join-student-registration'),id:z.string().regex(/^[a-f0-9]{64}$/)}).strict().parse(body);return sendJson(res,200,{ok:true,...await (await import('../_lib/intakeMatches.js')).joinStudentRegistration(db,actor,v.id)});}

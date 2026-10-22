@@ -22,7 +22,7 @@ export interface FeedQuestion { key: string; wordbookId: string; word: string; c
 /** A sentence from the 원정대 문장 세트: `text` without the / marks, `chunked` as registered (the pieces). */
 export interface FeedSentence { wordbookId: string; text: string; chunked: string; meaning: string }
 /** `stage`: the 원정대 stage this game is for (none for a plain game). */
-export interface FeedRun { id: string; questions: FeedQuestion[]; results: {choice: number; correct: boolean; points: number}[]; startedAt: number; finished: boolean; stage?: string; slot?: number }
+export interface FeedRun { id: string; questions: FeedQuestion[]; results: {choice: number; correct: boolean; points: number}[]; startedAt: number; finished: boolean; stage?: string; slot?: number; /** 단어 과제 (petWordTasks): the task this game is for */ task?: string }
 export interface PetGameState { version: 1; day: string; rewardedToday: string[]; run: FeedRun | null; updatedAt: number }
 export interface FeedSource { books: {id: string; words: FeedWord[]}[]; wrongs: FeedWord[] }
 
@@ -35,7 +35,7 @@ export const initialGameState = (now = Date.now()): PetGameState => ({version: 1
 export function rollGameDay(g: PetGameState, now = Date.now()) { const day = seoulDay(now); if (g.day !== day) { g.day = day; g.rewardedToday = []; } return g; }
 
 /** Two meanings from the same book that share nothing with the answer or with each other; null when that isn't possible. */
-function distractors(answer: FeedWord, pool: FeedWord[], rand: () => number) {
+export function distractors(answer: FeedWord, pool: FeedWord[], rand: () => number) {
   const picks: string[] = [];
   for (const w of shuffle(pool, rand)) {
     if (picks.length === PET_WORD_FEED.choices - 1) break;
@@ -44,7 +44,7 @@ function distractors(answer: FeedWord, pool: FeedWord[], rand: () => number) {
   }
   return picks.length === PET_WORD_FEED.choices - 1 ? picks : null;
 }
-function shuffle<T>(list: T[], rand: () => number) { const a = [...list]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+export function shuffle<T>(list: T[], rand: () => number) { const a = [...list]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 /** Build options: the stage's game, the sentences for it, and a quiet place (듣고 고르기 → 뜻 고르기, 낭독 → 문장 배열) or no
  *  speech recognition here (낭독 → 문장 배열). No sentences: 문장 배열 → 듣고 고르기 (뜻 고르기 when quiet), 낭독 → 철자. */
@@ -183,7 +183,7 @@ export function runSummary(run: FeedRun) {
 /** What the browser sees: answers only for questions already answered. */
 export function publicRun(run: FeedRun | null) {
   if (!run) return null;
-  return {id: run.id, stage: run.stage || null, finished: run.finished, total: run.questions.length, index: run.results.length,
+  return {id: run.id, stage: run.stage || null, task: run.task || null, finished: run.finished, total: run.questions.length, index: run.results.length,
     questions: run.questions.map((q, i) => {
       const type = q.type || 'meaning', done = i < run.results.length;
       // Never the answer before it is given: 철자 gets the given letters and the shuffled rest, 문장 배열 the shuffled pieces,

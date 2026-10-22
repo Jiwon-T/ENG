@@ -42,12 +42,15 @@ export default function ExpeditionMap({ state, send, onClose, onGuild, initial }
   const [notice, setNotice] = useState('');
   const [jobLater, setJobLater] = useState(false);
   const [quietFor, setQuietFor] = useState<{ id: string; restart: boolean } | null>(null); // before the early return (hook order)
+  // 단어 과제 (선생님이 낸 단어장·Day 범위): shown above the map; a game of one costs no energy
+  const [tasks, setTasks] = useState<{ id: string; title: string; total: number; mastered: number; completedAt: number | null }[]>([]);
+  const loadTasks = async () => { const r: any = await send('word-tasks'); setTasks(r.tasks || []); };
   const pet = state.pets.find(p => p.slot === state.currentPetSlot)!;
   const chooseJob = async (job: PetJob) => { setBusy(true); setNotice(''); try { const r = await send('choose-job', { job }); if (r.expedition) setExp(r.expedition); } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); } finally { setBusy(false); } };
   const chooseJob2 = async (job2: PetJob2) => { setBusy(true); setNotice(''); try { const r = await send('choose-job2', { job2 }); if (r.expedition) setExp(r.expedition); } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); } finally { setBusy(false); } };
 
   const refresh = async () => { const r = await send('expedition-state'); if (r.expedition) { setExp(r.expedition); setChapterId(id => id || r.expedition!.current.split('-')[0]); } setRun(r.run || null); };
-  useEffect(() => { void refresh().catch(e => setNotice(e?.message || '지도를 불러오지 못했어요.')); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void refresh().catch(e => setNotice(e?.message || '지도를 불러오지 못했어요.')); void loadTasks().catch(() => undefined); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Seven chapters don't fit in one row: keep the open chapter's tab in view.
   useEffect(() => { if (chapterId) document.querySelector(`[data-chapter-tab="${chapterId}"]`)?.scrollIntoView({ block: 'nearest', inline: 'center' }); }, [chapterId, exp === null]);
 
@@ -72,9 +75,17 @@ export default function ExpeditionMap({ state, send, onClose, onGuild, initial }
     } finally { setBusy(false); }
   };
 
+  const playTask = async (id: string, restart = false): Promise<void> => {
+    setBusy(true); setNotice('');
+    try { const r = await send('feed-start', { task: id, ...(restart ? { restart: true } : {}) }); if (r.run) { setRun(r.run); setPlaying(true); } }
+    catch (e: any) {
+      if (e?.code === 'FEED_OTHER_RUN' && await askConfirm({ title: '하던 판이 있어요', message: '하던 판을 그만두고 단어 과제를 풀까요? (과제 판은 기운을 쓰지 않아요)', confirmText: '그만두고 풀기' })) { setBusy(false); return playTask(id, true); }
+      if (e?.code !== 'FEED_OTHER_RUN') { setNotice(e?.message || '잠시 후 다시 해 주세요.'); void loadTasks().catch(() => undefined); }
+    } finally { setBusy(false); }
+  };
   if (playing && run) return <WordFeed run={run} state={state} send={async (a, p) => { const r: any = await send(a, p); if (r.run) setRun(r.run); if (r.expedition) setExp(r.expedition); return r; }}
-    title={run.stage ? stageTitle(run.stage) : undefined}
-    onClose={() => { setPlaying(false); void refresh().catch(() => undefined); }}
+    title={run.stage ? stageTitle(run.stage) : run.task ? `📚 ${tasks.find(t => t.id === run.task)?.title || '단어 과제'}` : undefined}
+    onClose={() => { setPlaying(false); void refresh().catch(() => undefined); void loadTasks().catch(() => undefined); }}
     onNext={next => { setPlaying(false); setChapterId(next.split('-')[0]); setSelected(next); }} />;
 
   return (
@@ -88,6 +99,12 @@ export default function ExpeditionMap({ state, send, onClose, onGuild, initial }
         <div role="tablist" aria-label="장" className="-mx-4 mt-3 flex gap-1.5 overflow-x-auto px-4 pb-1">
           {exp.chapters.map(c => <button key={c.id} type="button" role="tab" data-chapter-tab={c.id} aria-selected={c.id === chapterId} onClick={() => { setChapterId(c.id); setSelected(null); }} className={`flex flex-none items-center justify-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold ${c.id === chapterId ? 'bg-[#e0587a] text-white' : c.unlocked ? 'bg-[#f8f1f2] text-[#8b2f40]' : 'bg-[#f8f1f2] text-slate-400'}`}>{c.title}{!c.levelOk ? <span className="text-[10px]">Lv.{c.minLevel}</span> : !c.unlocked && <Lock size={11} aria-label="잠김" />}{c.rewarded && <Check size={12} aria-label="완료" />}</button>)}
         </div>
+        {tasks.filter(t => !t.completedAt || Date.now() - t.completedAt < 3 * 86400000).slice(0, 3).map(t => <div key={t.id} className={`mt-3 rounded-2xl border-2 px-3 py-2.5 ${t.completedAt ? 'border-[#c0dd97] bg-[#eaf3de] text-[#27500a]' : 'border-[#b5d4f4] bg-[#e6f1fb] text-[#0c447c]'}`}>
+          <div className="flex items-center justify-between text-sm font-black"><span>{t.completedAt ? '✅ 과제 완료' : '📚 단어 과제'}</span><span className="text-xs font-bold">{t.mastered} / {t.total}</span></div>
+          <p className="mt-0.5 text-xs font-bold">{t.title}</p>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/70"><span className="block h-full rounded-full bg-[#1d9e75]" style={{ width: `${Math.round(t.mastered / Math.max(1, t.total) * 100)}%` }} /></div>
+          {!t.completedAt && <div className="mt-2 flex items-center justify-between gap-2"><span className="text-[10px] opacity-80">처음에 맞힌 단어만 쌓여요 · 기운을 쓰지 않아요</span><button type="button" disabled={busy} onClick={() => void playTask(t.id)} className="flex-none rounded-full bg-[#185fa5] px-3 py-1 text-xs font-bold text-white">{run && !run.finished && run.task === t.id ? '이어 풀기 →' : '과제 풀기 →'}</button></div>}
+        </div>)}
         <p className="mt-2 text-center text-xs font-bold text-[#8b2f40]">{chapter.name}{!chapter.levelOk && <span className="ml-1 text-slate-500">· 대표 펫 Lv.{chapter.minLevel}부터 갈 수 있어요</span>}</p>
 
         <div className="relative mt-2 aspect-[23/30] w-full overflow-hidden rounded-3xl" style={{ background: look.bg }}>

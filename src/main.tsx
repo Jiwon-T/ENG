@@ -1,3 +1,5 @@
+// First: keeps a translated page from crashing React (see translateGuard).
+import './lib/translateGuard';
 import {StrictMode, Suspense, lazy} from 'react';
 import {createRoot} from 'react-dom/client';
 import { parentStartupSlug } from './lib/startupRoute';

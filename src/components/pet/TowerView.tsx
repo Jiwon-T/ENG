@@ -68,6 +68,7 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
   useEffect(() => { void send('tower-state'); return () => window.clearTimeout(feedbackTimer.current); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = tower?.run || (feedback ? frozen : null), q = feedback ? feedback.q : run?.q || null;
+  const prompt = q && run ? (q.order ? <>이 뜻이 되게 문장을 맞춰요 <b className="font-black">“{q.prompt}”</b></> : q.kind === 'attack' ? <>이 뜻의 영어 단어는? <b className="font-black">“{q.prompt}”</b></> : <>{run.monster.name}의 공격! 막으려면 뜻을 골라요 <b className="font-black">{q.prompt}</b></>) : null;
   // In battle the pet wears its outfit and holds its tower weapon (instead of a shop item in that hand).
   const battleLook = tower?.equip.weapon ? [...wornAccessories(pet).filter(id => accessorySlot(id) !== 'hand'), tower.equip.weapon] : wornAccessories(pet);
   // The monster's turn has a time limit: answer before it runs out (the server checks the time too). One timer for the
@@ -164,7 +165,9 @@ export default function TowerView({ state, onState, onClose }: { state: PetState
           {run.foe?.next && !feedback && q?.kind !== 'defend' && <FoeWarning monster={run.monster.name} next={run.foe.next} />}
           <div className="space-y-2 bg-white p-3">
             <p role="status" aria-live="polite" className="min-h-[44px] rounded-xl border-2 border-[#26215c] px-3 py-2 text-sm font-medium text-[#26215c]">
-              {message || (q ? (q.order ? <>이 뜻이 되게 문장을 맞춰요 <b className="font-black">“{q.prompt}”</b></> : q.kind === 'attack' ? <>이 뜻의 영어 단어는? <b className="font-black">“{q.prompt}”</b></> : <>{run.monster.name}의 공격! 막으려면 뜻을 골라요 <b className="font-black">{q.prompt}</b></>) : '무엇을 할까요?')}
+              {/* While a word is asked its prompt always shows; a message from the event or last move (몬스터가 깼어요! …) sits above it. */}
+              {q && !feedback ? <>{message && <span className="mb-0.5 block text-xs font-bold text-[#b04a5a]">{message}</span>}{prompt}</>
+                : message || prompt || '무엇을 할까요?'}
             </p>
             {q ? <>
               {q.kind === 'defend' && defendMs !== null && <div key={`${run.id}:${q.prompt}`} className="h-1.5 overflow-hidden rounded-full bg-[#fcebeb]" aria-label={`남은 시간 ${Math.ceil(defendMs / 1000)}초`}><div className="h-full rounded-full bg-[#e24b4a]" style={{ width: `${Math.min(100, (defendMs / (q.msTotal || PET_TOWER.defendSeconds * 1000)) * 100)}%`, animation: `tw-drain ${defendMs}ms linear forwards` }} /></div>}
