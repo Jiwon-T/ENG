@@ -30,8 +30,14 @@ test('과제 판: only the words not yet right (10 at most, wrong meanings from 
   const {id, task} = await studentWordTask(f.db, K, view.id);
   await assert.rejects(studentWordTask(f.db, '22222222-2222-4222-8222-222222222222', view.id), /WORD_TASK_NOT_FOUND/, 'another student');
   const run = buildTaskRun(id, task, 5000)!;
-  assert.equal(run.task, id); assert.equal(run.questions.length, 10);
-  assert.ok(run.questions.every(q => q.choices.length === 3 && q.choices[q.answer] && /^wm:word\d+$/.test(q.key)));
+  assert.equal(run.task, id); assert.ok(run.questions.length <= 10);
+  const types = new Set(run.questions.map(q => q.type || 'meaning'));
+  assert.ok(types.has('match') && types.has('meaning') && types.has('listen'), `the 원정대 games mixed: ${[...types]}`);
+  const asked = run.questions.flatMap(q => q.type === 'match' ? q.pairs!.map(p => p.key) : [q.key]);
+  assert.equal(new Set(asked).size, asked.length, 'each word once');
+  assert.ok(asked.every(k => /^wm:word\d+$/.test(k)), 'only the task words');
+  assert.ok(run.questions.filter(q => !q.type || q.type === 'listen').every(q => q.choices.length === 3 && q.choices[q.answer]));
+  assert.equal(buildTaskRun(id, task, 5000, Math.random, {quiet: true})!.questions.some(q => q.type === 'listen'), false, 'quiet: no 듣고 고르기');
   // 11 of 12 right
   const keys = Array.from({length: 12}, (_, i) => `wm:word${i}`);
   let after: any = await markTaskWords(f.db, id, keys.slice(0, 11), 6000);

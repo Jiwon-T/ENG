@@ -42,6 +42,7 @@ export default function ExpeditionMap({ state, send, onClose, onGuild, initial }
   const [notice, setNotice] = useState('');
   const [jobLater, setJobLater] = useState(false);
   const [quietFor, setQuietFor] = useState<{ id: string; restart: boolean } | null>(null); // before the early return (hook order)
+  const [quietTask, setQuietTask] = useState<{ id: string; restart: boolean } | null>(null); // 단어 과제 mixes in 듣고 고르기: asked first too
   // 단어 과제 (선생님이 낸 단어장·Day 범위): shown above the map; a game of one costs no energy
   const [tasks, setTasks] = useState<{ id: string; title: string; total: number; mastered: number; completedAt: number | null }[]>([]);
   const loadTasks = async () => { const r: any = await send('word-tasks'); setTasks(r.tasks || []); };
@@ -75,16 +76,19 @@ export default function ExpeditionMap({ state, send, onClose, onGuild, initial }
     } finally { setBusy(false); }
   };
 
-  const playTask = async (id: string, restart = false): Promise<void> => {
-    setBusy(true); setNotice('');
-    try { const r = await send('feed-start', { task: id, ...(restart ? { restart: true } : {}) }); if (r.run) { setRun(r.run); setPlaying(true); } }
+  const playTask = async (id: string, restart = false, quiet?: boolean): Promise<void> => {
+    const resuming = run && !run.finished && run.task === id && !restart;
+    if (quiet === undefined && !resuming) { setQuietTask({ id, restart }); return; }
+    setQuietTask(null); setBusy(true); setNotice('');
+    try { const r = await send('feed-start', { task: id, ...(restart ? { restart: true } : {}), quiet: quiet === true }); if (r.run) { setRun(r.run); setPlaying(true); } }
     catch (e: any) {
-      if (e?.code === 'FEED_OTHER_RUN' && await askConfirm({ title: '하던 판이 있어요', message: '하던 판을 그만두고 단어 과제를 풀까요? (과제 판은 기운을 쓰지 않아요)', confirmText: '그만두고 풀기' })) { setBusy(false); return playTask(id, true); }
+      if (e?.code === 'FEED_OTHER_RUN' && await askConfirm({ title: '하던 판이 있어요', message: '하던 판을 그만두고 단어 과제를 풀까요? (과제 판은 기운을 쓰지 않아요)', confirmText: '그만두고 풀기' })) { setBusy(false); return playTask(id, true, quiet); }
       if (e?.code !== 'FEED_OTHER_RUN') { setNotice(e?.message || '잠시 후 다시 해 주세요.'); void loadTasks().catch(() => undefined); }
     } finally { setBusy(false); }
   };
   if (playing && run) return <WordFeed run={run} state={state} send={async (a, p) => { const r: any = await send(a, p); if (r.run) setRun(r.run); if (r.expedition) setExp(r.expedition); return r; }}
     title={run.stage ? stageTitle(run.stage) : run.task ? `📚 ${tasks.find(t => t.id === run.task)?.title || '단어 과제'}` : undefined}
+    task={run.task ? tasks.find(t => t.id === run.task) || null : null}
     onClose={() => { setPlaying(false); void refresh().catch(() => undefined); void loadTasks().catch(() => undefined); }}
     onNext={next => { setPlaying(false); setChapterId(next.split('-')[0]); setSelected(next); }} />;
 
@@ -150,6 +154,7 @@ export default function ExpeditionMap({ state, send, onClose, onGuild, initial }
         </div>
       </div>}
 
+      {quietTask && <QuietPrompt onLoud={() => void playTask(quietTask.id, quietTask.restart, false)} onQuiet={() => void playTask(quietTask.id, quietTask.restart, true)} quietLabel="조용히 해야 해요 → 소리 없는 문제만" />}
       {quietFor && <QuietPrompt onLoud={() => void start(quietFor.id, quietFor.restart, false)} onQuiet={() => void start(quietFor.id, quietFor.restart, true)} quietLabel="조용히 해야 해요 → 소리 없는 게임으로" />}
       {stage && <div className="fixed inset-0 z-[85] flex items-end justify-center bg-slate-900/30" onClick={e => { if (e.target === e.currentTarget) setSelected(null); }}>
         <div role="dialog" aria-modal="true" aria-labelledby="stage-title" className="w-full max-w-md rounded-t-3xl bg-white px-5 pb-6 pt-4 text-center">

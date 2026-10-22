@@ -49,7 +49,7 @@ export function shuffle<T>(list: T[], rand: () => number) { const a = [...list];
 /** Build options: the stage's game, the sentences for it, and a quiet place (듣고 고르기 → 뜻 고르기, 낭독 → 문장 배열) or no
  *  speech recognition here (낭독 → 문장 배열). No sentences: 문장 배열 → 듣고 고르기 (뜻 고르기 when quiet), 낭독 → 철자. */
 export interface BuildOptions { game?: StageGame; sentences?: FeedSentence[]; quiet?: boolean; noMic?: boolean }
-const spellable = (w: string) => /^[a-z]{3,12}$/i.test(w.trim());
+export const spellable = (w: string) => /^[a-z]{3,12}$/i.test(w.trim());
 const sentenceKey = (s: FeedSentence) => `${s.wordbookId}:s:${s.text.toLowerCase().slice(0, 80)}`;
 
 /** One game. 뜻 고르기 (and 듣고 고르기): up to 3 wrong answers first, then words not rewarded today; a word whose 3 cards

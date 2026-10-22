@@ -10,6 +10,7 @@ import LinkCodeDialog from './student/LinkCodeDialog';
 import RosyLogo from './RosyLogo';
 import { PassBadge, PetPointsChip, RankChip } from './PassBadge';
 import { AssignedQuestionRow } from './generator/AssignedQuestions';
+import HomeWordTasks from './pet/HomeWordTasks';
 import { PetService, type PetSummary } from '../lib/petService';
 import PointsInbox from './pet/PointsInbox';
 const loadPetRanking = () => import('./pet/PetRanking');
@@ -60,6 +61,8 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
     return () => { live = false; };
   }, [userUid, isEducator]);
   const pending = typeof pendingAssignmentCount === 'number' && lessonPending?.uid === userUid ? pendingAssignmentCount + lessonPending.count : null;
+  // 원정대 단어 과제 not done yet: counted with the 숙제 on the 오늘 badge
+  const [wordTasks, setWordTasks] = useState(0), homework = (pending || 0) + wordTasks;
   const isSuperAdmin = userEmail === 'lizzieshere1@gmail.com';
 
   const today = new Intl.DateTimeFormat('ko-KR', {timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', weekday: 'long'}).format(new Date());
@@ -112,11 +115,12 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
 
       <div className="px-4 md:px-6">
         <section aria-label="오늘" className="relative -mt-8 rounded-2xl border border-[#f6e3e6] bg-white px-4 py-3 shadow-sm shadow-[#f5a3a81f] md:-mt-10 md:rounded-3xl md:px-6 md:py-4">
-          <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-black text-[#5e1e2a] md:text-base">오늘</h2>{!isEducator && pending !== null && pending > 0 && <span className="rounded-full bg-[#f5a3a8] px-2 py-0.5 text-[11px] font-bold text-[#5e1e2a]">숙제 {pending}</span>}</div>
+          <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-black text-[#5e1e2a] md:text-base">오늘</h2>{!isEducator && (pending !== null || wordTasks > 0) && homework > 0 && <span className="rounded-full bg-[#f5a3a8] px-2 py-0.5 text-[11px] font-bold text-[#5e1e2a]">숙제 {homework}</span>}</div>
           {isEducator ? <button type="button" onClick={() => onNavigate('teacher-room')} className={row}><span className={rowIcon}><Users size={15} className={rowSvg} aria-hidden="true" /></span><span className="min-w-0 flex-1"><b className="block font-bold text-[#5e1e2a]">선생님방</b><span className="block text-xs text-slate-500 md:text-sm">수업 일지 · 일정 · 성적 관리</span></span><ChevronRight size={16} className={rowArrow} aria-hidden="true" /></button> : <>
             {nextSchedule?.uid === userUid && nextSchedule.schedule && <button type="button" onClick={() => onNavigate('report')} className={row}><span className={rowIcon}><Clock size={15} className={rowSvg} aria-hidden="true" /></span><span className="min-w-0 flex-1 truncate">다음 수업 · {scheduleTime(nextSchedule.schedule.startAt)} {nextSchedule.schedule.title}</span><ChevronRight size={16} className={rowArrow} aria-hidden="true" /></button>}
             <button type="button" onClick={() => onNavigate('report')} className={row}><span className={rowIcon}><CheckCircle2 size={15} className={rowSvg} aria-hidden="true" /></span><span className="min-w-0 flex-1">{pending !== null ? (pending > 0 ? `미완료 수업 숙제 ${pending}개` : '미완료 수업 숙제 없음') : '숙제 · 일정 확인하기'}</span><ChevronRight size={16} className={rowArrow} aria-hidden="true" /></button>
             {studentLinked && <AssignedQuestionRow onOpen={() => onNavigate('report')} rowClass={row} iconClass={rowIcon} svgClass={rowSvg} arrowClass={rowArrow} />}
+            {studentLinked && userRole === 'student' && <HomeWordTasks rowClass={row} iconClass={rowIcon} arrowClass={rowArrow} onCount={setWordTasks} />}
           </>}
           {recent && onResume && <button type="button" onClick={() => onResume(recent)} className={row}><span className={rowIcon}><PlayCircle size={15} className={rowSvg} aria-hidden="true" /></span><span className="min-w-0 flex-1 truncate">이어하기 · {recent.title} · 범위 {recent.chunk + 1}</span><ChevronRight size={16} className={rowArrow} aria-hidden="true" /></button>}
         </section>

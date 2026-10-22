@@ -1,3 +1,4 @@
+import { wordTaskResult } from '../../lib/wordTaskResult';
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
@@ -15,7 +16,13 @@ export interface StageOutcome { stage: string; boss?: boolean; stars: number; be
 export interface FeedRunView { id: string; stage?: string | null; /** 단어 과제 game */ task?: string | null; finished: boolean; total: number; index: number; questions: FeedQuestionView[]; summary?: { correct: number; total: number; points: number; stars: number } }
 
 /** `title`: the 원정대 stage name; `onNext`: open the stage this one just unlocked. */
-export default function WordFeed({ run: initial, state, send, onClose, title, onNext }: { run: FeedRunView; state: PetState; send: (action: string, payload?: Record<string, unknown>) => Promise<PetResponse & { run?: FeedRunView }>; onClose: () => void; title?: string; onNext?: (stage: string) => void }) {
+/** A 단어 과제 as the result screen shows it. */
+export interface FeedTaskView { title: string; total: number; mastered: number; completedAt: number | null }
+export default function WordFeed({ run: initial, state, send: sendRaw, onClose, title, onNext, task: taskStart }: { run: FeedRunView; state: PetState; send: (action: string, payload?: Record<string, unknown>) => Promise<PetResponse & { run?: FeedRunView }>; onClose: () => void; title?: string; onNext?: (stage: string) => void; /** 단어 과제 game: the task (kept up to date from each answer) */ task?: FeedTaskView | null }) {
+  // 단어 과제: each answer brings the task back (맞힘 so far, done when every word is right)
+  const [task, setTask] = useState<FeedTaskView | null>(taskStart || null);
+  const taskEnd = wordTaskResult(task);
+  const send: typeof sendRaw = async (action, payload) => { const r: any = await sendRaw(action, payload); if (r?.result?.task) setTask(r.result.task); return r; };
   const [run, setRun] = useState(initial);
   const [shown, setShown] = useState<number | null>(null); // question whose answer is on screen
   const [busy, setBusy] = useState(false);
@@ -46,9 +53,9 @@ export default function WordFeed({ run: initial, state, send, onClose, title, on
     } finally { setBusy(false); }
   };
   const again = async (quiet?: boolean) => {
-    if (quiet === undefined && stageHasSound(run.stage)) { setQuietAsk(true); return; }
+    if (quiet === undefined && (stageHasSound(run.stage) || run.task)) { setQuietAsk(true); return; }
     setQuietAsk(false); setBusy(true); setNotice('');
-    try { const r = await send('feed-start', run.stage ? { stage: run.stage, quiet: quiet === true, noMic: !speechRecognitionClass() } : run.task ? { task: run.task } : {}); if (r.run) { setRun(r.run); setShown(null); setOutcome(null); } } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); } finally { setBusy(false); }
+    try { const r = await send('feed-start', run.stage ? { stage: run.stage, quiet: quiet === true, noMic: !speechRecognitionClass() } : run.task ? { task: run.task, quiet: quiet === true } : {}); if (r.run) { setRun(r.run); setShown(null); setOutcome(null); } } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); } finally { setBusy(false); }
   };
 
   const answered = q?.answer !== undefined && shown !== null;
@@ -66,10 +73,12 @@ export default function WordFeed({ run: initial, state, send, onClose, title, on
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#f6e3e6]"><div className="h-full rounded-full bg-[#e0587a] transition-all" style={{ width: `${(run.index / Math.max(1, run.total)) * 100}%` }} /></div>
 
         {done ? <div className="mt-6 text-center">
-          <h2 className="text-lg font-black text-[#5e1e2a]">{outcome ? (outcome.cleared ? `${title || '스테이지'} 통과!` : outcome.boss ? '조금만 더! 별 2개면 통과예요' : '조금만 더! 절반 이상 맞히면 통과예요') : '다 먹었어요!'}</h2>
+          <h2 className="text-lg font-black text-[#5e1e2a]">{run.task ? taskEnd.heading : outcome ? (outcome.cleared ? `${title || '스테이지'} 통과!` : outcome.boss ? '조금만 더! 별 2개면 통과예요' : '조금만 더! 절반 이상 맞히면 통과예요') : '다 먹었어요!'}</h2>
           <p className="mt-1 text-2xl tracking-widest text-[#f2b84b]" aria-label={`별 ${run.summary!.stars}개`}>{'★'.repeat(run.summary!.stars)}<span className="text-[#ece3e5]">{'★'.repeat(3 - run.summary!.stars)}</span></p>
           <div className="mt-2 flex justify-center"><PetCharacter character={pet.character} stage={petStage(pet.level)} clothing={pet.clothing} accessory={wornAccessories(pet)} gear={petGearView(pet)} size={110} /></div>
           <div className="mx-auto mt-3 max-w-xs rounded-2xl bg-[#fdf6f7] px-4 py-3 text-left text-xs leading-6 text-[#5e1e2a]">
+            {run.task && task && <span className={`mb-2 block rounded-xl px-3 py-2 ${taskEnd.done ? 'bg-[#eaf3de] text-[#27500a]' : 'bg-[#e6f1fb] text-[#0c447c]'}`}><b className="block font-black">{taskEnd.line}</b>{task.title}
+              <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-white/70"><span className="block h-full rounded-full bg-[#1d9e75]" style={{ width: `${taskEnd.percent}%` }} /></span></span>}
             처음 맞힌 문제 {run.summary!.correct} / {run.summary!.total}개 · <b className="font-bold">+{run.summary!.points}P</b><br />
             {outcome && outcome.bonuses.map(b => { const full = PET_EXPEDITION.bonus[b as keyof typeof PET_EXPEDITION.bonus], got = outcome.paid?.[b] ?? 0; return <span key={b} className="block">{b === 'clear' ? '처음 통과 보너스' : b === 'star2' ? '★★ 처음 달성' : '★★★ 처음 달성'} <b className="font-bold">+{got}P</b>{got < full && <span className="text-slate-400"> (오늘 공부 포인트가 가득 찼어요)</span>}</span>; })}
             {outcome?.unlocked && <span className="block font-bold text-[#b04a5a]">다음 스테이지가 열렸어요!</span>}
@@ -78,9 +87,10 @@ export default function WordFeed({ run: initial, state, send, onClose, title, on
             <span className="text-slate-500">오늘 공부 포인트 {state.today.studyPoints} / {state.today.studyCap}P · 기운 {pet.energy}</span>
           </div>
           {outcome?.unlocked && onNext ? <button type="button" onClick={() => onNext(outcome.unlocked!)} className="mt-4 w-full rounded-2xl bg-[#e0587a] py-3 text-sm font-bold text-white">다음 스테이지</button>
+            : run.task ? (taskEnd.more && <button type="button" disabled={busy} onClick={() => void again(undefined)} className="mt-4 w-full rounded-2xl bg-[#185fa5] py-3 text-sm font-bold text-white disabled:opacity-60">다음 판 (기운 안 씀)</button>)
             : <button type="button" disabled={busy} onClick={() => void again(undefined)} className="mt-4 w-full rounded-2xl bg-[#e0587a] py-3 text-sm font-bold text-white disabled:opacity-60">{run.stage ? '다시 도전' : '한 판 더'} (기운 {PET_WORD_FEED.energy})</button>}
           {outcome?.unlocked && onNext && <button type="button" disabled={busy} onClick={() => void again(undefined)} className="mt-2 w-full rounded-2xl border border-[#f3d5da] py-2.5 text-sm font-bold text-[#8b2f40]">다시 도전 (기운 {PET_WORD_FEED.energy})</button>}
-          <button type="button" onClick={onClose} className="mt-2 w-full rounded-2xl border border-[#f3d5da] py-2.5 text-sm font-bold text-[#8b2f40]">{run.stage ? '지도로 돌아가기' : '펫에게 돌아가기'}</button>
+          <button type="button" onClick={onClose} className="mt-2 w-full rounded-2xl border border-[#f3d5da] py-2.5 text-sm font-bold text-[#8b2f40]">{run.stage || run.task ? '지도로 돌아가기' : '펫에게 돌아가기'}</button>
           <p className="mt-3 text-[11px] text-slate-400">오늘 이미 포인트를 받은 단어는 다시 맞혀도 포인트가 없어요.</p>
         </div> : q && <>
           <div className={`relative mt-4 flex items-end justify-center overflow-hidden rounded-3xl bg-[#fdf6f7] ${type === 'meaning' || type === 'listen' ? 'h-52' : 'h-36'}`}>

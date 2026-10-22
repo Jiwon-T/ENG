@@ -338,7 +338,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       const {id, task} = await studentWordTask(db, await couponStudentKey(db, uid).catch(() => null), body.task), restart = body.restart === true;
       const current = (await db.collection(PET_GAMES).doc(uid).get()).data() as PetGameState | undefined, active = current?.run && !current.run.finished ? current.run : null;
       if (active && !restart && active.task !== id) return fail('FEED_OTHER_RUN', 409);
-      const fresh = active && !restart ? null : buildTaskRun(id, task, now);
+      const fresh = active && !restart ? null : buildTaskRun(id, task, now, Math.random, {quiet: body.quiet === true});
       if (!fresh && !(active && !restart)) return fail('WORD_TASK_DONE');
       return feedDone(await changeGame(db, uid, now, (_s, g) => {
         const live = g.run && !g.run.finished ? g.run : null;
@@ -373,7 +373,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
         return {resumed: false, energy: PET_WORD_FEED.energy};
       }));
     }
-    if (action === 'feed-answer') { let mark: {id: string; key: string} | null = null; const out = await changeGame(db, uid, now, (s, g, e, party) => {
+    if (action === 'feed-answer') { let mark: {id: string; keys: string[]} | null = null; const out = await changeGame(db, uid, now, (s, g, e, party) => {
       const index = Number(body.index), r: any = answerRun(g, s, String(body.runId || ''), index, {choice: body.choice === undefined ? undefined : Number(body.choice), text: typeof body.text === 'string' ? body.text.slice(0, 400) : undefined, correct: body.correct === true, pick: Array.isArray(body.pick) ? [Number(body.pick[0]), Number(body.pick[1])] : undefined}), q = g.run?.questions[index];
       // Party: a word answered right for the first time (sentences and boards don't count toward the boss).
       if (party && !r.repeat && !r.pending && r.correct && q && !q.retry && ['meaning', 'listen', 'spell', undefined].includes(q.type)) r.party = addContribution(party, uid, q.key, petLook(s), now);
@@ -381,10 +381,10 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       if (!r.repeat && g.run?.finished) noteQuest(s, 'feed');
       if (!r.repeat && g.run?.finished && g.run.stage) r.expedition = finishStage(e, s, g.run.stage, runSummary(g.run).stars, g.run.slot);
       // 단어 과제: a word right the first time in this game counts toward the task
-      if (!r.repeat && !r.pending && r.correct && q && !q.retry && g.run?.task) mark = {id: g.run.task, key: q.key};
+      if (!r.repeat && !r.pending && r.correct && q && !q.retry && g.run?.task) mark = {id: g.run.task, keys: q.type === 'match' ? (q.pairs || []).map(p => p.key) : [q.key]}; // a 짝 맞추기 board: its words
       return r;
     });
-    if (mark) { const m: {id: string; key: string} = mark; out.result.task = await markTaskWords(db, m.id, [m.key], now).catch(() => null); }
+    if (mark) { const m: {id: string; keys: string[]} = mark; out.result.task = await markTaskWords(db, m.id, m.keys, now).catch(() => null); }
     return feedDone(out); }
     if (action === 'choose-job') return feedDone(await changeGame(db, uid, now, (s, _g, e) => chooseJob(e, s, body.job)));
     if (action === 'choose-job2') return feedDone(await changeGame(db, uid, now, (s, _g, e) => chooseJob2(e, s, body.job2)));

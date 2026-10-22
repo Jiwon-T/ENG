@@ -21,3 +21,11 @@ test('home: the app bar is hidden on home (the header has the menu button); the 
  assert.match(app,/currentView !== 'teacher-room' && currentView !== 'home' && \(/);assert.match(app,/onOpenMenu=\{\(\) => setIsMenuOpen\(true\)\}/);
  assert.ok(fs.existsSync(new URL('../public/icons/icon-rosy-192.png',import.meta.url)));
 });
+
+test('home › 오늘: the 원정대 단어 과제 lines (a linked student) open the game here, and open ones count with the 숙제 badge',()=>{
+ const home=fs.readFileSync(new URL('../src/components/Home.tsx',import.meta.url),'utf8'),rows=fs.readFileSync(new URL('../src/components/pet/HomeWordTasks.tsx',import.meta.url),'utf8');
+ assert.match(home,/studentLinked && userRole === 'student' && <HomeWordTasks rowClass=\{row\} iconClass=\{rowIcon\} arrowClass=\{rowArrow\} onCount=\{setWordTasks\} \/>/);
+ assert.match(home,/homework = \(pending \|\| 0\) \+ wordTasks/);assert.match(home,/숙제 \{homework\}/);
+ assert.match(rows,/filter\(\(t: TaskRow\) => !t\.completedAt\)/,'a task done leaves the list');
+ assert.match(rows,/PetService\.act\('feed-start', \{ task: task\.id, quiet/,'straight into the game (no map), asked about a quiet place first');
+});

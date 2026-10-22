@@ -3,7 +3,8 @@
 // right the first time in a game (a miss comes back in a later game). All of them right: the task is done (completedAt).
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
-import {distractors, shuffle, wordKey, type FeedQuestion, type FeedRun, type FeedWord} from './petWordFeed.js';
+import {distractors, meaningsOverlap, shuffle, spellable, wordKey, type FeedQuestion, type FeedRun, type FeedWord} from './petWordFeed.js';
+import {shuffledOrder} from '../../src/lib/sentenceGame.js';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 
 export const WORD_TASKS = 'petWordTasks';
@@ -70,18 +71,37 @@ export async function studentWordTask(db: any, studentKey: string | null, idInpu
   if (!t || t.removed || !studentKey || t.studentKey !== uuid(studentKey)) throw Error('WORD_TASK_NOT_FOUND');
   return {id, task: t};
 }
-/** A game of the task: the words not yet right (up to 10, in random order), each with 2 wrong meanings from the task's own
- *  words (so a few words left still make a game). Null when every word is right. */
-export function buildTaskRun(id: string, t: WordTask, now: number, rand: () => number = Math.random): FeedRun | null {
-  const pool: FeedWord[] = t.words.map(w => ({wordbookId: t.wordbookId, wordId: '', word: w.w, meaning: w.m})), done = new Set(t.mastered), questions: FeedQuestion[] = [];
-  for (const w of shuffle(pool.filter(w => !done.has(wordKey(w))), rand)) {
+/** A game of the task, from the words not yet right (in random order), with the 원정대 games mixed: one 짝 맞추기 board of
+ *  4 when 8 or more words are left, then 뜻 고르기 → 철자 (a word that can be spelled) → 듣고 고르기 in turn (뜻 고르기 in a
+ *  quiet place), up to 10 in all. Wrong meanings come from the task's own words, so a few words left still make a game.
+ *  Null when every word is right. */
+export function buildTaskRun(id: string, t: WordTask, now: number, rand: () => number = Math.random, options: {quiet?: boolean} = {}): FeedRun | null {
+  const pool: FeedWord[] = t.words.map(w => ({wordbookId: t.wordbookId, wordId: '', word: w.w, meaning: w.m})), done = new Set(t.mastered);
+  const left = shuffle(pool.filter(w => !done.has(wordKey(w))), rand), used = new Set<string>(), questions: FeedQuestion[] = [];
+  if (left.length >= 8) {
+    const pairs: {word: string; meaning: string; key: string}[] = [];
+    for (const w of left) { if (pairs.length === 4) break; if (pairs.some(p => meaningsOverlap(p.meaning, w.meaning) || p.word === w.word)) continue; pairs.push({word: w.word, meaning: w.meaning, key: wordKey(w)}); }
+    if (pairs.length >= 3) { pairs.forEach(p => used.add(p.key)); questions.push({key: pairs.map(p => p.key).join('|'), wordbookId: '', word: '', choices: [], answer: -1, type: 'match', pairs, meaningOrder: shuffledOrder(pairs.map(p => p.meaning), rand), matched: [], mistakes: 0}); }
+  }
+  const turns: ('meaning' | 'spell' | 'listen')[] = ['meaning', 'spell', options.quiet ? 'meaning' : 'listen'];
+  let turn = 0;
+  for (const w of left) {
     if (questions.length >= WORD_TASK_RULES.questions) break;
-    const wrong = distractors(w, pool, rand); if (!wrong) continue;
-    const choices = shuffle([w.meaning, ...wrong], rand);
-    questions.push({key: wordKey(w), wordbookId: t.wordbookId, word: w.word, choices, answer: choices.indexOf(w.meaning)});
+    const key = wordKey(w); if (used.has(key)) continue;
+    let kind = turns[turn % turns.length]; turn++;
+    if (kind === 'spell' && !spellable(w.word)) kind = 'meaning';
+    if (kind === 'spell') {
+      const hint = w.word.slice(0, Math.min(2, w.word.length - 1)), rest = w.word.slice(hint.length).split('');
+      questions.push({key, wordbookId: t.wordbookId, word: w.word, meaning: w.meaning, choices: [], answer: -1, type: 'spell', hint, letters: shuffledOrder(rest, rand).map(i => rest[i]), tries: 0});
+    } else {
+      const wrong = distractors(w, pool, rand); if (!wrong) continue;
+      const choices = shuffle([w.meaning, ...wrong], rand);
+      questions.push({key, wordbookId: t.wordbookId, word: w.word, choices, answer: choices.indexOf(w.meaning), ...(kind === 'listen' ? {type: 'listen' as const} : {})});
+    }
+    used.add(key);
   }
   if (!questions.length) return null;
-  return {id: `${now.toString(36)}${Math.floor(rand() * 1e9).toString(36)}`, questions, results: [], startedAt: now, finished: false, task: id};
+  return {id: `${now.toString(36)}${Math.floor(rand() * 1e9).toString(36)}`, questions: shuffle(questions, rand), results: [], startedAt: now, finished: false, task: id};
 }
 /** Words answered right the first time in a game count; all of them: done. */
 export async function markTaskWords(db: any, id: string, keys: string[], now = Date.now()) {
