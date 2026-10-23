@@ -4,7 +4,7 @@ import { verifyAdminAuth } from '../_lib/auth.js';
 import {
   LinkStudentAccountSchema,
   UnlinkStudentAccountSchema,
-  type StoredNotionStudentMapping,
+  type StoredStudentMapping,
 } from '../_lib/reportSchemas.js';
 import { lookupStudentIdentity, migrateStudentMapping, readStudentMapping } from '../_lib/studentIdentity.js';
 import { hashStudentKey } from '../_lib/security.js';
@@ -38,7 +38,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
     const { db } = getFirebaseAdmin();
 
     // ----------------------------------------------------
-    // GET: 특정 학생 계정(또는 노션 키)의 현재 연결 상태 조회
+    // GET: 특정 학생 계정(또는 학생 키)의 현재 연결 상태 조회
     // ----------------------------------------------------
     if (req.method === 'GET') {
       const url = new URL(req.url || '', 'http://localhost');
@@ -57,7 +57,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
         const udata = userDoc.data();
         const currentKey = udata?.notionStudentKey || null;
 
-        let mappingData: StoredNotionStudentMapping | null = null;
+        let mappingData: StoredStudentMapping | null = null;
         if (currentKey) {
           mappingData = await readStudentMapping(db, currentKey);
         }
@@ -89,7 +89,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
     }
 
     // ----------------------------------------------------
-    // POST: 관리자가 학생 Firebase UID와 Notion studentKey를 공식 연결
+    // POST: 관리자가 학생 Firebase UID와 studentKey를 공식 연결
     // ----------------------------------------------------
     if (req.method === 'POST') {
       const rawBody = await parseJsonBody(req);
@@ -155,7 +155,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
             if (canonicalSnap.exists) { mappingRef = canonicalRef; mappingSnap = canonicalSnap; }
           }
           if (mappingSnap.exists) {
-            const mdata = mappingSnap.data() as StoredNotionStudentMapping;
+            const mdata = mappingSnap.data() as StoredStudentMapping;
             if (mdata.firebaseUid === firebaseUid) {
               t.update(mappingRef, {
                 firebaseUid: null,

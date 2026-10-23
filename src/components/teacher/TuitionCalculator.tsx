@@ -39,11 +39,12 @@ export default function TuitionCalculator({busy,request,act,autoLoad=false,onDir
    <div className="rv-filters"><label className="student-master-search"><Search size={16} aria-hidden="true"/><input aria-label="학생 검색" placeholder="학생 이름·초성 검색" value={query} onChange={e=>setQuery(e.target.value)}/></label>
     <div className="rv-seg" role="group" aria-label="보기">{([['all','전체',rows.length],['missing','수강료 없음',missing],['edited','직접 고친 행',rows.filter((r:any)=>r.edited||r.dirty).length],['left','퇴원·중단',rows.filter((r:any)=>r.left).length]] as const).map(([k,l,n])=><button key={k} type="button" aria-pressed={filter===k} onClick={()=>setFilter(k)}>{l} {n}</button>)}</div></div>
    <div className="tu-table-wrap"><table className="tu-table">
-    <thead><tr><th scope="col">학생</th><th scope="col">과목</th><th scope="col" title="이번 달 이미 쓴 일지(수업 있음) 개수">일지</th><th scope="col" title="오늘 이후 남은 정규 수업(휴강 제외, 보강 포함)">남은 수업</th><th scope="col">수업 횟수</th><th scope="col" title="청구하지 않을 무료 보강 횟수">무료 보강</th><th scope="col">청구</th><th scope="col">수강료 (8회)</th><th scope="col">청구액</th></tr></thead>
+    <thead><tr><th scope="col">학생</th><th scope="col">과목</th><th scope="col" title="이번 달 마지막 회차 (수업 시간만큼 쌓여요). 수강료는 소수점을 버린 회차로 계산해요. 회차가 없는 과목은 일지 수로 계산해요.">회차</th><th scope="col" title="오늘 이후 남은 정규 수업(휴강 제외, 보강 포함)">남은 수업</th><th scope="col">수업 횟수</th><th scope="col" title="청구하지 않을 무료 보강 횟수">무료 보강</th><th scope="col">청구</th><th scope="col">수강료 (8회)</th><th scope="col">청구액</th></tr></thead>
     <tbody>{shown.map((r:any)=><tr key={r.key} className={r.changedSinceConfirm?'is-changed':r.dirty?'is-dirty':r.edited?'is-edited':''}>
      <th scope="row"><span className="tu-name">{r.name}</span>{r.classes.length>0&&<small>{r.classes.join(', ')}</small>}</th>
      <td>{r.subject}{r.left&&<small className="warn">{/퇴원|탈퇴/.test(r.enrollment||'')?r.enrollment:r.status==='기록만'?'수강 정보 없음':'중단'}{r.endDate?` · ${Number(r.endDate.slice(5,7))}/${Number(r.endDate.slice(8))}`:''}</small>}</td>
-     <td className="num">{r.written}{r.lastRound!=null&&<small>마지막 {r.lastRound}회{typeof r.taught==='number'&&r.taught!==r.written?` · ${r.taught}회 반영`:''}</small>}</td>
+     {/* 회차: the month's latest 회차 first (what the bill counts, 소수점 버림), the 일지 under it; no 회차: the 일지 count */}
+     <td className="num">{r.lastRound!=null?<>{r.lastRound}회<small>청구 {typeof r.taught==='number'?r.taught:Math.floor(r.lastRound)}회 · 일지 {r.written}</small></>:<>일지 {r.written}<small>회차 없음 · 일지 수로 계산</small></>}</td>
      <td className="num">{r.planned}</td>
      <td><input className="tu-in" inputMode="numeric" aria-label={`${r.name} ${r.subject} 수업 횟수`} value={r.sessions} onChange={e=>edit(r.key,'sessions',e.target.value)}/>{r.sessions!==r.expected&&<small>예상 {r.expected}</small>}</td>
      <td><input className="tu-in" inputMode="numeric" aria-label={`${r.name} ${r.subject} 무료 보강`} value={r.free||''} placeholder="0" onChange={e=>edit(r.key,'free',e.target.value)}/></td>

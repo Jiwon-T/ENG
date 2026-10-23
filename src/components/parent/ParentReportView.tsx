@@ -19,7 +19,7 @@ interface ParentReportViewProps {
 }
 
 /**
- * Notion 원문 상태값 보존 함수:
+ * 원문 상태값 보존 함수:
  * - 유효한 문자열이면 trim한 원문을 절대 변환/재해석/축약 없이 그대로 반환
  * - 값이 null, undefined, 비문자열 또는 공백일 때만 '미확인' 반환
  */

@@ -1,20 +1,20 @@
 import type { Firestore } from 'firebase-admin/firestore';
-import type { StoredNotionStudentMapping } from './reportSchemas.js';
+import type { StoredStudentMapping } from './reportSchemas.js';
 import { generateInternalStudentId, hashStudentKey } from './security.js';
 import { normalizeNotionPageId, isNotionPageId } from './notionPageId.js';
 import {coreActive,coreStudentIdentity,coreStudentPage} from './academyCore.js';
 
 /** Read-only bridge for previously linked accounts. Never claims an account. */
-export async function readStudentMapping(db: Firestore, key: string): Promise<StoredNotionStudentMapping | null> {
+export async function readStudentMapping(db: Firestore, key: string): Promise<StoredStudentMapping | null> {
   const storedKey = isNotionPageId(key) ? normalizeNotionPageId(key) : key;
   let old = await db.collection('notionStudentMappings').doc(hashStudentKey(storedKey)).get();
   if (!old.exists && storedKey !== key) old = await db.collection('notionStudentMappings').doc(hashStudentKey(key)).get();
   if (!old.exists) return null;
-  const mapping = old.data() as StoredNotionStudentMapping;
+  const mapping = old.data() as StoredStudentMapping;
   const canonicalKey = normalizeNotionPageId(mapping.sourceMode==='firestore'?mapping.studentKey:mapping.notionStudentPageId);
   if (storedKey === canonicalKey) return mapping;
   const canonical = await db.collection('notionStudentMappings').doc(hashStudentKey(canonicalKey)).get();
-  return canonical.exists ? canonical.data() as StoredNotionStudentMapping : mapping;
+  return canonical.exists ? canonical.data() as StoredStudentMapping : mapping;
 }
 
 /** Legacy keys are resolved only through saved server mappings, never by a student name. */
@@ -25,7 +25,7 @@ export async function resolveStudentPageId(db: Firestore, key: string): Promise<
   return normalizeNotionPageId(mapping.sourceMode==='firestore'?mapping.studentKey:mapping.notionStudentPageId);
 }
 
-/** Students live in the app since the core switch; there is no Notion lookup to fall back to. */
+/** Students live in the app since the core switch. */
 export async function lookupStudentIdentity(db: Firestore, key: string, requireGuardianContact = true) {
   if(!await coreActive(db,{academyId:'main'}))throw Error('CORE_NOT_READY');
   return coreStudentIdentity(db,await resolveStudentPageId(db,key),requireGuardianContact);
@@ -43,38 +43,38 @@ export async function lookupGuardianPhone(db: Firestore, key: string) {
  * Old index documents remain as read aliases for rollout; no reports are rewritten.
  * Called only by admin endpoints or the authenticated Make webhook.
  */
-export async function migrateStudentMapping(db: Firestore, pageId: string, displayName: string): Promise<StoredNotionStudentMapping> {
+export async function migrateStudentMapping(db: Firestore, pageId: string, displayName: string): Promise<StoredStudentMapping> {
   const studentKey = normalizeNotionPageId(pageId);
   const collection = db.collection('notionStudentMappings');
   const canonicalRef = collection.doc(hashStudentKey(studentKey));
   const legacyQuery = collection.where('notionStudentPageId', 'in', [studentKey, studentKey.replace(/-/g, '')]);
   return db.runTransaction(async t => {
     const canonical = await t.get(canonicalRef);
-    if(canonical.exists&&canonical.data()?.origin==='app'){const saved=canonical.data() as StoredNotionStudentMapping;if(saved.studentKey!==studentKey||saved.notionStudentPageId!==null)throw Error('STUDENT_MAPPING_CONFLICT');return saved;}
+    if(canonical.exists&&canonical.data()?.origin==='app'){const saved=canonical.data() as StoredStudentMapping;if(saved.studentKey!==studentKey||saved.notionStudentPageId!==null)throw Error('STUDENT_MAPPING_CONFLICT');return saved;}
     const legacy = await t.get(legacyQuery);
     const documents = legacy.docs.filter(doc => doc.id !== canonicalRef.id);
-    const records = [ ...(canonical.exists ? [canonical.data() as StoredNotionStudentMapping] : []),
-      ...documents.map(doc => doc.data() as StoredNotionStudentMapping) ];
+    const records = [ ...(canonical.exists ? [canonical.data() as StoredStudentMapping] : []),
+      ...documents.map(doc => doc.data() as StoredStudentMapping) ];
     for (const record of records) {
       if (normalizeNotionPageId(record.notionStudentPageId) !== studentKey) throw new Error('STUDENT_ID_MISMATCH');
     }
     const internalIds = new Set(records.map(record => record.internalStudentId));
     // Once migrated, canonical ownership is authoritative. Legacy aliases may be stale
     // after an explicit unlink and must never restore the former owner.
-    const ownerRecords = canonical.exists ? [canonical.data() as StoredNotionStudentMapping] : records;
+    const ownerRecords = canonical.exists ? [canonical.data() as StoredStudentMapping] : records;
     const owners = new Set(ownerRecords.map(record => record.firebaseUid).filter(Boolean));
     if (internalIds.size > 1 || owners.size > 1) throw new Error('STUDENT_MAPPING_CONFLICT');
     const firebaseUid = [...owners][0] || null;
     const userRef = firebaseUid ? db.collection('users').doc(firebaseUid) : null;
     const user = userRef ? await t.get(userRef) : null;
     const now = new Date().toISOString();
-    const existing = canonical.exists ? canonical.data() as StoredNotionStudentMapping
+    const existing = canonical.exists ? canonical.data() as StoredStudentMapping
       : records.find(record => record.firebaseUid) || records[0];
     const internalStudentId = existing?.internalStudentId || generateInternalStudentId(studentKey);
     const slugDocuments = await t.get(db.collection('reportSlugs').where('internalStudentId', '==', internalStudentId));
     const reportMappingRef = db.collection('studentReportMappings').doc(internalStudentId);
     const reportMapping = await t.get(reportMappingRef);
-    const mapping: StoredNotionStudentMapping = {
+    const mapping: StoredStudentMapping = {
       ...existing,
       studentKey,
       notionStudentPageId: studentKey,

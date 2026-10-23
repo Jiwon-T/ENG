@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import {
   LinkStudentAccountSchema,
   UnlinkStudentAccountSchema,
-  type StoredNotionStudentMapping,
+  type StoredStudentMapping,
   type StudentLessonReportDTO,
 } from '../api/_lib/reportSchemas.ts';
 
@@ -13,7 +13,7 @@ describe('Student Account Linking and Ownership Protection Tests', () => {
   it('1. Student API rejects when mapping firebaseUid is null', () => {
     const studentUid = 'student_uid_alice';
     const userProfile = { notionStudentKey: '학생A (복제고1)' };
-    const mapping: StoredNotionStudentMapping = {
+    const mapping: StoredStudentMapping = {
       internalStudentId: 'internal_id_a',
       studentKey: '학생A (복제고1)',
       studentDisplayName: '학생A',
@@ -38,7 +38,7 @@ describe('Student Account Linking and Ownership Protection Tests', () => {
   // 2. firebaseUid가 다른 UID면 403
   it('2. Student API rejects when mapping firebaseUid belongs to another user', () => {
     const attackerUid = 'attacker_uid_mallory';
-    const mapping: StoredNotionStudentMapping = {
+    const mapping: StoredStudentMapping = {
       internalStudentId: 'internal_id_victim',
       studentKey: '학생B (복제고1)',
       studentDisplayName: '학생B',
@@ -55,7 +55,7 @@ describe('Student Account Linking and Ownership Protection Tests', () => {
   // 3. firebaseUid가 현재 UID와 같을 때만 제한 DTO 반환
   it('3. Student API returns limited DTO only when mapping firebaseUid strictly matches', () => {
     const studentUid = 'legitimate_uid_charlie';
-    const mapping: StoredNotionStudentMapping = {
+    const mapping: StoredStudentMapping = {
       internalStudentId: 'internal_id_charlie',
       studentKey: '학생C (복제고1)',
       studentDisplayName: '학생C',
@@ -209,7 +209,7 @@ describe('Student Account Linking and Ownership Protection Tests', () => {
 
   // 11. 이미 다른 UID에 연결된 Notion 학생을 재연결하려 하면 충돌 (Conflict)
   it('11. Admin link conflict detection prevents taking over already linked Notion student', () => {
-    const existingMapping: StoredNotionStudentMapping = {
+    const existingMapping: StoredStudentMapping = {
       internalStudentId: 'internal_id_student1',
       studentKey: '학생1 (복제고1)',
       studentDisplayName: '학생1',
@@ -233,7 +233,7 @@ describe('Student Account Linking and Ownership Protection Tests', () => {
     assert.equal(parsed.success, true);
 
     // 해제된 상태
-    const unlinkedMapping: StoredNotionStudentMapping = {
+    const unlinkedMapping: StoredStudentMapping = {
       internalStudentId: 'internal_id_student1',
       studentKey: '학생1 (복제고1)',
       studentDisplayName: '학생1',

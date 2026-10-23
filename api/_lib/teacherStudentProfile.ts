@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {registrationGrades} from '../../src/lib/studentRegistration.js';
 import type {StudentProfileInput,StudentProfileRecord} from '../../src/lib/studentProfile.js';
 import {assertRegistrationAccess,type RegistrationActor} from './teacherStudentRegistration.js';
-import {REGISTRATION_STUDENT_DATABASE,registrationText} from './teacherStudentRegistrationNotion.js';
+import {STUDENT_SOURCE_ID,registrationText} from './studentRegistrationRows.js';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {hashPin,hashStudentKey} from './security.js';
 import {invalidateTeacherMutation} from './teacherReadCache.js';
@@ -25,7 +25,7 @@ export function profileProperties(data:StudentProfileInput,base:StudentProfileIn
     return Object.fromEntries((Object.keys(names) as (keyof StudentProfileInput)[]).filter(key=>data[key]!==base[key]).map(key=>[names[key],all[names[key]]]));
 }
 function assertPage(page:any,key:string) {
-    if(!page || page.archived || page.in_trash || uuid(page.id)!==key || uuid(page.parent?.database_id || '')!==REGISTRATION_STUDENT_DATABASE)throw Error('NOTION_SOURCE_MISMATCH');
+    if(!page || page.archived || page.in_trash || uuid(page.id)!==key || uuid(page.parent?.database_id || '')!==STUDENT_SOURCE_ID)throw Error('NOTION_SOURCE_MISMATCH');
 }
 async function access(db:any,actor:RegistrationActor,key:string) {
     assertRegistrationAccess(actor);

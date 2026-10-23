@@ -16,8 +16,6 @@ body:has(.teacher-workspace) nav.no-print.sticky {background:var(--workspace-sur
 .schedule-event-title {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;line-height:18px;font-weight:600;}
 .schedule-event-title-row .workspace-status-badge {font-size:11px;padding:1px 3px;}
 .schedule-event-subtitle {font-size:12px;line-height:16px;color:var(--workspace-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
-.schedule-event-card:has(.schedule-notion-link) .schedule-event-bottom {padding-right:20px;}
-.schedule-notion-link {position:absolute;bottom:8px;right:6px;width:24px;height:24px;display:grid;place-items:center;color:var(--workspace-muted);border-radius:8px;}
 .schedule-event-card.is-cancelled .schedule-event-title,.schedule-event-card.is-cancelled .schedule-event-time {text-decoration:line-through;color:var(--workspace-muted);}
 .schedule-week-board {container-name:schedule-board;container-type:inline-size;}
 .schedule-board-wide {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:stretch;}
@@ -43,7 +41,7 @@ body:has(.teacher-workspace) nav.no-print.sticky {background:var(--workspace-sur
 .schedule-skeleton {display:grid;gap:8px;min-height:240px;}
 .schedule-skeleton>span {display:block;min-height:72px;background:var(--workspace-neutral-bg);border-radius:12px;}
 @container schedule-board (width < 700px){.schedule-board-wide{display:none;}.schedule-board-narrow{display:block;}}
-@media(pointer:coarse){.schedule-notion-link,.schedule-week-column>header>button,.schedule-empty-day>button{min-width:44px;min-height:44px;}.schedule-event-card:has(.schedule-notion-link) .schedule-event-bottom{padding-right:40px;}}
+@media(pointer:coarse){.schedule-week-column>header>button,.schedule-empty-day>button{min-width:44px;min-height:44px;}}
 .teacher-workspace.schedule-active {max-width:1440px;}
 .schedule-workspace-page {container-name:schedule-page;container-type:inline-size;}
 .schedule-view-header {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;}

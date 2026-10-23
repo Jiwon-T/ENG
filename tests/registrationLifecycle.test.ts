@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
 import {saveStudentRegistration,listStudentRegistrations,convertRegistrationToResident} from '../api/_lib/teacherStudentRegistration.js';
-import {REGISTRATION_STUDENT_DATABASE} from '../api/_lib/teacherStudentRegistrationNotion.js';
+import {STUDENT_SOURCE_ID} from '../api/_lib/studentRegistrationRows.js';
 const actor={uid:'principal',admin:false,principal:true,academyId:'main'},requestId='11111111-1111-4111-8111-111111111111',student='22222222-2222-4222-8222-222222222222';
 const input={name:'학생',enrollments:[{subject:'영어',status:'등록',startDate:'2026-10-05'}]};
 test('resident transition removes intake listing while preserving identities and replay result',async()=>{

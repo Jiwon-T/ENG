@@ -51,7 +51,7 @@ export async function teacherActor(req: IncomingMessage, initialize = getFirebas
     stage('account');
     workspaceStage='workspace-scope';
     const coreMode=academyId==='main'?await mainAuthority:await coreActive(db,{academyId});
-    // App-only: assignments come from the app. An academy that never switched gets a clear error instead of a Notion lookup.
+    // App-only: assignments come from the app. An academy that never switched gets a clear error.
     if(!coreMode)throw new Error('CORE_NOT_READY');
     // A principal sees every active student of the academy: that list is read alongside the own assignments.
     const academyMembers=principal?db.collection('academyStudentMemberships').where('academyId', '==', academyId).get():null;academyMembers?.catch(()=>{});

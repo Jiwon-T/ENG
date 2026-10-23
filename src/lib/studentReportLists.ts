@@ -6,7 +6,7 @@ export function sortParentSchedules(schedules: StudentScheduleDTO[], now = Date.
   const koreaOffset = 9 * 60 * 60 * 1000;
   const today = Math.floor((now + koreaOffset) / dayMs);
   const day = (value: string) => {
-    // Date-only Notion values denote a local calendar day, not a UTC timestamp.
+    // Date-only values denote a local calendar day, not a UTC timestamp.
     const parsed = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00+09:00` : value);
     return Number.isFinite(parsed) ? Math.floor((parsed + koreaOffset) / dayMs) : null;
   };

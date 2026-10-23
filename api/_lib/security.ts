@@ -35,8 +35,8 @@ export function generateSecureToken(bytes = 32): string {
 }
 
 /**
- * Notion 학생 페이지 ID로부터 안정적인 16진수 SHA-256 내부 학생 식별자 생성
- * 클라이언트에 Notion 페이지 ID 원본을 노출하지 않습니다.
+ * 학생 원본 페이지 ID로부터 안정적인 16진수 SHA-256 내부 학생 식별자 생성
+ * 클라이언트에 원본 페이지 ID를 노출하지 않습니다.
  */
 export function generateInternalStudentId(notionStudentPageId: string): string {
   if (!notionStudentPageId || typeof notionStudentPageId !== 'string') {

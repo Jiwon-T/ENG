@@ -45,6 +45,8 @@ export interface SheetLayout {
 const PT = 0.3528, SAFE = 0.96;
 export const SHEET_TYPE = { en: 9, ko: 7.5, note: 7.5, panel: 8 }; // pt
 const ROW_EN = 4.2, ROW_KO = 3.5, NOTE = 3.4, FULL = 3.6, WRITE = 8.5, GAP = 2.4, TITLE = 15;
+/** The line heights (mm) the layout plans with; the Word file uses them as exact line heights so its pages match. */
+export const SHEET_LINE = { en: ROW_EN, ko: ROW_KO, note: NOTE, full: FULL, gap: GAP };
 const narrower = (print: number, o: Orientation) => Math.min(print, Math.floor(DOCX_BODY[o] / TWIPS_PER_MM * 10) / 10);
 const GEOMETRY: Record<Orientation, { body: number; height: number }> = { landscape: { body: narrower(269, 'landscape'), height: 167 }, portrait: { body: narrower(182, 'portrait'), height: 254 } };
 export const PANEL_SHARE = 1 / 2.85, COLUMN_GAP = 7;
@@ -53,10 +55,11 @@ export function sheetWidths(orientation: Orientation) {
   const body = GEOMETRY[orientation].body, panel = (body - COLUMN_GAP) * PANEL_SHARE;
   return { body, panel, first: body - COLUMN_GAP - panel, column: (body - COLUMN_GAP) / 2 };
 }
-/** Width in mm of a text at a type size (Korean full width, capitals wider, spaces narrow). */
+/** Width in mm of a text at a type size (Korean full width — Malgun Gothic's Hangul is a full 1 em, measured — capitals
+ *  wider, spaces narrow). */
 export function textWidth(text: string, pt: number) {
   let em = 0;
-  for (const ch of text) em += /[ㄱ-힣]/.test(ch) ? 0.92 : ch === ' ' ? 0.28 : /[A-Z]/.test(ch) ? 0.66 : /[mwMW]/.test(ch) ? 0.8 : /[il.,;:'!|]/.test(ch) ? 0.26 : 0.52;
+  for (const ch of text) em += /[ㄱ-힣]/.test(ch) ? 1 : ch === ' ' ? 0.28 : /[A-Z]/.test(ch) ? 0.66 : /[mwMW]/.test(ch) ? 0.8 : /[il.,;:'!|]/.test(ch) ? 0.26 : 0.52;
   return em * pt * PT;
 }
 const linesOf = (text: string, pt: number, width: number) => text ? Math.max(1, Math.ceil(textWidth(text, pt) / width)) : 0;
@@ -161,6 +164,8 @@ export function layoutSheet(p: Passage, o: SheetOptions): SheetLayout {
     const showKo = o.kind === 'analysis' && o.meaning;
     const chunks = linkRuns(s, pieces).map((runs, k) => { const en = runs.map(r => r.text).join(' '), ko = showKo ? kos[k] || '' : '';
       return { runs, ko, width: Math.max(textWidth(en, SHEET_TYPE.en), textWidth(ko, SHEET_TYPE.ko)) + PIECE_PAD }; });
+    // the 서술형 tag follows the last piece, so that piece needs its room too
+    if (o.kind === 'analysis' && p.parts.grammar?.essay.index === i && chunks.length) chunks[chunks.length - 1].width += textWidth('  서술형', SHEET_TYPE.note) + 1;
     const notes: string[] = [];
     if (o.kind === 'analysis' && o.grammar) {
       for (const h of (marks[i] || []).filter(h => h.kind === 'sure').slice(0, 2)) notes.push(`${h.word} (✖ ${h.wrong}) — ${h.why}`);

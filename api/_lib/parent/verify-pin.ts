@@ -107,7 +107,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
     const pinVerifiedAt = performance.now();
 
-    // PIN validation uses the saved name; Notion is never on the parent's login path.
+    // PIN validation uses the saved name.
     // Prefetch reports while the session is persisted, after successful PIN validation only.
     const [session, initialPage] = await Promise.all([
       createParentSession({

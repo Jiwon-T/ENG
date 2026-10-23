@@ -1,15 +1,19 @@
 // 지문 분석지 › Word: the pages layoutSheet worked out, each its own page (page 1: the sentences and the 요점 정리 side
 // by side in a borderless table; later pages: two columns with a column break where the printed sheet has one).
-import { BorderStyle, ColumnBreak, Paragraph, ShadingType, Table, TableCell, TableLayoutType, TableRow, TabStopPosition, TabStopType, TextRun, WidthType } from 'docx';
-import { SHEET_KIND_LABEL, SHEET_TYPE, sheetWidths, stars, type SheetLayout, type SheetLine, type SheetPanel, type SheetRun } from './analysisSheet';
+import { BorderStyle, ColumnBreak, LineRuleType, Paragraph, ShadingType, Table, TableCell, TableLayoutType, TableRow, TabStopPosition, TabStopType, TextRun, WidthType } from 'docx';
+import { SHEET_KIND_LABEL, SHEET_LINE, SHEET_TYPE, sheetWidths, stars, type SheetLayout, type SheetLine, type SheetPanel, type SheetRun } from './analysisSheet';
 import { TWIPS_PER_MM, docxFont, docxRun, frameDocx, partTitle } from './printFrame';
 
 const MM = TWIPS_PER_MM, tw = (mm: number) => Math.round(mm * MM), NUM = Math.floor(5 * MM); // the 5 mm the layout keeps for the number
 const half = (pt: number) => Math.round(pt * 2);
 const NONE = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
 const noBorders = { top: NONE, bottom: NONE, left: NONE, right: NONE, insideHorizontal: NONE, insideVertical: NONE };
-const para = (children: TextRun[], opts: { after?: number; before?: number; line?: number; border?: any; tabs?: boolean } = {}) =>
-  new Paragraph({ spacing: { before: opts.before ?? 0, after: opts.after ?? 0, line: opts.line ?? 240 }, keepLines: true, border: opts.border, children,
+// `size` (half-points): the paragraph mark's size. Left out, the mark takes the document's 10.5pt in Malgun Gothic and
+// every short line grows to that height, so the pages overflow the layout's plan.
+// `exact` (mm): an exact line height, the one the layout planned with (SHEET_LINE).
+const para = (children: TextRun[], opts: { after?: number; before?: number; line?: number; border?: any; tabs?: boolean; size?: number; exact?: number } = {}) =>
+  new Paragraph({ spacing: { before: opts.before ?? 0, after: opts.after ?? 0, ...(opts.exact ? { line: tw(opts.exact), lineRule: LineRuleType.EXACT } : { line: opts.line ?? 240 }) }, keepLines: true, border: opts.border, children,
+    ...(opts.size ? { run: { size: opts.size, font: docxFont } } : {}),
     ...(opts.tabs ? { tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }] } : {}) });
 const runsOf = (runs: SheetRun[], size: number) => runs.flatMap((r, k) => [
   ...(k ? [new TextRun({ text: ' ', font: docxFont, size })] : []),
@@ -19,29 +23,33 @@ const slash = (size: number) => new TextRun({ text: ' / ', font: docxFont, size,
 
 function sentence(line: SheetLine, layout: SheetLayout, width: number): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = [], en = half(SHEET_TYPE.en), ko = half(SHEET_TYPE.ko), note = half(SHEET_TYPE.note);
-  const num = new TextRun({ text: `${line.index + 1} `, font: docxFont, size: en, bold: true, color: '993556' });
+  const num = new TextRun({ text: `${line.index + 1}`, font: docxFont, size: en, bold: true, color: '993556' });
   const essay = line.essay ? [new TextRun({ text: '  서술형', font: docxFont, size: note, bold: true, color: '8B2F40' })] : [];
   if (layout.meaning && line.rows.some(r => r.some(c => c.ko))) {
     // each row of pieces as a borderless table: the English piece over its Korean
     line.rows.forEach((row, r) => {
       const total = row.reduce((n, c) => n + c.width, 0), scale = Math.min(1, (width - NUM) / (total * MM));
-      out.push(new Table({ layout: TableLayoutType.FIXED, borders: noBorders, width: { size: Math.round(total * MM * scale) + (r === 0 ? NUM : 0), type: WidthType.DXA }, rows: [new TableRow({ cantSplit: true, children: [
-        ...(r === 0 ? [new TableCell({ width: { size: NUM, type: WidthType.DXA }, borders: noBorders, children: [para([num])] })] : []),
+      // Word sizes a table by its grid (columnWidths); without it every cell gets the same width and pieces wrap
+      const cols = [...(r === 0 ? [NUM] : []), ...row.map(c => Math.round(c.width * MM * scale))];
+      // Word joins tables that touch into one (their columns then clash and every piece is squeezed): a hairline between
+      if (r) out.push(para([], { size: 2, exact: 0.35 }));
+      out.push(new Table({ layout: TableLayoutType.FIXED, borders: noBorders, columnWidths: cols, width: { size: cols.reduce((n, x) => n + x, 0), type: WidthType.DXA }, rows: [new TableRow({ cantSplit: true, children: [
+        ...(r === 0 ? [new TableCell({ width: { size: NUM, type: WidthType.DXA }, borders: noBorders, margins: { left: 0, right: 0 }, children: [para([num], { size: en, exact: SHEET_LINE.en })] })] : []),
         ...row.map((c, k) => new TableCell({ width: { size: Math.round(c.width * MM * scale), type: WidthType.DXA }, borders: noBorders, margins: { left: 0, right: 40 }, children: [
           // a part with only Korean (a long translation of a short piece) keeps an empty English line of the same size
-          para([...(c.runs.length ? runsOf(c.runs, en) : [new TextRun({ text: '', font: docxFont, size: en })]), ...(c.slash ? [slash(en)] : []), ...(r === line.rows.length - 1 && k === row.length - 1 ? essay : [])]),
-          para([new TextRun({ text: c.ko, font: docxFont, size: ko, color: '72243E' })]),
+          para([...(c.runs.length ? runsOf(c.runs, en) : [new TextRun({ text: '', font: docxFont, size: en })]), ...(c.slash ? [slash(en)] : []), ...(r === line.rows.length - 1 && k === row.length - 1 ? essay : [])], { size: en, exact: SHEET_LINE.en }),
+          para([new TextRun({ text: c.ko, font: docxFont, size: ko, color: '72243E' })], { size: ko, exact: SHEET_LINE.ko }),
         ] })),
       ] })] }));
     });
   } else {
     const pieces = line.rows.flat();
-    out.push(para([num, ...pieces.flatMap((c, k) => [...(k ? [pieces[k - 1].slash ? slash(en) : new TextRun({ text: ' ', font: docxFont, size: en })] : []), ...runsOf(c.runs, en)]), ...essay], { line: 276 }));
+    out.push(para([num, new TextRun({ text: ' ', font: docxFont, size: en }), ...pieces.flatMap((c, k) => [...(k ? [pieces[k - 1].slash ? slash(en) : new TextRun({ text: ' ', font: docxFont, size: en })] : []), ...runsOf(c.runs, en)]), ...essay], { line: 276, size: en }));
   }
-  for (const n of line.notes) out.push(para([new TextRun({ text: `· ${n}`, font: docxFont, size: note, color: '5F5E5A' })], { line: 220 }));
-  if (line.full) out.push(para([new TextRun({ text: line.full, font: docxFont, size: ko, color: '72243E' })], { line: 220 }));
-  for (let k = 0; k < line.write; k++) out.push(para([new TextRun({ text: ' ', font: docxFont, size: en })], { before: 260, border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'B4B2A9', space: 1 } } }));
-  out.push(para([], { after: 60, ...(line.write ? {} : { border: { bottom: { style: BorderStyle.DOTTED, size: 2, color: 'D3D1C7', space: 1 } } }) }));
+  for (const n of line.notes) out.push(para([new TextRun({ text: `· ${n}`, font: docxFont, size: note, color: '5F5E5A' })], { size: note, exact: SHEET_LINE.note }));
+  if (line.full) out.push(para([new TextRun({ text: line.full, font: docxFont, size: ko, color: '72243E' })], { size: ko, exact: SHEET_LINE.full }));
+  for (let k = 0; k < line.write; k++) out.push(para([new TextRun({ text: ' ', font: docxFont, size: en })], { before: 260, size: en, border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'B4B2A9', space: 1 } } }));
+  out.push(para([], { after: 60, size: 8, exact: SHEET_LINE.gap - 1.2, ...(line.write ? {} : { border: { bottom: { style: BorderStyle.DOTTED, size: 2, color: 'D3D1C7', space: 1 } } }) }));
   return out;
 }
 
@@ -49,7 +57,7 @@ function panelBox(title: string, body: TextRun[][]): Paragraph[] {
   const side = { style: BorderStyle.SINGLE, size: 4, color: 'B4B2A9', space: 3 }, size = half(SHEET_TYPE.panel);
   const border = (first: boolean, last: boolean) => ({ left: side, right: side, ...(first ? { top: side } : {}), ...(last ? { bottom: side } : {}) });
   const lines = [[new TextRun({ text: title, font: docxFont, size, bold: true, color: '72243E' })], ...body];
-  return [...lines.map((runs, k) => para(runs, { border: border(k === 0, k === lines.length - 1), line: 230 })), para([], { after: 100 })];
+  return [...lines.map((runs, k) => para(runs, { border: border(k === 0, k === lines.length - 1), size, exact: SHEET_LINE.full })), para([], { after: 100, size })];
 }
 function panel(p: SheetPanel): Paragraph[] {
   const size = half(SHEET_TYPE.panel), t = (text: string, color = '2C2C2A', s = size) => new TextRun({ text, font: docxFont, size: s, color });
@@ -75,7 +83,7 @@ export async function analysisSheetDocx(layout: SheetLayout, footer?: string) {
   const sections = layout.pages.map(page => {
     if (page.first && layout.panel) {
       const gap = tw(w.body - w.first - w.panel), left = tw(w.first), panelWidth = tw(w.panel);
-      const table = new Table({ layout: TableLayoutType.FIXED, borders: noBorders, width: { size: left + gap + panelWidth, type: WidthType.DXA }, rows: [new TableRow({ children: [
+      const table = new Table({ layout: TableLayoutType.FIXED, borders: noBorders, columnWidths: [left + gap, panelWidth], width: { size: left + gap + panelWidth, type: WidthType.DXA }, rows: [new TableRow({ children: [
         new TableCell({ width: { size: left + gap, type: WidthType.DXA }, borders: noBorders, margins: { left: 0, right: gap }, children: page.columns[0]?.flatMap(l => sentence(l, layout, left)) || [para([])] }),
         new TableCell({ width: { size: panelWidth, type: WidthType.DXA }, borders: noBorders, margins: { left: 0, right: 0 }, children: panel(layout.panel) }),
       ] })] });

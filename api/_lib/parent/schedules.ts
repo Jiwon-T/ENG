@@ -46,7 +46,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     // 최신/예정 순 정렬 (startAt 기준 오름차순 또는 내림차순 지원, 화면에서는 그룹별 재정렬 가능)
     storedSchedules.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 
-    // 안전한 학부모용 일정 DTO (다른 학생 식별자, Notion 내부 ID 일체 제외)
+    // 안전한 학부모용 일정 DTO (다른 학생 식별자, 내부 원본 ID 일체 제외)
     const scheduleDTOs: StudentScheduleDTO[] = storedSchedules.map(s => ({
       scheduleId: s.scheduleDocId,
       title: s.title,

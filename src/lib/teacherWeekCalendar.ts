@@ -3,9 +3,9 @@ export function addCalendarDays(date: string, amount: number) { const d = new Da
 export function mondayOfWeek(date: string) { const weekday = new Date(`${date}T00:00:00Z`).getUTCDay(); return addCalendarDays(date, -((weekday + 6) % 7)); }
 export function calendarWeek(date: string) { const monday = mondayOfWeek(date); return Array.from({ length: 7 }, (_, index) => addCalendarDays(monday, index)); }
 export function weeklyBoardEvents(date: string, schedules: any[], classes: any[], reflected: any[] = []) {
-    // App-only records have no Notion id (null): never read it without a fallback.
+    // App-only records have no notionPageId (null): never read it without a fallback.
     const pageKey = (id: unknown) => typeof id === 'string' ? id.replace(/-/g, '') : '';
-    // A published copy is hidden when its record is listed: by its Notion page, or (app-only schedules) by the record id.
+    // A published copy is hidden when its record is listed: by its notionPageId, or (app-only schedules) by the record id.
     const days = calendarWeek(date), sources = new Set(schedules.flatMap(s => [pageKey(s.notionPageId), pageKey(s.id)]).filter(Boolean));
     return days.map(day => ({ day, events: [
             ...schedules.filter(s => s.data?.date === day).map(s => ({ id: s.id, type: 'schedule', title: s.data.title, start: s.data.start, end: s.data.end, subject: s.data.subject, students: s.data.students, kind: s.data.kind === '시험' ? '테스트' : s.data.kind, status: s.data.status, stage: s.stage, record: s })),

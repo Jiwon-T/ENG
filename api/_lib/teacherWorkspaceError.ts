@@ -19,7 +19,7 @@ export function workspaceError(error: unknown, failureStage: string) {
  // 워크북: AI 해석과 재생성 기록.
  Object.assign(directoryMessages,{WORKBOOK_TRANSLATE_FAILED:'AI 해석을 받지 못했어요. 잠시 후 다시 해 주세요.',AI_REGION_UNSUPPORTED:'AI 서버가 지금 서버 지역(홍콩)에서는 쓸 수 없다고 거절했어요. 서버 지역 설정을 바꿔야 해요.',AI_BUSY:'AI 서버가 바빠요. 잠시 후 다시 해 주세요.',AI_QUOTA:'AI 사용 한도에 걸렸어요. 잠시 후 다시 하거나 요금 설정을 확인해 주세요.',WORKBOOK_TRANSLATE_MISMATCH:'AI 해석 개수가 문장 수와 맞지 않아 넣지 않았어요. 다시 해 주세요.',AI_NOT_CONFIGURED:'AI 연결 설정이 없어요. 관리자에게 확인해 주세요.'});allowed.push('WORKBOOK_TRANSLATE_FAILED','WORKBOOK_TRANSLATE_MISMATCH','AI_NOT_CONFIGURED','AI_REGION_UNSUPPORTED','AI_BUSY','AI_QUOTA');
  directoryMessages.LESSON_TRASH_EXPIRED='휴지통에 7일이 넘게 있던 일지는 복원할 수 없습니다.';allowed.push('LESSON_TRASH_EXPIRED');
- // App-only wording for the codes the app paths still raise (Notion fallbacks are gone).
+ // App-only wording for the codes the app paths still raise.
  const appOnlyMessages:Record<string,string>={
   CORE_NOT_READY:'학생·선생님 정보가 아직 앱으로 전환되지 않은 학원입니다. 관리자에게 확인해 주세요.',
   LESSON_APP_REQUIRED:'일지는 앱에서만 저장·공개·삭제·복원할 수 있습니다. 새로고침한 뒤 다시 시도해 주세요.',

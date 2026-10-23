@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {DIRECTORY_ROWS,directoryRowKey} from './academyDirectorySource.js';
-import {registrationText} from './teacherStudentRegistrationNotion.js';
+import {registrationText} from './studentRegistrationRows.js';
 /** Only the school and grade entered in student management, for exam titles. Contacts and other profile fields are never returned. */
 export async function readStudentSchool(db:any,actor:any,id:unknown){
  const key=uuid(z.string().uuid().parse(id));

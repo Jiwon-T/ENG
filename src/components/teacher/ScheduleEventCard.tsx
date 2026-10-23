@@ -2,8 +2,8 @@ import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {SyncStatus,ScheduleStatus,ClassStatus} from './ScheduleStatus';
 const SCHEDULE_STATUSES=['예정','변경','완료','취소'];
-export interface ScheduleEventCardProps {time:string;title:string;subtitle:string;subtitleFull?:string;kindBadge?:string;kindTone?:'study'|'test';scheduleStatus?:string;syncStatus?:string;cancelled?:boolean;onOpen:()=>void;notionUrl?:string;variant?:'dated'|'regular';classState?:string;disabled?:boolean;onStatus?:(status:string)=>void}
-export default function ScheduleEventCard({time,title,subtitle,subtitleFull,kindBadge,kindTone,scheduleStatus,syncStatus,cancelled=false,onOpen,notionUrl,variant='dated',classState,disabled=false,onStatus}:ScheduleEventCardProps){
+export interface ScheduleEventCardProps {time:string;title:string;subtitle:string;subtitleFull?:string;kindBadge?:string;kindTone?:'study'|'test';scheduleStatus?:string;syncStatus?:string;cancelled?:boolean;onOpen:()=>void;variant?:'dated'|'regular';classState?:string;disabled?:boolean;onStatus?:(status:string)=>void}
+export default function ScheduleEventCard({time,title,subtitle,subtitleFull,kindBadge,kindTone,scheduleStatus,syncStatus,cancelled=false,onOpen,variant='dated',classState,disabled=false,onStatus}:ScheduleEventCardProps){
  const [picking,setPicking]=useState<{top:number;left:number}|null>(null),pickRef=useRef<HTMLButtonElement>(null);
  // The menu is fixed to the viewport so day columns (which clip overflow) never hide it; it closes on scroll or outside click.
  useEffect(()=>{if(!picking)return;const close=(e:Event)=>{if(e.type==='scroll'||!(e.target as HTMLElement)?.closest?.('.schedule-status-menu,.schedule-status-button'))setPicking(null);};window.addEventListener('scroll',close,true);window.addEventListener('pointerdown',close);return()=>{window.removeEventListener('scroll',close,true);window.removeEventListener('pointerdown',close);};},[picking]);

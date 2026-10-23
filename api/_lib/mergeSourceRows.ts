@@ -1,7 +1,7 @@
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
-/** Merge app rows with source rows (the old Notion list, now app sources such as managed classes):
- *  keeps local identity, pending local edits and app-only rows. Moved unchanged from teacherNotionWorkspace. */
-export function mergeNotionRows(local:any[],remote:any[]){
+/** Merge app rows with source rows (imported rows and app sources such as managed classes):
+ *  keeps local identity, pending local edits and app-only rows. */
+export function mergeSourceRows(local:any[],remote:any[]){
  local=local.map(r=>r.notionSyncStage==='syncing'&&Date.now()-(r.notionSyncStartedAt||0)>=900000?{...r,notionSyncStage:'failed',notionSyncError:'반영 처리가 중단되었습니다. 다시 반영해 주세요.'}:r);
  const normalize=(id:any)=>{try{return uuid(id);}catch{return '';}};
  const markers=new Map<string,number>();for(const r of remote)if(normalize(r.appRecordId))markers.set(normalize(r.appRecordId),(markers.get(normalize(r.appRecordId))||0)+1);

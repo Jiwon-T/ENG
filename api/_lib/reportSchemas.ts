@@ -45,29 +45,6 @@ export function isReservedSlug(slug: string): boolean {
   return RESERVED_SLUGS.has(slug.toLowerCase().trim());
 }
 
-export const NotionReportWebhookSchema = z.object({
-  schemaVersion: z.number().optional().default(1),
-  notionPageId: z.string().min(1, 'notionPageId is required'),
-  notionStudentPageId: z.string().min(1, 'notionStudentPageId is required'),
-  studentKey: z.string().optional(),
-  lessonDateStart: z.string().min(1, 'lessonDateStart is required'),
-  lessonDateEnd: z.string().nullable().optional(),
-  lessonTime: z.string().optional().default(''),
-  selfStudyTime: z.string().optional().default(''),
-  subject: z.string().optional().default('영어'),
-  category: z.enum(['수업', '테스트']).catch('수업'),
-  attendance: z.string().optional().default(''),
-  attitude: z.string().optional().default(''),
-  homework: z.string().optional().default(''),
-  test: z.string().optional().default(''),
-  vocabularyScore: z.number().nullable().optional().default(null),
-  schoolExamScore: z.number().nullable().optional().default(null),
-  feedback: z.string().optional().default(''),
-  sourceUpdatedAt: z.string().optional(),
-});
-
-export type NotionReportWebhookPayload = z.infer<typeof NotionReportWebhookSchema>;
-
 export const CreateReportSlugSchema = z.object({
   reportSlug: z.string()
     .min(3, '3자 이상이어야 합니다.')
@@ -115,7 +92,7 @@ export const UnlinkStudentAccountSchema = z.object({
 
 /**
  * Make 및 수업일지 저장 모델:
- * internalStudentId: SHA-256(Notion 학생 페이지 ID)
+ * internalStudentId: SHA-256(학생 원본 페이지 ID)
  */
 export interface StoredLessonReport {
   reportIdentity?: string;
@@ -148,9 +125,9 @@ export interface StoredLessonReport {
 }
 
 /**
- * Notion 학생 매핑 모델 (서버 전용: notionStudentMappings/{studentKeyHash})
+ * 학생 매핑 모델 (서버 전용: notionStudentMappings/{studentKeyHash})
  */
-export interface StoredNotionStudentMapping {
+export interface StoredStudentMapping {
   internalStudentId: string;
   studentKey: string;
   studentDisplayName: string;
@@ -240,7 +217,7 @@ export interface ParentLessonReportDTO {
 
 /**
  * ----------------------------------------------------
- * Notion 일정 동기화 및 일정 DTO 스키마
+ * 일정 DTO 스키마
  * ----------------------------------------------------
  */
 

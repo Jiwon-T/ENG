@@ -222,7 +222,7 @@ export async function saveCoreGrant(db:any,actor:any,value:any,expected:number,p
  const ref=db.collection('teacherWorkspaceAccess').doc(value.uid),ur=db.collection('users').doc(value.uid),intent=digest([value,expected]);
  return db.runTransaction(async(tx:any)=>{
   await guard(tx,db);const saved=(await tx.get(ref)).data(),user=(await tx.get(ur)).data();
-  // After the switch the admin can register a teacher account that has no workspace record yet (no Notion page needed).
+  // After the switch the admin can register a teacher account that has no workspace record yet.
   const old=saved||(actor.admin&&['teacher','principal'].includes(user?.role)&&!value.notionTeacherPageId?{academyId:'main',scopes:[],assignmentRevision:0,notionTeacherPageId:null,workspaceRole:value.workspaceRole,createdAt:Date.now(),createdBy:actor.uid}:null);
   if(!old||old.academyId!=='main'||value.uid!==process.env.ADMIN_UID&&!old.offline&&!['teacher','principal'].includes(user?.role))throw Error('INVALID_TEACHER');
   if(old.offline&&value.workspaceRole!=='teacher')throw Error('INVALID_TEACHER'); // no account, so never 원장
@@ -233,7 +233,7 @@ export async function saveCoreGrant(db:any,actor:any,value:any,expected:number,p
   const memberships=[];for(const key of keys)memberships.push(await member(tx,db,actor,key));policy(actor,value,old,user,memberships);
   const enrollments=[];for(const key of keys){const found=await enrollmentRow(db,key),row=valid((await tx.get(found.ref)).data(),'enrollments');enrollments.push({key,ref:found.ref,row});}
   let teacherRow:any=null;if(old.notionTeacherPageId){const teacher=valid((await tx.get(refFor(db,'teachers',old.notionTeacherPageId))).data(),'teachers');if(teacher.pointer?.teacherUid!==value.uid||['중단','휴직'].includes(choice(teacher.fields.properties['상태'])))throw Error('INVALID_TEACHER');teacherRow=teacher;}
-  // Without a Notion teacher page the app record alone holds the assignment (the app is the only store now).
+  // The app record alone holds the assignment (the app is the only store).
   if(!actor.admin&&JSON.stringify(value.notionSources||[])!==JSON.stringify(old.notionSources||[]))throw Error('FORBIDDEN');
   let teacherId=old.notionTeacherPageId?uuid(old.notionTeacherPageId):null;const at=Date.now();
   // 담당 변경 from the teacher dialog: this teacher taken off a subject that continues needs a reason, like 수강 관리.
@@ -248,7 +248,7 @@ export async function saveCoreGrant(db:any,actor:any,value:any,expected:number,p
   for(const e of enrollments){const p={...e.row.fields.properties};for(const subject of subjects){const ids=members(p[subject+' 담당']).filter(id=>id!==teacherId);if(teacherId&&value.scopes.some((s:any)=>uuid(s.studentKey)===e.key&&s.subject===subject))ids.push(teacherId);p[subject+' 담당']={relation:ids.map(id=>({id}))};}changed(tx,db,e.ref,e.row,p,actor.uid,at);}
   // An offline teacher's 연락처 / 메모 / 담당 과목 are edited here too; the teacher row follows (name = label, 담당 과목).
   const offlineInfo=old.offline?{phone:value.offlinePhone??old.phone??'',memo:value.offlineMemo??old.memo??'',subjects:value.offlineSubjects??old.subjects??[]}:null;
-  // A row the app made for an account (선생님 권한 or a link) follows the same way: name and 담당 과목 (Notion-era rows are left alone).
+  // A row the app made for an account (선생님 권한 or a link) follows the same way: name and 담당 과목 (imported rows are left alone).
   const appRow=!old.offline&&(old.appTeacherRow||made)?{subjects:value.teacherSubjects??old.subjects??[]}:null;
   if((offlineInfo||appRow)&&teacherRow){const label=offlineInfo?value.workspaceLabel||old.workspaceLabel||'':accountName,list=(offlineInfo||appRow)!.subjects,props=teacherRow.fields.properties;const nextProps={...props,'선생님':{title:[{plain_text:label,text:{content:label}}]},'담당 과목':{multi_select:list.map((name:string)=>({name}))}};if(JSON.stringify(nextProps)!==JSON.stringify(props))changed(tx,db,refFor(db,'teachers',old.notionTeacherPageId),teacherRow,nextProps,actor.uid,at);}
   for(const s of value.scopes)if(!(old.scopes||[]).some((o:any)=>uuid(o.studentKey)===uuid(s.studentKey)&&o.subject===s.subject)){const e=enrollments.find(x=>x.key===uuid(s.studentKey));writeAssignmentStart(tx,db,{uid:value.uid,studentKey:s.studentKey,subject:s.subject,since:startDayFor(e?.row.fields.properties[s.subject+' 시작일']?.date?.start,at),by:actor.uid,at,source:'grant'});}

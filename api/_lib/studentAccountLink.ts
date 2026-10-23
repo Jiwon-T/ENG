@@ -1,4 +1,4 @@
-import type { StoredNotionStudentMapping } from './reportSchemas.js';
+import type { StoredStudentMapping } from './reportSchemas.js';
 import { lookupStudentIdentity, migrateStudentMapping } from './studentIdentity.js';
 import { hashStudentKey } from './security.js';
 import { normalizeNotionPageId } from './notionPageId.js';
@@ -16,8 +16,8 @@ export async function linkStudentAccount(db: any, input: { firebaseUid: string; 
     if (!userSnap.exists) throw new Error('USER_NOT_FOUND');
     if (userSnap.data()?.role !== 'student') throw new Error('INVALID_ROLE');
     // 2) Exactly one registered student.
-    const notionLookup = await lookupStudentIdentity(db, input.studentKey, false);
-    const existingIdentity = await migrateStudentMapping(db, notionLookup.notionStudentPageId, notionLookup.studentDisplayName);
+    const studentLookup = await lookupStudentIdentity(db, input.studentKey, false);
+    const existingIdentity = await migrateStudentMapping(db, studentLookup.notionStudentPageId, studentLookup.studentDisplayName);
     const studentKey = existingIdentity.studentKey;
     const internalStudentId = existingIdentity.internalStudentId;
     const mappingRef = db.collection('notionStudentMappings').doc(hashStudentKey(studentKey));
@@ -40,15 +40,15 @@ export async function linkStudentAccount(db: any, input: { firebaseUid: string; 
             if (prevMappingSnap.exists && prevMappingSnap.data()?.firebaseUid === firebaseUid) t.update(prevMappingRef, { firebaseUid: null, updatedAt: now });
         }
         if (mappingSnap.exists) {
-            const mappingData = mappingSnap.data() as StoredNotionStudentMapping;
+            const mappingData = mappingSnap.data() as StoredStudentMapping;
             // The student is already linked to a different account.
             if (mappingData.firebaseUid && mappingData.firebaseUid !== firebaseUid) throw new Error('NOTION_STUDENT_ALREADY_LINKED_TO_ANOTHER_ACCOUNT');
             t.update(mappingRef, { firebaseUid, linkedByAdminUid: linkedByUid, linkedAt: now, updatedAt: now });
         } else {
-            const newMapping: StoredNotionStudentMapping = { internalStudentId, studentKey, studentDisplayName: notionLookup.studentDisplayName, notionStudentPageId: notionLookup.notionStudentPageId, firebaseUid, linkedByAdminUid: linkedByUid, linkedAt: now, createdAt: now, updatedAt: now };
+            const newMapping: StoredStudentMapping = { internalStudentId, studentKey, studentDisplayName: studentLookup.studentDisplayName, notionStudentPageId: studentLookup.notionStudentPageId, firebaseUid, linkedByAdminUid: linkedByUid, linkedAt: now, createdAt: now, updatedAt: now };
             t.set(mappingRef, newMapping);
         }
         t.update(userRef, { notionStudentKey: studentKey, updatedAt: now });
     });
-    return { firebaseUid, studentKey, studentDisplayName: notionLookup.studentDisplayName, linkedAt: now };
+    return { firebaseUid, studentKey, studentDisplayName: studentLookup.studentDisplayName, linkedAt: now };
 }

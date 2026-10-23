@@ -1,5 +1,5 @@
 import {workspaceError} from '../api/_lib/teacherWorkspaceError.js';
-import {REGISTRATION_STUDENT_DATABASE} from '../api/_lib/teacherStudentRegistrationNotion.js';
+import {STUDENT_SOURCE_ID} from '../api/_lib/studentRegistrationRows.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';

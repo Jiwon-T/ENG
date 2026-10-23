@@ -54,7 +54,7 @@ export async function templateManagementList(db:any,actor:any,cursor?:string){
 async function requireReady(db:any){
  if(!(await db.collection(TEMPLATE_STATE).doc(TEMPLATE_SOURCE).get()).data()?.ready)throw Error('TEMPLATE_STORE_NOT_READY');
 }
-// Bounded compatibility list (same existing 500 template ceiling); no Notion fallback.
+// Bounded compatibility list (same existing 500 template ceiling).
 export async function storedMessageTemplates(db:any,actor:any){
  assertTemplateAccess(actor);await requireReady(db);
  const snapshot=await pageQuery(db,undefined,501).get();
@@ -92,7 +92,7 @@ export async function saveTemplate(db:any,actor:any,input:unknown,clock=Date.now
    tx.set(jobRef,{sourceKey:TEMPLATE_SOURCE,notionPageId:id,revision:next.revision,desired:data,desiredHash:dataHash,intent,status:'not-needed',appOnly:true,attempts:0,createdAt:at,ownerUid:actor.uid,leaseOwner:null,leaseUntil:0});
    return dto(next);
   }
-  // Templates are app-only; there is no Notion write to queue any more.
+  // Templates are app-only.
   throw Error('TEMPLATE_APP_REQUIRED');
  });
 }

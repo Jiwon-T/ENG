@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {studentRegistrationSchema} from '../api/_lib/teacherStudentRegistration.js';
-import {registrationStudentProperties,registrationEnrollmentProperties} from '../api/_lib/teacherStudentRegistrationNotion.js';
+import {registrationStudentProperties,registrationEnrollmentProperties} from '../api/_lib/studentRegistrationRows.js';
 import fs from 'node:fs';
 import StudentRegistrationForm from '../src/components/teacher/StudentRegistrationForm';
 import {emptyRegistration} from '../src/lib/studentRegistration';

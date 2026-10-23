@@ -3,7 +3,7 @@ import {MessageSquareText} from 'lucide-react';
 import {MessageTemplateEditor} from './MessageTemplateManager';
 import {askDiscard} from './ConfirmDialog';
 import {useLeaveProtection} from '../../lib/leaveProtection';
-/** App-only text templates: pick one, edit, save. No Notion sync controls (templates live only in the app now). */
+/** App-only text templates: pick one, edit, save. Templates live only in the app. */
 export default function AppTemplateManager({busy,request,act,autoLoad=false,onDirty}:{busy:boolean;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;autoLoad?:boolean;onDirty?:(dirty:boolean)=>void}){
  const [list,setList]=useState<any[]|null>(null),[selected,setSelected]=useState<any>(null),[dirty,setDirty]=useState(false),[notice,setNotice]=useState('');
  useLeaveProtection(dirty);

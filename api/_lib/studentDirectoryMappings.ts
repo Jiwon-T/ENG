@@ -1,19 +1,19 @@
 import type { Firestore } from 'firebase-admin/firestore';
-import type { StoredNotionStudentMapping } from './reportSchemas.js';
+import type { StoredStudentMapping } from './reportSchemas.js';
 import { isNotionPageId, normalizeNotionPageId } from './notionPageId.js';
 import { hashStudentKey } from './security.js';
 
 /** Admin directory reads existing mappings once; it never creates or migrates accounts. */
 export async function readStudentDirectoryMappings(db: Firestore) {
   const snapshot = await db.collection('notionStudentMappings').get();
-  const groups = new Map<string, { id: string; record: StoredNotionStudentMapping }[]>();
+  const groups = new Map<string, { id: string; record: StoredStudentMapping }[]>();
   for (const doc of snapshot.docs) {
-    const record = doc.data() as StoredNotionStudentMapping;
+    const record = doc.data() as StoredStudentMapping;
     if (!isNotionPageId(record.notionStudentPageId)) continue;
     const key = normalizeNotionPageId(record.notionStudentPageId);
     groups.set(key, [...(groups.get(key) || []), { id: doc.id, record }]);
   }
-  const mappings = new Map<string, StoredNotionStudentMapping>();
+  const mappings = new Map<string, StoredStudentMapping>();
   for (const [key, entries] of groups) {
     const canonical = entries.find(entry => entry.id === hashStudentKey(key));
     // Explicit canonical unlink takes precedence over stale legacy owners.

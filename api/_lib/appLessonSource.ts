@@ -4,13 +4,13 @@ import { draftAccess } from './appAcademic.js';
 import { normalizeNotionPageId } from './notionPageId.js';
 
 /*
- * App-only lesson reads (used only while lessonAppActive). The migrated Notion rows in
- * lessonSourceRecords take the place of the Notion reader with the same row shape and the same
- * visibility rules, so mergeNotionRows and the screens behave exactly as before.
+ * App-only lesson reads (used only while lessonAppActive). The imported rows in
+ * lessonSourceRecords keep the old row shape and the same
+ * visibility rules, so mergeSourceRows and the screens behave exactly as before.
  */
 const SOURCE = 'lessonSourceRecords';
 
-/** Same visibility as the Notion reader: admin all; principal own academy; teacher owned/assigned rows within scope. */
+/** Visibility: admin all; principal own academy; teacher owned/assigned rows within scope. */
 export function canReadSourceLesson(actor: any, s: any) {
     if (!s || s.removed || s.appDeleted || s.academyId !== 'main') return false;
     if (actor.admin) return true;
@@ -85,7 +85,7 @@ async function takenOver(db: any, sources: any[]) {
     };
 }
 
-/** Replacement for previousNotionLesson: same fields, built from the student's migrated history, with published app edits winning. */
+/** The student's previous lesson in a subject, built from the student's migrated history, with published app edits winning. */
 export async function previousAppSourceLesson(db: any, actor: any, studentKey: string, subject: string, date?: string) {
     const rows = (await db.collection(SOURCE).where('studentKey', '==', studentKey).get()).docs.map((d: any) => d.data())
         .filter((s: any) => s.subject === subject && !s.removed && !s.appDeleted && s.academyId === 'main');
@@ -106,8 +106,8 @@ export async function previousAppSourceLesson(db: any, actor: any, studentKey: s
 }
 
 /**
- * Editing or deleting a migrated row: reuse the existing app lesson for that Notion page, or create one
- * with the Notion page ID as its ID. The public report ID and reportIdentity are carried by appProjectionId.
+ * Editing or deleting a migrated row: reuse the existing app lesson for that row's notionPageId, or create one
+ * with that ID as its ID. The public report ID and reportIdentity are carried by appProjectionId.
  */
 export async function ensureAppLessonDraft(db: any, actor: any, idInput: unknown) {
     const id = z.string().uuid().parse(idInput);
@@ -137,7 +137,7 @@ export async function ensureAppLessonDraft(db: any, actor: any, idInput: unknown
 }
 
 /**
- * An old Notion creation whose result was never confirmed is settled with the migration's evidence:
+ * A write from before the import whose result was never confirmed is settled with the migration's evidence:
  * page found => link it; no page after a full scan => clear the pending write. No evidence => unchanged.
  */
 export async function settleUncertainLessonWrite(db: any, id: string) {

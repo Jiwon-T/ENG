@@ -70,7 +70,7 @@ export function registrationDocumentId(academyId:string, requestId:string) {
     return createHash('sha256').update(JSON.stringify([academyId,requestId])).digest('hex');
 }
 // Server-only input storage; the sync worker consumes an immutable revision.
-// Store the input and pending sync state atomically; never claim Notion completion here.
+// Store the input and pending sync state atomically; never claim completion here.
 export async function saveStudentRegistration(db:any, actor:RegistrationActor, input:unknown, requestId:unknown, expectedRevision?:number, writeId?:unknown, sourceMode?:'firestore') {
     const key = z.string().uuid().parse(requestId);
     const value = studentRegistrationSchema.parse(input);

@@ -9,7 +9,7 @@ import { lessonReportId } from '../reportAudienceDTO.js';
 
 /**
  * The student screen receives reportId from studentLessonDTO (reportIdentity, else notionPageId).
- * Completion must resolve the same ID; app-native reports have no Notion page ID.
+ * Completion must resolve the same ID; app-native reports have no notionPageId.
  */
 export function findAssignmentTarget(reports: StoredLessonReport[], reportId: string) {
   return reports.find(report => (report.reportIdentity || report.notionPageId) && lessonReportId(report) === reportId);

@@ -9,7 +9,7 @@ import {
   isReservedSlug,
   type StoredReportSlug,
   type StudentReportMapping,
-  type StoredNotionStudentMapping,
+  type StoredStudentMapping,
 } from '../_lib/reportSchemas.js';
 import { lookupGuardianPhone, lookupStudentIdentity, migrateStudentMapping } from '../_lib/studentIdentity.js';
 import { hashStudentKey } from '../_lib/security.js';
@@ -73,7 +73,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
     }
 
     // ----------------------------------------------------
-    // POST: 신규 고정 주소 생성 (Firebase 가입 여부와 무관하게 Notion 기반 발급)
+    // POST: 신규 고정 주소 생성 (Firebase 가입 여부와 무관하게 앱 학생 기록 기반 발급)
     // ----------------------------------------------------
     if (req.method === 'POST') {
       const rawBody = await parseJsonBody(req);
@@ -97,12 +97,12 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
         });
       }
 
-      // 1) Notion DB_학생 관리에서 학생 및 보호자 연락처, Notion Page ID 조회
-      let notionLookup;
+      // 1) 앱 학생 기록에서 학생과 보호자 연락처 조회
+      let studentLookup;
       try {
-        notionLookup = await lookupStudentIdentity(db, studentKey);
-      } catch (notionErr: any) {
-        if (notionErr.message === 'STUDENT_NOT_FOUND') {
+        studentLookup = await lookupStudentIdentity(db, studentKey);
+      } catch (lookupErr: any) {
+        if (lookupErr.message === 'STUDENT_NOT_FOUND') {
           return sendJson(res, 404, {
             ok: false,
             error: 'STUDENT_NOT_FOUND_IN_NOTION',
@@ -110,7 +110,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
             message: '학생 정보를 찾을 수 없습니다.',
           });
         }
-        if (notionErr.message === 'MULTIPLE_STUDENTS_MATCHED') {
+        if (lookupErr.message === 'MULTIPLE_STUDENTS_MATCHED') {
           return sendJson(res, 409, {
             ok: false,
             error: 'MULTIPLE_STUDENTS_MATCHED',
@@ -118,7 +118,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
             message: '같은 이름의 학생이 2명 이상 있습니다. 구분을 확인해 주세요.',
           });
         }
-        if (notionErr.message === 'GUARDIAN_CONTACT_MISSING_OR_INVALID') {
+        if (lookupErr.message === 'GUARDIAN_CONTACT_MISSING_OR_INVALID') {
           return sendJson(res, 422, {
             ok: false,
             error: 'GUARDIAN_CONTACT_MISSING',
@@ -126,18 +126,18 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
             message: '학생 정보에 유효한 보호자 연락처가 등록되어 있지 않습니다.',
           });
         }
-        throw notionErr;
+        throw lookupErr;
       }
 
-      // 2) Notion 학생 페이지 ID로부터 안정적인 internalStudentId 생성
-      const existingIdentity = await migrateStudentMapping(db, notionLookup.notionStudentPageId, notionLookup.studentDisplayName);
+      // 2) 학생 원본 페이지 ID로부터 안정적인 internalStudentId 생성
+      const existingIdentity = await migrateStudentMapping(db, studentLookup.notionStudentPageId, studentLookup.studentDisplayName);
       studentKey = existingIdentity.studentKey;
       const internalStudentId = existingIdentity.internalStudentId;
       const studentKeyHash = hashStudentKey(studentKey);
 
       const targetDocRef = db.collection('reportSlugs').doc(reportSlug);
       const mappingDocRef = db.collection('studentReportMappings').doc(internalStudentId);
-      const notionMappingDocRef = db.collection('notionStudentMappings').doc(studentKeyHash);
+      const studentMappingDocRef = db.collection('notionStudentMappings').doc(studentKeyHash);
 
       // 3) Firestore Transaction: 슬러그 생성, 학생 활성 슬러그 보장, notionStudentMappings 동기화
       // 학부모 리포트 발급은 학생 계정 연결과 완전히 독립적입니다.
@@ -149,9 +149,9 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
         }
 
         const mappingSnap = await t.get(mappingDocRef);
-        const notionMappingSnap = await t.get(notionMappingDocRef);
+        const studentMappingSnap = await t.get(studentMappingDocRef);
         const contactEdit=(await t.get(db.collection('teacherStudentEdits').doc(hashStudentKey(studentKey)))).data();
-        assertContactEditAllowsIssuance(contactEdit,notionLookup.sourceUpdatedAt);
+        assertContactEditAllowsIssuance(contactEdit,studentLookup.sourceUpdatedAt);
         const now = new Date().toISOString();
 
         if (mappingSnap.exists) {
@@ -175,9 +175,9 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
         const slugRecord: StoredReportSlug = {
           reportSlug,
           studentKey,
-          studentDisplayName: notionLookup.studentDisplayName,
+          studentDisplayName: studentLookup.studentDisplayName,
           internalStudentId,
-          parentPhonePinHash: notionLookup.parentPhonePinHash,
+          parentPhonePinHash: studentLookup.parentPhonePinHash,
           active: true,
           authVersion: 1,
           failedAttempts: 0,
@@ -199,21 +199,21 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
 
         // notionStudentMappings: 이미 관리자 연결 API를 통해 설정된 기존 firebaseUid가 있다면 보존, 신규는 null
         let preservedFirebaseUid: string | null = null;
-        if (notionMappingSnap.exists) {
-          const existing = notionMappingSnap.data() as StoredNotionStudentMapping;
+        if (studentMappingSnap.exists) {
+          const existing = studentMappingSnap.data() as StoredStudentMapping;
           preservedFirebaseUid = existing.firebaseUid || null;
         }
 
-        const notionMappingData: StoredNotionStudentMapping = {
+        const studentMappingData: StoredStudentMapping = {
           internalStudentId,
           studentKey,
-          studentDisplayName: notionLookup.studentDisplayName,
-          notionStudentPageId: notionLookup.notionStudentPageId,
+          studentDisplayName: studentLookup.studentDisplayName,
+          notionStudentPageId: studentLookup.notionStudentPageId,
           firebaseUid: preservedFirebaseUid,
-          createdAt: notionMappingSnap.exists ? (notionMappingSnap.data() as StoredNotionStudentMapping).createdAt : now,
+          createdAt: studentMappingSnap.exists ? (studentMappingSnap.data() as StoredStudentMapping).createdAt : now,
           updatedAt: now,
         };
-        t.set(notionMappingDocRef, notionMappingData, { merge: true });
+        t.set(studentMappingDocRef, studentMappingData, { merge: true });
       });
 
       return sendJson(res, 200, {

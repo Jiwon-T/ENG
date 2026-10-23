@@ -16,7 +16,7 @@ export async function studyReports(db: any, uid: string, preloadedUser?: any, ov
   if (!mapping?.firebaseUid || mapping.firebaseUid !== uid || !mapping.internalStudentId) return [];
   return lessonRows(db, mapping.internalStudentId, uid, override, user.notionStudentKey);
 }
-/** 계산 전용 수업 기록 (lessons kept outside the app's 일지, e.g. the 9/1–9/19 Notion lessons): read with the student's
+/** 계산 전용 수업 기록 (lessons kept outside the app's 일지, e.g. the 9/1–9/19 lessons from before the app): read with the student's
  *  lessons for the rewards (출석 → 지난 수업 보상, 개근) only — never shown in a report. {internalStudentId, date (the
  *  lesson's start, ISO), lessonTime, attendance, source}. */
 export const LESSON_BACKFILL = 'lessonBackfill';

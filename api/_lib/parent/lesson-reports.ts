@@ -45,7 +45,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return sendJson(res, 200, {
       ok: true,
       student: {
-        // 내부 studentKey 및 Notion Page ID를 절대 노출하지 않고 학부모 표시명만 전달
+        // 내부 studentKey 및 notionPageId를 절대 노출하지 않고 학부모 표시명만 전달
         studentDisplayName: session.studentDisplayName,
       },
       ...page,

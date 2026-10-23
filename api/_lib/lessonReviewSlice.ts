@@ -1,7 +1,7 @@
 /*
  * Narrow lesson reads for the review/export screens when a date and/or student is chosen.
  * Equality filters only (served by single-field indexes; no composite index deployment).
- * App lessons linked to the slice's source rows are loaded too, so mergeNotionRows gives exactly
+ * App lessons linked to the slice's source rows are loaded too, so mergeSourceRows gives exactly
  * the same result as the full read (an edited date or an archived app lesson still wins).
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

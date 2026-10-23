@@ -4,7 +4,7 @@ import {coreActive,coreStudentPage} from './academyCore.js';
 export {batiConfig} from './batiTransport.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
-import {REGISTRATION_STUDENT_DATABASE,registrationText} from './teacherStudentRegistrationNotion.js';
+import {STUDENT_SOURCE_ID,registrationText} from './studentRegistrationRows.js';
 import {profileFromPage} from './teacherStudentProfile.js';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {hashStudentKey} from './security.js';
@@ -13,10 +13,10 @@ import {unresolvedMessage} from '../../src/lib/teacherMessage.js';
 const TEMPLATE_DB='ec10d0f1-c79a-8312-946b-811e86041ee2';
 function assertMember(actor:any,member:any){if(member?.disabled||member?.academyId&&member.academyId!==actor.academyId||!actor.admin&&(!member||member.academyId!==actor.academyId))throw Error('FORBIDDEN');}
 const digest=(s:string)=>createHash('sha256').update(s).digest('hex');
-function assertPage(page:any,key:string,db=REGISTRATION_STUDENT_DATABASE){if(page?.archived||page?.in_trash||uuid(page?.id)!==key||uuid(page.parent?.database_id)!==db)throw Error('NOTION_SOURCE_MISMATCH');}
+function assertPage(page:any,key:string,db=STUDENT_SOURCE_ID){if(page?.archived||page?.in_trash||uuid(page?.id)!==key||uuid(page.parent?.database_id)!==db)throw Error('NOTION_SOURCE_MISMATCH');}
 async function access(db:any,actor:any,key:string,subject:string){
  if(actor.academyId!=='main')throw Error('NOTION_REGISTRATION_SOURCE_REQUIRED');
- // Students live in the app since the core switch; there is no Notion student source to fall back to.
+ // Students live in the app since the core switch.
  if(!await coreActive(db,actor))throw Error('CORE_NOT_READY');
  const member=(await db.collection('academyStudentMemberships').doc(key).get()).data();
  assertMember(actor,member);
@@ -24,7 +24,7 @@ async function access(db:any,actor:any,key:string,subject:string){
 }
 async function source(db:any,actor:any,key:string,subject:string){
  await access(db,actor,key,subject);const page=await coreStudentPage(db,key);
- // App-registered students have no Notion page or database; identity is the app record. Migrated ones keep their source identity.
+ // App-registered students have no source page; identity is the app record. Migrated ones keep their source identity.
  if(page.origin==='app'){if(uuid(page.id)!==key)throw Error('NOTION_SOURCE_MISMATCH');}else assertPage(page,key);
  const edit=(await db.collection('teacherStudentEdits').doc(hashStudentKey(key)).get()).data();assertContactEditAllowsIssuance(edit,page.last_edited_time);
  return page;
@@ -58,7 +58,7 @@ export async function prepareTeacherMessage(db:any,actor:any,input:unknown){
  let r=await db.runTransaction(async(tx:any)=>{const old=(await tx.get(ref)).data(),member=(await tx.get(db.collection('academyStudentMemberships').doc(key))).data(),edit=(await tx.get(db.collection('teacherStudentEdits').doc(hashStudentKey(key)))).data();assertMember(actor,member);assertContactEditAllowsIssuance(edit,page.last_edited_time);if(old){if(old.fingerprint!==fingerprint||old.ownerUid!==actor.uid)throw Error('MESSAGE_CONFLICT');return old;}const next={id:v.id,studentKey:key,subject:v.subject,templateId:uuid(v.templateId),lessonId:v.lessonId,body:v.body,recipient,context,ownerUid:actor.uid,academyId:actor.academyId,fingerprint,status:'prepared',createdAt:Date.now()};tx.set(ref,next);return next;});
  // Student text is a backup. Only these two properties are changed; SMS is independent.
  if(r.status==='prepared'){
-  // The app record is authoritative and the body is stored here; there is no Notion backup copy any more.
+  // The app record is authoritative and the body is stored here.
   await db.runTransaction(async(tx:any)=>{const current=(await tx.get(ref)).data();if(current?.status==='prepared'){r={...current,status:'ready'};tx.set(ref,r);}else r=current;});
  }
  return publicDraft(r);

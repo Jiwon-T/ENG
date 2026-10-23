@@ -18,7 +18,7 @@
 
 import { getFirebaseAdmin } from '../api/_lib/firebaseAdmin.ts';
 import { hashStudentKey } from '../api/_lib/security.ts';
-import type { StoredNotionStudentMapping } from '../api/_lib/reportSchemas.ts';
+import type { StoredStudentMapping } from '../api/_lib/reportSchemas.ts';
 
 interface AuditIssue {
   type:
@@ -65,10 +65,10 @@ export async function runStudentMappingAudit(): Promise<{
   // 2. 전체 notionStudentMappings 컬렉션 스캔
   const mappingsSnap = await db.collection('notionStudentMappings').get();
   const mappingsByUid = new Map<string, string[]>();
-  const mappingsByKey = new Map<string, StoredNotionStudentMapping>();
+  const mappingsByKey = new Map<string, StoredStudentMapping>();
 
   mappingsSnap.forEach((d) => {
-    const data = d.data() as StoredNotionStudentMapping;
+    const data = d.data() as StoredStudentMapping;
     mappingsByKey.set(data.studentKey, data);
 
     if (data.firebaseUid) {
