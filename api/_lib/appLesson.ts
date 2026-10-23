@@ -6,6 +6,12 @@ import { directLessonReport } from './teacherDirectReport.js';
 import { normalizeNotionPageId } from './notionPageId.js';
 import { linkedSourceRows, markSourceRows } from './appLessonSource.js';
 import { readLessonReward, writeLessonReward } from './lessonRewardOnPublish.js';
+import { DIRECTORY_ROWS, directoryRowKey } from './academyDirectorySource.js';
+const isTrialRow = (row: any) => { const p = row?.fields?.properties; return (p?.['등록상태']?.status?.name || p?.['등록상태']?.select?.name) === '시범'; };
+/** 시범 수업: the student is on the roster as '시범' now (a lesson written then stays a 시범 lesson: out of 수강료, 급여 and 문자). */
+async function trialStudent(tx: any, db: any, key: string) { return isTrialRow((await tx.get(db.collection(DIRECTORY_ROWS).doc(directoryRowKey('students', normalizeNotionPageId(key))))).data()); }
+/** The same, read outside a transaction (회차: a student no longer 시범 leaves the 시범 lessons out). */
+export async function studentIsTrial(db: any, key: string) { return isTrialRow((await db.collection(DIRECTORY_ROWS).doc(directoryRowKey('students', normalizeNotionPageId(key))).get()).data()); }
 
 // Foundation only: no route or authority flag activates this before migration verification.
 function stable(record: any) {
@@ -36,7 +42,8 @@ export async function saveAppLesson(db: any, actor: any, body: any) {
                 (old.data.studentKey !== data.studentKey || old.data.subject !== data.subject))
                 throw Error('SOURCE_IDENTITY_LOCKED');
         }
-        const record = { ...old, data, ownerUid: old?.ownerUid || actor.uid,
+        const trial = Boolean(old?.trial) || await trialStudent(tx, db, data.studentKey);
+        const record = { ...old, data, ...(trial ? { trial: true } : {}), ownerUid: old?.ownerUid || actor.uid,
             academyId: actor.academyId, revision: (old?.revision || 0) + 1,
             sourceMode: 'firestore', appEdited: true, stage: 'draft',
             percentage: percentage(data.correct, data.total), updatedAt: Date.now() };
@@ -69,6 +76,7 @@ async function changePublicLesson(db: any, actor: any, idInput: unknown, revisio
         }
         if (old.deleteRequested && !archive) throw Error('FORBIDDEN');
         const mapping = await identity(tx, db, actor, old.data.studentKey, old.data.subject);
+        const trial = Boolean(old.trial) || (!archive && await trialStudent(tx, db, old.data.studentKey));
         const linked = await tx.get(db.collection('lessonReports').where('teacherDraftId', '==', id).limit(3));
         const source = old.notionPageId || old.notionWrite?.pageId;
         const candidates = [...new Set([old.appProjectionId, id,
@@ -89,7 +97,7 @@ async function changePublicLesson(db: any, actor: any, idInput: unknown, revisio
         const version = old.sourceMode === 'firestore' ? revision : revision + 1;
         const target = previous?.ref || db.collection('lessonReports').doc(old.appProjectionId || (source ? normalizeNotionPageId(source) : 'app-' + id));
         const now = Date.now();
-        const record = { ...old, revision: version, sourceMode: 'firestore', appEdited: true,
+        const record = { ...old, ...(trial ? { trial: true } : {}), revision: version, sourceMode: 'firestore', appEdited: true,
             ...(old.sourceMode !== 'firestore' ? { appTakeoverBaseRevision: revision } : {}),
             stage: archive ? 'archived' : 'published', archived: archive, deleteRequested: false,
             appProjectionId: target.id, appPublishedRevision: version, directReportRevision: version,
@@ -98,7 +106,7 @@ async function changePublicLesson(db: any, actor: any, idInput: unknown, revisio
             ...(archive ? {} : { publishedAssignment: String(old.data?.assignment || '').trim() }) };
         const projected = archive ? null : { ...prior, ...directLessonReport(id, record, mapping,
             prior || { reportIdentity: source || id }), notionPageId: source ? normalizeNotionPageId(source) : null,
-            appLessonId: id, academyId: actor.academyId, sourceMode: 'firestore' };
+            appLessonId: id, academyId: actor.academyId, sourceMode: 'firestore', ...(trial ? { trial: true } : {}) };
         // 수업 보상: the lesson's points follow this 반영 (or the deletion), in this same transaction.
         const reward = await readLessonReward(tx, db, mapping, archive ? prior : projected, archive);
         if (archive && previous) tx.delete(target);

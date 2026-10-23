@@ -44,7 +44,7 @@ test('workspace errors distinguish expired authentication, server setup, and inv
  const setup=workspaceError(new Error('CONFIG_ERROR: secret'), 'authentication');
  assert.equal(setup.status,500);assert.equal(setup.body.error,'SERVER_CONFIG_ERROR');assert.ok(!JSON.stringify(setup).includes('secret'));
  assert.equal(workspaceError(new Error('UNAUTHORIZED'),'authentication').status,401);
- assert.equal(workspaceError(new Error('NOTION_403'),'workspace-data').status,502);
+ assert.equal(workspaceError(new Error('NOTION_403'),'workspace-data').body.error,'WORKSPACE_ERROR');
  assert.equal(workspaceError(new Error('SELF_STUDY_REQUIRED'),'publish').status,400);
 });
 test('principal scope is server-approved academy membership, not user-editable role or submitted scopes',async()=>{

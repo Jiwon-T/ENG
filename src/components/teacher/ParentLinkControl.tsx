@@ -16,7 +16,7 @@ const failures:Record<string,string>={
 };
 /** A phone in groups: 11 digits 3-4-4, 10 digits 3-3-4 (anything else as it is). */
 const phoneText=(d:string)=>d.length===11?`${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`:d.length===10?`${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`:d;
-const failureText=(r:any)=>failures[r.data?.error]||String(r.data?.message||r.userMessage||'처리하지 못했습니다.').replace(/Notion\s*(\[[^\]]*\])?\s*/g,'');
+const failureText=(r:any)=>failures[r.data?.error]||String(r.data?.message||r.userMessage||'처리하지 못했습니다.');
 /** Admin: the parent report's fixed address (jiwont.kr/주소) for this student, using /api/teacher/report-slug unchanged.
  *  Parents open it and confirm with the last 4 digits of the guardian phone. */
 export default function ParentLinkControl({studentKey,studentName}:{studentKey:string;studentName:string}){

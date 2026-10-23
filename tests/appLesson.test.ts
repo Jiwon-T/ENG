@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { templateFirestore } from './helpers/templateFirestore.js';
 import { hashStudentKey } from '../api/_lib/security.js';
 import { saveAppLesson, publishAppLesson, archiveAppLesson } from '../api/_lib/appLesson.js';
+import { DIRECTORY_ROWS, directoryRowKey } from '../api/_lib/academyDirectorySource.js';
 const key = '11111111-1111-4111-8111-111111111111';
 function fixture() {
  const f=templateFirestore(), actor={uid:'teacher',academyId:'main',admin:false,scopes:[{studentKey:key,subject:'영어'}]};
@@ -55,4 +56,14 @@ test('selected lesson deletion keeps full history and other same-day lesson',asy
  await archiveAppLesson(f.db,f.actor,a,1);assert.equal(f.rows.has('lessonReports/app-'+a),false);assert.equal(f.rows.has('lessonReports/app-'+b),true);
  const history=f.rows.get('lessonAppHistory/'+a+':1:archive');assert.equal(history.before.reportIdentity,a);assert.equal(history.beforeDraft.data.content,f.data.content);
  const writes=f.metrics.writes;await archiveAppLesson(f.db,f.actor,a,1);assert.equal(f.metrics.writes,writes);
+});
+test('시범 수업: a lesson for a 시범 student is marked trial (draft and report) and stays so after 등록; later lessons are not', async () => {
+ const f = fixture(), row = (status: string) => f.rows.set(`${DIRECTORY_ROWS}/${directoryRowKey('students', key)}`, { academyId: 'main', kind: 'students', entityId: key, fields: { archived: false, properties: { '등록상태': { status: { name: status } } } } });
+ row('시범'); const a = randomUUID(); await saveAppLesson(f.db, f.actor, { id: a, data: f.data });
+ assert.equal(f.rows.get('teacherLessonDrafts/' + a).trial, true);
+ await publishAppLesson(f.db, f.actor, a, 1); assert.equal(f.rows.get('lessonReports/app-' + a).trial, true);
+ row('등록'); await saveAppLesson(f.db, f.actor, { id: a, revision: 1, data: { ...f.data, content: '고침' } });
+ assert.equal(f.rows.get('teacherLessonDrafts/' + a).trial, true, 'a 시범 lesson stays free');
+ const b = randomUUID(); await saveAppLesson(f.db, f.actor, { id: b, data: { ...f.data, date: '2026-10-12' } });
+ assert.equal(f.rows.get('teacherLessonDrafts/' + b).trial, undefined, 'after 등록: a usual lesson');
 });

@@ -12,7 +12,7 @@ const failures:Record<string,string>={
  MULTIPLE_STUDENTS_MATCHED:'같은 학생으로 보이는 기록이 둘 이상입니다. 관리자에게 확인해 주세요.',
  FORBIDDEN_ADMIN_ONLY:'관리자만 앱 계정을 연결할 수 있습니다.',
 };
-const failureText=(r:any)=>failures[r.data?.error]||r.data?.message?.replace(/Notion\s*/g,'')||r.userMessage||'연결 결과를 확인하지 못했습니다.';
+const failureText=(r:any)=>failures[r.data?.error]||r.data?.message||r.userMessage||'연결 결과를 확인하지 못했습니다.';
 /** Admin: link this registered student to the app account they signed up with (uses /api/teacher/student-link unchanged). */
 export default function StudentAccountLink({studentKey,studentName,linkedUid,onChanged}:{studentKey:string;studentName:string;linkedUid:string|null;onChanged:()=>Promise<void>|void}){
  const [code,setCode]=useState<{code:string;expiresAt:number}|null>(null),[copied,setCopied]=useState(false);

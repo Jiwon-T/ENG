@@ -35,7 +35,7 @@ export default function StudentCombobox({students,value,onChange,disabled=false,
    {filters&&<div className="report-picker-filters" role="group" aria-label="학생 수강 상태">{filters?.map((filter,i)=><button type="button" key={filter.label} aria-pressed={i===filterIndex} onMouseDown={e=>e.preventDefault()} onClick={()=>{setFilterIndex(i);setActive(0);}}>{filter.label}</button>)}</div>}
    <div id={`${id}-list`} role="listbox" aria-label="학생 검색 결과">{results.map((student,i)=>{const isToday=current.has(student.studentKey);return <div key={student.studentKey}>
     {(i===0||isToday!==current.has(results[i-1].studentKey))&&<div role="presentation" className="student-combobox-group">{isToday?'오늘':'학생'}</div>}
-    <div id={`${id}-option-${i}`} role="option" aria-selected={value===student.studentKey} className={`student-combobox-option ${i===index?'is-active':''}`} onMouseDown={event=>event.preventDefault()} onClick={()=>choose(student.studentKey)}>{student.studentDisplayName}{isToday&&<span className="student-today-tag">오늘</span>}</div>
+    <div id={`${id}-option-${i}`} role="option" aria-selected={value===student.studentKey} className={`student-combobox-option ${i===index?'is-active':''}`} onMouseDown={event=>event.preventDefault()} onClick={()=>choose(student.studentKey)}>{student.studentDisplayName}{(student as any).enrollmentStatus==='시범'&&<span className="student-trial-tag">시범</span>}{isToday&&<span className="student-today-tag">오늘</span>}</div>
    </div>;})}</div>{!results.length&&<p role="status" className="student-combobox-empty">{canAdd?'학생 목록에 없어요':'일치하는 학생이 없어요'}</p>}
    {canAdd&&<button type="button" className="student-combobox-add" onMouseDown={event=>event.preventDefault()} onClick={addNew}>신입생 '{typed}'(으)로 추가</button>}
   </div>}

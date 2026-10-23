@@ -129,6 +129,7 @@
 .admission-level-table th { background: #fff5f8; font-weight: 600; }
 .admission-level-table td { width: 20%; }
 .admission-level-table input { min-width: 0; width: 100%; padding: .45rem; font-size: .8rem; }
+.admission-level-table textarea { display: block; min-width: 0; width: 100%; min-height: 2.6rem; padding: .35rem .45rem; font-size: .8rem; line-height: 1.35; resize: vertical; }
 
 /* 장비 움직임 (petGearArt): 반짝임·숨 쉬는 빛·망토·회전·별 궤도·눈송이. 움직임 줄이기면 멈춰요. */
 .pg-tw{animation:pg-tw 1.8s ease-in-out infinite}.pg-d2{animation-delay:.9s}@keyframes pg-tw{0%,100%{opacity:.35}50%{opacity:1}}

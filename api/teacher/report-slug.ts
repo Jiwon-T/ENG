@@ -107,7 +107,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
             ok: false,
             error: 'STUDENT_NOT_FOUND_IN_NOTION',
             guardianContactStatus: 'not_found',
-            message: 'Notion [DB_학생 관리]에서 학생을 찾을 수 없습니다.',
+            message: '학생 정보를 찾을 수 없습니다.',
           });
         }
         if (notionErr.message === 'MULTIPLE_STUDENTS_MATCHED') {
@@ -115,7 +115,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
             ok: false,
             error: 'MULTIPLE_STUDENTS_MATCHED',
             guardianContactStatus: 'duplicate_match',
-            message: 'Notion에서 동명의 학생이 2명 이상 검색되었습니다. 구분을 확인해 주세요.',
+            message: '같은 이름의 학생이 2명 이상 있습니다. 구분을 확인해 주세요.',
           });
         }
         if (notionErr.message === 'GUARDIAN_CONTACT_MISSING_OR_INVALID') {
@@ -123,7 +123,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
             ok: false,
             error: 'GUARDIAN_CONTACT_MISSING',
             guardianContactStatus: 'contact_missing',
-            message: 'Notion [DB_학생 관리]에 유효한 보호자연락처가 등록되어 있지 않습니다.',
+            message: '학생 정보에 유효한 보호자 연락처가 등록되어 있지 않습니다.',
           });
         }
         throw notionErr;

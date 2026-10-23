@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {templateFirestore} from './helpers/templateFirestore.js';
-import {commitAppStudentRegistration} from '../api/_lib/appStudentRegistration.js';
+import {commitAppStudentRegistration,endTrialRegistration} from '../api/_lib/appStudentRegistration.js';
 import {saveStudentRegistration,convertRegistrationToResident} from '../api/_lib/teacherStudentRegistration.js';
 import {emptyRegistration} from '../src/lib/studentRegistration.js';
 import {directoryRowKey,directorySourceKey,readDirectoryStudents} from '../api/_lib/academyDirectorySource.js';
@@ -24,3 +24,25 @@ test('new app profile edits preserve app provenance and existing URLs/PINs, and 
 
 test('registration transition errors have bounded recovery messages without raw server details',()=>{for(const code of ['CORE_REGISTRATION_IN_PROGRESS','REGISTRATION_SOURCE_CONFLICT','REGISTRATION_ID_CONFLICT']){const result=workspaceError(Error(code),'student-registration-sync');assert.equal(result.body.error,code);assert.equal(result.status,409);assert.ok(result.body.message);assert.ok(!result.body.message.includes('undefined'));}});
 test('학원 등록일: the 원서 date is saved on the student (today by default), and 학생 정보 offers the earliest 과목 시작일',async()=>{const f=await fixture();assert.match(String(f.input.academyStartDate),/^\d{4}-\d{2}-\d{2}$/,'today by default');const r=await commitAppStudentRegistration(f.db,f.actor,f.saved.id,1);const p=await readCoreProfile(f.db,f.actor,r.studentKey,profileFromPage);assert.equal(p.data.academyStartDate,f.input.academyStartDate);assert.equal((p as any).firstSubjectStart,'2026-10-08');const {startId}=await import('../api/_lib/assignmentStarts.js');assert.equal(f.rows.get('teacherAssignmentStarts/'+startId(teacher,r.studentKey,'영어'))?.since,'2026-10-08','the 원서 teacher starts on the 과목 시작일');});
+
+test('시범 수업: a 상담 intake goes on the roster as 시범 (대기, 담당 scope, no 반 or 수강료), ends without 등록, and 등록 확정 later continues the same student',async()=>{
+ const f=await fixture(),consult=await saveStudentRegistration(f.db,f.actor,{...f.input,intakeStage:'consultation'},randomUUID(),undefined,randomUUID()),regPath='teacherStudentRegistrations/'+consult.id;
+ await assert.rejects(commitAppStudentRegistration(f.db,f.actor,consult.id,1),/REGISTRATION_ENROLLMENT_REQUIRED/,'a 상담 is not 등록 확정');
+ const t=await commitAppStudentRegistration(f.db,f.actor,consult.id,1,'trial') as any,key=t.trialStudentKey;
+ const row=()=>f.rows.get('academyDirectorySources/'+directoryRowKey('students',key)),scoped=()=>(f.rows.get('teacherWorkspaceAccess/'+teacher).scopes||[]).some((s:any)=>s.studentKey===key);
+ assert.equal(row().fields.properties['등록상태'].status.name,'시범');assert.equal(row().fields.properties['시범 수업'].checkbox,true);
+ assert.equal(f.rows.get('academyStudentMemberships/'+key).disabled,false);assert.ok(scoped(),'the 담당 선생님 can pick the student');
+ assert.ok(!f.rows.get('teacherClasses/'+klassId).students.includes(key),'no 반');assert.equal(f.rows.get('studentTuition/'+key),undefined,'no 수강료');
+ assert.equal(f.rows.get(regPath).data.intakeStage,'consultation');assert.notEqual(f.rows.get(regPath).syncStatus,'synced');
+ await assert.rejects(commitAppStudentRegistration(f.db,f.actor,consult.id,1,'trial'),/REGISTRATION_TRIAL_EXISTS/);
+ await endTrialRegistration(f.db,f.actor,consult.id,1);
+ assert.equal(row().fields.properties['등록상태'].status.name,'중단');assert.equal(f.rows.get('academyStudentMemberships/'+key).disabled,true);assert.ok(!scoped(),'out of the teacher list');
+ await assert.rejects(endTrialRegistration(f.db,f.actor,consult.id,1),/REGISTRATION_TRIAL_NOT_ACTIVE/);
+ // the family comes back: the intake becomes an 등록 원서 and 등록 확정 continues the same student
+ f.rows.set(regPath,{...f.rows.get(regPath),data:{...f.rows.get(regPath).data,intakeStage:'new'}});
+ const r=await commitAppStudentRegistration(f.db,f.actor,consult.id,1) as any;
+ assert.equal(r.studentKey,key,'the same student (the 시범 lessons stay theirs)');
+ assert.equal(row().fields.properties['등록상태'].status.name,'등록');assert.equal(f.rows.get('academyStudentMemberships/'+key).disabled,false);assert.ok(scoped());
+ assert.ok(f.rows.get('teacherClasses/'+klassId).students.includes(key),'the 반 now');
+ assert.equal((f.rows.get('teacherWorkspaceAccess/'+teacher).scopes||[]).filter((s:any)=>s.studentKey===key).length,1,'one scope');
+});

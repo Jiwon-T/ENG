@@ -167,7 +167,7 @@ test('입학·상담 정보: admin reads and saves only admission properties; te
  const first=await read();assert.equal(first.data.admission.birthDate,'');assert.equal(first.data.admission.levels.length,4);
  const profileBefore=await readStudentProfile(f.db,f.actor,sid);
  const data={guardianName:'김보호',guardianSalutation:'어머님',admission:{...first.data.admission,birthDate:'2012-03-04',address:'평택시',referral:'지인 소개',goal:'내신 1등급',availableDays:['월','수'],notes:'긴 메모 '.repeat(500).trim(),
-  levels:first.data.admission.levels.map((l:any)=>l.subject==='영어'?{...l,schoolScore:88,schoolGrade:'2',diagnostic:'문법 약함'}:l),consent:'동의',consentDate:'2026-10-01',signerName:'김보호',signedPaper:true}};
+  levels:first.data.admission.levels.map((l:any)=>l.subject==='영어'?{...l,schoolScore:'88',schoolGrade:'2',diagnostic:'문법 약함'}:l),consent:'동의',consentDate:'2026-10-01',signerName:'김보호',signedPaper:true}};
  const request={action:'save-student-admission',studentKey:sid,operationId:randomUUID(),expectedEditedAt:first.editedAt,data};
  assert.equal((await workspaceCall(f,'POST',request,ordinary(f))).status,403,'an ordinary teacher cannot save');
  assert.equal((await workspaceCall(f,'POST',{...request,data:{...data,displayName:'hijack'}})).status,400,'only admission fields are accepted');

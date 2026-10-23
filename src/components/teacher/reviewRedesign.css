@@ -282,6 +282,7 @@
 .teacher-workspace .admission-application .grid{gap:8px 12px}
 .teacher-workspace .admission-application .admission-level-table th,.teacher-workspace .admission-application .admission-level-table td{padding:4px 6px;font-size:12px}
 .teacher-workspace .admission-application .admission-level-table input{min-height:32px!important;height:32px!important;margin:0!important;padding:4px 8px!important}
+.teacher-workspace .admission-application .admission-level-table textarea{min-height:44px!important;height:auto!important;margin:0!important;padding:4px 8px!important}
 .teacher-workspace .admission-application .admission-level-table caption{text-align:left;font-size:13px;font-weight:700;padding-bottom:6px}
 .teacher-workspace .admission-application .registration-enrollment{gap:8px 12px;padding:8px 0}
 .teacher-workspace .admission-application .adm-step>fieldset+fieldset{margin-top:10px}

@@ -253,7 +253,7 @@ test('간식 선물: food bought with my points (or from my 가방) goes into th
   assert.equal(f.rows.get('petStates/a').pets[0].xp, xp + 10);
   assert.deepEqual(f.rows.get('petStates/b').snacks, {macaron: 1}, 'into the friend\'s 가방');
   assert.equal((await give('b', 'cookie')).error, 'ROOM_GIFT_USED');
-  assert.equal((await give('c', 'coffee')).error, 'ROOM_BAD_GIFT', 'no energy snacks');
+  assert.equal((await give('c', 'monster')).error, 'ROOM_BAD_GIFT', 'no 몬스터');
   assert.deepEqual((await give('c', 'cookie', true)).result.snacks, {}, 'from my 가방, no points');
   assert.equal(f.rows.get('petStates/a').points, 150);
   set('d', {snacks: {candy: 99}});
@@ -267,4 +267,20 @@ test('간식 선물: food bought with my points (or from my 가방) goes into th
   // a sticker afterwards keeps the gift on the visit
   await call('a', {action: 'room-sticker', at: r.at, id: id('펫b'), sticker: 'best'}, f);
   assert.deepEqual(((await call('b', {action: 'room-home'}, f)).result.guestbook[0]), {...home.guestbook[0], sticker: 'best', at: home.guestbook[0].at});
+});
+
+test("친구 선물 기운 간식: into the friend's 친구 선물 칸; one a day beyond the 2-a-day limit, waking a 탈진 pet too; the 오늘 할 일 box coffee can be given", async () => {
+  const f = registrationFirestore();
+  for (const uid of ['a', 'b']) student(f, uid, [[20, 5, 1]], `팀${uid}`, [`펫${uid}`]);
+  f.rows.set('petStates/a', {...f.rows.get('petStates/a'), points: 0, snacks: {coffee: 1}});
+  const r = (await call('a', {action: 'rank-board', kind: 'pet'}, f)).ranking, bRow = r.rows.find((x: any) => x.label === '펫b');
+  const g = await call('a', {action: 'room-gift', at: r.at, id: bRow.id, item: 'coffee', fromBag: true}, f);
+  assert.deepEqual(g.result.snacks, {}, 'the box coffee, given from my 가방');
+  assert.deepEqual([f.rows.get('petStates/b').friendSnacks, f.rows.get('petStates/b').snacks], [{coffee: 1}, undefined]);
+  // b has used both energy snacks today and is 탈진: the friend's coffee still wakes the pet, once
+  const b = f.rows.get('petStates/b'); b.today = {...b.today, energyItems: 2}; b.pets[0].energy = 0; b.friendSnacks = {coffee: 2}; f.rows.set('petStates/b', b);
+  const ate = await call('b', {action: 'friend-snack-use', itemId: 'coffee'}, f);
+  assert.deepEqual([ate.result.message, ate.state.pets[0].energy, ate.state.today.friendEnergyLeft, ate.state.friendSnacks], ['친구가 준 간식으로 번쩍 깨어났어요!', 30, 0, {coffee: 1}]);
+  assert.equal((await call('b', {action: 'friend-snack-use', itemId: 'coffee'}, f)).error, 'PET_FRIEND_SNACK_USED', 'one a day');
+  assert.equal((await call('b', {action: 'friend-snack-use', itemId: 'cookie'}, f)).error, 'PET_ITEM_NOT_FOUND');
 });

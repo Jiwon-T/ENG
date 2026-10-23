@@ -5,7 +5,8 @@ import { admissionSubjects, emptyAdmission } from '../../lib/studentAdmission';
 // 입학원서 (채움학원's paper form, the same layout): one A4 page filled from a 상담·신입생 원서, or blank to print and write
 // by hand. Printed with PrintPortal; the browser's 'PDF로 저장' makes the file.
 const LOGO = '/branding/chaeum-logo.png';
-const score = (grade: string, value: number | null) => [grade && (/등급$/.test(grade) ? grade : `${grade}등급`), value != null ? `${value}점` : ''].filter(Boolean).join(' · ');
+// 점수 is free text (several 학기): a bare number still gets '점'
+const score = (grade: string, value: string) => [grade && (/등급$/.test(grade) ? grade : `${grade}등급`), /^\d+(\.\d+)?$/.test(value.trim()) ? `${value.trim()}점` : value.trim()].filter(Boolean).join(' · ');
 const dateParts = (day: string) => /^\d{4}-\d{2}-\d{2}$/.test(day) ? [day.slice(0, 4), String(Number(day.slice(5, 7))), String(Number(day.slice(8, 10)))] : ['', '', ''];
 
 export default function AdmissionFormSheet({ value }: { value?: RegistrationInput | null }) {
@@ -30,8 +31,8 @@ export default function AdmissionFormSheet({ value }: { value?: RegistrationInpu
       <tr><th>이전 학습 이력</th><th>기 간</th><th colSpan={4}>학원명, 사용교재, 학습내용</th></tr>
       <tr className="admission-tall"><td /><td>{a.previousPeriod}</td><td colSpan={4} className="admission-pre">{history}</td></tr>
       <tr><th rowSpan={4}>현 재 수 준</th><th /><>{admissionSubjects.map(s => <th key={s}>{s.split('').join(' ')}</th>)}</></tr>
-      <tr><th className="admission-sub">내신 (등급.점수)</th>{admissionSubjects.map(s => <td key={s}>{score(level(s)?.schoolGrade || '', level(s)?.schoolScore ?? null)}</td>)}</tr>
-      <tr><th className="admission-sub">모평 (등급.점수)</th>{admissionSubjects.map(s => <td key={s}>{score(level(s)?.mockGrade || '', level(s)?.mockScore ?? null)}</td>)}</tr>
+      <tr><th className="admission-sub">내신 (등급.점수)</th>{admissionSubjects.map(s => <td key={s}>{score(level(s)?.schoolGrade || '', String(level(s)?.schoolScore ?? ''))}</td>)}</tr>
+      <tr><th className="admission-sub">모평 (등급.점수)</th>{admissionSubjects.map(s => <td key={s}>{score(level(s)?.mockGrade || '', String(level(s)?.mockScore ?? ''))}</td>)}</tr>
       <tr><th className="admission-sub">진단평가 결과</th>{admissionSubjects.map(s => <td key={s} className="admission-pre">{level(s)?.diagnostic}</td>)}</tr>
       <tr><th>목 &nbsp; 표</th><td colSpan={5} className="admission-pre">{a.goal}</td></tr>
       <tr className="admission-mid"><th>수업 가능<br />요일. 시간</th><td colSpan={5} className="admission-pre">{days}</td></tr>

@@ -184,15 +184,33 @@ export default function StudentRegistrationManager({onSynced,students=[],coreMod
             if(current===generation.current){setBusy(false);setReload(old=>old+1);}
         }
     }
+    // 시범 수업: put a 상담 student on the roster as '시범' (lessons and 일정 can name them; 일지 stay out of 수강료 and 문자),
+    // or end it without 등록. 등록 later is the usual 등록 확정 and continues the same student.
+    async function trial(record:RegistrationSummary,end:boolean){
+        if(writeBusy.current)return;
+        if(!await askConfirm(end?{title:'시범 수업을 끝낼까요?',message:'학생 명부와 담당 선생님 목록에서 빠져요. 나중에 등록하면 같은 학생으로 이어지고, 시범 수업 일지도 그대로 남아요.',confirmText:'시범 끝',icon:'check'}
+            :{title:'시범 수업 학생으로 올릴까요?',message:'원서에 적은 과목과 담당 선생님으로 학생 명부에 \'시범\'으로 올라가요. 수업 일지와 일정에서 고를 수 있고, 시범 수업 일지는 수강료와 학부모 문자에서 빠져요.',confirmText:'올리기',icon:'check'}))return;
+        writeBusy.current=true;setBusy(true);setFeedback('');const current=generation.current,uid=auth.currentUser?.uid;
+        try{
+            const result=await teacherAuthenticatedRequest<ServerResult>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:end?'end-trial-registration':'trial-student-registration',id:record.id,revision:record.revision})});
+            if(current!==generation.current||auth.currentUser?.uid!==uid)return;
+            if(!result.ok||!result.data?.ok)throw Error(responseMessage(result));
+            setFeedback(end?'시범 수업을 끝냈어요. 등록하면 같은 학생으로 이어져요.':'시범 수업 학생으로 올렸어요. 수업 일지와 일정에서 \'시범\'으로 고를 수 있어요.');
+            try{await onSynced();}catch{setFeedback('저장은 됐지만 학생 명부를 다시 불러오지 못했어요. 새로고침해 주세요.');}
+        }catch(error){if(current===generation.current)setFeedback(error instanceof Error?error.message:'잠시 후 다시 해 주세요.');}
+        finally{writeBusy.current=false;if(current===generation.current){setBusy(false);setReload(old=>old+1);}}
+    }
     async function convert(record:RegistrationSummary){
         if(writeBusy.current)return;
         if(!await askConfirm(record.purpose==='additional'?{title:'상담 목록에서 정리할까요?',message:'선택한 상담 과목의 실제 등록을 확인한 뒤 정리해 주세요.',confirmText:'정리',icon:'check'}:{title:'재원생으로 전환할까요?',message:'이 목록에서 빠지고 아래 학생 관리 카드에서 계속 관리합니다. 기존 기록과 리포트 주소는 유지됩니다.',confirmText:'전환',icon:'check'}))return;
         writeBusy.current=true;setBusy(true);setFeedback('');const current=generation.current,uid=auth.currentUser?.uid;
         try{const result=await teacherAuthenticatedRequest<ServerResult>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'convert-registration-resident',id:record.id,revision:record.revision})});if(current!==generation.current||auth.currentUser?.uid!==uid)return;if(!result.ok||!result.data?.ok)throw Error(responseMessage(result));setReload(n=>n+1);setFeedback('목록에서 정리했습니다. 아래 학생 관리 카드에서 계속 관리할 수 있습니다.');await onSynced();}catch(error){if(current===generation.current)setFeedback(error instanceof Error?error.message:'전환 결과를 확인하지 못했습니다.');}finally{writeBusy.current=false;if(current===generation.current)setBusy(false);}
     }
-    const stageText=(record:RegistrationSummary)=>record.purpose==='additional'?'추가 과목 상담':record.intakeStage==='consultation'?'상담만 진행':record.syncStatus==='synced'?'등록 첫 달':registrationStatusLabels[record.syncStatus]||'등록 확인 필요';
+    const stageText=(record:RegistrationSummary)=>record.purpose==='additional'?'추가 과목 상담':record.intakeStage==='consultation'?(record.trialStudentKey?(record.trialEndedAt?'시범 끝':'시범 수업 중'):'상담만 진행'):record.syncStatus==='synced'?'등록 첫 달':registrationStatusLabels[record.syncStatus]||'등록 확인 필요';
     const actions=(record:RegistrationSummary)=><>
         {record.purpose!=='additional'&&record.intakeStage!=='consultation'&&record.syncStatus!=='synced' ? <button type="button" className="primary-button" disabled={busy} onClick={()=>void sync(record)}>{record.syncStatus==='uncertain' || record.syncStatus==='syncing'?'반영 결과 확인':record.syncStatus==='failed'?coreMode?'앱 등록 재시도':'등록 재시도':coreMode?'앱 등록 확정':'등록 확정'}</button> : null}
+        {record.purpose!=='additional'&&record.intakeStage==='consultation'&&!record.trialStudentKey ? <button type="button" className="small-button" disabled={busy} onClick={()=>void trial(record,false)}>시범 수업 학생으로 올리기</button> : null}
+        {record.purpose!=='additional'&&record.intakeStage==='consultation'&&record.trialStudentKey&&!record.trialEndedAt ? <button type="button" className="small-button" disabled={busy} onClick={()=>void trial(record,true)}>시범 끝 (등록 안 함)</button> : null}
         {record.purpose==='additional'&&record.existingStudentKey ? <button type="button" className="small-button" disabled={busy} onClick={()=>setEnrollmentKey(record.existingStudentKey!)}>기존 학생 수강 관리</button> : null}
         {(record.syncStatus==='synced'||record.purpose==='additional') ? <button type="button" className="small-button" disabled={busy} onClick={()=>void convert(record)}>{record.purpose==='additional'?'수강 완료 · 목록에서 정리':'재원생으로 전환'}</button> : null}
     </>;

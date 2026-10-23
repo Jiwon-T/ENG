@@ -110,15 +110,15 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
       } catch (linkErr: any) {
         if (linkErr.message === 'USER_NOT_FOUND') return sendJson(res, 404, { ok: false, error: 'USER_NOT_FOUND', message: '대상이 되는 Firebase 사용자 계정을 찾을 수 없습니다.' });
         if (linkErr.message === 'INVALID_ROLE') return sendJson(res, 400, { ok: false, error: 'INVALID_ROLE', message: '학생(student) 역할의 계정만 수업 리포트에 연결할 수 있습니다.' });
-        if (linkErr.message === 'STUDENT_NOT_FOUND') return sendJson(res, 404, { ok: false, error: 'STUDENT_NOT_FOUND_IN_NOTION', message: 'Notion [DB_학생 관리]에서 학생을 찾을 수 없습니다.' });
-        if (linkErr.message === 'MULTIPLE_STUDENTS_MATCHED') return sendJson(res, 409, { ok: false, error: 'MULTIPLE_STUDENTS_MATCHED', message: 'Notion에서 동명의 학생이 2명 이상 검색되었습니다.' });
+        if (linkErr.message === 'STUDENT_NOT_FOUND') return sendJson(res, 404, { ok: false, error: 'STUDENT_NOT_FOUND_IN_NOTION', message: '학생 정보를 찾을 수 없습니다.' });
+        if (linkErr.message === 'MULTIPLE_STUDENTS_MATCHED') return sendJson(res, 409, { ok: false, error: 'MULTIPLE_STUDENTS_MATCHED', message: '같은 이름의 학생이 2명 이상 있습니다.' });
         throw linkErr;
       }
 
       return sendJson(res, 200, {
         ok: true,
         ...linked,
-        message: '학생 계정과 Notion 학생 리포트가 성공적으로 연결되었습니다.',
+        message: '학생 계정과 학생 리포트가 연결되었습니다.',
       });
     }
 
@@ -186,7 +186,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
       return sendJson(res, 409, {
         ok: false,
         error: 'STUDENT_ALREADY_LINKED',
-        message: '해당 Notion 학생은 이미 다른 학생 계정(Firebase UID)에 연결되어 있습니다.',
+        message: '이 학생은 이미 다른 학생 계정에 연결되어 있습니다.',
       });
     }
     if (err.message === 'USER_NOT_FOUND') {

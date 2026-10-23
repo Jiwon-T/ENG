@@ -42,6 +42,8 @@ export interface RegistrationSummary {
     sourceMode?:'notion'|'firestore';
     purpose?: 'new' | 'additional';
     intakeStage?: 'consultation' | 'new';
+    /** 시범 수업: the student put on the roster as '시범' from this 상담, and when the 시범 ended (등록 안 함) */
+    trialStudentKey?: string | null; trialEndedAt?: number | null;
     existingStudentKey?: string | null;
     studentKey?: string | null;
     id: string;

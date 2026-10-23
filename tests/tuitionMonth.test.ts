@@ -132,3 +132,10 @@ test('sessions taught use the latest 회차 of the month rounded down from 2026-
     const b = (await readTuitionMonth(f.db, admin, '2026-10', NOW)).rows.find((r: any) => r.studentKey === B && r.subject === '영어');
     assert.deepEqual([b.written, b.lastRound, b.taught, b.planned, b.sessions, b.charged], [3, 4.6, 4, 0, 4, 4], 'three logs, 회차 4.6 → 4 sessions charged');
 });
+
+test("시범 수업: a 시범 lesson is free — out of the 일지 count, the 회차 and the teacher count", async () => {
+    const f = seed(), before = (await readTuitionMonth(f.db, admin, '2026-10', NOW)).rows.find((x: any) => x.studentKey === A);
+    f.rows.set('teacherLessonDrafts/trial1', { academyId: 'main', stage: 'published', archived: false, trial: true, ownerUid: 'teacher', data: { studentKey: A, subject: '영어', date: '2026-10-18', classSession: '있음', round: 9 } });
+    const after = (await readTuitionMonth(f.db, admin, '2026-10', NOW)).rows.find((x: any) => x.studentKey === A);
+    assert.deepEqual([after.written, after.taught, after.amount], [before.written, before.taught, before.amount]);
+});

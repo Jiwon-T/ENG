@@ -42,7 +42,7 @@ test('과제 알림 보내기: data-only to the student\'s devices, one tag per 
   assert.equal(await sendLessonPush(db, {studentKey: K, assignment: ''}, 'L1', 'new', m), 0, 'no 과제: nothing');
   assert.equal(await sendToTokens(db, [], {title: 'x', body: 'y', tag: 'z'}, m), 0);
   const src = readFileSync(new URL('../api/teacher/workspace.ts', import.meta.url), 'utf8');
-  assert.match(src, /isLessonPushKind\(body\.notify\)&&!result\.alreadyPublished\?await .*sendLessonPush\(db,current\.data,id,body\.notify\)\.catch\(\(\)=>0\):0/, 'sent with the 반영, never failing it');
+  assert.match(src, /isLessonPushKind\(body\.notify\)&&!result\.alreadyPublished&&!result\.record\?\.trial\?await .*sendLessonPush\(db,current\.data,id,body\.notify\)\.catch\(\(\)=>0\):0/, 'sent with the 반영, never failing it');
 });
 
 test('보강 아침 알림: today\'s published, not cancelled 보강 only, at 08:00 KST (23:00 UTC)', async () => {

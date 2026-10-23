@@ -133,15 +133,16 @@ export async function placeGift(db: any, owner: string, viewer: string, itemInpu
     if (ownerPet.data()?.roomHidden) throw Error('ROOM_HIDDEN');
     if (visit.data()?.gift) throw Error('ROOM_GIFT_USED');
     // a full 가방 (99 of it) takes nothing, so nothing is spent
-    const friend = rollDay(ownerPet.data(), now) as ServerPetState;
-    if ((friend.snacks?.[id] || 0) >= 99) throw Error('ROOM_GIFT_BAG_FULL');
+    const friend = rollDay(ownerPet.data(), now) as ServerPetState, energy = (PET_ROOM.energyGifts as readonly string[]).includes(id);
+    if (((energy ? friend.friendSnacks : friend.snacks)?.[id] || 0) >= 99) throw Error('ROOM_GIFT_BAG_FULL');
     if (!mePet.exists) throw Error('PET_NOT_ENOUGH_POINTS');
     const me = rollDay(mePet.data(), now) as ServerPetState;
     if ((me.today.gifts || 0) >= PET_ROOM.giftsPerDay) throw Error('ROOM_GIFTS_DONE');
     if (fromBag) { if (!(me.snacks?.[id]! > 0)) throw Error('PET_BAG_EMPTY'); me.snacks![id] -= 1; if (!me.snacks![id]) delete me.snacks![id]; }
     else { if (me.points < item.price) throw Error('PET_NOT_ENOUGH_POINTS'); me.points -= item.price; }
     me.today.gifts = (me.today.gifts || 0) + 1; addXP(me, PET_ROOM.giftXp); me.updatedAt = now;
-    const bag = friend.snacks ||= {};
+    // a 기운 snack goes into the '친구 선물' 칸 (eaten beyond the daily limit), food into the 가방
+    const bag = energy ? (friend.friendSnacks ||= {}) : (friend.snacks ||= {});
     bag[id] = (bag[id] || 0) + 1; friend.updatedAt = now;
     let r: RoomDoc = room.data() || {};
     if (!visit.exists) r = addVisit(r, day);

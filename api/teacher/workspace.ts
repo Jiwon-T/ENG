@@ -397,6 +397,14 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(!await coreActive(db,actor))throw new Error('CORE_NOT_READY');
             return sendJson(res,200,{ok:true,...await (await import('../_lib/appStudentRegistration.js')).commitAppStudentRegistration(db,actor,value.id,value.revision)});
         }
+        // 시범 수업: a 상담 intake on the roster as '시범' (lessons and 일정 can name the student), and 시범 끝
+        if(body.action==='trial-student-registration'||body.action==='end-trial-registration'){
+            failureStage='student-registration-sync';
+            const value=z.object({action:z.enum(['trial-student-registration','end-trial-registration']),id:z.string().regex(/^[a-f0-9]{64}$/),revision:z.number().int().positive()}).strict().parse(body);
+            if(!await coreActive(db,actor))throw new Error('CORE_NOT_READY');
+            const lib=await import('../_lib/appStudentRegistration.js');
+            return sendJson(res,200,{ok:true,...(value.action==='trial-student-registration'?await lib.commitAppStudentRegistration(db,actor,value.id,value.revision,'trial'):await lib.endTrialRegistration(db,actor,value.id,value.revision))});
+        }
         if(body.action==='save-student-enrollment') {
             failureStage='student-enrollment-save';
             const v=z.object({action:z.literal('save-student-enrollment'),studentKey:z.string().uuid(),operationId:z.string().uuid(),studentEditedAt:z.string().datetime(),enrollmentEditedAt:z.string().datetime(),data:z.unknown()}).strict().parse(body);
@@ -558,7 +566,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const result=await (await import('../_lib/appLesson.js')).publishAppLesson(db,actor,id,body.revision??current.revision);
             // '학생에게 알림 보내기' in the 반영 확인 창: sent now; a failed send never fails the 반영.
             const {isLessonPushKind}=await import('../../src/lib/lessonPush.js');
-            const pushed=isLessonPushKind(body.notify)&&!result.alreadyPublished?await (await import('../_lib/pushSend.js')).sendLessonPush(db,current.data,id,body.notify).catch(()=>0):0;
+            const pushed=isLessonPushKind(body.notify)&&!result.alreadyPublished&&!result.record?.trial?await (await import('../_lib/pushSend.js')).sendLessonPush(db,current.data,id,body.notify).catch(()=>0):0;
             return sendJson(res,200,{ok:true,stage:result.stage,pageId:result.record?.notionPageId||null,record:result.record,pushed});
         }
         if(body.action==='publish')throw new Error('LESSON_APP_REQUIRED');
@@ -570,7 +578,9 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const date=body.date===undefined?undefined:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(body.date);
             const records=await teacherReadCache.get(teacherReadKey(actor,'previous-lessons-local'),async()=>(await db.collection('teacherLessonDrafts').where('ownerUid','==',actor.uid).get()).docs.map(d=>({id:d.id,...d.data()})));
             const local=latestPreviousLesson(records,key,subject,date);
-            const localRecords=records.filter((r:any)=>!r.archived&&!r.deleteRequested&&r.data?.studentKey===key&&r.data.subject===subject);
+            // 회차: once the student is past 시범 (등록), the free 시범 lessons stay out of the count
+            const trialNow=await (await import('../_lib/appLesson.js')).studentIsTrial(db,key).catch(()=>false);
+            const localRecords=records.filter((r:any)=>!r.archived&&!r.deleteRequested&&(trialNow||!r.trial)&&r.data?.studentKey===key&&r.data.subject===subject);
             const context={studentKey:key,subject,date};
             const needLesson=Boolean(date)&&!sessionBase(localRecords,context,'lesson');
             const needStudy=Boolean(date)&&!sessionBase(localRecords,context,'study');

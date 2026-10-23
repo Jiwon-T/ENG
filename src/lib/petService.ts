@@ -7,9 +7,9 @@ export type { PetCharacterType, PetStage } from './petCatalog';
 export interface LearnedPhrase { original: string; remembered: string; learnedAtLevel: number; evolvedVersions: Record<string, string> }
 export interface PetData { slot: number; character: string; name: string; chosen: boolean; level: number; xp: number; energy: number; maxEnergy: number; learnedPhrases: LearnedPhrase[]; clothing: string | null; accessories?: Partial<Record<AccessorySlot, string>>; job?: PetJob | null; job2?: PetJob2 | null; job3?: PetJob3 | null; gear?: PetGearLook | null; gearShow?: boolean; gearStyle?: PetJob | null }
 export interface PetState {
-  points: number; inventory: string[]; /** 가방: snacks from 간식 상자 */ snacks?: Record<string, number>; /** 목표 물건 being saved up for */ goal?: string | null; clothing: string | null; accessories?: Partial<Record<AccessorySlot, string>>; background: string;
+  points: number; inventory: string[]; /** 가방: snacks from 간식 상자 */ snacks?: Record<string, number>; /** 가방 › 친구 선물 (기운 간식) */ friendSnacks?: Record<string, number>; /** 목표 물건 being saved up for */ goal?: string | null; clothing: string | null; accessories?: Partial<Record<AccessorySlot, string>>; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: PetData[]; day: string;
-  today: { studyPoints: number; studyCap: number; energyItemsLeft: number; revivesLeft?: number }; stage: PetStage;
+  today: { studyPoints: number; studyCap: number; energyItemsLeft: number; revivesLeft?: number; /** 친구 선물 기운 간식 still allowed today */ friendEnergyLeft?: number }; stage: PetStage;
   /** 금메달 by month ('2026-10') and where they sit in each room (% of the room, by background). */
   medals?: string[]; /** 탑 장식 won */ towerDecor?: string[]; decor?: Record<string, MedalSpot[]>; /** 포인트 내역 (this month and last) */ ledger?: LedgerItem[];
   /** 영어 회화 모드 (works while a 펫 패스·프리미엄 is in force) */ englishTalk?: boolean;

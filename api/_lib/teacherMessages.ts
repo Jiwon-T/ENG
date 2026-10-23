@@ -41,7 +41,7 @@ export async function readTeacherMessages(db:any,actor:any,keyInput:unknown,subj
  const templates:any[]=await storedMessageTemplates(db,actor);
  // Only this student's lessons (both ID spellings), not the whole academy.
  const records=await db.collection('teacherLessonDrafts').where('data.studentKey','in',[...new Set([key,key.replace(/-/g,'')])]).get();
- const lessons=records.docs.map((d:any)=>({id:d.id,...d.data()})).filter((r:any)=>r.academyId===actor.academyId&&r.stage==='published'&&!r.archived&&r.data?.studentKey?.replace(/-/g,'')===key.replace(/-/g,'')&&r.data?.subject===subject).sort((a:any,b:any)=>b.data.date.localeCompare(a.data.date)).slice(0,30).map((r:any)=>({id:r.id,data:r.data}));
+ const lessons=records.docs.map((d:any)=>({id:d.id,...d.data()})).filter((r:any)=>r.academyId===actor.academyId&&r.stage==='published'&&!r.archived&&!r.trial&&r.data?.studentKey?.replace(/-/g,'')===key.replace(/-/g,'')&&r.data?.subject===subject).sort((a:any,b:any)=>b.data.date.localeCompare(a.data.date)).slice(0,30).map((r:any)=>({id:r.id,data:r.data}));
  const drafts=await db.collection('teacherMessages').where('studentKey','==',key).get();
  // 수강료 is for the admin and principal only.
  const profile=profileFromPage(page);if(!actor.admin&&!actor.principal)profile.tuition=null;
@@ -53,7 +53,7 @@ export async function prepareTeacherMessage(db:any,actor:any,input:unknown){
  if(!await templateReadsFromApp(db))throw Error('TEMPLATE_APP_REQUIRED');
  const page=await source(db,actor,key,v.subject),template=await storedMessageTemplatePage(db,actor,v.templateId);assertPage(template,uuid(v.templateId),TEMPLATE_DB);
  const recipient=profileFromPage(page).guardianPhone;if(!/^0\d{8,10}$/.test(recipient))throw Error('MESSAGE_CONTACT_REQUIRED');
- if(v.lessonId){const lesson=(await db.collection('teacherLessonDrafts').doc(v.lessonId).get()).data();if(!lesson||lesson.academyId!==actor.academyId||lesson.stage!=='published'||lesson.archived||uuid(lesson.data.studentKey)!==key||lesson.data.subject!==v.subject)throw Error('FORBIDDEN');}
+ if(v.lessonId){const lesson=(await db.collection('teacherLessonDrafts').doc(v.lessonId).get()).data();if(!lesson||lesson.academyId!==actor.academyId||lesson.stage!=='published'||lesson.archived||lesson.trial||uuid(lesson.data.studentKey)!==key||lesson.data.subject!==v.subject)throw Error('FORBIDDEN');}
  const ref=db.collection('teacherMessages').doc(v.id),context=messageContext(page,template),fingerprint=digest(JSON.stringify([actor.uid,key,v.subject,v.templateId,v.lessonId,v.body]));
  let r=await db.runTransaction(async(tx:any)=>{const old=(await tx.get(ref)).data(),member=(await tx.get(db.collection('academyStudentMemberships').doc(key))).data(),edit=(await tx.get(db.collection('teacherStudentEdits').doc(hashStudentKey(key)))).data();assertMember(actor,member);assertContactEditAllowsIssuance(edit,page.last_edited_time);if(old){if(old.fingerprint!==fingerprint||old.ownerUid!==actor.uid)throw Error('MESSAGE_CONFLICT');return old;}const next={id:v.id,studentKey:key,subject:v.subject,templateId:uuid(v.templateId),lessonId:v.lessonId,body:v.body,recipient,context,ownerUid:actor.uid,academyId:actor.academyId,fingerprint,status:'prepared',createdAt:Date.now()};tx.set(ref,next);return next;});
  // Student text is a backup. Only these two properties are changed; SMS is independent.

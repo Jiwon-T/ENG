@@ -113,6 +113,8 @@ export function registrationSummary(id:string, record:any): RegistrationSummary 
         purpose:record.data?.purpose||'new',intakeStage:record.data?.intakeStage||'new',existingStudentKey:record.data?.existingStudentKey||null,sourceMode:record.sourceMode||'notion',studentKey:record.studentKey||record.notionStudentPageId||record.data?.existingStudentKey||null,
         canEdit:!(['syncing','uncertain','synced'].includes(record.syncStatus) || record.notionStudentPageId || record.studentCreateAttempted || record.enrollmentCreateAttempted),
         studentSaved:Boolean(record.studentSaved),enrollmentSaved:Boolean(record.enrollmentSaved),
+        // 시범 수업: on the roster as '시범' (the intake still a 상담), and when it ended
+        trialStudentKey:record.trialStudentKey||null,trialEndedAt:record.trialEndedAt||null,
         enrollments:(record.data?.enrollments || []).map((item:any)=>({subject:item.subject, status:item.status,startDate:item.startDate}))};
 }
 export async function listStudentRegistrations(db:any, actor:RegistrationActor) {

@@ -3,7 +3,7 @@
 // teacher screens. The AI talk uses fixed instructions written here; the student's text is only ever passed as data.
 import {keepsNameHidden} from '../../src/lib/rankNames.js';
 import {
-  PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_CHARACTERS, PET_DAILY_STUDY_POINTS, PET_ENERGY_ITEMS_PER_DAY, PET_FRIEND_LEVEL, PET_MAX_ENERGY, PET_MAX_LEVEL, PET_MAX_PETS, PET_REVIVES_PER_DAY,
+  PET_ACTIONS, PET_ATTENDANCE_REWARD, PET_HOMEWORK_REWARD, PET_ROOM, PET_CHARACTERS, PET_DAILY_STUDY_POINTS, PET_ENERGY_ITEMS_PER_DAY, PET_FRIEND_LEVEL, PET_MAX_ENERGY, PET_MAX_LEVEL, PET_MAX_PETS, PET_REVIVES_PER_DAY,
   PET_ATTITUDE_REWARD, COUPON_BOOST, PET_COUPON, PET_LATE_REWARD, PET_TEST_DAY, PET_REWARD_WINDOW_DAYS, LESSON_REWARD_FROM, LESSON_REWARD_LOCK_DAYS, PET_TEST_REWARD, PET_STUDY_RATES, PLACEHOLDER_PET_NAME, passAllows, petItem, petStage, xpNeeded, type PetStudySource, type PetJob2, type PetJob3, accessorySlot, type AccessorySlot, type PetJob, type PetGearLook} from '../../src/lib/petCatalog.js';
 
 export const PET_STATES = 'petStates';
@@ -19,7 +19,7 @@ export interface ServerPetState {
   version: 1; points: number; inventory: string[]; /** before 여러 마리: what pet 1 wore */ clothing?: string | null; accessory?: string | null; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: ServerPet[];
   day: string; today: { studyPoints: number; energyItems?: number; /** before 2/day */ energyItem?: boolean; /** 몬스터 today */ revives?: number; /** 선생님 인증 paid today */ certs?: number;
-    /** 오늘 할 일 done so far (counted whatever today's three are) and whether today's 간식 상자 was opened */ quest?: Partial<Record<string, number>>; questClaimed?: boolean; /** 응원 스티커 that gave XP today */ stickers?: number; /** 간식 선물 given today */ gifts?: number };
+    /** 오늘 할 일 done so far (counted whatever today's three are) and whether today's 간식 상자 was opened */ quest?: Partial<Record<string, number>>; questClaimed?: boolean; /** 응원 스티커 that gave XP today */ stickers?: number; /** 간식 선물 given today */ gifts?: number; /** 친구 선물 기운 간식 eaten today (beyond the 2) */ friendEnergy?: number };
   rewarded: Record<string, string[]>; updatedAt: number;
   /** 이달의 장학 쿠폰: points earned in `month` ('YYYY-MM', Korea time). */ earned?: { month: string; points: number };
   /** Earned by month (this month and last): a lesson's points count for the month of the lesson. */ earnedBy?: Record<string, number>;
@@ -34,6 +34,7 @@ export interface ServerPetState {
   /** 쌓인 포인트 알림: 수업 보상 that came in (or changed) without the student, shown once when the app opens. */
   inbox?: InboxLine[];
   /** 가방: snacks from 간식 상자 (item id → count), given to the pet without points. */ snacks?: Record<string, number>;
+  /** 가방 › 친구 선물: 기운 snacks friends gave (one a day beyond the limit, even while 탈진) */ friendSnacks?: Record<string, number>;
   /** 목표 물건: the 특별 item the student is saving up for (shown at the top of the pet screen) */ goal?: string;
   /** 방 구경: the room is closed to friends (no visits, no stickers; the 순위 still shows the pet). */ roomHidden?: boolean;
   /** 오늘 할 일 days in a row: the last day all three were done and how many days in a row (a 특별 상자 every 5). */ questStreak?: { day: string; n: number };
@@ -206,6 +207,18 @@ export function buyItem(s: ServerPetState, id: string, fromBag = false) {
   }
   s.inventory.push(id);
   return {message: '구매 완료!'};
+}
+
+/** 친구 선물 기운 간식: one a day beyond the 2-a-day limit; it wakes a 탈진 pet too (to the snack's 기운). */
+export function eatFriendSnack(s: ServerPetState, id: string) {
+  const item = petItem(id); if (!item || !(PET_ROOM.energyGifts as readonly string[]).includes(id)) throw Error('PET_ITEM_NOT_FOUND');
+  if (!(s.friendSnacks?.[id]! > 0)) throw Error('PET_BAG_EMPTY');
+  if ((s.today.friendEnergy || 0) >= PET_ROOM.friendEnergyPerDay) throw Error('PET_FRIEND_SNACK_USED');
+  const pet = currentPet(s), woke = pet.energy <= 0;
+  s.friendSnacks![id] -= 1; if (!s.friendSnacks![id]) delete s.friendSnacks![id];
+  s.today.friendEnergy = (s.today.friendEnergy || 0) + 1;
+  pet.energy = Math.min(pet.maxEnergy, Math.max(0, pet.energy) + (item.energy || 0));
+  return {message: woke ? '친구가 준 간식으로 번쩍 깨어났어요!' : '친구가 준 간식을 먹고 기운이 났어요!'};
 }
 
 /** `plan`: the person's AI plan today, for a pass-only room (looked up by the caller only for those). */
@@ -452,8 +465,8 @@ export const parseAi = (text: string) => { try { return JSON.parse(text); } catc
 /** What the browser sees: everything but the bookkeeping. */
 export function publicPetState(s: ServerPetState) {
   const pet = currentPet(s);
-  return {goal: s.goal && petItem(s.goal)?.special && !s.inventory.includes(s.goal) ? s.goal : null, roomHidden: Boolean(s.roomHidden), snacks: s.snacks || {}, ledger: s.ledger || [], englishTalk: Boolean(s.englishTalk), medals: s.medals || [], towerDecor: s.towerDecor || [], decor: s.decor || {}, points: s.points, inventory: s.inventory, clothing: pet.clothing, accessories: pet.accessories, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
-    today: {studyPoints: s.today.studyPoints, studyCap: PET_DAILY_STUDY_POINTS, energyItemsLeft: Math.max(0, PET_ENERGY_ITEMS_PER_DAY - energyItemsUsed(s)), revivesLeft: Math.max(0, PET_REVIVES_PER_DAY - (s.today.revives || 0))}, stage: petStage(pet.level)};
+  return {friendSnacks: s.friendSnacks || {}, goal: s.goal && petItem(s.goal)?.special && !s.inventory.includes(s.goal) ? s.goal : null, roomHidden: Boolean(s.roomHidden), snacks: s.snacks || {}, ledger: s.ledger || [], englishTalk: Boolean(s.englishTalk), medals: s.medals || [], towerDecor: s.towerDecor || [], decor: s.decor || {}, points: s.points, inventory: s.inventory, clothing: pet.clothing, accessories: pet.accessories, background: s.background, currentPetSlot: s.currentPetSlot, unlockedSlots: s.unlockedSlots, pets: s.pets, day: s.day,
+    today: {studyPoints: s.today.studyPoints, studyCap: PET_DAILY_STUDY_POINTS, energyItemsLeft: Math.max(0, PET_ENERGY_ITEMS_PER_DAY - energyItemsUsed(s)), revivesLeft: Math.max(0, PET_REVIVES_PER_DAY - (s.today.revives || 0)), friendEnergyLeft: Math.max(0, PET_ROOM.friendEnergyPerDay - (s.today.friendEnergy || 0))}, stage: petStage(pet.level)};
 }
 /** For the teacher screens: the highest-level pet and how many live here. */
 export const petSummary = (s: ServerPetState) => { const pet = [...s.pets].sort((a, b) => b.level - a.level || b.xp - a.xp)[0]; return {points: s.points, totalXP: pet.xp, highestLevel: pet.level, petName: pet.name, character: pet.character, petCount: s.pets.length, /** 장학 쿠폰: this month's earned (the % on the student list) */ couponMonth: s.day.slice(0, 7), couponEarned: monthEarned(s)}; };

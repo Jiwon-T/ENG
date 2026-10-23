@@ -210,20 +210,22 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
     const energyUsed = item.revive ? !exhausted || (state.today.revivesLeft ?? 1) <= 0 : Boolean(item.energy) && (exhausted || !(state.today.energyItemsLeft > 0));
     const usedLabel = item.revive ? (exhausted ? '오늘 다 먹음' : '탈진 때만') : exhausted ? '탈진 중' : '오늘 다 먹음';
     const effect = item.xp ? `경험치 +${item.xp}` : item.energy ? `기운 +${item.energy}` : '';
-    // 가방 (간식 상자 from 오늘 할 일): given without points, the same daily limits
-    const bag = !wearable && mode === 'buy' ? state.snacks?.[item.id] || 0 : 0;
-    const label = mode === 'try' ? (has ? (on ? '입는 중' : item.pass ? '쓸 수 있음' : '가짐') : item.reward ? '원정대 전용' : item.pass ? '패스 전용' : `${won(item.price)}P`) : mode === 'wear' ? (on ? '입는 중' : '입기') : wearable && has ? (on ? '입는 중' : '가짐') : energyUsed ? usedLabel : bag ? `가방 ${bag}개 · 주기` : `${won(item.price)}P`;
-    const blocked = mode === 'buy' && (wearable ? has || poor : energyUsed || (poor && !bag));
+    // 가방 (간식 상자 from 오늘 할 일): given without points, the same daily limits; 친구 선물 기운 간식: once a day beyond them,
+    // even while 탈진 (offered when the usual ones are used up or the pet is 탈진)
+    const bag = !wearable && mode === 'buy' ? state.snacks?.[item.id] || 0 : 0, gifted = !wearable && mode === 'buy' && !item.revive ? state.friendSnacks?.[item.id] || 0 : 0;
+    const friend = gifted > 0 && (state.today.friendEnergyLeft ?? 0) > 0 && energyUsed;
+    const label = mode === 'try' ? (has ? (on ? '입는 중' : item.pass ? '쓸 수 있음' : '가짐') : item.reward ? '원정대 전용' : item.pass ? '패스 전용' : `${won(item.price)}P`) : mode === 'wear' ? (on ? '입는 중' : '입기') : wearable && has ? (on ? '입는 중' : '가짐') : friend ? `친구 선물 ${gifted} · 주기` : energyUsed ? usedLabel : bag ? `가방 ${bag}개 · 주기` : `${won(item.price)}P`;
+    const blocked = mode === 'buy' && (wearable ? has || poor : (energyUsed && !friend) || (poor && !bag && !friend));
     const disabled = busy || blocked, dim = blocked && !(wearable && has);
     const picked = mode === 'try' && trial === item.id;
-    const onClick = () => mode === 'try' ? setTrial(picked ? null : item.id) : mode === 'wear' ? void act('equip', { itemId: item.id }) : void act(bag ? 'snack-use' : 'buy', { itemId: item.id }).then(r => { if (r?.result?.message) say(r.result.message); });
+    const onClick = () => mode === 'try' ? setTrial(picked ? null : item.id) : mode === 'wear' ? void act('equip', { itemId: item.id }) : void act(friend ? 'friend-snack-use' : bag ? 'snack-use' : 'buy', { itemId: item.id }).then(r => { if (r?.result?.message) say(r.result.message); });
     return <button key={item.id} type="button" disabled={disabled} aria-pressed={mode === 'try' ? picked : undefined} onClick={onClick} className={`flex flex-col items-center gap-0.5 rounded-2xl border bg-white px-1.5 py-2.5 text-center transition-colors ${picked ? 'border-2 border-[#d26272]' : on ? 'border-[#d26272]' : 'border-[#f3e6e8] hover:border-[#f5a3a8]'} ${dim ? 'opacity-50' : ''}`}>
       {item.reward && <span className="-mb-1 rounded-full bg-[#eef6ea] px-1.5 text-[10px] font-bold text-[#4f7a43]">원정대</span>}
       {item.pass && <span className={`-mb-1 rounded-full px-1.5 text-[10px] font-bold ${item.pass === 'premium' ? 'bg-[#faeeda] text-[#854f0b]' : 'bg-[#fbeaf0] text-[#993556]'}`}>{item.pass === 'premium' ? '프리미엄' : '펫 패스'}</span>}
       {item.revive ? <span className="flex h-8 items-center"><MonsterCan size={32} /></span> : <span className="text-2xl" aria-hidden="true">{item.icon}</span>}
       <span className="text-xs font-bold text-[#5e1e2a]">{item.name}</span>
       {effect && <span className="text-[11px] text-slate-500">{effect}</span>}
-      <span className={`mt-1 w-full rounded-full py-0.5 text-[11px] font-bold ${on ? 'border border-[#d26272] text-[#8b2f40]' : bag && !energyUsed ? 'bg-[#eef6ea] text-[#3b6d11]' : item.reward && !has ? 'bg-[#eef6ea] text-[#4f7a43]' : mode !== 'wear' && !has && !energyUsed ? 'bg-[#f5a3a8] text-[#5e1e2a]' : 'bg-[#f8f1f2] text-[#8b2f40]'}`}>{label}</span>
+      <span className={`mt-1 w-full rounded-full py-0.5 text-[11px] font-bold ${on ? 'border border-[#d26272] text-[#8b2f40]' : friend ? 'bg-[#fbeaf0] text-[#993556]' : bag && !energyUsed ? 'bg-[#eef6ea] text-[#3b6d11]' : item.reward && !has ? 'bg-[#eef6ea] text-[#4f7a43]' : mode !== 'wear' && !has && !energyUsed ? 'bg-[#f5a3a8] text-[#5e1e2a]' : 'bg-[#f8f1f2] text-[#8b2f40]'}`}>{label}</span>
     </button>;
   };
 
@@ -339,7 +341,8 @@ export default function PetHome({ onBack }: { onBack: () => void }) {
             </ul></details>
           </section>
           </>}
-          {tab === 'snacks' && <div className="grid grid-cols-3 gap-2">{byPrice(PET_ITEMS.filter(i => i.category === 'consumable')).map(i => itemCard(i, 'buy'))}</div>}
+          {tab === 'snacks' && <><div className="grid grid-cols-3 gap-2">{byPrice(PET_ITEMS.filter(i => i.category === 'consumable')).map(i => itemCard(i, 'buy'))}</div>
+            {Object.keys(state.friendSnacks || {}).length > 0 && <p className="mt-2 rounded-xl bg-[#fbeaf0] px-3 py-2 text-xs text-[#72243e]">💌 친구가 준 기운 간식은 하루 1번 더 먹을 수 있어요 · 탈진 때도 깨울 수 있어요{(state.today.friendEnergyLeft ?? 0) > 0 ? '' : ' (오늘은 먹었어요)'}</p>}</>}
           {tab === 'closet' && (() => { const mine = PET_ITEMS.filter(i => i.category !== 'consumable' && i.category !== 'decor' && owned(i.id)); return mine.length > 1 ? <>
             {/* What each place has on now; tap a place to see only its items. */}
             <div className="mb-2 grid grid-cols-4 gap-1.5">{ACCESSORY_SLOTS.map(s => { const id = state.accessories?.[s.id]; return <button key={s.id} type="button" aria-pressed={closetGroup === s.id} onClick={() => setClosetGroup(closetGroup === s.id ? 'all' : s.id)} className={`rounded-xl border px-1.5 py-1.5 text-center text-[11px] ${closetGroup === s.id ? 'border-[#d26272] bg-[#fef2f3]' : 'border-[#f3e6e8] bg-white'}`}><span className="block text-slate-400">{s.label}</span><b className="block truncate font-bold text-[#5e1e2a]">{id ? `${petItem(id)?.icon} ${petItem(id)?.name}` : '—'}</b></button>; })}</div>

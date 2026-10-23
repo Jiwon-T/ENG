@@ -419,6 +419,9 @@
 .student-combobox-option:hover,.student-combobox-option.is-active {background:var(--lesson-soft);color:var(--lesson-accent);}
 .student-combobox-option[aria-selected=true] {font-weight:700;}
 .student-today-tag {font-size:10px;padding:2px 6px;background:var(--lesson-soft);color:var(--lesson-accent);border-radius:var(--lesson-pill);}
+/* 시범 수업 학생 (상담만 한 신입생): lessons stay out of 수강료 and 문자 */
+.student-trial-tag {margin-left:4px;font-size:10px;padding:2px 6px;background:#eeedfe;color:#3c3489;border-radius:var(--lesson-pill);}
+.lesson-trial-note {margin:0 0 8px;padding:6px 10px;border-radius:10px;background:#eeedfe;color:#3c3489;font-size:12px;font-weight:600;}
 .student-combobox-empty {font-size:var(--workspace-font-xs);padding:12px;color:var(--lesson-muted);}
 .teacher-workspace .student-combobox input:focus-visible {outline:2px solid var(--lesson-focus);outline-offset:2px;}
 @media(max-width:640px){.student-combobox-option{min-height:44px;}.student-combobox-popup{max-height:min(280px,var(--student-list-height,280px));}}

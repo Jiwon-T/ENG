@@ -46,8 +46,10 @@ export const PET_ROOM = {
   ],
   stickerXp: 5, xpPerDay: 5,
   /** 이웃 kept at most, and 이번 주 인기 방 shown */ neighborsMax: 30, popular: 3,
-  /** 간식 선물: food only (an energy snack would get round the 2-a-day limit), bought with my points or from my 가방, into the
-   *  friend's 가방; one a day per room, `giftsPerDay` a day; the giver's pet gets `giftXp` */ gifts: ['cookie', 'macaron', 'cake', 'candy'], giftsPerDay: 3, giftXp: 10,
+  /** 간식 선물: bought with my points or from my 가방 (the 오늘 할 일 box's coffee too), into the friend's 가방; one a day per room,
+   *  `giftsPerDay` a day; the giver's pet gets `giftXp`. A 기운 snack (`energyGifts`) goes into the friend's '친구 선물' 칸: one
+   *  a day may be eaten beyond the 2-a-day limit — even while 탈진 (decided 2026-10-23, to get friends playing) */
+  gifts: ['cookie', 'macaron', 'cake', 'candy', 'coffee', 'energy_drink'], energyGifts: ['coffee', 'energy_drink'], giftsPerDay: 3, giftXp: 10, friendEnergyPerDay: 1,
 } as const;
 export type PetRoomSticker = typeof PET_ROOM.stickers[number]['id'];
 /** 탈진 회복 '몬스터': once a day, only at 0 기운. */

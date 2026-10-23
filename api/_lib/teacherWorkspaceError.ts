@@ -1,20 +1,19 @@
-import {LessonSchemaError} from './teacherLessonDiagnostics.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 export function workspaceError(error: unknown, failureStage: string) {
  const raw = error instanceof Error ? error.message : '';
- const allowed = ['WORD_TASK_NO_WORDS','WORD_TASK_TOO_MANY','WORD_TASK_LIMIT','WORD_TASK_NOT_FOUND','INTAKE_PHOTO_BAD','INTAKE_PHOTO_LIMIT','CLASS_NOT_FOUND','TRANSFER_REASON_REQUIRED','SCHEDULE_MIGRATION_NOT_READY','SCHEDULE_CONFIG_MIGRATION_REQUIRED','SCHEDULE_CONFIG_MIGRATION_REQUIRED','ACADEMIC_PAGE_LIMIT','ACADEMIC_MIGRATION_REQUIRED','ACADEMIC_MIGRATION_RECOVERY_REQUIRED','CORE_REGISTRATION_IN_PROGRESS','REGISTRATION_SOURCE_CONFLICT','REGISTRATION_ID_CONFLICT','MESSAGE_CONTEXT_REQUIRED','NOTION_SCHEDULE_SOURCE_UNAVAILABLE','NOTION_READ_SCHEMA_MISMATCH','REGISTRATION_ENROLLMENT_REQUIRED','REGISTRATION_ALREADY_RESIDENT','NOTION_ADMISSION_SCHEMA_REQUIRED','NOTION_SCHEDULE_PLACE_REQUIRED','NOTION_SCHEDULE_PLACE_SCHEMA_REQUIRED','NOTION_TEACHER_ID_CONFLICT','ASSIGNMENT_RETRY_REQUIRED','NOTION_400','NOTION_401','NOTION_403','NOTION_404','NOTION_429','MESSAGE_VARIABLE_REQUIRED','MESSAGE_CONTACT_REQUIRED','MESSAGE_CONTACT_CHANGED','MESSAGE_CONFIG_REQUIRED','MESSAGE_CONFIRM_REQUIRED','MESSAGE_CONFLICT','MESSAGE_NOT_READY','MESSAGE_DUPLICATE','STUDENT_PROFILE_CONTACT_PENDING','NOTION_SUBJECT_NOT_CONFIGURED','NOTION_WRITE_REQUEST_CONFLICT','NOTION_WRITE_PENDING','NOTION_WRITE_RESULT_UNCERTAIN','SCHEDULE_PROJECTION_LIMIT','DUPLICATE_NOTION_RECORD','STUDENT_ENROLLMENT_REQUEST_CONFLICT','STUDENT_ENROLLMENT_IN_PROGRESS','STUDENT_ENROLLMENT_RESULT_UNCERTAIN','STUDENT_PROFILE_REQUEST_CONFLICT','STUDENT_PROFILE_IN_PROGRESS','STUDENT_PROFILE_RESULT_UNCERTAIN','STUDENT_PROFILE_AUTH_CONFLICT','STUDENT_MAPPING_CONFLICT','NOTION_REGISTRATION_ASSIGNMENT_REQUIRED','NOTION_REGISTRATION_SOURCE_REQUIRED','NOTION_REGISTRATION_SCHEMA_REQUIRED','NOTION_REGISTRATION_ID_MISMATCH','NOTION_REGISTRATION_DUPLICATE','NOTION_REGISTRATION_CREATE_UNCERTAIN','NOTION_REGISTRATION_SYNC_FAILED','REGISTRATION_REQUEST_CONFLICT','REGISTRATION_CONFLICT','REGISTRATION_SYNC_IN_PROGRESS','REGISTRATION_NOT_FOUND','COMMON_PLAN_NOT_SYNCED','INVALID_INPUT','UNAUTHORIZED','SESSION_REVOKED','FORBIDDEN','TEACHER_NOT_CONFIGURED','DRAFT_CONFLICT','SOURCE_IDENTITY_LOCKED','PUBLISH_IN_PROGRESS','NOTION_SCHEMA_SETUP_REQUIRED','MAKE_TRIGGER_NOT_CONFIGURED','MAKE_TRIGGER_FAILED','MAKE_SUBJECT_NOT_CONFIGURED','TEACHER_NOTION_LINK_REQUIRED','LESSON_CONTENT_REQUIRED','LESSON_ROUNDS_REQUIRED','SELF_STUDY_REQUIRED','LESSON_OR_STUDY_REQUIRED','ACADEMY_REQUIRED','INVALID_TEACHER','TEACHER_LINK_INVALID','TEACHER_ALREADY_LINKED','ASSIGNMENT_NOT_FOUND','NOTION_STUDENT_ALREADY_LINKED_TO_ANOTHER_ACCOUNT','INVALID_ROLE','USER_NOT_FOUND','STUDENT_NOT_FOUND','MULTIPLE_STUDENTS_MATCHED','ACADEMY_MIGRATION_REQUIRED','ACADEMY_MEMBERSHIP_CONFLICT','NOTION_EDIT_CONFLICT','NOTION_SOURCE_NOT_CONFIGURED','NOTION_SOURCE_MISMATCH','NOTION_SHARED_TIMETABLE','NOTION_SOURCE_OWNER_CONFLICT','NOTION_DUPLICATE_ENROLLMENT','NOTION_ENROLLMENT_REQUIRED','NOTION_DUPLICATE_SOURCE'];
- const templateMessages:Record<string,string>={TEMPLATE_NOT_FOUND:'앱 저장 템플릿을 찾을 수 없습니다.',TEMPLATE_STORE_NOT_READY:'최초 가져오기와 추가 변경분 처리를 완료한 뒤 조회를 전환해 주세요.',TEMPLATE_PAGE_LIMIT:'템플릿이 500개를 초과합니다. 조회 전환 전에 페이지 처리 범위를 확인해 주세요.',TEMPLATE_SOURCE_MISMATCH:'템플릿 원본 DB 연결을 확인해 주세요.',TEMPLATE_SCHEMA_REQUIRED:'템플릿의 유형·내용·대상 속성 형식을 확인해 주세요.',TEMPLATE_BUSY:'동기화 작업이 실행 중입니다. 잠시 후 다시 확인해 주세요.',TEMPLATE_LEASE_LOST:'다른 작업이 이어서 처리 중입니다. 상태를 새로고침해 주세요.',TEMPLATE_REQUEST_CONFLICT:'같은 요청 ID에 다른 내용이 있습니다. 상태를 새로고침해 주세요.',TEMPLATE_REVISION_CONFLICT:'다른 수정이 먼저 저장됐습니다. 최신 내용을 다시 열어 주세요.',TEMPLATE_PENDING:'기존 동기화 또는 충돌 확인을 완료한 뒤 수정해 주세요.',TEMPLATE_ARCHIVED:'Notion에서 보관된 템플릿은 자동으로 복구하지 않습니다.',TEMPLATE_APP_ACTIVE:'문자 템플릿이 앱 전용으로 전환되어 Notion 가져오기·대조·재반영은 실행하지 않습니다.',TEMPLATE_CONFLICTS_REMAIN:'양쪽에서 수정된 템플릿을 먼저 정리해야 전환할 수 있습니다.',TEMPLATE_SOURCE_UNKNOWN:'원본 접근을 확인하지 못한 템플릿이 있어 전환하지 않았습니다.',TEMPLATE_FINAL_CHECK_REQUIRED:'최근 15분 안의 전체 가져오기·원본 점검이 필요합니다. 전환 버튼을 누르면 자동으로 실행합니다.',TEMPLATE_CUTOVER_LIMIT:'동기화 대기 템플릿이 너무 많아 한 번에 전환할 수 없습니다.'};
+ const allowed = ['WORD_TASK_NO_WORDS','WORD_TASK_TOO_MANY','WORD_TASK_LIMIT','WORD_TASK_NOT_FOUND','INTAKE_PHOTO_BAD','INTAKE_PHOTO_LIMIT','CLASS_NOT_FOUND','TRANSFER_REASON_REQUIRED','SCHEDULE_MIGRATION_NOT_READY','SCHEDULE_CONFIG_MIGRATION_REQUIRED','SCHEDULE_CONFIG_MIGRATION_REQUIRED','ACADEMIC_PAGE_LIMIT','ACADEMIC_MIGRATION_REQUIRED','CORE_REGISTRATION_IN_PROGRESS','REGISTRATION_SOURCE_CONFLICT','REGISTRATION_ID_CONFLICT','MESSAGE_CONTEXT_REQUIRED','REGISTRATION_ENROLLMENT_REQUIRED','REGISTRATION_ALREADY_RESIDENT','ASSIGNMENT_RETRY_REQUIRED','MESSAGE_VARIABLE_REQUIRED','MESSAGE_CONTACT_REQUIRED','MESSAGE_CONTACT_CHANGED','MESSAGE_CONFIG_REQUIRED','MESSAGE_CONFIRM_REQUIRED','MESSAGE_CONFLICT','MESSAGE_NOT_READY','MESSAGE_DUPLICATE','STUDENT_PROFILE_CONTACT_PENDING','NOTION_WRITE_PENDING','NOTION_WRITE_RESULT_UNCERTAIN','SCHEDULE_PROJECTION_LIMIT','DUPLICATE_NOTION_RECORD','STUDENT_ENROLLMENT_REQUEST_CONFLICT','STUDENT_ENROLLMENT_IN_PROGRESS','STUDENT_PROFILE_REQUEST_CONFLICT','STUDENT_PROFILE_IN_PROGRESS','STUDENT_PROFILE_AUTH_CONFLICT','STUDENT_MAPPING_CONFLICT','NOTION_REGISTRATION_ASSIGNMENT_REQUIRED','NOTION_REGISTRATION_SOURCE_REQUIRED','REGISTRATION_REQUEST_CONFLICT','REGISTRATION_CONFLICT','REGISTRATION_SYNC_IN_PROGRESS','REGISTRATION_NOT_FOUND','INVALID_INPUT','UNAUTHORIZED','SESSION_REVOKED','FORBIDDEN','TEACHER_NOT_CONFIGURED','DRAFT_CONFLICT','SOURCE_IDENTITY_LOCKED','PUBLISH_IN_PROGRESS','MAKE_TRIGGER_NOT_CONFIGURED','MAKE_TRIGGER_FAILED','MAKE_SUBJECT_NOT_CONFIGURED','TEACHER_NOTION_LINK_REQUIRED','LESSON_CONTENT_REQUIRED','LESSON_ROUNDS_REQUIRED','SELF_STUDY_REQUIRED','LESSON_OR_STUDY_REQUIRED','ACADEMY_REQUIRED','INVALID_TEACHER','TEACHER_LINK_INVALID','TEACHER_ALREADY_LINKED','ASSIGNMENT_NOT_FOUND','NOTION_STUDENT_ALREADY_LINKED_TO_ANOTHER_ACCOUNT','INVALID_ROLE','USER_NOT_FOUND','STUDENT_NOT_FOUND','MULTIPLE_STUDENTS_MATCHED','ACADEMY_MIGRATION_REQUIRED','ACADEMY_MEMBERSHIP_CONFLICT','NOTION_EDIT_CONFLICT','NOTION_SOURCE_MISMATCH','NOTION_DUPLICATE_ENROLLMENT','NOTION_DUPLICATE_SOURCE'];
+ const templateMessages:Record<string,string>={TEMPLATE_NOT_FOUND:'앱 저장 템플릿을 찾을 수 없습니다.',TEMPLATE_STORE_NOT_READY:'최초 가져오기와 추가 변경분 처리를 완료한 뒤 조회를 전환해 주세요.',TEMPLATE_PAGE_LIMIT:'템플릿이 500개를 초과합니다. 조회 전환 전에 페이지 처리 범위를 확인해 주세요.',TEMPLATE_SOURCE_MISMATCH:'템플릿 원본 DB 연결을 확인해 주세요.',TEMPLATE_SCHEMA_REQUIRED:'템플릿의 유형·내용·대상 속성 형식을 확인해 주세요.',TEMPLATE_BUSY:'동기화 작업이 실행 중입니다. 잠시 후 다시 확인해 주세요.',TEMPLATE_LEASE_LOST:'다른 작업이 이어서 처리 중입니다. 상태를 새로고침해 주세요.',TEMPLATE_REQUEST_CONFLICT:'같은 요청 ID에 다른 내용이 있습니다. 상태를 새로고침해 주세요.',TEMPLATE_REVISION_CONFLICT:'다른 수정이 먼저 저장됐습니다. 최신 내용을 다시 열어 주세요.',TEMPLATE_PENDING:'기존 동기화 또는 충돌 확인을 완료한 뒤 수정해 주세요.',TEMPLATE_ARCHIVED:'보관된 템플릿은 자동으로 복구하지 않습니다.',TEMPLATE_APP_ACTIVE:'문자 템플릿이 앱 전용으로 전환되어 가져오기·대조·재반영은 실행하지 않습니다.',TEMPLATE_CONFLICTS_REMAIN:'양쪽에서 수정된 템플릿을 먼저 정리해야 전환할 수 있습니다.',TEMPLATE_SOURCE_UNKNOWN:'원본 접근을 확인하지 못한 템플릿이 있어 전환하지 않았습니다.',TEMPLATE_FINAL_CHECK_REQUIRED:'최근 15분 안의 전체 가져오기·원본 점검이 필요합니다. 전환 버튼을 누르면 자동으로 실행합니다.',TEMPLATE_CUTOVER_LIMIT:'동기화 대기 템플릿이 너무 많아 한 번에 전환할 수 없습니다.'};
  allowed.push(...Object.keys(templateMessages));
- const directoryMessages:Record<string,string>={DIRECTORY_SOURCE_REQUIRED:'기존 학생 원본 DB 연결을 확인해 주세요.',DIRECTORY_SOURCE_MISMATCH:'원본 DB·학생 연결이 다릅니다.',DIRECTORY_FIELD_INCOMPLETE:'원본 필드나 관계를 끝까지 읽지 못했습니다. 저장본을 유지합니다.',DIRECTORY_STUDENT_LINK_REQUIRED:'수강 자료에 학생 한 명이 연결되어 있어야 합니다.',DIRECTORY_BUSY:'자료 갱신 중입니다. 잠시 후 다시 확인해 주세요.',DIRECTORY_NOT_READY:'최종 가져오기와 연결 검증을 완료해 주세요.',DIRECTORY_REVIEW_REQUIRED:'연결 누락·중복·미완료 수정이 남아 있습니다.',DIRECTORY_PAGE_LIMIT:'학생 목록이 500명을 초과합니다. 페이지 조회 전환이 필요합니다.',CORE_NOT_READY:'Firestore 운영 전환을 확인해야 합니다.',CORE_FROZEN:'이미 앱 전용으로 전환된 자료입니다. Notion 가져오기는 중단합니다.',CORE_LINK_REQUIRED:'이전된 학생·선생님·계정 연결을 확인해 주세요.',CORE_CLASS_MIGRATION_REQUIRED:'반·정규 시간표 연결의 앱 전용 전환을 먼저 완료해야 합니다.',CORE_CUTOVER_LIMIT:'일괄 전환 범위를 초과했습니다. 분할 이전이 필요합니다.'};
+ const directoryMessages:Record<string,string>={DIRECTORY_SOURCE_REQUIRED:'기존 학생 원본 DB 연결을 확인해 주세요.',DIRECTORY_SOURCE_MISMATCH:'원본 DB·학생 연결이 다릅니다.',DIRECTORY_FIELD_INCOMPLETE:'원본 필드나 관계를 끝까지 읽지 못했습니다. 저장본을 유지합니다.',DIRECTORY_STUDENT_LINK_REQUIRED:'수강 자료에 학생 한 명이 연결되어 있어야 합니다.',DIRECTORY_BUSY:'자료 갱신 중입니다. 잠시 후 다시 확인해 주세요.',DIRECTORY_NOT_READY:'최종 가져오기와 연결 검증을 완료해 주세요.',DIRECTORY_REVIEW_REQUIRED:'연결 누락·중복·미완료 수정이 남아 있습니다.',DIRECTORY_PAGE_LIMIT:'학생 목록이 500명을 초과합니다. 페이지 조회 전환이 필요합니다.',CORE_NOT_READY:'Firestore 운영 전환을 확인해야 합니다.',CORE_FROZEN:'이미 앱 전용으로 전환된 자료입니다. 가져오기는 중단합니다.',CORE_LINK_REQUIRED:'이전된 학생·선생님·계정 연결을 확인해 주세요.',CORE_CLASS_MIGRATION_REQUIRED:'반·정규 시간표 연결의 앱 전용 전환을 먼저 완료해야 합니다.',CORE_CUTOVER_LIMIT:'일괄 전환 범위를 초과했습니다. 분할 이전이 필요합니다.'};
  allowed.push(...Object.keys(directoryMessages));
  directoryMessages.CORE_REGISTRATION_MIGRATION_REQUIRED='앱 전용 신규 등록 경로를 먼저 완료해야 합니다. 기존 초안은 보존했습니다.';allowed.push('CORE_REGISTRATION_MIGRATION_REQUIRED');
- const lessonMigrationMessages:Record<string,string>={LESSON_MIGRATION_RUNNING:'다른 일지 이전 작업이 진행 중입니다. 일시 중지하거나 완료된 뒤 다시 시작해 주세요.',LESSON_MIGRATION_REQUIRED:'전체 이전을 한 번 완료한 뒤 보류 재확인을 실행할 수 있습니다.',LESSON_MIGRATION_LIMIT:'일지 이전 처리 한도를 초과했습니다. 진행 위치는 저장되어 있습니다.',LESSON_MIGRATION_PAGINATION:'Notion 페이지 순회가 끝까지 확인되지 않았습니다. 진행 위치를 유지하고 중단했습니다.',LESSON_APP_ACTIVE:'일지가 앱 전용으로 전환되어 Notion 가져오기·충돌 처리는 실행하지 않습니다. 앱에서 바로 수정해 주세요.',LESSON_APP_PATHS_NOT_READY:'앱 일지 조회·저장 경로가 아직 연결되지 않아 전환할 수 없습니다. 최종 대조는 미리 실행할 수 있습니다.',LESSON_FINAL_CHECK_REQUIRED:'최근 15분 안의 최종 대조 결과가 필요합니다. 전환 버튼을 누르면 자동으로 대조 후 전환합니다.',ACADEMIC_APP_ACTIVE:'성적이 앱 전용으로 전환되어 Notion 가져오기·충돌 처리는 실행하지 않습니다. 앱에서 바로 수정해 주세요.',ACADEMIC_FINAL_CHECK_REQUIRED:'최근 15분 안에 끝난 과거 성적 전체 대조가 필요합니다. 전환 버튼을 누르면 자동으로 대조합니다.',SCHEDULE_APP_ACTIVE:'일정이 앱 전용으로 전환되어 Notion 충돌 처리는 실행하지 않습니다. 앱에서 바로 수정해 주세요.',LESSON_APP_REQUIRED:'삭제한 일지 복원은 일지 앱 전용 전환 후 사용할 수 있습니다.',LESSON_MIGRATION_NOT_READY:'확인이 필요한 일지가 남아 있어 전환할 수 없습니다. 기존 Notion 경로는 그대로 유지됩니다.'};
+ const lessonMigrationMessages:Record<string,string>={LESSON_MIGRATION_RUNNING:'다른 일지 이전 작업이 진행 중입니다. 일시 중지하거나 완료된 뒤 다시 시작해 주세요.',LESSON_MIGRATION_REQUIRED:'전체 이전을 한 번 완료한 뒤 보류 재확인을 실행할 수 있습니다.',LESSON_MIGRATION_LIMIT:'일지 이전 처리 한도를 초과했습니다. 진행 위치는 저장되어 있습니다.',LESSON_MIGRATION_PAGINATION:'원본 기록 순회가 끝까지 확인되지 않았습니다. 진행 위치를 유지하고 중단했습니다.',LESSON_APP_ACTIVE:'일지가 앱 전용으로 전환되어 가져오기·충돌 처리는 실행하지 않습니다. 앱에서 바로 수정해 주세요.',LESSON_APP_PATHS_NOT_READY:'앱 일지 조회·저장 경로가 아직 연결되지 않아 전환할 수 없습니다. 최종 대조는 미리 실행할 수 있습니다.',LESSON_FINAL_CHECK_REQUIRED:'최근 15분 안의 최종 대조 결과가 필요합니다. 전환 버튼을 누르면 자동으로 대조 후 전환합니다.',ACADEMIC_APP_ACTIVE:'성적이 앱 전용으로 전환되어 가져오기·충돌 처리는 실행하지 않습니다. 앱에서 바로 수정해 주세요.',ACADEMIC_FINAL_CHECK_REQUIRED:'최근 15분 안에 끝난 과거 성적 전체 대조가 필요합니다. 전환 버튼을 누르면 자동으로 대조합니다.',SCHEDULE_APP_ACTIVE:'일정이 앱 전용으로 전환되어 예전 충돌 처리는 실행하지 않습니다. 앱에서 바로 수정해 주세요.',LESSON_APP_REQUIRED:'삭제한 일지 복원은 일지 앱 전용 전환 후 사용할 수 있습니다.',LESSON_MIGRATION_NOT_READY:'확인이 필요한 일지가 남아 있어 전환할 수 없습니다. 기존 경로는 그대로 유지됩니다.'};
  Object.assign(directoryMessages,lessonMigrationMessages);allowed.push(...Object.keys(lessonMigrationMessages));
  // 반·교재 이전: these used to fall through to the generic "server connection" message.
- const managedMessages:Record<string,string>={MANAGED_PENDING_WRITE:'반·교재 중 처리 중인 Notion 반영이나 삭제 요청이 있어 이전을 멈췄습니다. 앱 저장본은 그대로 보존했습니다.',MANAGED_LINK_REQUIRED:'반·교재의 원본 연결(작성자·과목·Notion 페이지·시간표)을 확인해야 합니다. 앱 자료와 이전 위치는 보존했습니다.',MANAGED_BOOKS_FIRST:'반·시간표 이전 전에 교재 이전을 먼저 완료해야 합니다.',MANAGED_IMPORT_FAILED:'반·교재 이전을 완료하지 못했습니다. 이전 위치는 보존했습니다. 잠시 후 다시 시작해 주세요.'};
+ const managedMessages:Record<string,string>={MANAGED_PENDING_WRITE:'반·교재 중 처리 중인 반영이나 삭제 요청이 있어 이전을 멈췄습니다. 앱 저장본은 그대로 보존했습니다.',MANAGED_LINK_REQUIRED:'반·교재의 원본 연결(작성자·과목·원본 기록·시간표)을 확인해야 합니다. 앱 자료와 이전 위치는 보존했습니다.',MANAGED_BOOKS_FIRST:'반·시간표 이전 전에 교재 이전을 먼저 완료해야 합니다.',MANAGED_IMPORT_FAILED:'반·교재 이전을 완료하지 못했습니다. 이전 위치는 보존했습니다. 잠시 후 다시 시작해 주세요.'};
  const blocker=(error as any)?.managedBlocker;
- if(blocker&&typeof blocker.title==='string'){const what=blocker.kind==='curricula'?'교재':'반·시간표',name=blocker.title?`‘${blocker.title}’ ${what}`:what;managedMessages.MANAGED_PENDING_WRITE=`${name}: ${blocker.reason==='running'?'Notion 반영이 진행 중입니다. 끝난 뒤 다시 시작해 주세요.':blocker.reason==='deletion'?'삭제 요청이 있어 먼저 결과를 확인해야 합니다.':'Notion 반영이 끝나지 않은 앱 저장본입니다. 이전을 다시 시작하면 앱 저장본으로 확정됩니다.'} 앱 저장본과 이전 위치는 보존했습니다.`;}
+ if(blocker&&typeof blocker.title==='string'){const what=blocker.kind==='curricula'?'교재':'반·시간표',name=blocker.title?`‘${blocker.title}’ ${what}`:what;managedMessages.MANAGED_PENDING_WRITE=`${name}: ${blocker.reason==='running'?'반영이 진행 중입니다. 끝난 뒤 다시 시작해 주세요.':blocker.reason==='deletion'?'삭제 요청이 있어 먼저 결과를 확인해야 합니다.':'반영이 끝나지 않은 앱 저장본입니다. 이전을 다시 시작하면 앱 저장본으로 확정됩니다.'} 앱 저장본과 이전 위치는 보존했습니다.`;}
  Object.assign(directoryMessages,managedMessages);allowed.push(...Object.keys(managedMessages));
  Object.assign(directoryMessages,{APP_USER_LINKED_STUDENT:'학생과 연결된 계정은 선생님으로 바꿀 수 없습니다. 선생님은 별도 계정으로 가입해 주세요.',APP_USER_NOT_FOUND:'해당 계정을 찾을 수 없습니다.',APP_USER_LIMIT:'계정이 너무 많아 목록을 불러오지 못했습니다.',TUITION_CONFLICT:'다른 곳에서 수강료 표가 먼저 저장되었습니다. 새로고침 후 다시 저장해 주세요.',TUITION_TOO_MANY_ROWS:'한 번에 저장할 수 있는 행 수를 넘었습니다.',APP_USER_SIGNIN_UPDATE_FAILED:'로그인 차단 설정을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.',APP_USER_TEACHER_REMOVE:'선생님 계정은 먼저 ‘학생으로 되돌리기’를 한 뒤 탈퇴시킬 수 있습니다.',APP_USER_LINKED_REMOVE:'등록된 학생과 연결된 계정입니다. 학생 관리에서 앱 계정 연결을 먼저 해제해 주세요.',PAYROLL_CONFLICT:'다른 곳에서 정산이 먼저 저장되었습니다. 새로고침 후 다시 저장해 주세요.',PAYROLL_TOO_MANY:'한 번에 저장할 수 있는 선생님 수를 넘었습니다.',TUITION_ROW_INVALID:'수강료 표의 학생·과목을 확인하지 못했습니다. 새로고침 후 다시 저장해 주세요.'});allowed.push('TUITION_CONFLICT','TUITION_TOO_MANY_ROWS','TUITION_ROW_INVALID','PAYROLL_CONFLICT','PAYROLL_TOO_MANY','APP_USER_TEACHER_REMOVE','APP_USER_LINKED_REMOVE','APP_USER_SIGNIN_UPDATE_FAILED');allowed.push('APP_USER_LINKED_STUDENT','APP_USER_NOT_FOUND','APP_USER_LIMIT');
  // 워크북: AI 해석과 재생성 기록.
@@ -52,12 +51,11 @@ export function workspaceError(error: unknown, failureStage: string) {
  };
  Object.assign(directoryMessages,appOnlyMessages);allowed.push(...Object.keys(appOnlyMessages));
  const config = raw.startsWith('CONFIG_ERROR') || raw === 'AUTH_SERVER_CONFIG_ERROR';
- const notion = /^NOTION_/.test(raw);
  const missingIndex = failureStage === 'report-review' && /requires an index|FAILED_PRECONDITION.*index/i.test(raw);
  const exhausted=(error as any)?.code===8||['resource-exhausted','firestore/resource-exhausted'].includes((error as any)?.code);
- const code = exhausted?'FIRESTORE_RESOURCE_EXHAUSTED':error instanceof z.ZodError ? 'INVALID_INPUT' : missingIndex ? 'REPORT_INDEX_REQUIRED' : config ? 'SERVER_CONFIG_ERROR' : allowed.includes(raw) ? raw : notion ? 'NOTION_CONNECTION_ERROR' : 'WORKSPACE_ERROR';
+ const code = exhausted?'FIRESTORE_RESOURCE_EXHAUSTED':error instanceof z.ZodError ? 'INVALID_INPUT' : missingIndex ? 'REPORT_INDEX_REQUIRED' : config ? 'SERVER_CONFIG_ERROR' : allowed.includes(raw) ? raw : 'WORKSPACE_ERROR';
  const diagnosticId = randomUUID();
- const messages: Record<string,string> = {SERVER_CONFIG_ERROR:'서버 인증·연결 설정을 확인해야 합니다.',UNAUTHORIZED:'로그인 인증이 만료되었습니다. 다시 로그인해 주세요.',SESSION_REVOKED:'로그인이 해제되었습니다. 다시 로그인해 주세요.',NOTION_CONNECTION_ERROR:'Notion 연결 권한과 데이터베이스 설정을 확인해야 합니다.',LESSON_ROUNDS_REQUIRED:'수업이 있는 날은 출결과 수업 회차를 입력해 주세요.',SELF_STUDY_REQUIRED:'자습 여부를 선택하고, 자습이 있는 날은 시간과 회차를 입력해 주세요.',LESSON_OR_STUDY_REQUIRED:'수업 또는 자습 중 하나 이상을 기록해 주세요.'};
+ const messages: Record<string,string> = {SERVER_CONFIG_ERROR:'서버 인증·연결 설정을 확인해야 합니다.',UNAUTHORIZED:'로그인 인증이 만료되었습니다. 다시 로그인해 주세요.',SESSION_REVOKED:'로그인이 해제되었습니다. 다시 로그인해 주세요.',LESSON_ROUNDS_REQUIRED:'수업이 있는 날은 출결과 수업 회차를 입력해 주세요.',SELF_STUDY_REQUIRED:'자습 여부를 선택하고, 자습이 있는 날은 시간과 회차를 입력해 주세요.',LESSON_OR_STUDY_REQUIRED:'수업 또는 자습 중 하나 이상을 기록해 주세요.'};
  messages.FIRESTORE_RESOURCE_EXHAUSTED='학생 데이터 서버의 사용량·자원 한도에 걸려 조회가 중단됐습니다. 관리자에게 Firebase Firestore 사용량·할당량 확인을 요청해 주세요. 반복 새로고침은 한도를 복구하지 않습니다.';
  messages.MESSAGE_VARIABLE_REQUIRED='치환하지 않은 변수를 입력하거나 해당 항목을 삭제해 주세요.';
 messages.MESSAGE_CONTACT_REQUIRED='보호자 연락처를 확인해 주세요.';
@@ -66,46 +64,25 @@ messages.MESSAGE_CONFIG_REQUIRED='Bati 요청 방식·수신 번호·본문 매�
 messages.MESSAGE_CONTEXT_REQUIRED='기존 Bati 연동 정보가 없는 문자입니다. 새 본문을 준비하고 연동 정보를 확인해 주세요.';
 messages.MESSAGE_CONFIRM_REQUIRED='수신자와 본문을 최종 확인해 주세요.';
 messages.MESSAGE_CONFLICT='저장한 문자 요청과 내용이 다릅니다. 새로 열어 주세요.';
-messages.MESSAGE_NOT_READY='문자본문을 노션에 저장한 뒤 발송할 수 있습니다.';
+messages.MESSAGE_NOT_READY='문자 본문을 먼저 저장한 뒤 발송할 수 있습니다.';
 messages.MESSAGE_DUPLICATE='동일 수신자와 본문의 발송 요청이 이미 있습니다. 발송 이력을 확인해 주세요.';
 messages.STUDENT_PROFILE_CONTACT_PENDING='보호자 연락처 변경을 먼저 완료해 주세요.';
- messages.NOTION_SHARED_DATA_REQUIRED='기존 반·커리큘럼의 담당 선생님·과목·학원 연결을 먼저 확인해 주세요.';
- messages.NOTION_LEGACY_MIGRATION_REQUIRED='기존 선생님별 DB 자료를 공용 DB로 옮긴 뒤 공용 연결을 시작해 주세요.';
- messages.NOTION_TEACHER_ID_CONFLICT='같은 노션 선생님 페이지가 여러 계정에 연결되어 있습니다. 관리자 설정을 확인해 주세요.';
  messages.ASSIGNMENT_RETRY_REQUIRED='일부 담당 변경이 반영됐을 수 있습니다. 저장한 범위를 먼저 다시 반영한 뒤 수정하세요.' ;
- messages.NOTION_SCHEDULE_SOURCE_UNAVAILABLE='현재 노션 일정 원본을 편집용으로 불러올 수 없습니다. 원본의 삭제 여부와 과목·시간·담당 연결을 확인해 주세요.';
- messages.NOTION_400=failureStage==='workspace-data'?'노션 조회 조건이 DB 속성과 맞지 않습니다. 연결한 DB와 앱 조회 설정을 확인해 주세요.':'노션이 속성 형식 또는 선택값을 거절했습니다. 수업 일지 DB의 속성과 상태 옵션을 확인해 주세요.';
- messages.NOTION_READ_SCHEMA_MISMATCH='연결한 DB의 조회 속성 형식이 앱 조회 조건과 다릅니다. 관리자 설정에서 연결한 DB를 확인해 주세요.';
- messages.NOTION_401='노션 연결 토큰 인증에 실패했습니다. 서버 연결 설정을 확인해 주세요.';
- messages.NOTION_403='노션 연결에 대상 DB의 접근 권한이 없습니다. 연결 공유 설정을 확인해 주세요.';
- messages.NOTION_404='노션 대상 DB 또는 페이지를 찾을 수 없습니다. DB 주소와 연결 공유 설정을 확인해 주세요.';
- messages.NOTION_429='노션 요청 제한에 도달했습니다. 잠시 후 저장한 요청으로 다시 확인해 주세요.';
- messages.NOTION_EDIT_CONFLICT='노션에서 이 자료가 변경되었습니다. 새로고침하고 다시 선택한 뒤 수정해 주세요.';
- messages.NOTION_SOURCE_NOT_CONFIGURED='이 선생님의 과목별 노션 DB를 관리자 설정에서 연결해 주세요.';
- messages.NOTION_SOURCE_OWNER_CONFLICT='같은 반 또는 커리큘럼 DB가 여러 선생님에게 연결되어 있습니다. 소속과 담당 DB 연결을 확인해 주세요.';
- messages.NOTION_SOURCE_MISMATCH='연결한 노션 DB와 자료의 원본 DB가 다릅니다. DB 연결을 확인해 주세요.';
- messages.NOTION_ENROLLMENT_REQUIRED='DB_수강에 학생당 하나의 수강 페이지가 필요합니다.';
- messages.NOTION_DUPLICATE_ENROLLMENT='DB_수강에 동일 학생의 페이지가 여러 개 있습니다. 중복을 확인해 주세요.';
+ messages.NOTION_EDIT_CONFLICT='다른 곳에서 이 자료가 변경되었습니다. 새로고침하고 다시 선택한 뒤 수정해 주세요.';
+ messages.NOTION_SOURCE_MISMATCH='자료의 원본 연결이 맞지 않습니다. 관리자에게 확인해 주세요.';
+ messages.NOTION_DUPLICATE_ENROLLMENT='같은 학생의 수강 기록이 여러 개 있습니다. 중복을 확인해 주세요.';
  messages.NOTION_DUPLICATE_SOURCE='한 과목에는 DB 연결을 하나만 등록해 주세요.';
- messages.NOTION_SHARED_TIMETABLE='여러 반이 공동 사용 중인 시간표입니다. 해당 반 전용 시간대로 분리한 뒤 수정해 주세요.';
  messages.ACADEMY_MIGRATION_REQUIRED='이미 연결된 선생님의 학원 변경은 기존 기록을 함께 이전해야 합니다.';
  messages.ACADEMY_MEMBERSHIP_CONFLICT='다른 학원에 연결된 학생이 포함되어 있습니다. 소속 학원을 확인해 주세요.';
- messages.COMMON_PLAN_NOT_SYNCED='공통 교재를 먼저 노션에 반영한 뒤 반에서 선택해 주세요.';
  messages.CLASS_NOT_FOUND='삭제됐거나 찾을 수 없는 반이에요. 반 목록을 새로고침한 뒤 다시 골라 주세요.';
  messages.TRANSFER_REASON_REQUIRED='담당 선생님을 바꾸는 이유를 골라 주세요.';
  messages.NOTION_REGISTRATION_ASSIGNMENT_REQUIRED='담당 선생님의 소속·재직·과목 또는 반의 담당·상태가 변경되었습니다. 등록 내용을 확인해 주세요.';
- messages.NOTION_REGISTRATION_SOURCE_REQUIRED='이 학원의 학생·수강 노션 연결을 확인해야 합니다.';
- messages.NOTION_REGISTRATION_SCHEMA_REQUIRED='학생·수강 DB의 학교와 앱 등록 ID 등 연결 속성을 확인해 주세요.';
- messages.NOTION_REGISTRATION_ID_MISMATCH='노션 기록의 원본과 학생 연결이 일치하지 않아 반영을 멈췄습니다.';
- messages.NOTION_REGISTRATION_DUPLICATE='같은 앱 등록 ID의 노션 행이 여러 개입니다. 중복을 확인해 주세요.';
- messages.NOTION_REGISTRATION_CREATE_UNCERTAIN='노션 생성 결과를 아직 확인하지 못했습니다. 새로 만들지 않고 기존 행을 다시 확인해 주세요.';
- messages.NOTION_REGISTRATION_SYNC_FAILED='노션 반영 또는 앱 연결에 실패했습니다. 저장한 입력을 유지하며 다시 시도해 주세요.';
+ messages.NOTION_REGISTRATION_SOURCE_REQUIRED='이 학원의 학생·수강 연결을 확인해야 합니다.';
  messages.REGISTRATION_REQUEST_CONFLICT='같은 저장 요청의 내용이 달라졌습니다. 저장한 등록 내용을 다시 열어 주세요.';
- messages.REGISTRATION_ENROLLMENT_REQUIRED='신규 학생은 등록 첫 달 상태로 노션 반영을 완료한 뒤 전환해 주세요. 추가 과목 상담은 기존 학생 수강 관리에서 상담 과목을 실제 등록한 뒤 정리해 주세요.';
+ messages.REGISTRATION_ENROLLMENT_REQUIRED='신규 학생은 등록 첫 달 상태로 반영을 완료한 뒤 전환해 주세요. 추가 과목 상담은 기존 학생 수강 관리에서 상담 과목을 실제 등록한 뒤 정리해 주세요.';
  messages.REGISTRATION_ALREADY_RESIDENT='이미 재원생으로 전환한 기록입니다. 아래 학생 관리 카드에서 관리해 주세요.';
  messages.REGISTRATION_CONFLICT='다른 화면에서 등록 내용을 수정했습니다. 목록에서 다시 열어 주세요.';
- messages.REGISTRATION_SYNC_IN_PROGRESS='노션 반영 결과를 확인한 뒤 수정할 수 있습니다.';
- messages.NOTION_ADMISSION_SCHEMA_REQUIRED='노션 학생 관리 DB의 입학·상담 속성 형식과 선택 옵션을 확인해 주세요.';
+ messages.REGISTRATION_SYNC_IN_PROGRESS='반영 결과를 확인한 뒤 수정할 수 있습니다.';
  messages.REGISTRATION_NOT_FOUND='저장한 등록 내용을 찾을 수 없습니다.';
  messages.WORD_TASK_NO_WORDS='이 단어장의 그 Day에는 단어가 없어요.';
  messages.WORD_TASK_TOO_MANY='단어가 너무 많아요. Day 범위를 200단어 이하로 나눠 주세요.';
@@ -115,38 +92,30 @@ messages.STUDENT_PROFILE_CONTACT_PENDING='보호자 연락처 변경을 먼저 �
  messages.INTAKE_PHOTO_LIMIT='종이 원서 사진은 6장까지 붙일 수 있어요.';
  messages.STUDENT_PROFILE_REQUEST_CONFLICT='같은 수정 요청의 내용이 달라졌습니다. 학생 정보를 다시 열어 주세요.';
  messages.STUDENT_PROFILE_IN_PROGRESS='학생 정보 수정이 진행 중입니다. 저장 결과를 먼저 확인해 주세요.';
- messages.STUDENT_PROFILE_RESULT_UNCERTAIN='노션 수정 결과를 확인하지 못했습니다. 입력을 유지하고 저장 결과 확인을 다시 눌러 주세요.';
  messages.STUDENT_PROFILE_AUTH_CONFLICT='리포트 인증 정보가 변경되었습니다. 기존 링크 연결을 확인해야 합니다.';
  messages.STUDENT_MAPPING_CONFLICT='학생 식별 연결이 충돌했습니다. 계정 연결을 확인해야 합니다.';
  messages.STUDENT_ENROLLMENT_REQUEST_CONFLICT='저장한 수정 요청의 내용이 달라졌습니다. 수강 관리를 다시 열어 주세요.';
  messages.STUDENT_ENROLLMENT_IN_PROGRESS='수강 변경이 진행 중입니다. 기존 요청의 결과를 먼저 확인해 주세요.';
- messages.STUDENT_ENROLLMENT_RESULT_UNCERTAIN='노션 반영 결과를 아직 확인하지 못했습니다. 저장한 요청으로 결과를 다시 확인해 주세요.';
- messages.NOTION_SUBJECT_NOT_CONFIGURED='이 과목의 노션 수업일지 DB 연결을 확인해 주세요.';
- messages.NOTION_WRITE_REQUEST_CONFLICT='저장한 노션 반영 요청과 내용이 다릅니다. 기존 요청 결과를 먼저 확인해 주세요.';
- messages.NOTION_WRITE_PENDING='노션 반영이 완료되지 않은 요청이 있습니다. 기존 반영 요청을 다시 확인해 주세요.';
- messages.NOTION_SCHEDULE_PLACE_REQUIRED='선택한 장소가 현재 노션 옵션에 없습니다. 장소 목록을 새로고침하고 다시 선택해 주세요.';
- messages.NOTION_SCHEDULE_PLACE_SCHEMA_REQUIRED='노션 일정표의 장소 속성이 선택 형식인지 확인해 주세요.';
+ messages.NOTION_WRITE_PENDING='반영이 완료되지 않은 요청이 있습니다. 기존 반영 요청을 다시 확인해 주세요.';
  messages.SCHEDULE_PROJECTION_LIMIT='일정의 누적 대상 수가 동시 반영 한도를 초과했습니다. 일정 연결을 확인해야 합니다.';
  messages.LESSON_CONTENT_REQUIRED='수업 내용을 입력해 주세요.';
  messages.INVALID_INPUT='입력한 값과 중복된 교재 선택을 확인해 주세요.';
  const fieldLabels:Record<string,string>={studentKey:'학생 연결',subject:'과목',date:'수업 날짜',start:'수업 시작 시간',end:'수업 종료 시간',attendance:'출결',attitude:'태도',homework:'숙제',test:'테스트',content:'수업 내용',correct:'일반 테스트 정답 수',total:'일반 테스트 문항 수',wrong:'일반 테스트 오답 수',examCorrect:'내신 대비 정답 수',examTotal:'내신 대비 문항 수',examWrong:'내신 대비 오답 수',round:'수업 회차',selfStudy:'자습 여부',selfStudyStart:'자습 시작 시간',selfStudyMore:'나눠 한 자습 시간',selfStudyEnd:'자습 종료 시간',selfStudyRound:'자습 회차'};
  const inputFields=error instanceof z.ZodError?[...new Set(error.issues.flatMap(issue=>issue.path.map(String).filter(key=>fieldLabels[key])))]:[];
  if(code==='INVALID_INPUT'&&failureStage.startsWith('lesson-')&&inputFields.length)messages.INVALID_INPUT=`입력 확인: ${inputFields.map(key=>fieldLabels[key]).join(', ')}. 날짜·시간 형식과 점수 범위를 확인해 주세요.`;
- messages.NOTION_SCHEMA_SETUP_REQUIRED=error instanceof LessonSchemaError?`노션 수업 일지 DB에 필요한 속성이 없습니다: ${error.fields.join(', ')}. 관리자 연결 설정을 확인해 주세요.`:'노션 수업 일지 DB의 속성과 연결 설정을 확인해 주세요.';
 
  Object.assign(messages,templateMessages);
  Object.assign(messages,directoryMessages);
  messages.CORE_REGISTRATION_IN_PROGRESS='진행 중이거나 결과가 불확실한 기존 등록 요청이 있습니다. 기존 등록 결과를 확인한 뒤 이전을 다시 진행해 주세요.';
- messages.REGISTRATION_SOURCE_CONFLICT='이미 Notion 생성이 진행된 등록입니다. 기존 생성 결과를 확인해야 하며 새 학생을 중복 생성하지 않습니다.';
+ messages.REGISTRATION_SOURCE_CONFLICT='이미 학생 생성이 진행된 등록입니다. 기존 생성 결과를 확인해야 하며 새 학생을 중복 생성하지 않습니다.';
  messages.REGISTRATION_ID_CONFLICT='등록 식별자 연결을 확인해야 합니다. 저장한 등록 요청을 다시 확인해 주세요.';
  messages.ACADEMIC_PAGE_LIMIT='성적 조회 범위가 큽니다. 학생·과목을 선택해 조회 범위를 좁혀 주세요.';
  messages.ACADEMIC_MIGRATION_REQUIRED='이 성적의 원본 연결이 아직 앱에 저장되지 않았습니다. 기존 자료 이전을 먼저 확인해 주세요.';
- messages.ACADEMIC_MIGRATION_RECOVERY_REQUIRED='기존 Notion 반영 요청의 결과가 불확실합니다. 이전 점검에서 원본 연결을 확인해야 합니다. 입력은 앱에 유지됩니다.';
  messages.SCHEDULE_CONFIG_MIGRATION_REQUIRED='장소 옵션을 앱에 이전해야 합니다. 관리자 일정 이전에서 확인하거나 미지정을 선택해 주세요.';
  messages.SCHEDULE_MIGRATION_NOT_READY='미이전 일정·장소·학생 연결·진행 중 작업을 먼저 대조해야 합니다. 기존 조회는 유지됩니다.';
  messages.SCHEDULE_CONFIG_MIGRATION_REQUIRED='장소 옵션을 앱에 준비해야 합니다. 관리자 일정 앱 전환에서 원본·장소 준비를 확인해 주세요.';
  messages.REPORT_INDEX_REQUIRED = '리포트 조회에 필요한 서버 인덱스 설정을 확인해야 합니다.';
- return {status: code==='FIRESTORE_RESOURCE_EXHAUSTED'?429:['UNAUTHORIZED','SESSION_REVOKED'].includes(code) ? 401 : code === 'FORBIDDEN' ? 403 : code === 'REGISTRATION_NOT_FOUND' ? 404 : ['SERVER_CONFIG_ERROR','WORKSPACE_ERROR','REPORT_INDEX_REQUIRED'].includes(code) ? 500 : code === 'NOTION_EDIT_CONFLICT' ? 409 : ['NOTION_CONNECTION_ERROR','NOTION_400','NOTION_401','NOTION_403','NOTION_404','NOTION_429'].includes(code) ? 502 : code === 'INVALID_INPUT' || code.includes('REQUIRED') ? 400 : 409, body:{ok:false,error:code,message:messages[code],failureStage,diagnosticId,...(code==='MANAGED_PENDING_WRITE'&&blocker?{blocker:{kind:blocker.kind,title:String(blocker.title).slice(0,200),reason:blocker.reason}}:{})}};
+ return {status: code==='FIRESTORE_RESOURCE_EXHAUSTED'?429:['UNAUTHORIZED','SESSION_REVOKED'].includes(code) ? 401 : code === 'FORBIDDEN' ? 403 : code === 'REGISTRATION_NOT_FOUND' ? 404 : ['SERVER_CONFIG_ERROR','WORKSPACE_ERROR','REPORT_INDEX_REQUIRED'].includes(code) ? 500 : code === 'NOTION_EDIT_CONFLICT' ? 409 : code === 'INVALID_INPUT' || code.includes('REQUIRED') ? 400 : 409, body:{ok:false,error:code,message:messages[code],failureStage,diagnosticId,...(code==='MANAGED_PENDING_WRITE'&&blocker?{blocker:{kind:blocker.kind,title:String(blocker.title).slice(0,200),reason:blocker.reason}}:{})}};
 }
 
 
