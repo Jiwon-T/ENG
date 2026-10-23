@@ -10,3 +10,8 @@ export function wordTaskResult(task: WordTaskProgress | null | undefined) {
     done,
   };
 }
+/** 단어 테스트 과제 (the test opened from the home): passed at the 통과 점수, else how many points are still missing. */
+export function testTaskResult(percentage: number, passScore: number) {
+  const passed = percentage >= passScore;
+  return { passed, heading: passed ? '📝 단어 테스트 과제 통과!' : `과제 통과까지 ${passScore - percentage}점 더`, line: passed ? `통과 ${passScore}점 · 선생님께 완료로 보여요` : `통과 ${passScore}점 · 다시 도전해요` };
+}

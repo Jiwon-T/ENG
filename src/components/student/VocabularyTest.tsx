@@ -1,3 +1,4 @@
+import { testTaskResult } from '../../lib/wordTaskResult';
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Volume2, ChevronRight, CheckCircle2, X, Trophy, RotateCcw, Home, GraduationCap, Timer, AlertCircle } from 'lucide-react';
@@ -37,6 +38,8 @@ interface VocabularyTestProps {
   wordbookTitle: string;
   category: 'word' | 'grammar' | 'exam';
   type?: string;
+  /** 단어 테스트 과제 (opened from the home): the 통과 점수, shown with the result */
+  assignment?: { passScore: number };
 }
 
 type TestPhase = 'intro' | 'info' | 'phase1' | 'phase2' | 'feedback' | 'result';
@@ -51,7 +54,7 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-export default function VocabularyTest({ words, dayRange, onClose, onNavigateToReport, wordbookId, wordbookTitle, category, type }: VocabularyTestProps) {
+export default function VocabularyTest({ words, dayRange, onClose, onNavigateToReport, wordbookId, wordbookTitle, category, type, assignment }: VocabularyTestProps) {
   const [phase, setPhase] = useState<TestPhase>('intro');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [options, setOptions] = useState<string[]>([]);
@@ -863,6 +866,7 @@ export default function VocabularyTest({ words, dayRange, onClose, onNavigateToR
                   아쉽게 목표에 도달하지 못했어요.
                 </div>
               )}
+              {assignment && (() => { const r = testTaskResult(percentage, assignment.passScore); return <div className={`mt-3 rounded-2xl px-4 py-2 text-center ${r.passed ? 'bg-[#eaf3de] text-[#27500a]' : 'bg-[#fbeaf0] text-[#72243e]'}`}><b className="block text-base font-black md:text-lg">{r.heading}</b><span className="text-xs md:text-sm">{r.line}</span></div>; })()}
             </div>
 
             {incorrectWords.length > 0 && (

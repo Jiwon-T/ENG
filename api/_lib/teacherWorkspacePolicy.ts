@@ -149,11 +149,13 @@ export const teacherScheduleSchema = z.object({
     return value.kind === '상담' ? { ...rest, prospects: [...new Map(prospects.map(p => [p.name, p])).values()] } : rest;
 });
 
-export function assertLessonComplete(input: unknown) {
+export function assertLessonComplete(input: unknown, trial = false) {
     const d = lessonDraftSchema.parse(input);
     if (!d.content.trim()) throw new Error('LESSON_CONTENT_REQUIRED');
     const absent = ['결석', '보강 결석'].includes(d.attendance);
-    if (d.classSession === '있음' && (d.attendance === '미확인' || d.round === null || (!absent && d.round <= 0))) throw new Error('LESSON_ROUNDS_REQUIRED');
+    // 시범 수업: free and out of 회차, so its 회차 may stay empty or 0 (kept as 0)
+    if (trial && d.classSession === '있음' && d.attendance !== '미확인' && d.round === null) d.round = 0;
+    if (d.classSession === '있음' && (d.attendance === '미확인' || d.round === null || (!absent && d.round <= 0 && !(trial && d.round === 0)))) throw new Error('LESSON_ROUNDS_REQUIRED');
     if (d.classSession === '없음' && d.selfStudy !== '있음') throw new Error('LESSON_OR_STUDY_REQUIRED');
     if (d.selfStudy === '미확인') throw new Error('SELF_STUDY_REQUIRED');
     if (d.selfStudy === '없음' && (d.selfStudyRound !== null && d.selfStudyRound !== 0 || d.selfStudyStart || d.selfStudyEnd || d.selfStudyMore.length)) throw new Error('SELF_STUDY_REQUIRED');

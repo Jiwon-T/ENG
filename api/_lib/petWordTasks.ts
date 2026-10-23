@@ -1,26 +1,33 @@
 // 원정대 › 단어 과제 (과제 모드): the teacher gives a student a word book's Day range (from the 수업 일지 단어 칩); the
 // student plays it in 원정대 — only those words, a game of up to 10, no energy — and a word counts once it is answered
 // right the first time in a game (a miss comes back in a later game). All of them right: the task is done (completedAt).
+// 단어 테스트 과제 (kind 'test'): the same range as the app's 단어 테스트; done the first time a test of that range, taken
+// after the task was given, reaches the 통과 점수 (80/90/100, 90 by default). Read from the test records (studySessions).
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {distractors, meaningsOverlap, shuffle, spellable, wordKey, type FeedQuestion, type FeedRun, type FeedWord} from './petWordFeed.js';
 import {shuffledOrder} from '../../src/lib/sentenceGame.js';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
+import {Timestamp} from 'firebase-admin/firestore';
+import {readStudentMapping} from './studentIdentity.js';
 
 export const WORD_TASKS = 'petWordTasks';
 export const WORD_TASK_RULES = {maxWords: 200, maxActive: 5, questions: 10} as const;
 export interface WordTask {academyId: string; studentKey: string; wordbookId: string; bookTitle: string; startDay: number; endDay: number;
-  words: {w: string; m: string}[]; mastered: string[]; createdBy: string; createdAt: number; completedAt: number | null; removed?: boolean}
-export interface WordTaskView {id: string; wordbookId: string; title: string; bookTitle: string; startDay: number; endDay: number; total: number; mastered: number; completedAt: number | null; createdAt: number}
+  words: {w: string; m: string}[]; mastered: string[]; createdBy: string; createdAt: number; completedAt: number | null; removed?: boolean;
+  /** 단어 테스트 과제: the 통과 점수, the best score and how many tests so far */ kind?: 'test'; passScore?: number; best?: number | null; attempts?: number}
+export interface WordTaskView {id: string; kind: 'expedition' | 'test'; wordbookId: string; title: string; bookTitle: string; startDay: number; endDay: number; total: number; mastered: number; completedAt: number | null; createdAt: number;
+  passScore: number | null; best: number | null; attempts: number}
 
 const range = (a: number, b: number) => a === b ? `Day ${a}` : `Day ${a}~${b}`;
-export const taskView = (id: string, t: WordTask): WordTaskView => ({id, wordbookId: t.wordbookId, title: `${t.bookTitle} · ${range(t.startDay, t.endDay)}`, bookTitle: t.bookTitle, startDay: t.startDay, endDay: t.endDay,
+export const taskView = (id: string, t: WordTask): WordTaskView => ({id, kind: t.kind === 'test' ? 'test' : 'expedition', passScore: t.kind === 'test' ? t.passScore ?? 90 : null, best: t.best ?? null, attempts: t.attempts || 0, wordbookId: t.wordbookId, title: `${t.bookTitle} · ${range(t.startDay, t.endDay)}`, bookTitle: t.bookTitle, startDay: t.startDay, endDay: t.endDay,
   total: t.words.length, mastered: t.mastered.length, completedAt: t.completedAt ?? null, createdAt: t.createdAt});
 const keyOf = (t: WordTask, w: {w: string}) => wordKey({wordbookId: t.wordbookId, word: w.w});
 /** A teacher of this student (any subject), the principal or the admin. */
 const teaches = (actor: any, key: string) => Boolean(actor?.admin || actor?.principal || (actor?.scopes || []).some((s: any) => s.studentKey === key) || (actor?.teachingScopes || []).some((s: any) => s.studentKey === key));
 
-const createInput = z.object({studentKey: z.string().uuid(), wordbookId: z.string().min(1).max(128), startDay: z.number().int().min(1).max(999), endDay: z.number().int().min(1).max(999)}).strict();
+const createInput = z.object({studentKey: z.string().uuid(), wordbookId: z.string().min(1).max(128), startDay: z.number().int().min(1).max(999), endDay: z.number().int().min(1).max(999),
+  kind: z.enum(['expedition', 'test']).optional(), passScore: z.union([z.literal(80), z.literal(90), z.literal(100)]).optional()}).strict();
 /** 원정대 과제로 내기: the range's words are kept with the task, so the game never reads the book. */
 export async function createWordTask(db: any, actor: any, input: unknown, now = Date.now()) {
   const v = createInput.parse(input), key = uuid(v.studentKey), start = Math.min(v.startDay, v.endDay), end = Math.max(v.startDay, v.endDay);
@@ -40,15 +47,39 @@ export async function createWordTask(db: any, actor: any, input: unknown, now = 
   const active = (await db.collection(WORD_TASKS).where('studentKey', '==', key).get()).docs.map((d: any) => d.data()).filter((t: any) => !t.removed && !t.completedAt);
   if (active.length >= WORD_TASK_RULES.maxActive) throw Error('WORD_TASK_LIMIT');
   const id = randomUUID(), task: WordTask = {academyId: actor.academyId || 'main', studentKey: key, wordbookId: v.wordbookId, bookTitle: String(book.title || '단어장').slice(0, 60), startDay: start, endDay: end,
-    words, mastered: [], createdBy: actor.uid, createdAt: now, completedAt: null};
+    words, mastered: [], createdBy: actor.uid, createdAt: now, completedAt: null, ...(v.kind === 'test' ? {kind: 'test' as const, passScore: v.passScore ?? 90, best: null, attempts: 0} : {})};
   await db.collection(WORD_TASKS).doc(id).set(task);
   return {task: taskView(id, task)};
 }
 /** A student's tasks (newest first; removed ones left out). */
-export async function listWordTasks(db: any, studentKey: string) {
+export async function listWordTasks(db: any, studentKey: string, uid?: string | null) {
   const key = uuid(studentKey);
   const rows = (await db.collection(WORD_TASKS).where('studentKey', '==', key).get()).docs.map((d: any) => ({id: d.id, t: d.data() as WordTask})).filter((r: any) => !r.t.removed);
+  await refreshTestTasks(db, key, rows, uid).catch(() => { console.warn('WORD_TEST_TASKS_FAILED'); });
   return rows.sort((a: any, b: any) => b.t.createdAt - a.t.createdAt).map((r: any) => taskView(r.id, r.t));
+}
+const sessionAt = (s: any) => { const c = s.createdAt; if (typeof c?.toMillis === 'function') return c.toMillis(); const sec = c?.seconds ?? c?._seconds; return typeof sec === 'number' ? sec * 1000 : Number(c) || 0; };
+/** 단어 테스트 과제 not done yet: the student's tests of that range since the task was given (best score, how many, done
+ *  at the first one reaching the 통과 점수); a change is saved on the task. */
+async function refreshTestTasks(db: any, key: string, rows: {id: string; t: WordTask}[], uidInput?: string | null) {
+  const open = rows.filter(r => r.t.kind === 'test' && !r.t.completedAt); if (!open.length) return;
+  const uid = uidInput || (await readStudentMapping(db, key).catch(() => null))?.firebaseUid; if (!uid) return;
+  const from = Math.min(...open.map(r => r.t.createdAt));
+  const sessions = (await db.collection('studySessions').where('uid', '==', uid).where('createdAt', '>=', Timestamp.fromMillis(from)).orderBy('createdAt', 'desc').limit(400).get()).docs.map((d: any) => d.data())
+    .filter((s: any) => s.type === 'test' && Number(s.totalItems) > 0).sort((a: any, b: any) => sessionAt(a) - sessionAt(b));
+  for (const r of open) {
+    const mine = sessions.filter((s: any) => s.wordbookId === r.t.wordbookId && Number(s.dayStart) === r.t.startDay && Number(s.dayEnd || s.dayStart) === r.t.endDay && sessionAt(s) >= r.t.createdAt);
+    const scores = mine.map((s: any) => ({at: sessionAt(s), score: Math.round(Number(s.score) / Number(s.totalItems) * 100)}));
+    const best = scores.length ? Math.max(...scores.map((x: any) => x.score)) : null, passed = scores.find((x: any) => x.score >= (r.t.passScore ?? 90));
+    const next = {...r.t, best, attempts: scores.length, completedAt: passed ? passed.at : null};
+    if (next.best !== (r.t.best ?? null) || next.attempts !== (r.t.attempts || 0) || next.completedAt !== r.t.completedAt) { r.t = next; await db.collection(WORD_TASKS).doc(r.id).set(next); }
+  }
+}
+/** 단어 테스트 과제 (the student's own): its words, for the test opened from the home. */
+export async function testTaskWords(db: any, studentKey: string | null, idInput: unknown) {
+  const {id, task} = await studentWordTask(db, studentKey, idInput, 'test');
+  return {id, wordbookId: task.wordbookId, bookTitle: task.bookTitle, startDay: task.startDay, endDay: task.endDay, passScore: task.passScore ?? 90,
+    words: task.words.map((w, i) => ({id: `t${i}`, word: w.w, meaning: w.m, order: i}))};
 }
 /** The 일지 단어 칩 (a teacher of the student): the student's tasks. */
 export async function teacherWordTasks(db: any, actor: any, studentKey: unknown) {
@@ -66,9 +97,9 @@ export async function removeWordTask(db: any, actor: any, idInput: unknown) {
 }
 
 /** The student's own task (by the linked student). */
-export async function studentWordTask(db: any, studentKey: string | null, idInput: unknown) {
+export async function studentWordTask(db: any, studentKey: string | null, idInput: unknown, kind: 'expedition' | 'test' = 'expedition') {
   const id = z.string().uuid().parse(idInput), t = (await db.collection(WORD_TASKS).doc(id).get()).data() as WordTask | undefined;
-  if (!t || t.removed || !studentKey || t.studentKey !== uuid(studentKey)) throw Error('WORD_TASK_NOT_FOUND');
+  if (!t || t.removed || !studentKey || t.studentKey !== uuid(studentKey) || (t.kind === 'test' ? 'test' : 'expedition') !== kind) throw Error('WORD_TASK_NOT_FOUND');
   return {id, task: t};
 }
 /** A game of the task, from the words not yet right (in random order), with the 원정대 games mixed: one 짝 맞추기 board of

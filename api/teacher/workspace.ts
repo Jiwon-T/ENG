@@ -562,7 +562,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             const id=z.string().uuid().parse(body.id);await settleUncertainLessonWrite(db,id);
             const current=(await db.collection('teacherLessonDrafts').doc(id).get()).data();
             if(!current||!canAccessOwned(actor,current.ownerUid,current.academyId))throw new Error('FORBIDDEN');
-            assertLessonComplete(current.data);
+            assertLessonComplete(current.data,Boolean(current.trial)||await (await import('../_lib/appLesson.js')).studentIsTrial(db,current.data?.studentKey).catch(()=>false));
             const result=await (await import('../_lib/appLesson.js')).publishAppLesson(db,actor,id,body.revision??current.revision);
             // '학생에게 알림 보내기' in the 반영 확인 창: sent now; a failed send never fails the 반영.
             const {isLessonPushKind}=await import('../../src/lib/lessonPush.js');

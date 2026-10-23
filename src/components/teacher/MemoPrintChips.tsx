@@ -60,25 +60,33 @@ export default function MemoPrintChips({ text, studentName, studentKey, preset }
 
 /** Pick the book (when the memo did not name just one), then 시험지 or 단어장 출력: the 학습 세트 window opens on that book with
  *  the memo's DAYs (the start, and the end the memo gave or the next DAY). */
-interface TaskView { id: string; wordbookId: string; title: string; startDay: number; endDay: number; total: number; mastered: number; completedAt: number | null }
-/** 원정대 단어 과제: the student's tasks of this book, and giving this range as a new one. */
+interface TaskView { id: string; kind: 'expedition' | 'test'; wordbookId: string; title: string; startDay: number; endDay: number; total: number; mastered: number; completedAt: number | null; passScore: number | null; best: number | null; attempts: number }
+const dayText2 = (t: { startDay: number; endDay: number }) => t.startDay === t.endDay ? `Day ${t.startDay}` : `Day ${t.startDay}~${t.endDay}`;
+/** 앱 과제로 내기: 🗺️ 원정대 과제 (that range's words in 원정대) or 📝 단어 테스트 (the app's test of that range, 통과 점수
+ *  80/90/100); and the student's tasks of this book with how far each has come. */
 function WordTaskRow({ book, pick, studentKey }: { book: MemoBook; pick: MemoPick; studentKey: string }) {
-  const [tasks, setTasks] = useState<TaskView[] | null>(null), [busy, setBusy] = useState(false), [note, setNote] = useState('');
+  const [tasks, setTasks] = useState<TaskView[] | null>(null), [busy, setBusy] = useState(false), [note, setNote] = useState(''), [pass, setPass] = useState<80 | 90 | 100>(90);
   const load = async () => { const r = await teacherAuthenticatedRequest<any>(auth, `/api/teacher/workspace?action=word-tasks&studentKey=${encodeURIComponent(studentKey)}`); if (r.ok && r.data?.ok) setTasks((r.data.tasks || []).filter((t: any) => t.wordbookId === book.id)); };
   useEffect(() => { void load().catch(() => {}); }, [book.id, studentKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const give = async () => {
+  const give = async (kind: 'expedition' | 'test') => {
     if (pick.start === null) return; setBusy(true); setNote('');
     try {
-      const r = await teacherAuthenticatedRequest<any>(auth, '/api/teacher/workspace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'word-task-create', studentKey, wordbookId: book.id, startDay: pick.start, endDay: pick.end ?? pick.start }) });
+      const r = await teacherAuthenticatedRequest<any>(auth, '/api/teacher/workspace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'word-task-create', studentKey, wordbookId: book.id, startDay: pick.start, endDay: pick.end ?? pick.start, kind, ...(kind === 'test' ? { passScore: pass } : {}) }) });
       if (!r.ok || !r.data?.ok) throw Error(r.data?.message || r.userMessage || '과제를 내지 못했어요.');
-      setNote(`원정대 과제로 냈어요 · ${r.data.task.total}단어`); await load();
+      setNote(kind === 'test' ? `단어 테스트 과제로 냈어요 · ${pass}점 넘기기` : `원정대 과제로 냈어요 · ${r.data.task.total}단어`); await load();
     } catch (e: any) { setNote(e?.message || '과제를 내지 못했어요.'); } finally { setBusy(false); }
   };
-  const same = tasks?.find(t => t.startDay === pick.start && t.endDay === (pick.end ?? pick.start) && !t.completedAt);
+  const same = (kind: 'expedition' | 'test') => tasks?.some(t => t.kind === kind && t.startDay === pick.start && t.endDay === (pick.end ?? pick.start) && !t.completedAt);
+  const button = 'w-full rounded-2xl border-2 bg-white py-2 text-xs font-bold disabled:opacity-50';
   return <div className="col-span-2">
-    <button type="button" disabled={busy || pick.start === null || Boolean(same)} onClick={() => void give()} className="w-full rounded-2xl border-2 border-[#1d9e75] bg-white py-2.5 text-sm font-bold text-[#0f6e56] disabled:opacity-50" title={pick.start === null ? '메모에 Day를 적으면 낼 수 있어요' : '이 범위 단어만 원정대에서 풀어요'}>{busy ? '내는 중…' : same ? '이 범위는 이미 과제로 냈어요' : '🗺️ 원정대 과제로 내기'}</button>
+    <p className="mb-1 text-[11px] font-bold text-slate-500">앱 과제로 내기{pick.start === null ? ' (메모에 Day를 적으면 낼 수 있어요)' : ''}</p>
+    <div className="grid grid-cols-2 gap-2">
+      <button type="button" disabled={busy || pick.start === null || same('expedition')} onClick={() => void give('expedition')} className={`${button} border-[#1d9e75] text-[#0f6e56]`} title="이 범위 단어만 원정대에서 풀어요">{same('expedition') ? '원정대 과제 냄' : '🗺️ 원정대 과제'}</button>
+      <button type="button" disabled={busy || pick.start === null || same('test')} onClick={() => void give('test')} className={`${button} border-[#d4537e] text-[#993556]`} title="이 범위 단어 테스트를 통과 점수 넘게 보면 완료">{same('test') ? '단어 테스트 냄' : '📝 단어 테스트'}</button>
+    </div>
+    <div className="mt-1.5 flex items-center justify-end gap-1 text-[11px] text-slate-500" role="group" aria-label="단어 테스트 통과 점수"><span>테스트 통과</span>{([80, 90, 100] as const).map(n => <button key={n} type="button" aria-pressed={pass === n} onClick={() => setPass(n)} className={`rounded-full border px-2 py-0.5 font-bold ${pass === n ? 'border-[#ed93b1] bg-[#fbeaf0] text-[#993556]' : 'border-slate-200 text-slate-500'}`}>{n}점</button>)}</div>
     {note && <p className="mt-1 text-center text-[11px] font-bold text-[#0f6e56]">{note}</p>}
-    {tasks && tasks.length > 0 && <ul className="mt-2 space-y-0.5 text-[11px] text-slate-500">{tasks.slice(0, 4).map(t => <li key={t.id}>{t.completedAt ? '✅' : '🗺️'} Day {t.startDay === t.endDay ? t.startDay : `${t.startDay}~${t.endDay}`} · {t.mastered}/{t.total} 맞힘{t.completedAt ? ' · 완료' : ''}</li>)}</ul>}
+    {tasks && tasks.length > 0 && <ul className="mt-2 space-y-0.5 text-[11px] text-slate-500">{tasks.slice(0, 5).map(t => <li key={t.id}>{t.completedAt ? '✅' : ''}{t.kind === 'test' ? '📝' : '🗺️'} {dayText2(t)} · {t.kind === 'test' ? `${t.best === null ? '아직 안 봄' : `최고 ${t.best}점`} / ${t.passScore}점${t.completedAt ? ' · 통과' : ''}` : `${t.mastered}/${t.total} 맞힘${t.completedAt ? ' · 완료' : ''}`}</li>)}</ul>}
   </div>;
 }
 

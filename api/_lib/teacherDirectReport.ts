@@ -4,7 +4,7 @@ import {lessonTestPaper,parentFeedbackText,type ExtraScore} from '../../src/lib/
 import {extractAssignmentFromFeedback} from './assignmentExtractor.js';
 import {normalizeNotionPageId} from './notionPageId.js';
 export function directLessonReport(draftId:string,draft:any,mapping:any,previous:any={},now=new Date().toISOString()) {
- const d=assertLessonComplete(draft.data);
+ const d=assertLessonComplete(draft.data,Boolean(draft.trial));
  // 선생님 메모 (teacherNote), 시험범위 and 회차 never reach the report.
  const feedback=parentFeedbackText(d);
  return {notionPageId:draft.notionPageId?normalizeNotionPageId(draft.notionPageId):draftId,reportIdentity:previous.reportIdentity||previous.notionPageId||draftId,teacherDraftId:draftId,teacherAppRevision:draft.revision,studentKey:mapping.studentKey,internalStudentId:mapping.internalStudentId,

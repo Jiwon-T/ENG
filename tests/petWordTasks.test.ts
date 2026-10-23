@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {registrationFirestore} from './helpers/registrationFirestore.js';
-import {buildTaskRun, createWordTask, listWordTasks, markTaskWords, removeWordTask, studentWordTask, teacherWordTasks} from '../api/_lib/petWordTasks.js';
+import {buildTaskRun, createWordTask, listWordTasks, markTaskWords, removeWordTask, studentWordTask, teacherWordTasks, testTaskWords} from '../api/_lib/petWordTasks.js';
+import {Timestamp} from 'firebase-admin/firestore';
 
 const K = '11111111-1111-4111-8111-111111111111';
 const teacher = {uid: 't1', admin: false, academyId: 'main', scopes: [{studentKey: K, subject: '영어'}]};
@@ -57,4 +58,25 @@ test('과제 빼기: the teacher who gave it (or 원장님); a removed task is g
   await removeWordTask(f.db, teacher, task.id);
   assert.deepEqual(await listWordTasks(f.db, K), []);
   await assert.rejects(studentWordTask(f.db, K, task.id), /WORD_TASK_NOT_FOUND/);
+});
+
+test('단어 테스트 과제: 통과 점수 (90 by default); only tests of that range after it was given count; best score, how many, done at the pass', async () => {
+  const f = book();
+  const {task}: any = await createWordTask(f.db, teacher, {studentKey: K, wordbookId: 'wm', startDay: 1, endDay: 2, kind: 'test'}, 10_000);
+  assert.deepEqual([task.kind, task.passScore, task.best, task.attempts, task.total], ['test', 90, null, 0, 12]);
+  await assert.rejects(studentWordTask(f.db, K, task.id), /WORD_TASK_NOT_FOUND/, 'not a 원정대 game');
+  const words: any = await testTaskWords(f.db, K, task.id);
+  assert.deepEqual([words.passScore, words.words.length, words.words[0].word], [90, 12, 'word0']);
+  const session = (id: string, at: number, score: number, extra: any = {}) => f.rows.set(`studySessions/${id}`, {uid: 'kid', type: 'test', wordbookId: 'wm', dayStart: 1, dayEnd: 2, score, totalItems: 12, createdAt: Timestamp.fromMillis(at), ...extra});
+  session('before', 5_000, 12); // before the task: does not count
+  session('other', 11_000, 12, {dayEnd: 3}); // another range
+  session('try1', 12_000, 9); // 75
+  let view: any = (await listWordTasks(f.db, K, 'kid'))[0];
+  assert.deepEqual([view.best, view.attempts, view.completedAt], [75, 1, null]);
+  session('try2', 13_000, 11); // 92: passed
+  view = (await listWordTasks(f.db, K, 'kid'))[0];
+  assert.deepEqual([view.best, view.attempts, view.completedAt], [92, 2, 13_000]);
+  assert.equal((await teacherWordTasks(f.db, teacher, K)).tasks[0].completedAt, 13_000, 'kept on the task (the teacher sees it)');
+  const strict: any = await createWordTask(f.db, teacher, {studentKey: K, wordbookId: 'wm', startDay: 3, endDay: 3, kind: 'test', passScore: 100}, 20_000);
+  assert.equal(strict.task.passScore, 100);
 });

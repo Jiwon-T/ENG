@@ -13,6 +13,12 @@ test('academy class rounds accept 1.7 and require rounds only for an actual clas
  assert.throws(()=>assertLessonComplete({...lesson,round:0}),/LESSON_ROUNDS_REQUIRED/);
  assert.equal(assertLessonComplete({...lesson,attendance:'결석',round:0}).round,0);
 });
+test("시범 lessons may leave 회차 empty or 0; attendance is still needed",()=>{
+ assert.equal(assertLessonComplete({...lesson,round:0},true).round,0);
+ assert.equal(assertLessonComplete({...lesson,round:null},true).round,0);
+ assert.equal(assertLessonComplete({...lesson,round:2},true).round,2);
+ assert.throws(()=>assertLessonComplete({...lesson,attendance:'미확인',round:null},true),/LESSON_ROUNDS_REQUIRED/);
+});
 test('self-study-only days omit class time and round but require self-study times and rounds',()=>{
  const study={...lesson,classSession:'없음',start:'',end:'',round:null,selfStudy:'있음',selfStudyStart:'19:00',selfStudyEnd:'19:47',selfStudyRound:1};
  assert.equal(assertLessonComplete(study).round,null);

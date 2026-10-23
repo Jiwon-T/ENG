@@ -25,7 +25,7 @@ import { PET_ROOMS, placeGift, placeSticker, roomCode, roomToday } from '../petR
 import { MONTH_RANK_DOC, keepsNameHidden, monthRankingSnapshot, readMonthRanking, studentRealName } from '../petMonthRanking.js';
 import { PET_TOWERS, syncTowerDecor, syncGearLooks, syncGearInbox, gearLookFor, takeJob3, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
 import { claimQuestBox, markWrongReviewed, noteQuest, questView, readQuestRecords } from '../petQuests.js';
-import { buildTaskRun, listWordTasks, markTaskWords, studentWordTask } from '../petWordTasks.js';
+import { buildTaskRun, listWordTasks, markTaskWords, studentWordTask, testTaskWords } from '../petWordTasks.js';
 import { couponStudentKey, couponView, placeDecor, readCoupon, readCouponView, requestCoupon, syncOfflineMedals } from '../petCoupon.js';
 import { PET_EXPEDITIONS, chooseJob, chooseJob2, finishStage, initialExpedition, levelOk, petProgress, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
 
@@ -334,7 +334,8 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       return sendJson(res, 200, {ok: true, run: publicRun(g.data()?.run || null), expedition: publicExpedition(e.exists ? e.data() : initialExpedition(now), main.level, main.slot)});
     }
     // 원정대 › 단어 과제: the student's tasks; a game of one (only its words, no energy; the same unfinished game resumes)
-    if (action === 'word-tasks') { const key = await couponStudentKey(db, uid).catch(() => null); return sendJson(res, 200, {ok: true, tasks: key ? await listWordTasks(db, key) : []}); }
+    if (action === 'word-tasks') { const key = await couponStudentKey(db, uid).catch(() => null); return sendJson(res, 200, {ok: true, tasks: key ? await listWordTasks(db, key, uid) : []}); }
+    if (action === 'word-task-words') return sendJson(res, 200, {ok: true, ...await testTaskWords(db, await couponStudentKey(db, uid).catch(() => null), body.id)});
     if (action === 'feed-start' && typeof body.task === 'string' && body.task) {
       const {id, task} = await studentWordTask(db, await couponStudentKey(db, uid).catch(() => null), body.task), restart = body.restart === true;
       const current = (await db.collection(PET_GAMES).doc(uid).get()).data() as PetGameState | undefined, active = current?.run && !current.run.finished ? current.run : null;

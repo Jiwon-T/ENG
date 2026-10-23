@@ -103,6 +103,8 @@ export async function saveStudentRegistration(db:any, actor:RegistrationActor, i
             createdAt:previous?.createdAt || Date.now(), updatedAt:Date.now(),
             notionStudentPageId:previous?.notionStudentPageId || null,
             syncStatus:'pending', syncError:null,...(sourceMode?{sourceMode}:{}),
+            // 시범 수업: the roster student this 상담 put on as '시범' stays linked (등록 확정 continues that same student)
+            ...Object.fromEntries(['trialStudentKey','trialEnrollmentId','trialInternalStudentId','trialAt','trialEndedAt'].filter(k=>previous?.[k]!==undefined).map(k=>[k,previous[k]])),
         });
         return {id:ref.id, revision, syncStatus:'pending', alreadySaved:false};
     });

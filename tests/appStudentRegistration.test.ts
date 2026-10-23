@@ -25,6 +25,13 @@ test('new app profile edits preserve app provenance and existing URLs/PINs, and 
 test('registration transition errors have bounded recovery messages without raw server details',()=>{for(const code of ['CORE_REGISTRATION_IN_PROGRESS','REGISTRATION_SOURCE_CONFLICT','REGISTRATION_ID_CONFLICT']){const result=workspaceError(Error(code),'student-registration-sync');assert.equal(result.body.error,code);assert.equal(result.status,409);assert.ok(result.body.message);assert.ok(!result.body.message.includes('undefined'));}});
 test('학원 등록일: the 원서 date is saved on the student (today by default), and 학생 정보 offers the earliest 과목 시작일',async()=>{const f=await fixture();assert.match(String(f.input.academyStartDate),/^\d{4}-\d{2}-\d{2}$/,'today by default');const r=await commitAppStudentRegistration(f.db,f.actor,f.saved.id,1);const p=await readCoreProfile(f.db,f.actor,r.studentKey,profileFromPage);assert.equal(p.data.academyStartDate,f.input.academyStartDate);assert.equal((p as any).firstSubjectStart,'2026-10-08');const {startId}=await import('../api/_lib/assignmentStarts.js');assert.equal(f.rows.get('teacherAssignmentStarts/'+startId(teacher,r.studentKey,'영어'))?.since,'2026-10-08','the 원서 teacher starts on the 과목 시작일');});
 
+test("시범 수업: saving the 상담 원서 again keeps the 시범 student linked",async()=>{
+ const f=await fixture(),request=randomUUID(),consult=await saveStudentRegistration(f.db,f.actor,{...f.input,intakeStage:'consultation'},request,undefined,randomUUID()),regPath='teacherStudentRegistrations/'+consult.id;
+ const t=await commitAppStudentRegistration(f.db,f.actor,consult.id,1,'trial') as any;
+ await saveStudentRegistration(f.db,f.actor,{...f.input,intakeStage:'consultation',school:'바뀐고'},request,1,randomUUID());
+ const reg=f.rows.get(regPath);assert.equal(reg.revision,2);assert.equal(reg.trialStudentKey,t.trialStudentKey);assert.ok(reg.trialEnrollmentId&&reg.trialInternalStudentId);
+ await assert.rejects(commitAppStudentRegistration(f.db,f.actor,consult.id,2,'trial'),/REGISTRATION_TRIAL_EXISTS/,'no second 시범 student');
+});
 test('시범 수업: a 상담 intake goes on the roster as 시범 (대기, 담당 scope, no 반 or 수강료), ends without 등록, and 등록 확정 later continues the same student',async()=>{
  const f=await fixture(),consult=await saveStudentRegistration(f.db,f.actor,{...f.input,intakeStage:'consultation'},randomUUID(),undefined,randomUUID()),regPath='teacherStudentRegistrations/'+consult.id;
  await assert.rejects(commitAppStudentRegistration(f.db,f.actor,consult.id,1),/REGISTRATION_ENROLLMENT_REQUIRED/,'a 상담 is not 등록 확정');

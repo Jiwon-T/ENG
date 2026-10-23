@@ -45,7 +45,7 @@ export default function ExpeditionMap({ state, send, onClose, onGuild, initial }
   const [quietTask, setQuietTask] = useState<{ id: string; restart: boolean } | null>(null); // 단어 과제 mixes in 듣고 고르기: asked first too
   // 단어 과제 (선생님이 낸 단어장·Day 범위): shown above the map; a game of one costs no energy
   const [tasks, setTasks] = useState<{ id: string; title: string; total: number; mastered: number; completedAt: number | null }[]>([]);
-  const loadTasks = async () => { const r: any = await send('word-tasks'); setTasks(r.tasks || []); };
+  const loadTasks = async () => { const r: any = await send('word-tasks'); setTasks((r.tasks || []).filter((t: any) => t.kind !== 'test')); }; // 단어 테스트 과제: on the home, not here
   const pet = state.pets.find(p => p.slot === state.currentPetSlot)!;
   const chooseJob = async (job: PetJob) => { setBusy(true); setNotice(''); try { const r = await send('choose-job', { job }); if (r.expedition) setExp(r.expedition); } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); } finally { setBusy(false); } };
   const chooseJob2 = async (job2: PetJob2) => { setBusy(true); setNotice(''); try { const r = await send('choose-job2', { job2 }); if (r.expedition) setExp(r.expedition); } catch (e: any) { setNotice(e?.message || '잠시 후 다시 해 주세요.'); } finally { setBusy(false); } };
