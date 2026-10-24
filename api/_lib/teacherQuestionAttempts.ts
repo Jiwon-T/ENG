@@ -12,8 +12,8 @@ import { CIRCLED, WRITTEN_TYPES, typeLabel } from '../../src/lib/questionMaker.j
 const LETTERS = ['ⓐ', 'ⓑ', 'ⓒ', 'ⓓ', 'ⓔ', 'ⓕ', 'ⓖ', 'ⓗ', 'ⓘ', 'ⓙ', 'ⓚ', 'ⓛ'];
 const answerText = (v: any) => typeof v === 'number' ? CIRCLED[v - 1] || '?' : Array.isArray(v) ? v.join(' · ') : '';
 
-/** One attempt as the teacher sees it. */
-function teacherRow(x: any) {
+/** One attempt as the teacher sees it (also 관리자 설정 › 앱 사용자 › 학습 기록). */
+export function teacherRow(x: any) {
   const total = x.results?.length ?? null, sessions = (x.sessions || []).map((s: any) => ({ start: s.start, end: s.end }));
   const ms = sessions.reduce((sum: number, s: any) => sum + Math.max(0, s.end - s.start), 0) + Number(x.folded?.ms || 0);
   return { id: x.id, kind: x.kind, title: x.title || '변형 문제', status: x.status, dueAt: x.dueAt ?? null, createdAt: x.createdAt, submittedAt: x.submittedAt || null,

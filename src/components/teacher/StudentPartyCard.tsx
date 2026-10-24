@@ -4,9 +4,10 @@ import {PET_PARTY,petStage,wornAccessories} from '../../lib/petCatalog';
 
 /** 학생 관리 › this week's 원정대 party of the student: the whole team, students of our academy by name and others by
  *  nickname only. Hidden when the student has no team this week. */
-export default function StudentPartyCard({studentKey,request}:{studentKey:string;request:(a:string,b?:any)=>Promise<any>}){
+export default function StudentPartyCard({studentKey,uid,request}:{studentKey?:string;uid?:string;request:(a:string,b?:any)=>Promise<any>}){
  const [party,setParty]=useState<any>(null);
- useEffect(()=>{let live=true;setParty(null);request('read:student-party',{studentKey}).then(r=>{if(live)setParty(r.party||null);}).catch(()=>undefined);return()=>{live=false;};},[studentKey]);
+ // `uid`: 관리자 설정 › 앱 사용자, an account not linked to a student yet
+ useEffect(()=>{let live=true;setParty(null);request(uid?'read:app-user-party':'read:student-party',uid?{uid}:{studentKey}).then(r=>{if(live)setParty(r.party||null);}).catch(()=>undefined);return()=>{live=false;};},[studentKey,uid]);
  if(!party)return null;
  const boss=PET_PARTY.bosses.find(b=>b.id===party.boss);
  return <div className="mt-2 rounded-xl border border-[#f3e6e8] bg-white px-3 py-2 text-xs">

@@ -117,6 +117,8 @@ export interface StoredLessonReport {
   /** The other tests of that day (벼락치기 85 …), after the first one above. */
   extraScores?: { name: string; score: number }[];
   schoolExamScore: number | null;
+  /** The other 내신 대비 tests of that day, after the first one above. */
+  examExtraScores?: number[];
   feedback: string;
   derivedAssignment?: string | null;
   sourceUpdatedAt: string;
@@ -212,6 +214,8 @@ export interface ParentLessonReportDTO {
   /** The other tests of that day (벼락치기 85 …), after the first one above. */
   extraScores?: { name: string; score: number }[];
   schoolExamScore: number | null;
+  /** The other 내신 대비 tests of that day, after the first one above. */
+  examExtraScores?: number[];
   feedback: string;
 }
 

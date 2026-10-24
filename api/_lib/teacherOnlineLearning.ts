@@ -10,6 +10,11 @@ import {lessonReportId,assignmentContentHash} from './reportAudienceDTO.js';
 const text=(v:any,max=1200)=>typeof v==='string'?v.slice(0,max):'';
 const number=(v:any)=>typeof v==='number'&&Number.isFinite(v)?v:null;
 function date(v:any){const ms=v?.toMillis?.()??(typeof v?.seconds==='number'?v.seconds*1000+Math.floor((v.nanoseconds||0)/1e6):Date.parse(v));return Number.isFinite(ms)?new Date(ms).toISOString():null;}
+/** One studySessions record as the 학습 리포트 shows it (also 관리자 설정 › 앱 사용자 › 학습 기록). */
+export const onlineSessionRow=(d:any)=>{const r=d.data(),answers=Array.isArray(r.incorrectAnswers)?r.incorrectAnswers:[];return {
+  id:d.id,wordbookTitle:text(r.wordbookTitle,450)||'단어장',type:text(r.type,50),category:text(r.category,50)||'word',wordbookType:text(r.wordbookType,100),createdAt:date(r.createdAt),duration:number(r.duration),score:number(r.score),totalItems:number(r.totalItems),dayStart:number(r.dayStart),dayEnd:number(r.dayEnd),incorrectCount:answers.length,
+  incorrectAnswers:answers.slice(0,100).map((a:any)=>({word:text(a.word),meaning:text(a.meaning),userChoice:text(a.userChoice),correctAnswer:text(a.correctAnswer),quizSentence:text(a.quizSentence,3000),isReviewed:Boolean(a.isReviewed)})),
+ };};
 const empty=(reason:string,linked=false)=>({linked,studentLinked:linked,parentUrl:null,subjectOptions:['영어'],reports:[],schedules:[],academic:{records:[],subjects:[],academyScores:[]},online:{reason,evaluation:undefined as undefined|{text:string;updatedAt:string|null},sessions:[],assignments:[],progress:null,nextCursor:null}});
 /** The student's own app account for this student record, after the same two-way link checks the report uses. */
 export async function linkedStudentAccount(db:any,key:string,deps:{readStudentMapping:typeof readStudentMapping}):Promise<{uid:string;user:any;mapping:any}|{reason:string}>{
@@ -39,10 +44,7 @@ export async function loadTeacherOnlineLearning(db:any,actor:any,keyInput:unknow
  const tasks=cursor?undefined:await assignmentList(db,uid,mapping.internalStudentId,assignments.docs);
  const latest=await deps.readStudentMapping(db,key),latestUser=(await db.collection('users').doc(uid).get()).data();
  if(latest?.firebaseUid!==uid||latest?.internalStudentId!==mapping.internalStudentId||latestUser?.notionStudentKey!==user.notionStudentKey||latestUser?.disabled||latestUser?.role!=='student')return empty('account-link-mismatch');
- const docs=sessions.docs.slice(0,20),rows=docs.filter((d:any)=>d.data().uid===uid&&(!d.data().subject||d.data().subject==='영어')).map((d:any)=>{const r=d.data(),answers=Array.isArray(r.incorrectAnswers)?r.incorrectAnswers:[];return {
-  id:d.id,wordbookTitle:text(r.wordbookTitle,450)||'단어장',type:text(r.type,50),category:text(r.category,50)||'word',wordbookType:text(r.wordbookType,100),createdAt:date(r.createdAt),duration:number(r.duration),score:number(r.score),totalItems:number(r.totalItems),dayStart:number(r.dayStart),dayEnd:number(r.dayEnd),incorrectCount:answers.length,
-  incorrectAnswers:answers.slice(0,100).map((a:any)=>({word:text(a.word),meaning:text(a.meaning),userChoice:text(a.userChoice),correctAnswer:text(a.correctAnswer),quizSentence:text(a.quizSentence,3000),isReviewed:Boolean(a.isReviewed)})),
- };});
+ const docs=sessions.docs.slice(0,20),rows=docs.filter((d:any)=>d.data().uid===uid&&(!d.data().subject||d.data().subject==='영어')).map(onlineSessionRow);
  const last=docs.at(-1),ts=last?.data().createdAt;
  const nextCursor=sessions.docs.length>20&&last&&typeof ts?.seconds==='number'?encodeReportCursor(binding,JSON.stringify({seconds:ts.seconds,nanoseconds:ts.nanoseconds||0}),last.id):null;
  const saved=evaluation?.exists?evaluation.data():null;

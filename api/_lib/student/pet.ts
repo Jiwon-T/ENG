@@ -25,7 +25,8 @@ import { PET_ROOMS, placeGift, placeSticker, roomCode, roomToday } from '../petR
 import { MONTH_RANK_DOC, keepsNameHidden, monthRankingSnapshot, readMonthRanking, studentRealName } from '../petMonthRanking.js';
 import { PET_TOWERS, syncTowerDecor, syncGearLooks, syncGearInbox, gearLookFor, takeJob3, equipTowerGear, initialTower, loadTowerPool, openEntranceChest, openTowerDoor, publicTower, towerWrongsSessions, towerAct, towerAnswer, towerEvent, towerPet, type TowerState } from '../petTower.js';
 import { claimQuestBox, markWrongReviewed, noteQuest, questView, readQuestRecords } from '../petQuests.js';
-import { buildTaskRun, listWordTasks, markTaskWords, studentWordTask, testTaskWords } from '../petWordTasks.js';
+import { buildTaskRun, listWordTasks, markTaskWords, recordTaskGame, studentWordTask, testTaskWords } from '../petWordTasks.js';
+import { alertDevice, alertTeachers, gameAlertText, taskAlertText } from '../studyAlerts.js';
 import { couponStudentKey, couponView, placeDecor, readCoupon, readCouponView, requestCoupon, syncOfflineMedals } from '../petCoupon.js';
 import { PET_EXPEDITIONS, chooseJob, chooseJob2, finishStage, initialExpedition, levelOk, petProgress, publicExpedition, stageInfo, stageUnlocked, type ExpeditionState } from '../petExpedition.js';
 
@@ -85,6 +86,20 @@ async function change(db: any, uid: string, now: number, apply: (s: ServerPetSta
     if (user) tx.set(userRef, {petStats: petSummary(s)}, {merge: true});
     return {state: s, result};
   });
+}
+
+/** A word game's last answer: 원정대 과제 → its study record, then "이번 판 n/m · 과제 a/b 맞힘" (or, the moment every word is
+ *  right, "완료") to the teachers; another game (단어 먹이, 원정대 스테이지) → a 펫 게임 alert for those who ticked it. */
+async function feedAlerts(db: any, uid: string, ended: {runId: string; task: string | null; stage: string | null; right: number; asked: number; ms: number} | null, marked: any, device: 'mobile' | 'pc', now: number) {
+  const done = Boolean(marked && marked.completedAt === now);
+  if (done) await alertTeachers(db, uid, name => taskAlertText(name, marked, null, true, device), {device, tag: `task-${marked.id}-done`});
+  if (!ended) return;
+  if (ended.task) {
+    const view = await recordTaskGame(db, uid, ended.task, ended, now);
+    if (view && !done) await alertTeachers(db, uid, name => taskAlertText(name, view, ended, false, device), {device, tag: `task-${ended.runId}`});
+    return;
+  }
+  await alertTeachers(db, uid, name => gameAlertText(name, {kind: ended.stage ? '원정대 게임' : '단어 먹이 주기', right: ended.right, asked: ended.asked, ms: ended.ms}, device), {device, tag: `feed-${ended.runId}`, game: true});
 }
 
 /** Same as change(), with the tower (petTowers/{uid}) in the same transaction. */
@@ -375,7 +390,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
         return {resumed: false, energy: PET_WORD_FEED.energy};
       }));
     }
-    if (action === 'feed-answer') { let mark: {id: string; keys: string[]} | null = null; const out = await changeGame(db, uid, now, (s, g, e, party) => {
+    if (action === 'feed-answer') { let mark: {id: string; keys: string[]} | null = null, ended: {runId: string; task: string | null; stage: string | null; right: number; asked: number; ms: number} | null = null; const out = await changeGame(db, uid, now, (s, g, e, party) => {
       const index = Number(body.index), r: any = answerRun(g, s, String(body.runId || ''), index, {choice: body.choice === undefined ? undefined : Number(body.choice), text: typeof body.text === 'string' ? body.text.slice(0, 400) : undefined, correct: body.correct === true, pick: Array.isArray(body.pick) ? [Number(body.pick[0]), Number(body.pick[1])] : undefined}), q = g.run?.questions[index];
       // Party: a word answered right for the first time (sentences and boards don't count toward the boss).
       if (party && !r.repeat && !r.pending && r.correct && q && !q.retry && ['meaning', 'listen', 'spell', undefined].includes(q.type)) r.party = addContribution(party, uid, q.key, petLook(s), now);
@@ -384,9 +399,12 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       if (!r.repeat && g.run?.finished && g.run.stage) r.expedition = finishStage(e, s, g.run.stage, runSummary(g.run).stars, g.run.slot);
       // 단어 과제: a word right the first time in this game counts toward the task
       if (!r.repeat && !r.pending && r.correct && q && !q.retry && g.run?.task) mark = {id: g.run.task, keys: q.type === 'match' ? (q.pairs || []).map(p => p.key) : [q.key]}; // a 짝 맞추기 board: its words
+      // the game ended with this answer: 원정대 과제 → a study record and the teacher's alert; other games → 펫 게임 alert
+      if (!r.repeat && g.run?.finished) ended = {runId: g.run.id, task: g.run.task || null, stage: g.run.stage || null, right: g.run.results.filter(x => x.correct).length, asked: g.run.questions.length, ms: now - g.run.startedAt};
       return r;
     });
     if (mark) { const m: {id: string; keys: string[]} = mark; out.result.task = await markTaskWords(db, m.id, m.keys, now).catch(() => null); }
+    await feedAlerts(db, uid, ended, out.result.task, alertDevice(body.device), now).catch(() => undefined);
     return feedDone(out); }
     if (action === 'choose-job') return feedDone(await changeGame(db, uid, now, (s, _g, e) => chooseJob(e, s, body.job)));
     if (action === 'choose-job2') return feedDone(await changeGame(db, uid, now, (s, _g, e) => chooseJob2(e, s, body.job2)));
@@ -394,6 +412,8 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     // 채움의 탑. The end of a battle (won, lost, ran away) sends its missed words to 오답 복습.
     if (action.startsWith('tower-')) {
       const towerDone = async (out: {state: ServerPetState; tower: TowerState; result: any}) => {
+        const end = out.result?.end; // a battle ended: 펫 게임 alert (teachers who ticked it)
+        if (end) await alertTeachers(db, uid, name => gameAlertText(name, {kind: '채움의 탑', detail: `${out.result.floor ? `${out.result.floor}층 · ` : ''}${end.wordbookTitle || ''}`, right: Number(end.right) || 0, asked: Number(end.asked) || 0, ms: now - Number(end.startedAt || now)}, alertDevice(body.device)), {device: alertDevice(body.device), tag: `tower-${end.runId}`, game: true}).catch(() => 0);
         const {end: _end, ...result} = out.result || {}; // the battle's internals stay on the server
         return sendJson(res, 200, {ok: true, state: publicPetState(out.state), tower: publicTower(out.tower, out.state, now), result});
       };

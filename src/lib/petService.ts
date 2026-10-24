@@ -1,4 +1,5 @@
 import { auth } from './firebase';
+import { studyDevice } from './studyDonePing';
 import { petStage, type AccessorySlot, type PetJob, type PetJob2, type PetJob3, type PetStage, type PetStudySource, type PetGearLook } from './petCatalog';
 export type { PetCharacterType, PetStage } from './petCatalog';
 
@@ -70,7 +71,8 @@ export const PetService = {
     } catch { return first; }
   },
   async summary(): Promise<PetSummary> { const r: any = await call('GET', undefined, '/api/student/pet?summary=1'); return { ...(Array.isArray(r.inbox) && r.inbox.length ? { inbox: r.inbox as InboxLine[] } : {}), hasPet: Boolean(r.hasPet), points: Number(r.points || 0), pass: r.pass || null, coupon: r.coupon || null, quests: r.quests || null, ...('rank' in r ? { rank: r.rank ?? null, rankTeacher: Boolean(r.rankTeacher) } : {}) }; },
-  act(action: string, payload: Record<string, unknown> = {}) { return call('POST', { action, ...payload }, AI_ACTIONS.has(action) ? '/api/gemini?task=pet' : '/api/student/pet'); },
+  // `device`: a phone or a computer, for the teacher's 학생 학습 알림 (모바일만)
+  act(action: string, payload: Record<string, unknown> = {}) { return AI_ACTIONS.has(action) ? call('POST', { action, ...payload }, '/api/gemini?task=pet') : call('POST', { action, ...payload, device: studyDevice() }, '/api/student/pet'); },
   /** 오답 복습: only the server marks an answer reviewed (and counts it for 오늘 할 일 in the same write). False: it was
    *  reviewed already or is not there; a failed request throws and the answer stays to be reviewed again. */
   async reviewMark(sessionId: string, word: string): Promise<boolean> {

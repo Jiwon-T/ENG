@@ -1,5 +1,6 @@
 import { studentReportCache } from './lib/studentReportCache';
 import { PushMenuRow } from './components/PushOptIn';
+import TeacherStudyAlert from './components/TeacherStudyAlert';
 import React, { useState, useEffect, Suspense, lazy, Component } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
@@ -175,7 +176,11 @@ export default function App() {
   const petSummary = user && petSummaryOf?.uid === user.uid ? petSummaryOf.summary : null;
   // Home's 워크북 opens 선생님방 on that tab; the 선생님방 row opens it as usual.
   const [teacherStartTab, setTeacherStartTab] = useState<string | undefined>(undefined);
-  useEffect(() => { if (currentView !== 'teacher-room') setTeacherStartTab(undefined); }, [currentView]);
+  useEffect(() => { if (currentView !== 'teacher-room') { setTeacherStartTab(undefined); setTeacherStartStudent(undefined); } }, [currentView]);
+  // 학생 학습 알림 tapped (/?study=<studentKey>): 선생님방 › 학생 관리 › that student's 온라인 학습
+  const [teacherStartStudent, setTeacherStartStudent] = useState<string | undefined>(undefined);
+  const isTeacherAccount = ['teacher', 'principal', 'admin'].includes(String(profile?.role)) || profile?.email === 'lizzieshere1@gmail.com';
+  useEffect(() => { const key = new URLSearchParams(window.location.search).get('study'); if (!key || !isTeacherAccount) return; window.history.replaceState({}, '', window.location.pathname); setTeacherStartTab('students'); setTeacherStartStudent(key); setCurrentView('teacher-room'); }, [isTeacherAccount]);
   // The print footer (채움학원 지원T) can be changed by teachers only; students always get the academy's.
   useEffect(() => { setPrintFooterLocked(!['teacher', 'principal', 'admin'].includes(String(profile?.role))); }, [profile?.role]);
   useEffect(() => { if (!user) { setPetSummaryOf(null); return; } if (currentView !== 'home') return; const uid = user.uid; let live = true; PetService.summary().then(summary => { if (live) setPetSummaryOf({ uid, summary }); }).catch(() => undefined); return () => { live = false; }; }, [user, currentView]);
@@ -540,6 +545,7 @@ export default function App() {
               </div>
 
               {isPWAInstalled && profile?.role === 'student' && user && <PushMenuRow uid={user.uid} />}
+              {isTeacherAccount && user && <TeacherStudyAlert uid={user.uid} />}
               {/* PWA Promotion */}
               {!isPWAInstalled && (
                 <div className="p-6">
@@ -654,7 +660,7 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
             >
               <AppChrome.Provider value={{ home: goHome, openMenu: () => setIsMenuOpen(true), name: profile?.alias || profile?.name || '', photo: profile?.photoURL, alert: hasNewAssignment }}>
-                <TeacherRoom onNavigate={setCurrentView} initialTab={teacherStartTab} />
+                <TeacherRoom onNavigate={setCurrentView} initialTab={teacherStartTab} initialStudent={teacherStartStudent} />
               </AppChrome.Provider>
             </motion.div>
           ) : currentView === 'vocab' || currentView === 'grammar' || currentView === 'exam' || currentView === 'sentence' ? (

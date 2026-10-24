@@ -60,5 +60,21 @@ test('the score box: tabs in the title row only when there is more than one test
   assert.match(many, /①<span class="lesson-test-tab-name"> 단어<\/span> 90/);
   assert.match(many, /②<span class="lesson-test-tab-name"> 벼락치기<\/span> 85/);
   const full = renderToStaticMarkup(<LessonTests value={{...lesson, extraTests: Array(3).fill({name: '', correct: 1, total: 2})}} onChange={() => {}}/>);
-  assert.doesNotMatch(full, /테스트 하나 더 기록/, 'four tests: no more');
+  const boxes = (html: string) => html.split('<fieldset').slice(1);
+  assert.doesNotMatch(boxes(full)[0], /테스트 하나 더 기록/, 'four tests: no more');
+  assert.match(boxes(full)[1], /테스트 하나 더 기록/, '내신 대비 has its own +');
+});
+
+test('내신 대비 점수: its own tabs and +, the other tests kept in examExtraTests (no name picker there)', () => {
+  const html = renderToStaticMarkup(<LessonTests value={{...lesson, examCorrect: 18, examTotal: 20, examExtraTests: [{correct: 15, total: 20}]}} onChange={() => {}}/>);
+  const exam = html.split('<fieldset').slice(1)[1];
+  assert.match(exam, /① 90/);
+  assert.match(exam, /② 75/);
+  assert.doesNotMatch(exam, /테스트 이름/, 'no name picker for 내신 대비');
+});
+
+test('saving: an empty first 내신 대비 test takes the next one; blank ones dropped', () => {
+  const base: any = {studentKey: '11111111-1111-4111-8111-111111111111', subject: '영어', date: '2026-10-23', start: '14:00', end: '15:30', attendance: '출석', attitude: '상', homework: '상', test: '상', content: '', assignment: '', note: '', nextPlan: '', correct: null, total: null, round: null};
+  const d: any = lessonDraftSchema.parse({...base, examExtraTests: [{correct: null, total: null}, {correct: null, total: 20, wrong: 2}, {correct: 7, total: 10}]});
+  assert.deepEqual([d.examCorrect, d.examTotal, d.examExtraTests.length, d.examExtraTests[0].correct], [18, 20, 1, 7]);
 });

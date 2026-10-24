@@ -15,9 +15,10 @@ interface PetView {
 const won = (n: number) => n.toLocaleString('ko-KR');
 const CATEGORY: Record<string, string> = { clothing: '옷', accessory: '소품', background: '배경' };
 
-export default function TeacherPetView({ studentKey, name, request, onClose }: { studentKey: string; name: string; request: (action?: string, body?: any) => Promise<any>; onClose: () => void }) {
+// `uid`: 관리자 설정 › 앱 사용자, an account not linked to a student yet (read by the account instead).
+export default function TeacherPetView({ studentKey, uid, name, request, onClose }: { studentKey?: string; uid?: string; name: string; request: (action?: string, body?: any) => Promise<any>; onClose: () => void }) {
   const [view, setView] = useState<PetView | null | undefined>(undefined), [error, setError] = useState(''), [slot, setSlot] = useState<number | null>(null);
-  useEffect(() => { let live = true; request('read:student-pet', { studentKey }).then(r => { if (live) setView(r.pet || null); }).catch(e => { if (live) setError(e?.message || '펫 정보를 불러오지 못했어요.'); }); return () => { live = false; }; }, [studentKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { let live = true; request(uid ? 'read:app-user-pet' : 'read:student-pet', uid ? { uid } : { studentKey }).then(r => { if (live) setView(r.pet || null); }).catch(e => { if (live) setError(e?.message || '펫 정보를 불러오지 못했어요.'); }); return () => { live = false; }; }, [studentKey, uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const pet = view ? view.pets.find(p => p.slot === (slot ?? view.currentPetSlot)) || view.pets[0] : null;
   return <WorkspaceDialog open title={`${name} 학생의 펫`} onClose={onClose}>
     {error ? <p role="alert" className="text-sm text-[#b04a5a]">{error}</p>

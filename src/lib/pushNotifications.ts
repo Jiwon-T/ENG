@@ -21,8 +21,8 @@ export function pushSupported(key = WEB_PUSH_KEY): boolean {
   return Boolean(key) && typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 }
 /** What this device shows for the signed-in account. */
-export function pushState(uid: string, key = WEB_PUSH_KEY): PushState {
-  if (!installedApp() || !pushSupported(key)) return 'unsupported';
+export function pushState(uid: string, key = WEB_PUSH_KEY, browser = false): PushState {
+  if ((!browser && !installedApp()) || !pushSupported(key)) return 'unsupported';
   if (Notification.permission === 'denied') return 'blocked';
   return Notification.permission === 'granted' && read(savedKey(uid)) ? 'on' : 'off';
 }
@@ -38,9 +38,10 @@ async function send(idToken: string, token: string, on: boolean) {
   const r = await safeFetchJson<any>('/api/student/push-token', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` }, body: JSON.stringify({ token, on }) });
   if (!r.ok) throw new Error(r.data?.message || '알림 설정을 저장하지 못했어요. 잠시 후 다시 해 주세요.');
 }
-/** 알림 켜기: the phone's permission, then this device's token saved for this account. */
-export async function enablePush(uid: string, idToken: () => Promise<string>, key = WEB_PUSH_KEY): Promise<PushState> {
-  if (!installedApp() || !pushSupported(key)) return 'unsupported';
+/** 알림 켜기: the phone's permission, then this device's token saved for this account. `browser`: a browser tab may turn
+ *  it on too (선생님 학생 학습 알림: a computer works; students only in the installed app). */
+export async function enablePush(uid: string, idToken: () => Promise<string>, key = WEB_PUSH_KEY, browser = false): Promise<PushState> {
+  if ((!browser && !installedApp()) || !pushSupported(key)) return 'unsupported';
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return permission === 'denied' ? 'blocked' : 'off';
   const token = await deviceToken(key);

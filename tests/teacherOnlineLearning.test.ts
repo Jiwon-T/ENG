@@ -151,3 +151,27 @@ test('수업 일지 › 이날 앱 학습: only that Seoul day of the linked stu
  assert.deepEqual((await loadLessonDayStudy(f.db,f.actor,key,'2026-10-18',{readStudentMapping:async()=>null} as any)).sessions,[],'no linked account: none');
  await assert.rejects(loadLessonDayStudy(f.db,f.actor,key,'10/18',f.deps));
 });
+test('관리자 설정 › 앱 사용자 › 학습 기록: admin only, an account not linked yet, its own records and 출석 체크',async()=>{
+ const {readAppUserStudy}=await import('../api/_lib/adminAppUserStudy.js');
+ const f=fixture(3),admin={uid:'admin',admin:true,academyId:'main'};f.rows.users.foreign={role:'student'};
+ f.rows.attendance={a:{studentId:'foreign',status:'present',date:'2026-10-02'},b:{studentId:'foreign',status:'present',date:'2026-10-20'},c:{studentId:'foreign',status:'absent',date:'2026-10-21'},d:{studentId:'student',status:'present',date:'2026-10-22'}};
+ await assert.rejects(readAppUserStudy(f.db,f.actor,'foreign'),/FORBIDDEN/,'a teacher cannot');
+ await assert.rejects(readAppUserStudy(f.db,admin,'student'),/FORBIDDEN/,'a linked account is seen in 학생 관리');
+ f.rows.users.someTeacher={role:'teacher'};await assert.rejects(readAppUserStudy(f.db,admin,'someTeacher'),/FORBIDDEN/);
+ const r:any=await readAppUserStudy(f.db,admin,'foreign');
+ assert.deepEqual(r.online.sessions.map((s:any)=>s.wordbookTitle),['FOREIGN']);assert.equal(r.online.progress.recorded,1);assert.equal(r.online.progress.learned,1);
+ assert.deepEqual(r.attendance.days,['2026-10-20','2026-10-02']);assert.ok(!JSON.stringify(r).includes('단어장 '),'never another account');
+});
+test('앱 사용자 › 학습 기록: 변형 문제, 지문 분석 and 워크북 of an account not linked yet, its own only, admin only',async()=>{
+ const {readAppUserQuestions,readAppUserMaterials}=await import('../api/_lib/adminAppUserStudy.js');
+ const f=fixture(1),admin={uid:'admin',admin:true,academyId:'main'};f.rows.users.foreign={role:'student'};
+ f.rows.questionAttempts={q1:{id:'q1',uid:'foreign',kind:'self',title:'관계대명사',status:'submitted',createdAt:1,updatedAt:5,score:{correct:3,total:4},results:[]},q2:{id:'q2',uid:'foreign',kind:'self',title:'새 문제',status:'draft',createdAt:2,updatedAt:9},q3:{id:'q3',uid:'student',kind:'self',title:'OTHER',status:'draft',createdAt:3,updatedAt:10}};
+ f.rows.passageViews={'foreign_p1':{uid:'foreign',passageId:'p1',at:100},'foreign_p2':{uid:'foreign',passageId:'p2',at:200},'student_p3':{uid:'student',passageId:'p3',at:300}};
+ f.rows.passages={p1:{title:'모의고사 20번',sentences:['First sentence.']},p2:{title:'',sentences:['Second one.']},p3:{title:'OTHER'}};
+ f.rows.workbookHistory={'foreign:k1':{ownerUid:'foreign',key:'k1',title:'모의고사 20번',updatedAt:50,versions:[{version:1,at:40,sentences:8},{version:2,at:50,sentences:8}]},'student:k2':{ownerUid:'student',key:'k2',title:'OTHER',updatedAt:60,versions:[]}};
+ await assert.rejects(readAppUserQuestions(f.db,f.actor,'foreign'),/FORBIDDEN/);await assert.rejects(readAppUserMaterials(f.db,admin,'student'),/FORBIDDEN/);
+ const q:any=await readAppUserQuestions(f.db,admin,'foreign');assert.deepEqual(q.attempts.map((a:any)=>a.title),['새 문제','관계대명사']);
+ const m:any=await readAppUserMaterials(f.db,admin,'foreign');
+ assert.deepEqual(m.passages.map((p:any)=>p.id),['p2','p1']);assert.equal(m.passages[1].first,'First sentence.');
+ assert.equal(m.workbooks.length,1);assert.equal(m.workbooks[0].versions.length,2);assert.ok(!JSON.stringify([q,m]).includes('OTHER'),'never another account');
+});

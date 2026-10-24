@@ -135,6 +135,15 @@ export function buildTaskRun(id: string, t: WordTask, now: number, rand: () => n
   return {id: `${now.toString(36)}${Math.floor(rand() * 1e9).toString(36)}`, questions: shuffle(questions, rand), results: [], startedAt: now, finished: false, task: id};
 }
 /** Words answered right the first time in a game count; all of them: done. */
+/** 원정대 과제: one game of it ended — kept as a study record (학습 리포트 › 온라인 학습, like any other study) and the task
+ *  as it stands now returned (for the teacher's alert). The record's id is the game's, so a resent answer writes it once. */
+export async function recordTaskGame(db: any, uid: string, taskId: string, game: {runId: string; right: number; asked: number; ms: number}, now = Date.now()) {
+  const t = (await db.collection(WORD_TASKS).doc(taskId).get()).data() as WordTask | undefined;
+  if (!t || t.removed) return null;
+  await db.collection('studySessions').doc(`task_${uid}_${game.runId}`).set({uid, wordbookId: t.wordbookId, wordbookTitle: `원정대 과제 · ${t.bookTitle}`.slice(0, 450), type: 'quiz', category: 'word',
+    duration: Math.max(1, Math.round(game.ms / 1000)), score: game.right, totalItems: Math.max(1, game.asked), dayStart: t.startDay, dayEnd: t.endDay, source: 'word-task', taskId, createdAt: Timestamp.fromMillis(now)});
+  return taskView(taskId, t);
+}
 export async function markTaskWords(db: any, id: string, keys: string[], now = Date.now()) {
   if (!keys.length) return null;
   const ref = db.collection(WORD_TASKS).doc(id);

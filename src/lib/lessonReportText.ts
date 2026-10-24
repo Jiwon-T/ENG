@@ -18,5 +18,7 @@ export const lessonTestPaper = (d: { testPaper?: boolean | null; extraTests?: { 
 /** An extra test as the report shows it: its name and 점수 out of 100. */
 export interface ExtraScore { name: string; score: number }
 export const extraScoresText = (list?: ExtraScore[] | null) => (list || []).map(t => `${testLabel(t.name)} ${t.score}점`).join(' · ');
+/** 내신 대비 점수's other tests: ② 90점 · ③ 78점 */
+export const examExtraScoresText = (list?: number[] | null) => (list || []).map((n, i) => `${'②③④⑤'[i] || ''} ${n}점`).join(' · ');
 export const testLabel = (name?: string | null) => name?.trim() || '테스트';
 export const testScoreTitle = (name?: string | null) => name?.trim() ? `테스트 점수 · ${name.trim()}` : '테스트 점수';

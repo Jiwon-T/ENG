@@ -1,8 +1,10 @@
-/** Shared ordering for authoritative/fast reads, pagination and Excel export. */
+/** Shared ordering for authoritative/fast reads, pagination and Excel export. A lesson with no 수업 시간 (자습만 한 날,
+ *  or the time left blank) goes by its earliest 자습 시간 among the others; neither written: last. */
+const clockMinutes=(time:unknown)=>{const match=/^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(time||''));return match?Number(match[1])*60+Number(match[2]):Infinity;};
 export function lessonStartMinutes(record:any) {
- const d=record.data||{};
- const match=d.classSession!=='없음'&&/^([01]?\d|2[0-3]):([0-5]\d)$/.exec(d.start||'');
- return match?Number(match[1])*60+Number(match[2]):Infinity;
+ const d=record.data||{},lesson=d.classSession!=='없음'?clockMinutes(d.start):Infinity;
+ if(lesson!==Infinity||d.selfStudy==='없음')return lesson;
+ return Math.min(clockMinutes(d.selfStudyStart),...(Array.isArray(d.selfStudyMore)?d.selfStudyMore:[]).map((p:any)=>clockMinutes(p?.start)));
 }
 export function compareLessonReview(a:any,b:any) {
  return String(b.data?.date||'').localeCompare(String(a.data?.date||'')) ||

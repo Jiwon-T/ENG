@@ -9,7 +9,8 @@ interface Row { id: string; kind: 'self' | 'assigned'; title: string; status: 'd
 const day = (at: number) => new Date(at).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric' });
 const time = (at: number) => new Date(at).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
-export default function TeacherQuestionAttempts({ studentKey }: { studentKey: string }) {
+// `uid`: 관리자 설정 › 앱 사용자, an account not linked to a student yet — read by the account, and read only (no 판정).
+export default function TeacherQuestionAttempts({ studentKey, uid }: { studentKey?: string; uid?: string }) {
   const [rows, setRows] = useState<Row[] | null>(null), [reason, setReason] = useState(''), [open, setOpen] = useState<string | null>(null);
   const [judging, setJudging] = useState(''), [judgeError, setJudgeError] = useState('');
   const judge = async (row: Row, index: number, ok: boolean) => {
@@ -22,13 +23,13 @@ export default function TeacherQuestionAttempts({ studentKey }: { studentKey: st
   };
   useEffect(() => {
     let live = true; setRows(null); setReason('');
-    teacherAuthenticatedRequest<any>(auth, `/api/teacher/workspace?action=question-attempts&studentKey=${encodeURIComponent(studentKey)}`).then(r => {
+    teacherAuthenticatedRequest<any>(auth, uid ? `/api/teacher/workspace?action=app-user-questions&uid=${encodeURIComponent(uid)}` : `/api/teacher/workspace?action=question-attempts&studentKey=${encodeURIComponent(studentKey || '')}`).then(r => {
       if (!live) return;
       if (!r.ok || !r.data?.ok) { setRows([]); setReason('error'); return; }
       setRows(r.data.attempts || []); setReason(r.data.reason || '');
     }).catch(() => { if (live) { setRows([]); setReason('error'); } });
     return () => { live = false; };
-  }, [studentKey]);
+  }, [studentKey, uid]);
   if (!rows) return <section className="report-online-assignments"><h4>변형 문제</h4><p className="report-caption">불러오는 중…</p></section>;
   if (reason && !rows.length) return null; // no linked account etc.: the online view above already says why
   return <section className="report-online-assignments" aria-label="변형 문제"><h4>변형 문제 · 최근 {Math.min(rows.length, 20)}개</h4>
@@ -55,11 +56,11 @@ export default function TeacherQuestionAttempts({ studentKey }: { studentKey: st
                   {q.answer && <p className="text-slate-700">학생 답: {q.answer}</p>}
                   {!q.ok && q.right && <p className="text-slate-500">정답: {q.right}</p>}
                   {q.check && <p className="text-slate-500">{q.check}</p>}
-                  <span className="mt-1 flex gap-1.5">
+                  {!uid && <span className="mt-1 flex gap-1.5">
                     {([[true, '맞음으로'], [false, '틀림으로']] as const).map(([ok, label]) => <button key={label} type="button" disabled={busy || q.ok === ok} onClick={() => void judge(r, q.index, ok)} className={`rounded-lg border px-2.5 py-1 font-bold disabled:opacity-40 ${ok ? 'border-emerald-200 text-emerald-700' : 'border-rose-200 text-rose-700'}`}>{busy ? '바꾸는 중…' : label}</button>)}
-                  </span>
+                  </span>}
                 </div>; })}
-              {r.kind === 'assigned' && r.reward && <p className="mt-1 text-slate-400">맞음으로 바꾸면 차이만큼 포인트를 더 줘요(오늘 공부 포인트 한도 안). 틀림으로 바꾸면 그 문제로 더 받았던 포인트의 30%만 돌려받아요.</p>}
+              {!uid && r.kind === 'assigned' && r.reward && <p className="mt-1 text-slate-400">맞음으로 바꾸면 차이만큼 포인트를 더 줘요(오늘 공부 포인트 한도 안). 틀림으로 바꾸면 그 문제로 더 받았던 포인트의 30%만 돌려받아요.</p>}
               {judgeError && <p role="alert" className="font-bold text-rose-700">{judgeError}</p>}</>}</>}
         </div>}
       </article>;

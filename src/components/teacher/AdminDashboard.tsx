@@ -16,7 +16,8 @@ import QuestionReportsPanel from './QuestionReportsPanel';
 import {createUnsavedGuard} from '../../lib/unsavedGuard';
 import {askDiscard} from './ConfirmDialog';
 
-type Props={data:any;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;busy:boolean;refresh:()=>Promise<any>};
+type Props={data:any;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;busy:boolean;refresh:()=>Promise<any>;
+ /** 앱 사용자 › 학습 기록 › 학생과 연결하기: to 학생 관리 (the student's 앱 계정 연결하기) */onOpenStudents?:()=>void};
 type Section={id:string;label:string;hint:string;icon:LucideIcon;alert?:boolean;adminOnly?:boolean};
 const STORE='workspace.adminSection',UNSAVED='저장하지 않은 변경이 있습니다. 버리고 다른 메뉴로 이동할까요?';
 const remembered=()=>{try{return localStorage.getItem(STORE)||'';}catch{return '';}};
@@ -24,7 +25,7 @@ const remember=(id:string)=>{try{localStorage.setItem(STORE,id);}catch{/* privat
 
 /** 관리자 설정 (admin and principal): one menu, one open tool. Choosing a menu shows that tool already loaded;
  *  tools with edits ask before the menu switches away. The last menu is remembered on this device. */
-export default function AdminDashboard({data,request,act,busy,refresh}:Props){
+export default function AdminDashboard({data,request,act,busy,refresh,onOpenStudents}:Props){
  const main=data.academyId==='main';
  const summary=useMemo(()=>{
   const staff:any[]=data.staff||[],access:any[]=data.access||[],students:any[]=data.students||[];
@@ -59,7 +60,7 @@ export default function AdminDashboard({data,request,act,busy,refresh}:Props){
   teachers:<TeacherManager data={data} request={request} act={act} busy={busy} refresh={refresh}/>,
   tuition:<TuitionCalculator busy={busy} request={request} act={act} autoLoad onDirty={markDirty}/>,
   payroll:<TeacherPayroll busy={busy} request={request} act={act} autoLoad onDirty={markDirty}/>,
-  users:<AppUserManager busy={busy} request={request} act={act} refresh={refresh} autoLoad/>,
+  users:<AppUserManager busy={busy} request={request} act={act} refresh={refresh} autoLoad onOpenStudents={onOpenStudents}/>,
   templates:<AppTemplateManager busy={busy} request={request} act={act} autoLoad onDirty={markDirty}/>,
   history:<AdminHistoryPanel busy={busy} request={request} act={act} autoLoad/>,
   coupon:<PetCouponPanel busy={busy} request={request} act={act} autoLoad/>,

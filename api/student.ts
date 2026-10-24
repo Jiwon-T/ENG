@@ -9,6 +9,7 @@ import h4 from './_lib/student/link-code.js';
 import h5 from './_lib/student/pet.js';
 import h6 from './_lib/student/study-cert.js';
 import h7 from './_lib/student/push-token.js';
+import h8 from './_lib/student/study-done.js';
 const handlers = {
   'lesson-reports': h0,
   'schedules': h1,
@@ -17,7 +18,8 @@ const handlers = {
   'link-code': h4,
   'pet': h5,
   'study-cert': h6,
-  'push-token': h7
+  'push-token': h7,
+  'study-done': h8
 };
 export default function handler(req: IncomingMessage, res: ServerResponse) { return routeHandler(req, res); }
 async function routeHandler(req: IncomingMessage, res: ServerResponse) {

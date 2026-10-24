@@ -297,6 +297,8 @@ export async function recordStudySession(data: {
     });
 
     const docRef = await addDoc(sessionRef, docData);
+    // 학생 학습 알림: the teachers who turned it on hear about it (never in the student's way)
+    void import('./studyDonePing').then(m => m.pingStudyDone(docRef.id)).catch(() => undefined);
     console.log(`[StudySession] Recorded successfully: ID=${docRef.id}, type=${data.type}, category=${docData.category}, score=${safeScore}/${safeTotal}, duration=${safeDuration}s`);
     return docRef.id;
   } catch (error) {

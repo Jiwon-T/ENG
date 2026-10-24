@@ -1,7 +1,7 @@
 import {useEffect,useState} from 'react';
 import {X} from 'lucide-react';
 import {getAttendanceBadgeClass,getDisplayStatus,getStatusBadgeClass} from '../parent/ParentReportView';
-import {extraScoresText,lessonFeedbackText,parentFeedbackText,percentage,testLabel,testScoreTitle} from '../../lib/lessonReportText';
+import {examExtraScoresText,extraScoresText,lessonFeedbackText,parentFeedbackText,percentage,testLabel,testScoreTitle} from '../../lib/lessonReportText';
 import {studyTimeText} from '../../lib/sessionNumbers';
 import {extractAssignmentFromFeedback} from '../../../api/_lib/assignmentExtractor';
 
@@ -12,11 +12,12 @@ import {extractAssignmentFromFeedback} from '../../../api/_lib/assignmentExtract
 function ParentPreview({lesson:d}:{lesson:any}){
  const feedback=parentFeedbackText(d),word=percentage(d.correct,d.total),exam=percentage(d.examCorrect,d.examTotal);
  const extras=extraScoresText((Array.isArray(d.extraTests)?d.extraTests:[]).map((t:any)=>({name:t.name,score:percentage(t.correct,t.total)})).filter((t:any)=>t.score!=null));
+ const examExtras=examExtraScoresText((Array.isArray(d.examExtraTests)?d.examExtraTests:[]).map((t:any)=>percentage(t.correct,t.total)).filter((n:any)=>n!=null));
  const times=[d.classSession==='있음'&&['수업 시간',`${d.start||'미입력'} ~ ${d.end||'미입력'}`],d.selfStudy==='있음'&&['자습 시간',studyTimeText(d,' ~ ')]].filter(Boolean) as [string,string][];
  return <div className="lesson-preview-body">
   <div className="lesson-preview-row"><span className={`lesson-preview-badge ${getAttendanceBadgeClass(d.attendance)}`}>{getDisplayStatus(d.attendance)}</span>{times.map(([k,v])=><span key={k} className="lesson-preview-time"><b>{k}</b>{v}</span>)}</div>
   <div className="lesson-preview-grid">{([['태도',d.attitude],['숙제',d.homework],['테스트',d.test]] as const).map(([k,v])=><div key={k} className="lesson-preview-tile"><span>{k}</span><b className={`lesson-preview-badge ${getStatusBadgeClass(v)}`}>{getDisplayStatus(v)}</b></div>)}</div>
-  {(word!==null||exam!==null)&&<div className="lesson-preview-grid">{word!==null&&<div className="lesson-preview-tile"><span>{testScoreTitle(d.testName)}</span><b>{word}점</b>{extras&&<span>{extras}</span>}</div>}{exam!==null&&<div className="lesson-preview-tile"><span>내신 대비 점수</span><b>{exam}점</b></div>}</div>}
+  {(word!==null||exam!==null)&&<div className="lesson-preview-grid">{word!==null&&<div className="lesson-preview-tile"><span>{testScoreTitle(d.testName)}</span><b>{word}점</b>{extras&&<span>{extras}</span>}</div>}{exam!==null&&<div className="lesson-preview-tile"><span>내신 대비 점수</span><b>{exam}점</b>{examExtras&&<span>{examExtras}</span>}</div>}</div>}
   <div className="lesson-preview-feedback"><p className="lesson-preview-label">수업 내용 및 피드백</p><p className="lesson-preview-text">{feedback||'아직 입력한 내용이 없어요'}</p></div>
  </div>;
 }

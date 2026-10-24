@@ -97,3 +97,9 @@ test('테스트 일지: a 수업 없는 날 일지 on the student’s 누적 테
  const out:any[]=await markTestDayLessons(f.db,[rec('a',A,'없음'),rec('b',B,'없음'),rec('c',C,'없음'),rec('a2',A,'있음')],day);
  assert.deepEqual(out.map(r=>[r.id,Boolean(r.testDay)]),[['a',true],['b',true],['c',false],['a2',false]]);
 });
+
+test('no 수업 시간: placed by its earliest 자습 시간 among the lessons of the day; neither: last', () => {
+  const r = (id: string, data: any) => ({id, data: {date: '2026-10-24', ...data}});
+  const rows = [r('none', {classSession: '있음', start: '', selfStudy: '없음'}), r('late', {classSession: '있음', start: '18:00'}), r('study', {classSession: '없음', start: '', selfStudy: '있음', selfStudyStart: '16:30', selfStudyMore: [{start: '15:10', end: '15:50'}]}), r('early', {classSession: '있음', start: '14:00'}), r('blank', {classSession: '있음', start: '', selfStudy: '있음', selfStudyStart: '17:00'})];
+  assert.deepEqual([...rows].sort(compareLessonReview).map(x => x.id), ['early', 'study', 'blank', 'late', 'none']);
+});

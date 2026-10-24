@@ -58,7 +58,7 @@ export function todayConsults(data:any,date:string,schedules:any[]=[],reflected:
 }
 /** The name a 상담 title gives for the 신입생 form ('김동하 학생 상담' → '김동하'); '' when it names nobody ('신입생 상담'). */
 export const consultName=(title:string)=>{const name=String(title||'').replace(/\s*(?:신입생|학생|학부모|입학)?\s*상담.*$/,'').trim();return /신입생|\d|^$/.test(name)?'':name.slice(0,30);};
-export const previousLessonAssessmentFields=['attendance','attitude','homework','test','correct','total','wrong','scorePercent','testName','extraTests','examCorrect','examTotal','examWrong','examScorePercent'] as const;
+export const previousLessonAssessmentFields=['attendance','attitude','homework','test','correct','total','wrong','scorePercent','testName','extraTests','examCorrect','examTotal','examWrong','examScorePercent','examExtraTests'] as const;
 export const previousLessonFields=['round','selfStudyRound','content','assignment','examScope',...previousLessonAssessmentFields] as const;
 export function applyPreviousLesson<T extends Record<string,any>>(current:T,seed:T,previous:any,touched:Iterable<string>=[]):T {
  if(current.studentKey!==seed.studentKey||current.subject!==seed.subject||current.date!==seed.date)return current;
@@ -67,10 +67,10 @@ export function applyPreviousLesson<T extends Record<string,any>>(current:T,seed
   if(Array.isArray(previous.sessionRecords)&&(field==='round'||field==='selfStudyRound'))continue;
   if(edited.has(field))continue;
   if(previousLessonAssessmentFields.includes(field as any)&&previous[field]===undefined)continue;
-  const scoreGroup=['correct','total','wrong','scorePercent','testName','extraTests'].includes(field)?['correct','total','wrong','scorePercent','testName','extraTests']:['examCorrect','examTotal','examWrong','examScorePercent'].includes(field)?['examCorrect','examTotal','examWrong','examScorePercent']:[];
+  const scoreGroup=['correct','total','wrong','scorePercent','testName','extraTests'].includes(field)?['correct','total','wrong','scorePercent','testName','extraTests']:['examCorrect','examTotal','examWrong','examScorePercent','examExtraTests'].includes(field)?['examCorrect','examTotal','examWrong','examScorePercent','examExtraTests']:[];
   if(scoreGroup.some(key=>edited.has(key)||!Object.is(current[key],seed[key])))continue;
   if(field==='round'&&current.classSession==='없음'||field==='selfStudyRound'&&current.selfStudy==='없음'&&(edited.has('selfStudy')||current.selfStudy!==seed.selfStudy))continue;
-  if(Object.is(current[field],seed[field]))next[field]=previous[field]??(field==='content'||field==='assignment'||field==='examScope'?'':field==='extraTests'?[]:null);
+  if(Object.is(current[field],seed[field]))next[field]=previous[field]??(field==='content'||field==='assignment'||field==='examScope'?'':field==='extraTests'||field==='examExtraTests'?[]:null);
  }
  // Retain this session's dates and times; never overwrite manually edited fields.
  if(!Array.isArray(previous.sessionRecords)&&previous.selfStudyRound!==null&&previous.selfStudyRound!==undefined&&!edited.has('selfStudy')&&current.selfStudy===seed.selfStudy&&current.selfStudy!=='있음')next.selfStudy='있음';

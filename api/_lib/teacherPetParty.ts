@@ -30,12 +30,16 @@ export async function readStudentParty(db: any, actor: any, id: unknown, now = D
   if (!allowedStudent(actor, key)) throw Error('FORBIDDEN');
   const uid = (await readStudentMapping(db, key))?.firebaseUid;
   if (!uid) return {party: null};
+  return partyOf(db, actor.academyId, uid, now);
+}
+/** This week's party of one app account (the student page, and 관리자 설정 › 앱 사용자 for an account not linked yet). */
+export async function partyOf(db: any, academyId: string, uid: string, now = Date.now()) {
   const guild = (await db.collection(PET_GUILD).doc(uid).get()).data() as GuildProfile | undefined, partyId = guild?.parties?.[weekOf(now)];
   const party = partyId ? (await db.collection(PET_PARTIES).doc(partyId).get()).data() as Party | undefined : undefined;
   const own = guild ? shownGuild(guild) || shownNickname(guild) : '';
   if (!party) return {party: null, nickname: own};
   const members = await Promise.all([...party.members].sort((a, b) => b.count - a.count).map(async m => {
-    const name = await nameInAcademy(db, m.uid, actor.academyId);
+    const name = await nameInAcademy(db, m.uid, academyId);
     return {name, ourAcademy: Boolean(name), nickname: memberNames(m).nickname, pet: m.pet, count: m.count, status: m.status, idleDays: inactiveDays(m, now), isStudent: m.uid === uid};
   }));
   return {party: {name: partyName(party.name), boss: party.boss, size: party.size, progress: progressOf(party), hp: party.hp, hpMax: party.hpMax, week: party.week, members}, nickname: own};
@@ -80,6 +84,10 @@ export async function readStudentPet(db: any, actor: any, id: unknown, now = Dat
   if (!allowedStudent(actor, key)) throw Error('FORBIDDEN');
   const uid = (await readStudentMapping(db, key))?.firebaseUid;
   if (!uid) return {pet: null};
+  return petViewOf(db, uid, now);
+}
+/** The pet screen of one app account, read only (the student page, and 관리자 설정 › 앱 사용자 for an account not linked yet). */
+export async function petViewOf(db: any, uid: string, now = Date.now()) {
   const [stateSnap, expSnap, guildSnap] = await Promise.all([db.collection(PET_STATES).doc(uid).get(), db.collection(PET_EXPEDITIONS).doc(uid).get(), db.collection(PET_GUILD).doc(uid).get()]);
   if (!stateSnap.exists) return {pet: null};
   const s: ServerPetState = rollDay(stateSnap.data(), now), view = publicPetState(s);
