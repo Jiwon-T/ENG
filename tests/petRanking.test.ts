@@ -284,3 +284,45 @@ test("친구 선물 기운 간식: into the friend's 친구 선물 칸; one a da
   assert.equal((await call('b', {action: 'friend-snack-use', itemId: 'coffee'}, f)).error, 'PET_FRIEND_SNACK_USED', 'one a day');
   assert.equal((await call('b', {action: 'friend-snack-use', itemId: 'cookie'}, f)).error, 'PET_ITEM_NOT_FOUND');
 });
+
+test('순위 ⭐ 원정대 별순: stars first, then floors and levels; 원정대 by summed stars; the room opens from that order', async () => {
+  const f = registrationFirestore();
+  student(f, 'x', [[10, 30, 5]], '탑돌이', ['높이 오른']);
+  student(f, 'y', [[10, 5, 40], [8, 2, 12]], '별사냥', ['별 모으기']);
+  const floor = (await call('x', {action: 'rank-board', kind: 'pet'}, f)).ranking;
+  assert.deepEqual([floor.sort, floor.rows.map((r: any) => r.label)], ['floor', ['높이 오른', '별 모으기', 'y펫2']]);
+  const stars = (await call('x', {action: 'rank-board', kind: 'pet-stars'}, f)).ranking;
+  assert.deepEqual([stars.sort, stars.kind, stars.rows.map((r: any) => [r.label, r.stars, r.value])], ['stars', 'pet', [['별 모으기', 40, 5], ['y펫2', 12, 2], ['높이 오른', 5, 30]]]);
+  const guild = (await call('x', {action: 'rank-board', kind: 'guild-stars'}, f)).ranking;
+  assert.deepEqual(guild.rows.map((r: any) => [r.label, r.stars, r.value]), [['별사냥', 52, 7], ['탑돌이', 5, 30]], 'summed stars first, floors shown too');
+  const prof = (await call('x', {action: 'rank-profile', at: stars.at, id: stars.rows[0].id, kind: 'pet-stars'}, f)).profile;
+  assert.equal(prof.label, '별 모으기');
+});
+
+test('순위 › 방: a teacher sees whose pet it is (their own academy student, an account not linked, a teacher; another academy without a name); a student never does', async () => {
+  const f = registrationFirestore();
+  student(f, 's1', [[30, 12, 20]], '반짝별', ['용감한 검객']);
+  f.rows.set('users/s1', {role: 'student', notionStudentKey: '11111111-1111-4111-8111-111111111111'});
+  f.rows.set('notionStudentMappings/x', {studentKey: '11111111-1111-4111-8111-111111111111', studentDisplayName: '박서준', firebaseUid: 's1'});
+  f.rows.set('academyStudentMemberships/11111111-1111-4111-8111-111111111111', {academyId: 'main'});
+  student(f, 'o1', [[25, 10, 9]], '먼곳', ['다른 학원 친구']);
+  f.rows.set('users/o1', {role: 'student', notionStudentKey: '22222222-2222-4222-8222-222222222222'});
+  f.rows.set('academyStudentMemberships/22222222-2222-4222-8222-222222222222', {academyId: 'other'});
+  f.rows.set('teacherWorkspaceAccess/t', {academyId: 'main'});
+  student(f, 'free', [[20, 8, 3]]); f.rows.set('users/free', {role: 'student', name: '김실명', alias: '앱유저'});
+  student(f, 't', [[5, 1, 1]], '선생님단', [], 'teacher'); f.rows.set('users/t', {role: 'teacher', name: '김선생'});
+  const board = (await call('t', {action: 'rank-board', kind: 'pet', teachers: true}, f)).ranking;
+  const open = async (viewer: string, label: string, b = board) => (await call(viewer, {action: 'rank-profile', at: b.at, id: b.rows.find((r: any) => r.label === label).id, kind: 'pet', teachers: viewer === 't'}, f)).profile;
+  assert.equal((await open('t', 'free펫1')).owner?.kind, 'app');
+  assert.equal((await open('t', 'free펫1')).owner?.name, '앱유저', 'a teacher: the app name');
+  student(f, 'adm', [[1, 0, 0]]); f.rows.set('users/adm', {role: 'admin'});
+  const ab = (await call('adm', {action: 'rank-board', kind: 'pet', teachers: true}, f)).ranking;
+  assert.deepEqual((await (async () => (await call('adm', {action: 'rank-profile', at: ab.at, id: ab.rows.find((r: any) => r.label === 'free펫1').id, kind: 'pet', teachers: true}, f)).profile)()).owner, {kind: 'app', name: '김실명', alias: '앱유저'}, 'the admin: the real name, and the app name');
+  assert.equal((await (async () => (await call('adm', {action: 'rank-profile', at: ab.at, id: ab.rows.find((r: any) => r.label === '다른 학원 친구').id, kind: 'pet', teachers: true}, f)).profile)()).owner?.kind, 'student', 'the admin: another academy too');
+  f.rows.set('users/free', {role: 'student', name: '사용자', alias: '앱유저'});
+  assert.deepEqual((await (async () => (await call('adm', {action: 'rank-profile', at: ab.at, id: ab.rows.find((r: any) => r.label === 'free펫1').id, kind: 'pet', teachers: true}, f)).profile)()).owner, {kind: 'app', name: '앱유저'}, 'no real name: the app name');
+  assert.equal((await open('t', '용감한 검객')).owner?.kind, 'student');
+  assert.deepEqual((await open('t', '다른 학원 친구')).owner, {kind: 'other-academy', name: ''}, 'another academy: no name');
+  const sb = (await call('free', {action: 'rank-board', kind: 'pet'}, f)).ranking;
+  assert.equal((await open('free', '용감한 검객', sb)).owner, undefined, 'a student does not see it');
+});

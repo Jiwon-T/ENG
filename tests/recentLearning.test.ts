@@ -10,7 +10,8 @@ test('recent learning is isolated by user and tolerates invalid or unavailable l
   assert.equal(readRecentLearning('user-B'), null);
   entries.set('recent-learning:user-A', '{broken'); assert.equal(readRecentLearning('user-A'), null);
   entries.set('recent-learning:user-A', JSON.stringify({ ...recent, chunk: -1 })); assert.equal(readRecentLearning('user-A'), null);
-  entries.set('recent-learning:user-A', JSON.stringify({ ...recent, unitSize: 0 })); assert.equal(readRecentLearning('user-A'), null);
+  entries.set('recent-learning:user-A', JSON.stringify({ ...recent, unitSize: 7 })); assert.equal(readRecentLearning('user-A'), null);
+  entries.set('recent-learning:user-A', JSON.stringify({ ...recent, unitSize: 0 })); assert.equal(readRecentLearning('user-A')?.unitSize, 0, '0: the whole Day (한 판 전부)');
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('disabled'); } });
   assert.equal(readRecentLearning('user-A'), null);
   assert.doesNotThrow(() => saveRecentLearning('user-A', recent));

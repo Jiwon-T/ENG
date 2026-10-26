@@ -106,7 +106,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
   const [currentChunk, setCurrentChunk] = useState(0);
 
   // Learning Unit Size for sessions
-  const [sessionUnitSize, setSessionUnitSize] = useState(10);
+  // 게임 한 판에 쓰는 단어 수 (0: 그 Day 전부, the default)
+  const [sessionUnitSize, setSessionUnitSize] = useState(0);
 
   // Flashcard states
   const [isFlashcardMode, setIsFlashcardMode] = useState(false);
@@ -442,12 +443,8 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
   useEffect(() => {
     if (!selectedWordbook) return;
     
-    // Set session unit size from wordbook settings, but keep Day tabs separate
-    if (selectedWordbook.defaultUnitSize) {
-      setSessionUnitSize(selectedWordbook.defaultUnitSize);
-    } else {
-      setSessionUnitSize(10);
-    }
+    // A new wordbook: each game uses the whole Day (한 판 ▾ 전부); the Day tabs come from the words themselves
+    setSessionUnitSize(0);
     
     setLoading(true);
     let full = false, live = true;
@@ -534,7 +531,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     
     // Use only words from the current Day/Set
     const shuffledPool = shuffleArray(displayedWords);
-    const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
+    const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize || undefined);
     setSessionWords(selectedSessionWords);
 
     const cards: any[] = [];
@@ -709,9 +706,9 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
         return;
       }
 
-      // Final pool: pick from entire set but limit by sessionUnitSize
+      // Final pool: pick from entire set but limit by sessionUnitSize (전부: as many as the Day has words)
       const shuffled = shuffleArray(allPotentialExamples);
-      const selectedSessionWords = shuffled.slice(0, sessionUnitSize);
+      const selectedSessionWords = shuffled.slice(0, sessionUnitSize || displayedWords.length);
       
       setSessionWords(selectedSessionWords);
       setQuizIndex(0);
@@ -726,7 +723,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     } else if (selectedWordbook?.type === 'grammar-cramming') {
       // For grammar-cramming, the data is already in words subcollection but formatted for quiz
       const shuffled = shuffleArray(displayedWords);
-      const selectedSessionWords = shuffled.slice(0, sessionUnitSize).map(w => ({
+      const selectedSessionWords = shuffled.slice(0, sessionUnitSize || undefined).map(w => ({
         ...w,
         meaning: crammingAnswer(w as any),
         quizSentence: (w as any).quizSentence || w.word,
@@ -772,7 +769,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
       } as any));
 
       const shuffled = shuffleArray(quizWords);
-      const selectedSessionWords = shuffled.slice(0, sessionUnitSize);
+      const selectedSessionWords = shuffled.slice(0, sessionUnitSize || undefined);
 
       setSessionWords(selectedSessionWords);
       setQuizIndex(0);
@@ -787,7 +784,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     } else {
       // Normal Wordbook: Pick sessionUnitSize random words from the CURRENT Day/Set
       const shuffledPool = shuffleArray(displayedWords);
-      const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
+      const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize || undefined);
       
       setSessionWords(selectedSessionWords);
       setIsQuizMode(true);
@@ -822,7 +819,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     
     // Use only words from the current Day/Set
     const shuffledPool = shuffleArray(displayedWords);
-    const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
+    const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize || undefined);
     setSessionWords(selectedSessionWords);
     
     setIsFlashcardMode(true);
@@ -841,7 +838,7 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
     
     // Use only words from the current Day/Set
     const shuffledPool = shuffleArray(displayedWords);
-    const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize);
+    const selectedSessionWords = shuffledPool.slice(0, sessionUnitSize || undefined);
     setSessionWords(selectedSessionWords);
     
     setIsConjugationMode(true);
@@ -2852,6 +2849,14 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
                       <Gamepad2 size={isMobile ? 12 : 14} />
                       매치 게임
                     </button>}
+                    {/* 한 판 ▾: how many of the Day's words one game uses; 전부 by default (the count shows only inside the list) */}
+                    <label className="flex items-center gap-1 text-[10px] md:text-xs font-black text-slate-400 whitespace-nowrap">한 판
+                      <select aria-label="게임 한 판 단어 수" value={sessionUnitSize && sessionUnitSize < displayedWords.length ? sessionUnitSize : 0} onChange={e => setSessionUnitSize(Number(e.target.value))}
+                        className="rounded-full border border-slate-100 bg-white px-2 py-1 md:py-1.5 text-[10px] md:text-xs font-black text-slate-500 outline-none focus:ring-2 focus:ring-pastel-pink-200">
+                        <option value={0}>전부 ({displayedWords.length}개)</option>
+                        {[...new Set([10, 20, 30, sessionUnitSize])].filter(n => n > 0 && n < displayedWords.length).sort((x, y) => x - y).map(n => <option key={n} value={n}>{n}개</option>)}
+                      </select>
+                    </label>
                     <button
                       onClick={() => {
                         setTestRange({ start: currentChunk + 1, end: currentChunk + 1 });
@@ -2870,20 +2875,6 @@ export default function WordbookView({ isMobile, category = 'word', onNavigate, 
 
             {/* Chunk Selector */}
             <div className={`bg-white ${isMobile ? 'p-4 rounded-2xl' : 'p-6 rounded-[2rem]'} border border-slate-100 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 overflow-hidden`}>
-              <div className="flex items-center gap-3 md:gap-4 flex-shrink-0">
-                <span className="text-xs md:text-sm font-bold text-slate-500 whitespace-nowrap">학습 단위(게임):</span>
-                <select 
-                  value={sessionUnitSize}
-                  onChange={(e) => {
-                    setSessionUnitSize(Number(e.target.value));
-                  }}
-                  className="bg-slate-50 border border-slate-100 rounded-lg px-2 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pastel-pink-200"
-                >
-                  {[10, 20, 30, 40, 50, 100].map(size => (
-                    <option key={size} value={size}>{size}개씩</option>
-                  ))}
-                </select>
-              </div>
               
               {wordsPartial && <p className="text-[11px] text-slate-400" role="status">나머지 범위를 불러오는 중…</p>}
               {chapters.length > 0 ? (

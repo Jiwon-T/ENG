@@ -1,8 +1,10 @@
 // 순위: 모험가 (each pet: 채움의 탑 best floor → 원정대 stars → level) and 원정대 (each student: their pets' best floors added
 // up → stars → levels), every academy together. Built from every student's documents at most every 10 minutes into one
 // snapshot (petRankings/current); students only get 원정대 이름·모험가 별칭, pet looks and numbers (no uids, no real names).
-// Teachers' pets are left out; a teacher may switch them on for their own view.
+// Teachers' pets are left out; a teacher may switch them on for their own view. ⭐ 원정대 별순 (kind 'pet-stars' / 'guild-stars')
+// puts the 원정대 stars first, then the floors and levels; the home chip stays by floors.
 import {FieldPath} from 'firebase-admin/firestore';
+import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {PET_STATES, rollDay, type ServerPet, type ServerPetState} from './pet.js';
 import {PET_GUILD, norm, shownAlias, shownGuild, type GuildProfile} from './petParty.js';
 import {shownName, studentRealName} from './realNames.js';
@@ -105,30 +107,32 @@ const placed = <T extends Row>(rows: T[]) => { rows.sort((a, b) => { for (let i 
 const look = (p: RankPet) => ({character: p.character, level: p.level, clothing: p.clothing, accessories: p.accessories, aura: p.aura ?? null, gear: p.gear ?? null});
 
 /** The rows of one ranking as `viewer` sees it: the top 50 and their own places (kept even when lower). */
-function rankRows(snap: RankSnapshot, viewer: string, kind: 'pet' | 'guild', withTeachers: boolean) {
+function rankRows(snap: RankSnapshot, viewer: string, kind: 'pet' | 'guild', withTeachers: boolean, stars = false) {
+  const order = (best: number, starCount: number, level: number) => stars ? [starCount, best, level] : [best, starCount, level];
   const pets = snap.pets.map((p, index) => ({p, index})).filter(({p}) => withTeachers || !p.teacher);
   let rows: any[];
-  if (kind === 'pet') rows = placed(pets.map(({p, index}) => ({key: [p.best, p.stars, p.level], index, uid: p.uid, p}))).map(r => ({rank: r.rank, id: r.index, label: r.p.alias || r.p.name, sub: [r.p.guild || NO_GUILD, `Lv.${r.p.level}`].join(' · '), job: r.p.job, pass: r.p.pass ?? null, value: r.p.best, stars: r.p.stars, looks: [look(r.p)], teacher: r.p.teacher, me: r.uid === viewer}));
+  if (kind === 'pet') rows = placed(pets.map(({p, index}) => ({key: order(p.best, p.stars, p.level), index, uid: p.uid, p}))).map(r => ({rank: r.rank, id: r.index, label: r.p.alias || r.p.name, sub: [r.p.guild || NO_GUILD, `Lv.${r.p.level}`].join(' · '), job: r.p.job, pass: r.p.pass ?? null, value: r.p.best, stars: r.p.stars, looks: [look(r.p)], teacher: r.p.teacher, me: r.uid === viewer}));
   else {
     const byUid = new Map<string, {p: RankPet; index: number}[]>();
     for (const x of pets) byUid.set(x.p.uid, [...(byUid.get(x.p.uid) || []), x]);
     rows = placed([...byUid.entries()].map(([uid, list]) => { const sum = (f: (p: RankPet) => number) => list.reduce((a, x) => a + f(x.p), 0), top = [...list].sort((a, b) => b.p.best - a.p.best || b.p.level - a.p.level)[0];
-      return {key: [sum(p => p.best), sum(p => p.stars), sum(p => p.level)], index: top.index, uid, list, top}; }))
-      .map(r => ({rank: r.rank, id: r.index, label: r.top.p.guild || NO_GUILD, sub: `펫 ${r.list.length}마리`, job: null, pass: r.top.p.pass ?? null, value: r.key[0], stars: r.key[1], looks: r.list.slice(0, 4).map(x => look(x.p)), teacher: r.top.p.teacher, me: r.uid === viewer}));
+      return {key: order(sum(p => p.best), sum(p => p.stars), sum(p => p.level)), floors: sum(p => p.best), starSum: sum(p => p.stars), index: top.index, uid, list, top}; }))
+      .map(r => ({rank: r.rank, id: r.index, label: r.top.p.guild || NO_GUILD, sub: `펫 ${r.list.length}마리`, job: null, pass: r.top.p.pass ?? null, value: r.floors, stars: r.starSum, looks: r.list.slice(0, 4).map(x => look(x.p)), teacher: r.top.p.teacher, me: r.uid === viewer}));
   }
   return {total: rows.length, rows: rows.slice(0, RANKING_TOP), mine: rows.filter((r, i) => r.me && i >= RANKING_TOP)};
 }
 const options = async (db: any, viewer: string, kindInput: unknown, withTeachersInput: unknown) => {
   const teacherView = (await climber(db, viewer)).teacher;
-  return {kind: kindInput === 'guild' ? 'guild' as const : 'pet' as const, teacherView, withTeachers: teacherView && withTeachersInput === true};
+  const k = String(kindInput || '');
+  return {kind: k.startsWith('guild') ? 'guild' as const : 'pet' as const, stars: k.endsWith('-stars'), teacherView, withTeachers: teacherView && withTeachersInput === true};
 };
 
 /** What a student sees. `id` = the snapshot index of the pet (for 원정대: the student's best pet) used to open its room;
  *  it changes when the snapshot is rebuilt (`at`). */
 export async function readRankings(db: any, viewer: string, kindInput: unknown, withTeachersInput: unknown, now: number) {
-  const [{kind, teacherView, withTeachers}, snap] = await Promise.all([options(db, viewer, kindInput, withTeachersInput), rankingSnapshot(db, now, RANKING_TTL, true)]);
+  const [{kind, stars, teacherView, withTeachers}, snap] = await Promise.all([options(db, viewer, kindInput, withTeachersInput), rankingSnapshot(db, now, RANKING_TTL, true)]);
   // `stale`: older than 10 minutes — shown now; the screen then asks for a rebuild and reads again
-  return {at: snap.builtAt, stale: now - snap.builtAt >= RANKING_TTL, kind, teacherView, withTeachers, ...rankRows(snap, viewer, kind, withTeachers)};
+  return {at: snap.builtAt, stale: now - snap.builtAt >= RANKING_TTL, kind, sort: stars ? 'stars' as const : 'floor' as const, teacherView, withTeachers, ...rankRows(snap, viewer, kind, withTeachers, stars)};
 }
 /** rank-refresh: rebuild the snapshot when it is older than 10 minutes (one at a time); its time, to read again. */
 export async function refreshRankings(db: any, now: number) {
@@ -148,9 +152,9 @@ export async function myPetRank(db: any, uid: string, now: number, hasPet = true
 
 /** The pet behind a 순위 row this viewer was shown (the same ranking: `kind`, `teachers`); RANK_STALE otherwise. */
 export async function rankTarget(db: any, viewer: string, atInput: unknown, idInput: unknown, kindInput: unknown, withTeachersInput: unknown, now: number) {
-  const [{kind, withTeachers}, snap] = await Promise.all([options(db, viewer, kindInput, withTeachersInput), rankingSnapshot(db, now)]), id = Math.floor(Number(idInput)), p = snap.pets[id];
+  const [{kind, stars, withTeachers}, snap] = await Promise.all([options(db, viewer, kindInput, withTeachersInput), rankingSnapshot(db, now)]), id = Math.floor(Number(idInput)), p = snap.pets[id];
   if (Number(atInput) !== snap.builtAt || !p) throw Error('RANK_STALE');
-  const shown = rankRows(snap, viewer, kind, withTeachers);
+  const shown = rankRows(snap, viewer, kind, withTeachers, stars);
   if (![...shown.rows, ...shown.mine].some(r => r.id === id)) throw Error('RANK_STALE');
   return p;
 }
@@ -160,6 +164,28 @@ export async function readRankProfile(db: any, viewer: string, atInput: unknown,
   return profileOf(db, viewer, await rankTarget(db, viewer, atInput, idInput, kindInput, withTeachersInput, now), now);
 }
 /** A pet's room as a visitor sees it (and the visit counted). */
+/** Whose pet this is, for a teacher looking at a room: a student of the teacher's own academy by their real name, an app
+ *  account not linked to a student by its app name, or a teacher. A student or teacher of another academy shows as just
+ *  that (no name); the admin sees every name, an account not linked by its real (Google) name too. Students never get this. */
+async function ownerOf(db: any, uid: string, viewer: string) {
+  const [user, me, myAccess, access] = await Promise.all([db.collection('users').doc(uid).get(), db.collection('users').doc(viewer).get(), db.collection('teacherWorkspaceAccess').doc(viewer).get(), db.collection('teacherWorkspaceAccess').doc(uid).get()])
+    .then(r => r.map((d: any) => d.data() || {}));
+  const app = String(user.alias || user.name || '').slice(0, 40), admin = viewer === process.env.ADMIN_UID || me.role === 'admin';
+  const mine = String(myAccess.academyId || 'main'), same = (academy: unknown) => admin || String(academy || '') === mine;
+  if (uid === process.env.ADMIN_UID || ['teacher', 'principal', 'admin'].includes(user.role)) return same(access.academyId || 'main') ? {kind: 'teacher' as const, name: app} : {kind: 'other-academy' as const, name: ''};
+  if (typeof user.notionStudentKey === 'string' && user.notionStudentKey) {
+    let key = ''; try { key = uuid(user.notionStudentKey); } catch { /* not a student key */ }
+    const member = key ? (await db.collection('academyStudentMemberships').doc(key).get()).data() : null;
+    if (!member || !same(member.academyId)) return {kind: 'other-academy' as const, name: ''};
+    const real = await studentRealName(db, uid);
+    if (real) return {kind: 'student' as const, name: real};
+  }
+  // an app account not linked: the admin sees the account's real name (the Google name it signed up with) and the app name
+  // it chose when that differs; a teacher the app name
+  // (an account may have no real name: '사용자' is what sign-up stores then, and the app name is shown)
+  const real = user.name && user.name !== '사용자' ? String(user.name).slice(0, 40) : '', alias = String(user.alias || '').slice(0, 40);
+  return admin && real ? {kind: 'app' as const, name: real, ...(alias && alias !== real ? {alias} : {})} : {kind: 'app' as const, name: app};
+}
 async function profileOf(db: any, viewer: string, p: RankPet, now: number) {
   const [raw, tower, kept, mine] = await Promise.all([db.collection(PET_STATES).doc(p.uid).get().then((d: any) => d.data()), db.collection(PET_TOWERS).doc(p.uid).get().then((d: any) => d.data() as TowerState | undefined),
     p.uid === viewer ? [] : neighborsOf(db, viewer).catch(() => [] as string[]), p.uid === viewer ? null : db.collection(PET_STATES).doc(viewer).get().then((d: any) => d.data()).catch(() => null)]);
@@ -170,8 +196,9 @@ async function profileOf(db: any, viewer: string, p: RankPet, now: number) {
   // 방 구경: a friend's room closed by its owner shows the pet only (no room, no visit); an open one counts the visit
   // (closed or not is what the visit's own transaction read; a failed visit shows the pet only too)
   const room = await visitRoom(db, p.uid, viewer, now).catch(() => { console.warn('PET_ROOM_VISIT_FAILED'); return null; });
+  const owner = p.uid !== viewer && (await climber(db, viewer)).teacher ? await ownerOf(db, p.uid, viewer).catch(() => null) : null;
   const hidden = p.uid !== viewer && !room, background = hidden ? 'default' : s?.background || 'default';
-  return {hidden, room, ...(p.uid === viewer ? {roomHidden: Boolean(s?.roomHidden)} : {neighbor: kept.includes(p.uid), wallet}), label: p.alias || p.name, guild: p.guild || NO_GUILD, name: p.name, character: pet?.character || p.character, level: pet?.level || p.level, job: pet?.job || p.job,
+  return {hidden, room, ...(owner ? {owner} : {}), ...(p.uid === viewer ? {roomHidden: Boolean(s?.roomHidden)} : {neighbor: kept.includes(p.uid), wallet}), label: p.alias || p.name, guild: p.guild || NO_GUILD, name: p.name, character: pet?.character || p.character, level: pet?.level || p.level, job: pet?.job || p.job,
     clothing: pet ? pet.clothing ?? null : p.clothing, accessories: pet ? wornAccessories(pet) : p.accessories, aura: pet ? petAura(pet) : p.aura ?? null, gear: pet ? gearViewFor(pet, tower?.pets?.[String(pet.slot)]) : p.gear ?? null, pass: p.pass ?? null, background, decor: hidden ? [] : s?.decor?.[background] || [], medals: (s?.medals || []).filter(m => !/-s$/.test(m)).length, silver: (s?.medals || []).filter(m => /-s$/.test(m)).length, best: p.best, stars: p.stars, me: p.uid === viewer};
 }
 

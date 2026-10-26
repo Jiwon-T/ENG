@@ -2,7 +2,7 @@ export interface RecentLearning { wordbookId: string; title: string; category: '
 export function readRecentLearning(uid: string): RecentLearning | null {
   try {
     const value = JSON.parse(localStorage.getItem(`recent-learning:${uid}`) || 'null');
-    if (!value || typeof value.wordbookId !== 'string' || !value.wordbookId || typeof value.title !== 'string' || !['word', 'grammar', 'exam', 'sentence'].includes(value.category) || !Number.isInteger(value.chunk) || value.chunk < 0 || ![10, 20, 30, 40, 50, 100].includes(value.unitSize)) return null;
+    if (!value || typeof value.wordbookId !== 'string' || !value.wordbookId || typeof value.title !== 'string' || !['word', 'grammar', 'exam', 'sentence'].includes(value.category) || !Number.isInteger(value.chunk) || value.chunk < 0 || ![0, 10, 20, 30, 40, 50, 100].includes(value.unitSize)) return null;
     return value;
   } catch { return null; }
 }
