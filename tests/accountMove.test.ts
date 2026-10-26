@@ -4,6 +4,7 @@ import {registrationFirestore} from './helpers/registrationFirestore.ts';
 import {moveStudentAccount, previewAccountMove, swapUid} from '../api/_lib/accountMove.ts';
 import {attemptId} from '../api/_lib/questionAttempts.ts';
 import {certId} from '../api/_lib/studyCerts.ts';
+import {initialPetState} from '../api/_lib/pet.ts';
 
 const A = 'oldAccountUid', B = 'newAccountUid', K = '11111111-1111-4111-8111-111111111111';
 const admin = {uid: 'admin', admin: true, academyId: 'main'};
@@ -64,4 +65,58 @@ test('옮기기: 학습 기록 merged (the new copy wins), 펫·포인트 the ol
   assert.deepEqual([r(`users/${A}`).notionStudentKey, r(`users/${A}`).movedTo, r(`users/${A}`).signInBlocked], [null, B, true]);
   assert.deepEqual([blocked, out.signInBlocked], [[A], true]);
   assert.ok([...f.rows.keys()].some(k => k.startsWith('accountMoves/')));
+});
+
+// 기존 계정으로 옮기기: U (not linked) into L (linked)
+const U = 'unlinkedUid', L = 'linkedUid';
+function mergeWorld(lHasPet = true) {
+  const f = registrationFirestore(), s = (path: string, v: any) => f.rows.set(path, v);
+  s(`users/${U}`, {role: 'student', email: 'u@x.com', name: '박서준'}); s(`users/${L}`, {role: 'student', email: 'l@x.com', name: '박서준', notionStudentKey: K});
+  const state = (points: number, name: string, extra = {}) => { const x: any = initialPetState(0); x.pets[0].name = name; return {...x, points, ...extra}; };
+  s(`petStates/${U}`, state(320, '말랑이')); if (lHasPet) s(`petStates/${L}`, state(2140, '고미', {rewarded: {r1: ['attendance']}}));
+  s(`petTowers/${U}`, {pets: {'1': {best: 9}}}); s(`petRooms/${U}`, {owner: U}); s('petRoomCodes/c1', {uid: U});
+  s('studySessions/u1', {uid: U, type: 'test'}); s('studySessions/l1', {uid: L, type: 'test'});
+  s(`wordProgress/${U}_w1`, {uid: U, learned: true}); s(`wordProgress/${U}_w2`, {uid: U, learned: true}); s(`wordProgress/${L}_w2`, {uid: L, learned: false});
+  s(`passageViews/${U}_p1`, {uid: U, passageId: 'p1', at: 1}); s(`workbookHistory/${U}:k1`, {ownerUid: U, key: 'k1', version: 2});
+  s('questionAttempts/old', {uid: U, kind: 'self', setId: 'set9', status: 'submitted'});
+  s(`aiPasses/${U}`, {plan: 'pet', until: '2099-01-01'}); s('petRankings/current', {builtAt: 5});
+  const blocked: string[] = [];
+  return {f, blocked, auth: {updateUser: async (uid: string, v: any) => { if (v.disabled) blocked.push(uid); }, revokeRefreshTokens: async () => {}}};
+}
+
+test('기존 계정으로 옮기기: 학습 기록 join the linked account (its own copy wins), only the points are added, the account moved is blocked', async () => {
+  const {mergeIntoLinkedAccount, previewAccountMerge} = await import('../api/_lib/accountMove.ts');
+  const {f, auth, blocked} = mergeWorld();
+  await assert.rejects(previewAccountMerge(f.db, {uid: 't', admin: false, academyId: 'main'}, {fromUid: U, toUid: L}), /FORBIDDEN/);
+  await assert.rejects(previewAccountMerge(f.db, admin, {fromUid: L, toUid: U}), /ACCOUNT_MERGE_FROM_LINKED/);
+  const p: any = await previewAccountMerge(f.db, admin, {fromUid: U, toUid: L});
+  assert.deepEqual([p.from.sessions, p.from.words, p.from.passages, p.from.workbooks, p.from.points, p.to.points], [1, 2, 1, 1, 320, 2140]);
+  const r: any = await mergeIntoLinkedAccount(f.db, admin, {fromUid: U, toUid: L}, auth, 1000);
+  assert.equal(r.points, 320);
+  const pet = f.rows.get(`petStates/${L}`);
+  assert.equal(pet.points, 2460); assert.equal(pet.pets[0].name, '고미', "the linked account's pet stays"); assert.deepEqual(pet.rewarded, {r1: ['attendance']});
+  assert.equal(f.rows.get(`users/${L}`).petStats.points, 2460);
+  assert.equal(f.rows.has(`petStates/${U}`), false); assert.equal(f.rows.has(`petTowers/${U}`), false); assert.equal(f.rows.has(`petTowers/${L}`), false, "U's tower does not come over");
+  assert.equal(f.rows.has('petRoomCodes/c1'), false);
+  assert.equal(f.rows.get('studySessions/u1').uid, L);
+  assert.equal(f.rows.get(`wordProgress/${L}_w1`).learned, true); assert.equal(f.rows.get(`wordProgress/${L}_w2`).learned, false, "L's own copy wins");
+  assert.equal(f.rows.has(`wordProgress/${U}_w1`), false);
+  assert.equal(f.rows.get(`passageViews/${L}_p1`).uid, L); assert.equal(f.rows.get(`workbookHistory/${L}:k1`).ownerUid, L);
+  assert.equal(f.rows.get(`questionAttempts/${attemptId(L, 'set9')}`).uid, L); assert.equal(f.rows.has('questionAttempts/old'), false);
+  assert.equal(f.rows.get(`aiPasses/${L}`).until, '2099-01-01', 'a pass in force comes over');
+  assert.equal(f.rows.get(`users/${L}`).notionStudentKey, K); assert.equal(f.rows.get(`users/${U}`).movedTo, L);
+  assert.deepEqual(blocked, [U]); assert.equal(f.rows.get(`users/${U}`).signInBlocked, true);
+  assert.equal(f.rows.get('petRankings/current').builtAt, 0);
+  // run again: nothing left under U, the points are not added twice
+  await mergeIntoLinkedAccount(f.db, admin, {fromUid: U, toUid: L}, auth, 2000);
+  assert.equal(f.rows.get(`petStates/${L}`).points, 2460);
+});
+
+test('기존 계정으로 옮기기: when the linked account has no pet yet, the pet comes over whole', async () => {
+  const {mergeIntoLinkedAccount} = await import('../api/_lib/accountMove.ts');
+  const {f, auth} = mergeWorld(false);
+  const r: any = await mergeIntoLinkedAccount(f.db, admin, {fromUid: U, toUid: L}, auth, 1000);
+  assert.equal(r.points, 0); assert.equal(f.rows.get(`petStates/${L}`).points, 320); assert.equal(f.rows.get(`petStates/${L}`).pets[0].name, '말랑이');
+  assert.equal(f.rows.get(`petTowers/${L}`).pets['1'].best, 9); assert.equal(f.rows.get(`petRooms/${L}`).owner, L);
+  assert.equal(f.rows.has(`petStates/${U}`), false);
 });

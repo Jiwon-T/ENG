@@ -34,11 +34,15 @@ test('과제·보강 알림 1단계: a device token is saved for the account (by
   await assert.rejects(() => savePushToken(db, 'nobody', {token: TOKEN, on: true}), /USER_NOT_FOUND/);
 });
 
-test('과제·보강 알림 1단계: nothing shows outside the installed app; the service worker shows pushes and opens the app', () => {
+test('과제·보강 알림: the home card only in the installed app, the menu row everywhere; the service worker shows pushes and opens the app', () => {
   assert.match(WEB_PUSH_KEY, /^B[A-Za-z0-9_-]{80,}$/, 'the public web push key');
   assert.equal(pushState('s1'), 'unsupported');
   assert.equal(pushState('s1', 'key'), 'unsupported', 'not the installed app');
-  assert.equal(renderToStaticMarkup(<><PushHomeCard uid="s1" pushKey="key" /><PushMenuRow uid="s1" pushKey="key" /></>), '');
+  assert.equal(renderToStaticMarkup(<PushHomeCard uid="s1" pushKey="key" />), '', 'the home card: installed app only');
+  // 내 메뉴: shown in a browser tab too (like the teacher's 학생 학습 알림), saying when this device cannot get alerts
+  const row = renderToStaticMarkup(<PushMenuRow uid="s1" pushKey="key" />);
+  assert.match(row, /과제·보강 알림/); assert.match(row, /이 기기에서는 받을 수 없어요|홈 화면에 추가한 앱/); assert.match(row, /aria-checked="false"[^>]*disabled/);
+  assert.equal(renderToStaticMarkup(<PushMenuRow uid="s1" pushKey="" />), '', 'no web push key: nothing');
   const sw = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
   assert.match(sw, /self\.addEventListener\('push'/);
   assert.match(sw, /tag: data\.tag \|\| undefined, renotify: Boolean\(data\.tag\)/, 'one alert per lesson: a change replaces it');

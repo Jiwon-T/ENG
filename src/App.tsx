@@ -181,6 +181,9 @@ export default function App() {
   const [teacherStartStudent, setTeacherStartStudent] = useState<string | undefined>(undefined);
   const isTeacherAccount = ['teacher', 'principal', 'admin'].includes(String(profile?.role)) || profile?.email === 'lizzieshere1@gmail.com';
   useEffect(() => { const key = new URLSearchParams(window.location.search).get('study'); if (!key || !isTeacherAccount) return; window.history.replaceState({}, '', window.location.pathname); setTeacherStartTab('students'); setTeacherStartStudent(key); setCurrentView('teacher-room'); }, [isTeacherAccount]);
+  // 과제 알림 tapped (/?task=<report id>): the student's 학습 리포트, opened on that 과제
+  const [reportFocus, setReportFocus] = useState<string | undefined>(undefined);
+  useEffect(() => { const task = new URLSearchParams(window.location.search).get('task'); if (!task || !profile || isTeacherAccount) return; window.history.replaceState({}, '', window.location.pathname); setReportFocus(task.slice(0, 64)); setCurrentView('report'); }, [profile?.role, isTeacherAccount]);
   // The print footer (채움학원 지원T) can be changed by teachers only; students always get the academy's.
   useEffect(() => { setPrintFooterLocked(!['teacher', 'principal', 'admin'].includes(String(profile?.role))); }, [profile?.role]);
   useEffect(() => { if (!user) { setPetSummaryOf(null); return; } if (currentView !== 'home') return; const uid = user.uid; let live = true; PetService.summary().then(summary => { if (live) setPetSummaryOf({ uid, summary }); }).catch(() => undefined); return () => { live = false; }; }, [user, currentView]);
@@ -544,7 +547,7 @@ export default function App() {
                 </div>
               </div>
 
-              {isPWAInstalled && profile?.role === 'student' && user && <PushMenuRow uid={user.uid} />}
+              {profile?.role === 'student' && user && <PushMenuRow uid={user.uid} />}
               {isTeacherAccount && user && <TeacherStudyAlert uid={user.uid} />}
               {/* PWA Promotion */}
               {!isPWAInstalled && (
@@ -685,7 +688,7 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
             >
-              <LearningReport />
+              <LearningReport focusTask={reportFocus} />
             </motion.div>
           ) : (
             <motion.div

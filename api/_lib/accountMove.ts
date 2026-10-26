@@ -4,6 +4,9 @@ import { forgetFirebaseSessions } from './firebaseSession.js';
 import { certId } from './studyCerts.js';
 import { PET_RANKINGS } from './petRanking.js';
 import { MONTH_RANK_DOC } from './petMonthRanking.js';
+import { displayName } from './petCoupon.js';
+import { activePlan } from '../../src/lib/aiPlans.js';
+import { petSummary } from './pet.js';
 
 /**
  * 앱 계정 옮기기 (관리자 설정 › 앱 사용자): a student who could not sign in and made a new account. Everything the app keeps
@@ -64,18 +67,21 @@ async function accounts(db: any, actor: any, raw: unknown) {
   return { fromUid, toUid, from, to, studentKey: String(from.notionStudentKey) };
 }
 
+/** What is under one account, counted (미리 세어 보기). */
+async function countUnder(db: any, uid: string) {
+  const field = (name: string, f: string) => db.collection(name).where(f, '==', uid).get().then((q: any) => q.docs.length);
+  const [sessions, words, attendance, attempts, certs, coupons, done, pet, tower] = await Promise.all([field('studySessions', 'uid'), field('wordProgress', 'uid'), field('attendance', 'studentId'),
+    field('questionAttempts', 'uid'), field('studyCerts', 'uid'), field('petCoupons', 'uid'), db.collection('users').doc(uid).collection('assignmentCompletions').get().then((q: any) => q.docs.length),
+    db.collection('petStates').doc(uid).get(), db.collection('petTowers').doc(uid).get()]);
+  const [passages, workbooks] = await Promise.all([field('passageViews', 'uid'), field('workbookHistory', 'ownerUid')]);
+  const p = pet.data(), best = Math.max(0, ...Object.values(tower.data()?.pets || {}).map((t: any) => Number(t?.best) || 0));
+  return { sessions, words, attendance, attempts, certs, coupons, done, passages, workbooks, points: p ? Number(p.points) || 0 : null, pets: p ? (p.pets || []).length : 0, floor: best || null };
+}
+
 /** What is under each account (미리 세어 보기). */
 export async function previewAccountMove(db: any, actor: any, raw: unknown) {
   const { fromUid, toUid, from, to } = await accounts(db, actor, raw);
-  const count = async (uid: string) => {
-    const field = (name: string, f: string) => db.collection(name).where(f, '==', uid).get().then((q: any) => q.docs.length);
-    const [sessions, words, attendance, attempts, certs, coupons, done, pet, tower] = await Promise.all([field('studySessions', 'uid'), field('wordProgress', 'uid'), field('attendance', 'studentId'),
-      field('questionAttempts', 'uid'), field('studyCerts', 'uid'), field('petCoupons', 'uid'), db.collection('users').doc(uid).collection('assignmentCompletions').get().then((q: any) => q.docs.length),
-      db.collection('petStates').doc(uid).get(), db.collection('petTowers').doc(uid).get()]);
-    const p = pet.data(), best = Math.max(0, ...Object.values(tower.data()?.pets || {}).map((t: any) => Number(t?.best) || 0));
-    return { sessions, words, attendance, attempts, certs, coupons, done, points: p ? Number(p.points) || 0 : null, pets: p ? (p.pets || []).length : 0, floor: best || null };
-  };
-  const [old, fresh] = await Promise.all([count(fromUid), count(toUid)]);
+  const [old, fresh] = await Promise.all([countUnder(db, fromUid), countUnder(db, toUid)]);
   const who = (u: any) => ({ name: String(u.alias || u.name || '').slice(0, 80), email: String(u.email || '').slice(0, 120) });
   return { from: { uid: fromUid, ...who(from), ...old }, to: { uid: toUid, ...who(to), ...fresh } };
 }
@@ -144,4 +150,114 @@ export async function moveStudentAccount(db: any, actor: any, raw: unknown, auth
   try { await auth.updateUser(A, { disabled: true }); await auth.revokeRefreshTokens(A); forgetFirebaseSessions(A); signInBlocked = true; } catch { /* reported */ }
   if (signInBlocked) { const u = (await db.collection('users').doc(A).get()).data(); if (u) await db.runTransaction(async (tx: any) => { tx.set(db.collection('users').doc(A), { ...u, signInBlocked: true }); }); }
   return { moved, signInBlocked, toUid: B };
+}
+
+/**
+ * 기존 계정으로 옮기기 (관리자 설정 › 앱 사용자): a student who used the app on an account of their own (U, not linked)
+ * before being linked on another one (L). U's 학습 기록 join L's (L's own copy wins where both have one: L is the
+ * academy's account); U's 펫·탑·원정대·방 go, and only U's points are added to L's pet (not as points earned: the 포인트
+ * 내역 and this month's coupon stay as they were) — when L has no pet yet, U's pet comes over whole. A pet pass U bought
+ * comes over when L has none in force. L keeps its link; U is marked moved and its sign-in blocked. A failed run can be
+ * run again (it starts from what is still under U; the points are added in the same write that deletes U's pet, so once).
+ */
+async function mergeAccounts(db: any, actor: any, raw: unknown) {
+  admin(actor);
+  const { fromUid, toUid } = input.parse(raw);
+  if (fromUid === toUid) throw Error('ACCOUNT_MOVE_SAME');
+  const [a, b, aAccess, bAccess] = await Promise.all([db.collection('users').doc(fromUid).get(), db.collection('users').doc(toUid).get(), db.collection('teacherWorkspaceAccess').doc(fromUid).get(), db.collection('teacherWorkspaceAccess').doc(toUid).get()]);
+  const from = a.data(), to = b.data();
+  if (!from || !to) throw Error('USER_NOT_FOUND');
+  const staff = (x: any) => x.exists && !x.data()?.disabled;
+  if (from.role !== 'student' || to.role !== 'student' || [fromUid, toUid].includes(String(process.env.ADMIN_UID)) || staff(aAccess) || staff(bAccess)) throw Error('INVALID_ROLE');
+  if (from.notionStudentKey) throw Error('ACCOUNT_MERGE_FROM_LINKED');
+  if (!to.notionStudentKey) throw Error('ACCOUNT_MERGE_TARGET_NOT_LINKED');
+  return { fromUid, toUid, from, to, studentKey: String(to.notionStudentKey) };
+}
+
+/** 기존 계정으로 옮기기, 미리 세어 보기 (with the student the target is linked to). */
+export async function previewAccountMerge(db: any, actor: any, raw: unknown) {
+  const { fromUid, toUid, from, to, studentKey } = await mergeAccounts(db, actor, raw);
+  const [old, fresh, student] = await Promise.all([countUnder(db, fromUid), countUnder(db, toUid), displayName(db, studentKey).catch(() => '')]);
+  const who = (u: any) => ({ name: String(u.alias || u.name || '').slice(0, 80), email: String(u.email || '').slice(0, 120) });
+  return { from: { uid: fromUid, ...who(from), ...old }, to: { uid: toUid, ...who(to), ...fresh, student: String(student || '').slice(0, 40) } };
+}
+
+/** 기존 계정으로 옮기기. `auth`: Firebase Admin auth, to block U's sign-in (a failure there is reported, the move stands). */
+export async function mergeIntoLinkedAccount(db: any, actor: any, raw: unknown, auth: any, now = Date.now()) {
+  const { fromUid: U, toUid: L, from } = await mergeAccounts(db, actor, raw);
+  const w = writer(db), moved: Record<string, number> = {};
+  const add = (k: string, n = 1) => { moved[k] = (moved[k] || 0) + n; };
+
+  // 1) 학습 기록 found by a field (U's room code goes with its room)
+  for (const [name, field] of BY_FIELD) for (const d of (await db.collection(name).where(field, '==', U).get()).docs) {
+    if (name === 'petRoomCodes') { await w.delete(d.ref); continue; }
+    await w.set(d.ref, { ...d.data(), [field]: L }); add(name);
+  }
+  // 2) ids that start with the account: L's own copy wins
+  for (const p of PREFIXED) for (const d of (await db.collection(p.name).where(p.field, '==', U).get()).docs) {
+    if (!d.id.startsWith(U + p.sep)) continue;
+    const target = db.collection(p.name).doc(L + d.id.slice(U.length));
+    if (!(await target.get()).exists) await w.set(target, { ...d.data(), [p.field]: L });
+    await w.delete(d.ref); add(p.name);
+  }
+  // 3) ids made from the account (문제 풀이, 공부 인증): worked out again for L
+  for (const d of (await db.collection('questionAttempts').where('uid', '==', U).get()).docs) {
+    const x = d.data(), id = attemptKeyId(x.kind === 'assigned' ? `asg:${L}:${x.assignmentId}` : `set:${L}:${x.setId}`);
+    if (!(await db.collection('questionAttempts').doc(id).get()).exists) await w.set(db.collection('questionAttempts').doc(id), { ...x, id, uid: L });
+    await w.delete(d.ref); add('questionAttempts');
+  }
+  const certIds = new Map<string, string>();
+  for (const d of (await db.collection('studyCerts').where('uid', '==', U).get()).docs) {
+    const x = d.data(), id = certId(L, x.kind, x.ref, x.round || 0, x.studentKey || ''); certIds.set(d.id, id);
+    if (!(await db.collection('studyCerts').doc(id).get()).exists) await w.set(db.collection('studyCerts').doc(id), { ...x, id, uid: L });
+    await w.delete(d.ref); add('studyCerts');
+  }
+  for (const d of (await db.collection('studyCertPhotos').where('uid', '==', U).get()).docs) {
+    const id = certIds.get(d.id); if (id && !(await db.collection('studyCertPhotos').doc(id).get()).exists) await w.set(db.collection('studyCertPhotos').doc(id), { ...d.data(), uid: L });
+    await w.delete(d.ref);
+  }
+  // 4) 숙제 완료 표시
+  for (const d of (await db.collection('users').doc(U).collection('assignmentCompletions').get()).docs) {
+    const target = db.collection('users').doc(L).collection('assignmentCompletions').doc(d.id);
+    if (!(await target.get()).exists) await w.set(target, d.data());
+    await w.delete(d.ref); add('assignmentCompletions');
+  }
+  // 5) a pet pass U bought, when L has none in force
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date(now));
+  const [uPass, lPass] = await Promise.all([db.collection('aiPasses').doc(U).get(), db.collection('aiPasses').doc(L).get()]).then(r => r.map((x: any) => x.data()));
+  if (uPass && activePlan(uPass, today) && !(lPass && activePlan(lPass, today))) { await w.set(db.collection('aiPasses').doc(L), swapUid(uPass, U, L)); add('aiPasses'); }
+  await w.flush();
+
+  // 6) the pet: U's points onto L's pet, in one write with U's pet docs going (so the points are added once)
+  let points = 0;
+  await db.runTransaction(async (tx: any) => {
+    const uPet = (await tx.get(db.collection('petStates').doc(U))).data(), lPet = (await tx.get(db.collection('petStates').doc(L))).data(), lUser = (await tx.get(db.collection('users').doc(L))).data();
+    const own: [string, any, boolean][] = [];
+    for (const n of OWN_DOCS) if (n !== 'petStates') own.push([n, (await tx.get(db.collection(n).doc(U))).data(), (await tx.get(db.collection(n).doc(L))).exists]);
+    if (uPet && !lPet) {
+      // L has no pet yet: U's comes over whole (its tower, map, room and name with it)
+      tx.set(db.collection('petStates').doc(L), swapUid(uPet, U, L)); add('petStates');
+      if (lUser) tx.set(db.collection('users').doc(L), { ...lUser, petStats: petSummary(uPet) });
+      for (const [n, doc, there] of own) if (doc && !there && n !== 'aiPasses' && n !== 'evaluations') { tx.set(db.collection(n).doc(L), swapUid(doc, U, L)); add(n); }
+    } else if (uPet && lPet) {
+      points = Math.max(0, Math.floor(Number(uPet.points) || 0));
+      if (points) { const next = { ...lPet, points: (Number(lPet.points) || 0) + points, updatedAt: now }; tx.set(db.collection('petStates').doc(L), next); if (lUser) tx.set(db.collection('users').doc(L), { ...lUser, petStats: petSummary(next) }); }
+    }
+    if (uPet) tx.delete(db.collection('petStates').doc(U));
+    for (const [n, doc] of own) if (doc) tx.delete(db.collection(n).doc(U));
+  });
+
+  // 7) U let go: marked moved; L keeps its link; the rankings are made again
+  const at = new Date(now).toISOString();
+  const latest = (await db.collection('users').doc(U).get()).data() || from;
+  await w.set(db.collection('users').doc(U), { ...latest, movedTo: L, movedAt: now, petStats: null, updatedAt: at });
+  for (const id of ['current', MONTH_RANK_DOC]) { const old = (await db.collection(PET_RANKINGS).doc(id).get()).data(); if (old) await w.set(db.collection(PET_RANKINGS).doc(id), { ...old, builtAt: 0 }); }
+  await w.set(db.collection('accountMoves').doc(`${now}_${U.slice(0, 8)}`), { kind: 'merge', fromUid: U, toUid: L, by: actor.uid, at: now, moved, points });
+  await w.flush();
+
+  // 8) U cannot sign in any more
+  let signInBlocked = false;
+  try { await auth.updateUser(U, { disabled: true }); await auth.revokeRefreshTokens(U); forgetFirebaseSessions(U); signInBlocked = true; } catch { /* reported */ }
+  if (signInBlocked) { const u = (await db.collection('users').doc(U).get()).data(); if (u) await db.runTransaction(async (tx: any) => { tx.set(db.collection('users').doc(U), { ...u, signInBlocked: true }); }); }
+  return { moved, points, signInBlocked, toUid: L };
 }

@@ -1,7 +1,7 @@
 import { loadStudentResource, studentReportCache } from '../../lib/studentReportCache';
 import AcademicPanel from '../reports/AcademicPanel';
 import type { AcademicData, SubjectEnrollment } from '../../types/academic';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart3, TrendingUp, BookOpen, CheckCircle2, Clock, Calendar, ClipboardList, ChevronLeft, ChevronRight, Gamepad2, XCircle, Play, RotateCcw, X, Trophy, ArrowRight, Trash2, Check, Sparkles, CalendarDays } from 'lucide-react';
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
@@ -20,7 +20,8 @@ function activityDate(value: any) {
   if (!value || !Number.isFinite(date.getTime())) return '날짜 미상';
   return date.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
-export default function LearningReport() {
+/** `focusTask`: 과제 알림 tapped (/?task=<report id>) — the 과제 list opens on that 과제, marked for a moment. */
+export default function LearningReport({ focusTask }: { focusTask?: string } = {}) {
   const [subjectFilter, setSubjectFilter] = useState('');
   const [enrollments, setEnrollments] = useState<SubjectEnrollment[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -338,6 +339,19 @@ export default function LearningReport() {
     const bTime = parseDisplayDate(b.createdAt)?.getTime() || 0;
     return bTime - aTime;
   });
+  // 과제 알림: once the lessons are in, go to that 과제's page (all subjects when the filter hides it) and show it;
+  // a 과제 already marked done says so instead.
+  const [focused, setFocused] = useState(''), [focusNote, setFocusNote] = useState(''), focusHandled = useRef('');
+  useEffect(() => {
+    if (!focusTask || focusHandled.current === focusTask || reportLoad !== 'ready') return;
+    const id = `lesson-${focusTask}`, index = combinedAssignments.findIndex(item => item.id === id);
+    if (index < 0 && subjectFilter && lessonAssignments.some(item => item.id === id)) { setSubjectFilter(''); return; }
+    focusHandled.current = focusTask;
+    if (index < 0) { setFocusNote(studentLessonReports.some(report => report.reportId === focusTask) ? '알림의 과제는 이미 완료로 표시했어요.' : ''); return; }
+    setShowAcademic(false); setAssignmentPage(Math.floor(index / ASSIGNMENTS_PER_PAGE) + 1); setFocused(id);
+    window.setTimeout(() => document.querySelector(`[data-task="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
+    window.setTimeout(() => setFocused(''), 4000);
+  }, [focusTask, reportLoad, combinedAssignments.length, subjectFilter]); // eslint-disable-line react-hooks/exhaustive-deps
   const totalAssignmentPages = Math.ceil(combinedAssignments.length / ASSIGNMENTS_PER_PAGE);
   const currentAssignmentPage = Math.min(assignmentPage, Math.max(1, totalAssignmentPages));
   const paginatedAssignments = combinedAssignments.slice((currentAssignmentPage - 1) * ASSIGNMENTS_PER_PAGE, currentAssignmentPage * ASSIGNMENTS_PER_PAGE);
@@ -587,11 +601,12 @@ export default function LearningReport() {
           {combinedAssignments.length > 0 && <span className="ml-auto text-xs font-normal text-slate-400">{combinedAssignments.length}개</span>}
         </h3>
         {/* The check is the student's own to-do mark; 숙제 points come from the teacher's 숙제 평가 in the next lesson. */}
+        {focusNote && <p role="status" className="-mt-1 mb-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700">{focusNote}</p>}
         {combinedAssignments.length > 0 && <p className="-mt-1.5 mb-2.5 text-[11px] text-slate-400">완료 체크는 내 할 일 표시예요 · 포인트는 다음 수업에서 선생님 숙제 평가로 받아요 ({PET_HOMEWORK_REWARD_TEXT})</p>}
         
         <div className="space-y-2">
           {paginatedAssignments.map((item) => (
-            <div key={item.id} className={`p-3 rounded-xl border transition-all ${item.isNew ? 'bg-blue-50 border-blue-100 shadow-md shadow-blue-50' : item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
+            <div key={item.id} data-task={item.id} className={`p-3 rounded-xl border transition-all ${focused === item.id ? 'ring-2 ring-[#d4537e] ring-offset-1 ' : ''}${item.isNew ? 'bg-blue-50 border-blue-100 shadow-md shadow-blue-50' : item.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${item.isNew ? 'bg-blue-500 animate-pulse' : item.isDone ? 'bg-emerald-500' : 'bg-slate-300'}`} />

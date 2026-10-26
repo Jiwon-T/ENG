@@ -34,7 +34,7 @@ export default function AppUserManager({busy,request,act,refresh,autoLoad=false,
  const rename=(u:any)=>{const name=renaming?.value.trim()||'';if(!name)return;
   void act(async()=>{const r=await request('set-user-name',{uid:u.uid,name});setRenaming(null);await load();setNotice(r.unchanged?'이름이 그대로입니다.':`앱 이름을 ‘${name}’(으)로 바꿨습니다.`);});};
  const [removed,setRemoved]=useState<any[]|null>(null);
- // 새 계정으로 옮기기: a linked student's old account (the panel opens above the list)
+ // 계정 옮기기 (a pop-up): 새 계정으로 — a linked student's old account; 기존 계정으로 — an account not linked yet, into the student's linked one
  const [moving,setMoving]=useState<any|null>(null);
  const loadRemoved=async()=>{const r=await request('read:removed-users');setRemoved(r.removed||[]);};
  const remove=async(u:any)=>{if(!await askConfirm({title:`${u.name||u.email} 계정을 탈퇴시킬까요?`,message:`앱에 저장된 이 계정의 정보가 지워집니다. 같은 계정으로 다시 로그인하면 새 학생 계정으로 시작합니다.${u.linkedStudent?'\n학생과 연결된 계정이라 연결도 함께 해제됩니다. 학생 기록·리포트·학부모 주소는 그대로 남습니다.':''}\n다시 가입하지 못하게 하려면 아래 ‘탈퇴한 계정’에서 로그인을 막을 수 있습니다.`,confirmText:'탈퇴시키기',tone:'danger',icon:'trash'}))return;
@@ -54,7 +54,7 @@ export default function AppUserManager({busy,request,act,refresh,autoLoad=false,
   {list&&<>
    <div className="rv-filters"><label className="student-master-search"><Search size={16} aria-hidden="true"/><input aria-label="사용자 검색" placeholder="이름·초성·이메일 검색" value={query} onChange={e=>setQuery(e.target.value)}/></label>
     <div className="rv-seg" role="group" aria-label="사용자 구분">{([['all','전체',list.length],['teacher','선생님',list.filter(isTeacher).length],['student','학생',list.filter(u=>!isTeacher(u)).length]] as const).map(([k,l,n])=><button key={k} type="button" aria-pressed={group===k} onClick={()=>setGroup(k)}>{l} {n}</button>)}</div></div>
-   {moving&&<AccountMovePanel key={moving.uid} from={moving} users={list} busy={busy} request={request} act={act} onClose={()=>setMoving(null)} onMoved={async message=>{setMoving(null);await load();await refresh();setNotice(message);}}/>}
+   {moving&&<AccountMovePanel key={moving.uid+(moving.moveMode||'')} from={moving} mode={moving.moveMode||'new'} users={list} busy={busy} request={request} act={act} onClose={()=>setMoving(null)} onMoved={async message=>{setMoving(null);await load();await refresh();setNotice(message);}}/>}
    <div className="gs-rows">{shown.slice(0,200).map(u=>{const k=userKind(u),who=u.name||u.email;const unlinked=!u.isAdmin&&!isTeacher(u)&&!u.linkedStudent;return <Fragment key={u.uid}><div className="gs-row app-user-row">
     {renaming?.uid===u.uid?<form className="gs-row-who app-user-rename" onSubmit={e=>{e.preventDefault();rename(u);}}><input aria-label={`${who} 앱 이름`} value={renaming.value} maxLength={100} autoFocus onChange={e=>setRenaming({uid:u.uid,value:e.target.value})}/><button type="submit" className="small-button" disabled={busy||!renaming.value.trim()}>저장</button><button type="button" className="gs-quiet" onClick={()=>setRenaming(null)}>취소</button></form>
      :<span className="gs-row-who"><strong>{u.name||'이름 없음'}</strong><span className="rv-sub">{u.email}{u.joinedAt&&` · ${new Date(u.joinedAt).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'numeric',day:'numeric'})} 가입`}</span>{unlinked&&<button type="button" className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-[#8b2f40]" aria-expanded={studyUid===u.uid} onClick={()=>setStudyUid(studyUid===u.uid?'':u.uid)}><BookOpen size={13} aria-hidden="true"/>학습 기록{studyUid===u.uid?<ChevronUp size={13} aria-hidden="true"/>:<ChevronDown size={13} aria-hidden="true"/>}</button>}</span>}
@@ -63,6 +63,7 @@ export default function AppUserManager({busy,request,act,refresh,autoLoad=false,
     <details className="aur-more"><summary aria-label={`${who} 더 보기`} title="더 보기"><MoreHorizontal size={16} aria-hidden="true"/></summary><div className="aur-menu" onClick={e=>{if((e.target as HTMLElement).closest('button'))e.currentTarget.closest('details')?.removeAttribute('open');}}>
      <button type="button" disabled={busy} onClick={()=>setRenaming({uid:u.uid,value:u.name||''})}>이름 바꾸기</button>
      {u.linkedStudent&&!u.isAdmin&&<button type="button" disabled={busy} title="로그인이 안 돼서 새로 가입한 학생: 이 계정의 앱 기록을 새 계정으로 옮겨요" onClick={()=>setMoving(u)}><ArrowRightLeft size={14} aria-hidden="true"/>새 계정으로 옮기기</button>}
+     {unlinked&&<button type="button" disabled={busy} title="학원과 연결하기 전에 따로 가입해 공부한 계정: 앱 기록을 학원과 연결된 계정으로 합쳐요" onClick={()=>setMoving({...u,moveMode:'existing'})}><ArrowRightLeft size={14} aria-hidden="true"/>기존 계정으로 옮기기</button>}
      {!u.isAdmin&&!isTeacher(u)&&<button type="button" className="is-danger" disabled={busy} title={u.linkedStudent?'졸업·퇴원한 학생의 계정을 탈퇴시킵니다. 학생 기록과 리포트는 남습니다.':'이 계정을 탈퇴시킵니다'} onClick={()=>remove(u)}><UserMinus size={14} aria-hidden="true"/>탈퇴</button>}
      {u.linkedStudent&&<p>학생과 연결된 계정이라 선생님 권한을 줄 수 없어요. 선생님은 따로 가입해 주세요.</p>}
      {isTeacher(u)&&!u.isAdmin&&<p>탈퇴하려면 먼저 학생으로 되돌려 주세요.</p>}

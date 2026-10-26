@@ -5,6 +5,7 @@ import {lessonPushBody, lessonPushChoice} from '../src/lib/lessonPush';
 import {sendLessonPush, sendMakeupMorning, sendToTokens} from '../api/_lib/pushSend';
 import {pushTokenId} from '../api/_lib/pushTokens';
 import {hashStudentKey} from '../api/_lib/security';
+import {lessonReportId} from '../api/_lib/reportAudienceDTO';
 
 const K = '11111111-1111-4111-8111-111111111111', T1 = 'device-one-'.padEnd(40, 'a'), T2 = 'device-two-'.padEnd(40, 'b');
 function memoryDb() {
@@ -40,6 +41,10 @@ test('과제 알림 보내기: data-only to the student\'s devices, one tag per 
   assert.equal(rows.has(`pushTokens/${pushTokenId(T2)}`), false, 'the gone token');
   assert.equal(rows.has(`pushTokens/${pushTokenId(T1)}`), true);
   assert.equal(await sendLessonPush(db, {studentKey: K, assignment: ''}, 'L1', 'new', m), 0, 'no 과제: nothing');
+  // tapped: the 학습 리포트 opens on this 과제 (the id the student's list uses)
+  rows.set('lessonReports/r1', {teacherDraftId: 'L2', reportIdentity: 'report-identity-2'});
+  await sendLessonPush(db, {studentKey: K, subject: '영어', date: '2026-10-22', assignment: 'p.14'}, 'L2', 'new', m);
+  assert.equal(m.sent.at(-1).data.link, `/?task=${lessonReportId({reportIdentity: 'report-identity-2'} as any)}`);
   assert.equal(await sendToTokens(db, [], {title: 'x', body: 'y', tag: 'z'}, m), 0);
   const src = readFileSync(new URL('../api/teacher/workspace.ts', import.meta.url), 'utf8');
   assert.match(src, /isLessonPushKind\(body\.notify\)&&!result\.alreadyPublished&&!result\.record\?\.trial\?await .*sendLessonPush\(db,current\.data,id,body\.notify\)\.catch\(\(\)=>0\):0/, 'sent with the 반영, never failing it');

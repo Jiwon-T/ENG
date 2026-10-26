@@ -196,7 +196,7 @@
 .teacher-workspace .workspace-dialog .lesson-review-detail dt{font-size:12px;font-weight:800;color:#64748b}
 .teacher-workspace .workspace-dialog .lesson-review-detail dd{margin:0;font-size:14px;line-height:1.6;color:#1e293b;white-space:pre-line}
 .teacher-workspace .gs .gs-row.lrd-trash-row{grid-template-columns:minmax(0,1fr) auto auto;padding:8px 12px;border:1px solid #eef2f6;border-radius:14px}
-.teacher-workspace .student-view-switch{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px}
+.teacher-workspace .student-view-switch{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-4px 0 8px;padding:4px 0;position:sticky;top:calc(var(--workspace-appbar-offset,0px) + var(--workspace-nav-height,44px));z-index:20;background:var(--workspace-surface)}
 .teacher-workspace .student-view-switch .rv-seg b{font-weight:800;margin-left:2px}
 /* Curriculum tab: cards */
 .teacher-workspace .curriculum-management-board{display:block}

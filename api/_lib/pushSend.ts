@@ -6,6 +6,7 @@ import { getFirebaseAdmin } from './firebaseAdmin.js';
 import { readStudentMapping } from './studentIdentity.js';
 import { PUSH_TOKENS, pushTokenId, pushTokensOf } from './pushTokens.js';
 import { LESSON_PUSH_TITLE, lessonPushBody, type LessonPushKind } from '../../src/lib/lessonPush.js';
+import { lessonReportId } from './reportAudienceDTO.js';
 
 export interface PushMessage { title: string; body: string; tag: string; link?: string }
 type Multicast = { sendEachForMulticast: (m: any) => Promise<{ successCount: number; responses: { success: boolean; error?: { code?: string } }[] }> };
@@ -34,7 +35,11 @@ export async function sendLessonPush(db: any, data: any, lessonId: string, kind:
   const uid = await studentUidOf(db, data.studentKey);
   if (!uid) return 0;
   const tokens = await pushTokensOf(db, uid);
-  return sendToTokens(db, tokens, { title: LESSON_PUSH_TITLE[kind], body: lessonPushBody(data), tag: `lesson-${lessonId}`, link: '/' }, messaging === undefined ? defaultMessaging() : messaging);
+  if (!tokens.length) return 0;
+  // tapped: 학습 리포트 opens on this 과제 (/?task=<the report id the student's list uses>)
+  const report = (await db.collection('lessonReports').where('teacherDraftId', '==', lessonId).limit(1).get().catch(() => null))?.docs?.[0]?.data();
+  const link = report && (report.reportIdentity || report.notionPageId) ? `/?task=${lessonReportId(report)}` : '/';
+  return sendToTokens(db, tokens, { title: LESSON_PUSH_TITLE[kind], body: lessonPushBody(data), tag: `lesson-${lessonId}`, link }, messaging === undefined ? defaultMessaging() : messaging);
 }
 
 /** Every morning at 8 (KST): "오늘 보강이 있어요" to each student with a 보강 today that was published to them and not
