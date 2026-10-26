@@ -28,3 +28,10 @@ test('테스트 평가 자동: the last thing done wins — a score typed, chang
   assert.equal(withAutoTestGrade(start, {...start, correct: 85, total: 100, wrong: 15}, 'wrong').test, '중상');
   assert.equal(withAutoTestGrade(typed, {...typed, extraTests: [{correct: 7, total: 10}]}, 'extraTests').test, '중', '(90 + 70) / 2');
 });
+
+test('테스트 평가 자동: a score still being typed (오답 수 above 문항 수) is skipped, never a crash', () => {
+  assert.equal(autoTestGrade({correct: -4, total: 2}), '미확인', '오답 6 carried over, 문항 수 "2" of 20 typed');
+  assert.equal(autoTestGrade({correct: 30, total: 20}), '미확인');
+  assert.equal(autoTestGrade({correct: -4, total: 2, extraTests: [{correct: 18, total: 20}]}), '상', 'the other test still counts');
+  assert.equal(withAutoTestGrade({}, {wrong: 6, total: 2, correct: -4}, 'total').test, '미확인');
+});

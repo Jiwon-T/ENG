@@ -324,7 +324,7 @@ export default function LearningReport({ focusTask }: { focusTask?: string } = {
   // 앱에서 등록한 과제와 수업일지의 마지막 `과제:` 구간을 하나의 목록으로 합친다.
   // 화면에는 출처를 노출하지 않지만 내부 키는 충돌하지 않도록 분리한다.
   const lessonAssignments = filteredLessonReports
-    .filter(report => Boolean(report.assignmentContent?.trim()) && !report.assignmentCompleted)
+    .filter(report => Boolean(report.assignmentContent?.trim()) && !report.assignmentCompleted && !report.assignmentGrade)
     .map(report => ({
       id: `lesson-${report.reportId}`,
       content: report.assignmentContent as string,
@@ -334,6 +334,12 @@ export default function LearningReport({ focusTask }: { focusTask?: string } = {
       subject: report.subject || '영어',
       isLessonAssignment: true,
     }));
+  // 선생님이 확인한 과제: graded in a later lesson (상·미제출 …) or passed without a grade, so out of the 할 일 — kept below,
+  // folded, newest first
+  const gradedAssignments = filteredLessonReports
+    .filter(report => Boolean(report.assignmentContent?.trim()) && report.assignmentGrade)
+    .sort((a, b) => String(b.lessonDate).localeCompare(String(a.lessonDate)))
+    .slice(0, 30);
   const combinedAssignments = [...stats.assignments, ...lessonAssignments].filter(item => !item.isDone && (!subjectFilter || (item.subject || '영어') === subjectFilter)).sort((a: any, b: any) => {
     const aTime = parseDisplayDate(a.createdAt)?.getTime() || 0;
     const bTime = parseDisplayDate(b.createdAt)?.getTime() || 0;
@@ -347,7 +353,7 @@ export default function LearningReport({ focusTask }: { focusTask?: string } = {
     const id = `lesson-${focusTask}`, index = combinedAssignments.findIndex(item => item.id === id);
     if (index < 0 && subjectFilter && lessonAssignments.some(item => item.id === id)) { setSubjectFilter(''); return; }
     focusHandled.current = focusTask;
-    if (index < 0) { setFocusNote(studentLessonReports.some(report => report.reportId === focusTask) ? '알림의 과제는 이미 완료로 표시했어요.' : ''); return; }
+    if (index < 0) { const report = studentLessonReports.find(r => r.reportId === focusTask); setFocusNote(!report ? '' : report.assignmentGrade ? (report.assignmentGrade.grade === null ? '알림의 과제는 지난 과제로 정리됐어요 (아래 ‘선생님이 확인한 과제’).' : '알림의 과제는 선생님이 이미 확인했어요 (아래 ‘선생님이 확인한 과제’).') : '알림의 과제는 이미 완료로 표시했어요.'); return; }
     setShowAcademic(false); setAssignmentPage(Math.floor(index / ASSIGNMENTS_PER_PAGE) + 1); setFocused(id);
     window.setTimeout(() => document.querySelector(`[data-task="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
     window.setTimeout(() => setFocused(''), 4000);
@@ -631,6 +637,23 @@ export default function LearningReport({ focusTask }: { focusTask?: string } = {
               </p>
             </div>
           ))}
+
+          {gradedAssignments.length > 0 && (
+            <details className="rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
+              <summary className="cursor-pointer text-xs font-bold text-slate-500">선생님이 확인한 과제 {gradedAssignments.length}</summary>
+              <ul className="mt-2 space-y-1.5">
+                {gradedAssignments.map(report => {
+                  const grade = report.assignmentGrade!, missed = grade.grade === '미제출', none = grade.grade === null;
+                  const when = parseDisplayDate(report.lessonDate);
+                  return <li key={report.reportId} className="flex items-start gap-2 text-[12px] text-slate-600">
+                    <span className="flex-none text-[10px] font-bold text-slate-400 pt-0.5">{when ? formatDateWithDay(when) : ''}</span>
+                    <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{report.assignmentContent}</span>
+                    <span className={`flex-none rounded-full px-2 py-0.5 text-[10.5px] font-bold ${none ? 'bg-slate-100 text-slate-500' : missed ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>{none ? '평가 없이 지남' : missed ? '미제출' : `숙제 ${grade.grade}`} · {Number(grade.date.slice(5, 7))}/{Number(grade.date.slice(8, 10))}</span>
+                  </li>;
+                })}
+              </ul>
+            </details>
+          )}
 
           {/* 변형 문제 a teacher gave (after the 수업 숙제; solved on screen) */}
           <AssignedQuestionList />

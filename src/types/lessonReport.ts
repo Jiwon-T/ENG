@@ -48,6 +48,8 @@ export interface StudentLessonReportDTO {
   schoolExamScore: number | null;
   assignmentContent: string | null;
   assignmentCompleted?: boolean;
+  /** 선생님이 확인한 과제: the 숙제 평가 the next graded lesson of the subject gave it (null: passed without one), and that day */
+  assignmentGrade?: { grade: string | null; date: string } | null;
 }
 
 /**

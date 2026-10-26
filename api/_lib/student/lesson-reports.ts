@@ -5,7 +5,7 @@ import { sendJson } from '../http.js';
 import { getFirebaseAdmin } from '../firebaseAdmin.js';
 import type { StudentLessonReportDTO, StoredLessonReport } from '../reportSchemas.js';
 import { readStudentMapping } from '../studentIdentity.js';
-import { studentLessonDTO } from '../reportAudienceDTO.js';
+import { studentLessonDTO, assignmentGrades } from '../reportAudienceDTO.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   try {
@@ -110,7 +110,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     // 학생용 제한 DTO:
     // - 공개 필드: reportId, lessonDate, category, attendance, homework, vocabularyScore, schoolExamScore, assignmentContent
     // - 비공개 필드 (원천 배제): attitude, test, feedback, selfStudyTime, notionPageId, internalStudentId, studentKey
-    const studentDTOs: StudentLessonReportDTO[] = storedReports.map(r => studentLessonDTO(r, completionHashes));
+    // 선생님이 확인한 과제: graded by a later lesson, out of the 할 일 (kept below, folded)
+    const graded = assignmentGrades(storedReports);
+    const studentDTOs: StudentLessonReportDTO[] = storedReports.map(r => { const dto = studentLessonDTO(r, completionHashes); return { ...dto, assignmentGrade: graded.get(dto.reportId) || null }; });
 
     const subjects = await loadSubjectEnrollments(db, internalStudentId);
     return sendJson(res, 200, {

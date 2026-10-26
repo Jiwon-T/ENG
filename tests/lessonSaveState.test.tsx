@@ -43,7 +43,7 @@ test('single editor: 반영 is primary when ready, every lesson switch is guarde
  const source=fs.readFileSync(new URL('../src/components/teacher/TeacherWorkspace.tsx',import.meta.url),'utf8');
  assert.match(source,/className=\{publishReady\?'small-button':'primary-button'\}[^>]*>[^<]*(<LoaderCircle[^>]*\/>\})?저장<ShortcutKey keys="S"\/><\/button>/);
  assert.match(source,/className=\{publishReady\?'primary-button':'small-button'\}/);
- for(const call of ['onChange={key=>{setPickHint(false);guarded(()=>selectStudent(key));}}','onNewLesson={()=>void leaveConsult().then(ok=>{if(ok){setConsultPane(null);guarded(resetLesson);}})}','onStudent={(key,event,savedId)=>void leaveConsult().then(ok=>{if(ok){setConsultPane(null);openDayLesson(key,event,savedId);}})}','{if(manual)setPickHint(false);if(data?.uid)markAutoOpenDone(data.uid,event.date);guarded(()=>selectStudent(key,','onClick={() => guarded(()=>openDraft(d))}','onClick={() => guarded(resetLesson)}','onClick={()=>{setPickHint(false);if(data?.uid)markAutoOpenDone(data.uid,lessonDay);guarded(resetLesson);}}','guarded(()=>selectStudent(lesson.studentKey,{subject}))'])assert.ok(source.includes(call),call);
+ for(const call of ['const go=()=>guarded(()=>selectStudent(key));if(studentDrawer&&drawerAttemptRef.current)drawerAttemptRef.current(go);else go();','onNewLesson={()=>void leaveConsult().then(ok=>{if(ok){setConsultPane(null);guarded(resetLesson);}})}','onStudent={(key,event,savedId)=>void leaveConsult().then(ok=>{if(ok){setConsultPane(null);openDayLesson(key,event,savedId);}})}','{if(manual)setPickHint(false);if(data?.uid)markAutoOpenDone(data.uid,event.date);guarded(()=>selectStudent(key,','onClick={() => guarded(()=>openDraft(d))}','onClick={() => guarded(resetLesson)}','onClick={()=>{setPickHint(false);if(data?.uid)markAutoOpenDone(data.uid,lessonDay);guarded(resetLesson);}}','guarded(()=>selectStudent(lesson.studentKey,{subject}))'])assert.ok(source.includes(call),call);
  assert.match(source,/confirmText:'저장하고 이동',altText:'저장 안 하고 이동'/);
  assert.match(source,/const shortcut=lessonShortcut\(e\);/);assert.match(source,/dialog\.confirm-modal\[open\]/);
  assert.match(source,/publishShortcut\.current=\(\)=>\{if\(!busy&&!autoLoading&&publishReady\)void act\(\(\)=>submitSingleLesson\('publish'\)\);\};/,'Ctrl/⌘+Enter publishes through the confirm, only when ready');
@@ -73,7 +73,8 @@ test('no browser confirm is left in the teacher screens; unsaved input asks 계�
  assert.match(dialog,/cancelText:'계속 작성',tone:'leave'/);assert.match(dialog,/\(danger\|\|leave\?cancel:ok\)/);
  const ws=fs.readFileSync(new URL('TeacherWorkspace.tsx',dir),'utf8');
  assert.match(ws,/title="수업 작성" onClose=\{async\(\)=>\{if\(!await leaveLessonGuard\(\)\)return;/,'closing 수업 작성 offers 저장하고 이동');
- assert.match(ws,/guarded\(\(\)=>selectStudent\(managementStudentKey,/,'opening 수업 작성 from 학생 관리 is guarded');
+ assert.match(ws,/guarded\(\(\)=>selectStudent\(key,/,'opening 수업 작성 from 학생 관리 is guarded');
+ assert.match(ws,/studentDetail\(managementStudentKey,\{/,'학생 관리 and the 일지 drawer share one student page');
 });
 test('shortcuts: Ctrl/⌘+S saves, Ctrl/⌘+Enter publishes; the grid asks before publishing',async()=>{
  const {lessonShortcut,ShortcutKey}=await import('../src/components/teacher/LessonActionBar');

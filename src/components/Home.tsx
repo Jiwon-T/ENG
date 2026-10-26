@@ -51,7 +51,7 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
     if (!userUid || isEducator || auth.currentUser?.uid !== userUid) return;
     const user = auth.currentUser, token = () => user.getIdToken();
     loadStudentResource<{reports: StudentLessonReportDTO[]}>(userUid, 'lesson-reports', token).then(result => {
-      if (live && auth.currentUser?.uid === userUid) setLessonPending({uid: userUid, count: result.reports.filter(r => r.assignmentContent?.trim() && !r.assignmentCompleted).length});
+      if (live && auth.currentUser?.uid === userUid) setLessonPending({uid: userUid, count: result.reports.filter(r => r.assignmentContent?.trim() && !r.assignmentCompleted && !r.assignmentGrade).length});
     }).catch(() => {});
     loadStudentResource<{schedules: StudentScheduleDTO[]}>(userUid, 'schedules', token).then(result => {
       if (!live || auth.currentUser?.uid !== userUid) return;
