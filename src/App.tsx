@@ -1,5 +1,6 @@
 import { studentReportCache } from './lib/studentReportCache';
 import { PushMenuRow } from './components/PushOptIn';
+import MovedAccountNotice from './components/MovedAccountNotice';
 import TeacherStudyAlert from './components/TeacherStudyAlert';
 import React, { useState, useEffect, Suspense, lazy, Component } from 'react';
 import { Analytics } from '@vercel/analytics/react';
@@ -120,6 +121,8 @@ interface UserProfile {
   email: string;
   name: string;
   alias?: string; // Add alias field
+  /** 기존 계정으로 옮기기: where this account's records went (masked email); the pop-up tells the student */
+  movedToEmail?: string | null;
   role: 'teacher' | 'student' | 'admin' | 'principal';
   photoURL?: string;
   isNameSet?: boolean; // Track if user has explicitly set their name
@@ -608,6 +611,7 @@ export default function App() {
               <p className="text-slate-400 font-bold text-sm">불러오는 중...</p>
             </div>
           }>
+            {profile?.role === 'student' && user && profile.movedToEmail && <MovedAccountNotice key={user.uid} uid={user.uid} email={profile.movedToEmail} home={currentView === 'home'} />}
             {currentView === 'home' ? (
             <motion.div
               key="home"

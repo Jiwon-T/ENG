@@ -4,9 +4,12 @@ export const lessonReportId = (r: StoredLessonReport) => crypto.createHash('sha2
 export const assignmentContentHash = (r: StoredLessonReport) => crypto.createHash('sha256').update(r.derivedAssignment || '').digest('hex');
 /** 선생님이 확인한 과제: a lesson that decides the 숙제 평가 (not 미확인, 없는 날 or none) grades the latest 과제 of that subject
  *  given before it; older 과제 still open then were passed without a grade (`grade` null). Either way they leave the
- *  student's 할 일. One 평가 grades one 과제. Keyed by report id. */
+ *  student's 할 일. One 평가 grades one 과제. A 과제 written again word for word in a later 일지 before any 평가 (e.g. carried
+ *  over to the 누적 테스트 day) is the same 과제 going on: the earlier one is `carried` and only the later one is listed.
+ *  Keyed by report id. */
 export function assignmentGrades(reports: StoredLessonReport[]) {
-  const out = new Map<string, { grade: string | null; date: string }>(), day = (r: StoredLessonReport) => String(r.lessonDateStart || '').slice(0, 10);
+  const out = new Map<string, { grade: string | null; date: string; carried?: true }>(), day = (r: StoredLessonReport) => String(r.lessonDateStart || '').slice(0, 10);
+  const text = (r: StoredLessonReport) => String(r.derivedAssignment || '').replace(/\s+/g, ' ').trim();
   const open = new Map<string, StoredLessonReport[]>();
   for (const r of [...reports].sort((a, b) => day(a).localeCompare(day(b)))) {
     const subject = r.subject || '영어', waiting = open.get(subject) || [];
@@ -16,7 +19,12 @@ export function assignmentGrades(reports: StoredLessonReport[]) {
       for (const a of before) out.set(lessonReportId(a), { grade: a === latest ? String(r.homework) : null, date: day(r) });
       open.set(subject, waiting.filter(a => day(a) >= day(r)));
     }
-    if (String(r.derivedAssignment || '').trim()) open.set(subject, [...(open.get(subject) || []), r]);
+    if (text(r)) {
+      // the same 과제 written again: it goes on in this 일지 (the earlier copy is not listed)
+      const still = open.get(subject) || [], last = still[still.length - 1];
+      if (last && day(last) < day(r) && text(last) === text(r)) { out.set(lessonReportId(last), { grade: null, date: day(r), carried: true }); still.pop(); }
+      open.set(subject, [...still, r]);
+    }
   }
   return out;
 }

@@ -337,7 +337,7 @@ export default function LearningReport({ focusTask }: { focusTask?: string } = {
   // 선생님이 확인한 과제: graded in a later lesson (상·미제출 …) or passed without a grade, so out of the 할 일 — kept below,
   // folded, newest first
   const gradedAssignments = filteredLessonReports
-    .filter(report => Boolean(report.assignmentContent?.trim()) && report.assignmentGrade)
+    .filter(report => Boolean(report.assignmentContent?.trim()) && report.assignmentGrade && !report.assignmentGrade.carried)
     .sort((a, b) => String(b.lessonDate).localeCompare(String(a.lessonDate)))
     .slice(0, 30);
   const combinedAssignments = [...stats.assignments, ...lessonAssignments].filter(item => !item.isDone && (!subjectFilter || (item.subject || '영어') === subjectFilter)).sort((a: any, b: any) => {
@@ -353,7 +353,7 @@ export default function LearningReport({ focusTask }: { focusTask?: string } = {
     const id = `lesson-${focusTask}`, index = combinedAssignments.findIndex(item => item.id === id);
     if (index < 0 && subjectFilter && lessonAssignments.some(item => item.id === id)) { setSubjectFilter(''); return; }
     focusHandled.current = focusTask;
-    if (index < 0) { const report = studentLessonReports.find(r => r.reportId === focusTask); setFocusNote(!report ? '' : report.assignmentGrade ? (report.assignmentGrade.grade === null ? '알림의 과제는 지난 과제로 정리됐어요 (아래 ‘선생님이 확인한 과제’).' : '알림의 과제는 선생님이 이미 확인했어요 (아래 ‘선생님이 확인한 과제’).') : '알림의 과제는 이미 완료로 표시했어요.'); return; }
+    if (index < 0) { const report = studentLessonReports.find(r => r.reportId === focusTask); setFocusNote(!report ? '' : report.assignmentGrade ? (report.assignmentGrade.carried ? '알림의 과제는 다음 일지에 이어서 적혀 있어요.' : report.assignmentGrade.grade === null ? '알림의 과제는 지난 과제로 정리됐어요 (아래 ‘선생님이 확인한 과제’).' : '알림의 과제는 선생님이 이미 확인했어요 (아래 ‘선생님이 확인한 과제’).') : '알림의 과제는 이미 완료로 표시했어요.'); return; }
     setShowAcademic(false); setAssignmentPage(Math.floor(index / ASSIGNMENTS_PER_PAGE) + 1); setFocused(id);
     window.setTimeout(() => document.querySelector(`[data-task="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 80);
     window.setTimeout(() => setFocused(''), 4000);

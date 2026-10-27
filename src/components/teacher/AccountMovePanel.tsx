@@ -26,8 +26,8 @@ export default function AccountMovePanel({from,mode='new',users,busy,request,act
   if(!to||!preview)return;
   if(existing){
    const pet=preview.from.points==null?'':preview.to.points==null?' 펫은 그대로 옮겨 가요.':` 포인트 ${won(preview.from.points)}P만 더하고, 이 계정의 펫·탑·원정대는 없어져요.`;
-   if(!await askConfirm({title:`${from.email} 계정의 앱 기록을 ${to.email} 계정으로 옮길까요?`,message:`학습 기록은 합치고(같은 기록은 받는 계정 것을 남겨요),${pet} 옮긴 계정은 로그인이 막혀요. 되돌릴 수 없어요.`,confirmText:'옮기기',tone:'danger',icon:'alert'}))return;
-   void act(async()=>{const r=await request('merge-student-account',{fromUid:from.uid,toUid:to.uid});await onMoved(`${to.email} 계정으로 옮겼어요.${r.points?` 포인트 ${won(r.points)}P를 더했어요.`:''}${r.signInBlocked?' 옮긴 계정은 로그인이 막혔어요.':' 옮긴 계정 로그인 막기는 실패했어요. 탈퇴한 계정에서 다시 막아 주세요.'}`);});
+   if(!await askConfirm({title:`${from.email} 계정의 앱 기록을 ${to.email} 계정으로 옮길까요?`,message:`학습 기록은 합치고(같은 기록은 받는 계정 것을 남겨요),${pet} 옮긴 계정으로도 로그인은 계속 되고, 들어오면 이 계정으로 안내해요. 되돌릴 수 없어요.`,confirmText:'옮기기',tone:'danger',icon:'alert'}))return;
+   void act(async()=>{const r=await request('merge-student-account',{fromUid:from.uid,toUid:to.uid});await onMoved(`${to.email} 계정으로 옮겼어요.${r.points?` 포인트 ${won(r.points)}P를 더했어요.`:''}`);});
    return;
   }
   if(!await askConfirm({title:`${from.name||from.email} 계정의 앱 기록을 새 계정으로 옮길까요?`,message:`${to.email}로 옮겨요. 학습 기록은 합치고, 펫·포인트는 옛 계정 것으로 바뀌어요(새 계정의 펫 ${preview.to.points==null?'없음':`${preview.to.points}P`}는 없어져요). 옛 계정은 학생 연결이 풀리고 로그인이 막혀요. 되돌릴 수 없어요.`,confirmText:'옮기기',tone:'danger',icon:'alert'}))return;
@@ -51,7 +51,7 @@ export default function AccountMovePanel({from,mode='new',users,busy,request,act
     <li><span>지문 분석 · 워크북</span><span>{preview.from.passages} · {preview.from.workbooks}</span></li>
     <li><span>펫 · 포인트</span><span>{preview.from.points==null?'펫 없음':preview.to.points==null?`펫 그대로 (${won(preview.from.points)}P)`:`${won(preview.from.points)}P 더하기`}</span></li>
    </ul>
-   <p className="gs-note">{preview.from.points!=null&&preview.to.points!=null?'받는 계정의 펫·탑·원정대는 그대로이고, 옮기는 계정의 펫·탑·원정대는 없어져요. ':''}같은 기록이 양쪽에 있으면 받는 계정 것을 남겨요. 옮긴 계정은 로그인이 막혀요(탈퇴한 계정에서 다시 풀 수 있어요). 학생 연결과 수업 일지·리포트는 그대로예요.</p>
+   <p className="gs-note">{preview.from.points!=null&&preview.to.points!=null?'받는 계정의 펫·탑·원정대는 그대로이고, 옮기는 계정의 펫·탑·원정대는 없어져요. ':''}같은 기록이 양쪽에 있으면 받는 계정 것을 남겨요. 옮긴 계정으로도 로그인은 계속 돼요(들어오면 받는 계정으로 안내하고, 거기서 또 공부했으면 다시 옮기면 돼요). 학생 연결과 수업 일지·리포트는 그대로예요.</p>
    <div className="gs-foot"><span className="gs-grow"/><button type="button" className="small-button" onClick={onClose}>취소</button><button type="button" className="primary-button" disabled={busy} onClick={()=>void move()}>옮기기</button></div>
   </>}
   {preview&&!existing&&<>

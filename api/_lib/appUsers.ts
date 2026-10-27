@@ -20,7 +20,7 @@ export async function listAppUsers(db: any, actor: any) {
     return {
         users: users.docs.map((d: any) => {
             const u = d.data() || {}, p: any = profiles.get(d.id);
-            return { uid: d.id, name: String(u.alias || u.name || '').slice(0, 80), email: String(u.email || '').slice(0, 120), role: u.role || 'student', linkedStudent: Boolean(u.notionStudentKey), isAdmin: d.id === process.env.ADMIN_UID, workspace: p ? { disabled: Boolean(p.disabled), role: p.workspaceRole || 'teacher' } : null, joinedAt: joinedAt(u.createdAt) };
+            return { uid: d.id, name: String(u.alias || u.name || '').slice(0, 80), email: String(u.email || '').slice(0, 120), role: u.role || 'student', linkedStudent: Boolean(u.notionStudentKey), movedToEmail: u.movedTo && u.movedToEmail ? String(u.movedToEmail).slice(0, 120) : null, isAdmin: d.id === process.env.ADMIN_UID, workspace: p ? { disabled: Boolean(p.disabled), role: p.workspaceRole || 'teacher' } : null, joinedAt: joinedAt(u.createdAt) };
         // Newest sign-ups first (they are the ones to look at); accounts without a sign-up time go last.
         }).sort((a: any, b: any) => (b.joinedAt ? Date.parse(b.joinedAt) : 0) - (a.joinedAt ? Date.parse(a.joinedAt) : 0) || a.name.localeCompare(b.name, 'ko')),
     };

@@ -84,7 +84,7 @@ function mergeWorld(lHasPet = true) {
   return {f, blocked, auth: {updateUser: async (uid: string, v: any) => { if (v.disabled) blocked.push(uid); }, revokeRefreshTokens: async () => {}}};
 }
 
-test('기존 계정으로 옮기기: 학습 기록 join the linked account (its own copy wins), only the points are added, the account moved is blocked', async () => {
+test('기존 계정으로 옮기기: 학습 기록 join the linked account (its own copy wins), only the points are added, the account moved still signs in (told where)', async () => {
   const {mergeIntoLinkedAccount, previewAccountMerge} = await import('../api/_lib/accountMove.ts');
   const {f, auth, blocked} = mergeWorld();
   await assert.rejects(previewAccountMerge(f.db, {uid: 't', admin: false, academyId: 'main'}, {fromUid: U, toUid: L}), /FORBIDDEN/);
@@ -105,7 +105,8 @@ test('기존 계정으로 옮기기: 학습 기록 join the linked account (its 
   assert.equal(f.rows.get(`questionAttempts/${attemptId(L, 'set9')}`).uid, L); assert.equal(f.rows.has('questionAttempts/old'), false);
   assert.equal(f.rows.get(`aiPasses/${L}`).until, '2099-01-01', 'a pass in force comes over');
   assert.equal(f.rows.get(`users/${L}`).notionStudentKey, K); assert.equal(f.rows.get(`users/${U}`).movedTo, L);
-  assert.deepEqual(blocked, [U]); assert.equal(f.rows.get(`users/${U}`).signInBlocked, true);
+  assert.deepEqual(blocked, [], 'not blocked'); assert.equal(f.rows.get(`users/${U}`).signInBlocked, undefined);
+  assert.equal(f.rows.get(`users/${U}`).movedToEmail, 'l***@x.com', 'where its records went, masked');
   assert.equal(f.rows.get('petRankings/current').builtAt, 0);
   // run again: nothing left under U, the points are not added twice
   await mergeIntoLinkedAccount(f.db, admin, {fromUid: U, toUid: L}, auth, 2000);
@@ -119,4 +120,9 @@ test('기존 계정으로 옮기기: when the linked account has no pet yet, the
   assert.equal(r.points, 0); assert.equal(f.rows.get(`petStates/${L}`).points, 320); assert.equal(f.rows.get(`petStates/${L}`).pets[0].name, '말랑이');
   assert.equal(f.rows.get(`petTowers/${L}`).pets['1'].best, 9); assert.equal(f.rows.get(`petRooms/${L}`).owner, L);
   assert.equal(f.rows.has(`petStates/${U}`), false);
+});
+
+test('maskedEmail: the first 3 letters and the domain', async () => {
+  const {maskedEmail} = await import('../api/_lib/accountMove.ts');
+  assert.deepEqual([maskedEmail('youngjun120117@gmail.com'), maskedEmail('ab@x.kr'), maskedEmail(''), maskedEmail('nodomain')], ['you***@gmail.com', 'ab***@x.kr', '', '']);
 });

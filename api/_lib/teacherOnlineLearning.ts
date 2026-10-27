@@ -6,7 +6,7 @@ import {hashStudentKey} from './security.js';
 import {normalizeNotionPageId as uuid} from './notionPageId.js';
 import {reviewSubjects} from './teacherReportReview.js';
 import {encodeReportCursor,decodeReportCursor} from './parentReportPage.js';
-import {lessonReportId,assignmentContentHash} from './reportAudienceDTO.js';
+import {lessonReportId,assignmentContentHash,assignmentGrades} from './reportAudienceDTO.js';
 const text=(v:any,max=1200)=>typeof v==='string'?v.slice(0,max):'';
 const number=(v:any)=>typeof v==='number'&&Number.isFinite(v)?v:null;
 function date(v:any){const ms=v?.toMillis?.()??(typeof v?.seconds==='number'?v.seconds*1000+Math.floor((v.nanoseconds||0)/1e6):Date.parse(v));return Number.isFinite(ms)?new Date(ms).toISOString():null;}
@@ -51,37 +51,43 @@ export async function loadTeacherOnlineLearning(db:any,actor:any,keyInput:unknow
  return {...empty('',true),online:{reason:'',evaluation:cursor?undefined:{text:text(saved?.evaluation,1000),updatedAt:date(saved?.updatedAt)},progress:{recorded:allWords.data().count,learned:learned.data().count},sessions:rows,nextCursor,assignments:tasks}};
 }
 const english=(r:any)=>!r.subject||r.subject==='영어';
-const TASK_FIELDS=['internalStudentId','subject','lessonDateStart','derivedAssignment','reportIdentity','notionPageId'],TASK_PAGE=20,TASK_PAGES=5;
+const TASK_FIELDS=['internalStudentId','subject','lessonDateStart','derivedAssignment','reportIdentity','notionPageId','homework'],TASK_PAGE=20,TASK_PAGES=5;
 const hasTask=(r:any,internalStudentId:string)=>r.internalStudentId===internalStudentId&&english(r)&&typeof r.derivedAssignment==='string'&&Boolean(r.derivedAssignment.trim());
 /** The newest English lessons with a 과제 for this student, newest first: pages of 20 by lesson date (only the fields
  *  needed), stopping at 10 found or after 100 lessons, so a long history is never walked. Subject and 과제 are checked
  *  per page because older reports may have no subject field (= English), which a query cannot match.
  *  Needs the lessonReports (internalStudentId, lessonDateStart desc) index; until it exists, falls back to one
  *  field-limited read of this student's reports. */
+/** `seen`: every English lesson read on the way (newest first), for the 숙제 평가 that later lessons gave the 과제. */
 async function recentLessonTasks(db:any,internalStudentId:string){
+ const seen:any[]=[];
  const base=db.collection('lessonReports').where('internalStudentId','==',internalStudentId).orderBy('lessonDateStart','desc').orderBy(FieldPath.documentId(),'desc').select(...TASK_FIELDS);
  const found:any[]=[];let after:any[]|null=null;
  try{
   for(let page=0;page<TASK_PAGES&&found.length<10;page++){
    const snap=await (after?base.startAfter(...after):base).limit(TASK_PAGE).get();
-   for(const d of snap.docs){const r={...d.data(),notionPageId:d.data().notionPageId||d.id};if(hasTask(r,internalStudentId))found.push(r);}
+   for(const d of snap.docs){const r={...d.data(),notionPageId:d.data().notionPageId||d.id};if(r.internalStudentId===internalStudentId&&english(r))seen.push(r);if(hasTask(r,internalStudentId))found.push(r);}
    const last=snap.docs.at(-1);if(snap.docs.length<TASK_PAGE||!last)break;after=[last.data().lessonDateStart,last.id];
   }
-  return found;
+  return {found,seen};
  }catch(error:any){
   if(error?.code!==9&&!/index/i.test(String(error?.message||'')))throw error;
   const all=await db.collection('lessonReports').where('internalStudentId','==',internalStudentId).select(...TASK_FIELDS).get();
-  return all.docs.map((d:any)=>({...d.data(),notionPageId:d.data().notionPageId||d.id})).filter((r:any)=>hasTask(r,internalStudentId));
+  const rows=all.docs.map((d:any)=>({...d.data(),notionPageId:d.data().notionPageId||d.id})).filter((r:any)=>r.internalStudentId===internalStudentId&&english(r));
+  return {found:rows.filter((r:any)=>hasTask(r,internalStudentId)),seen:rows};
  }
 }
 /** One 과제 list, as the student app shows it: the lesson log's 과제 plus notes left by the retired 과제 메모, newest first.
- *  A lesson 과제 is done when the student's completion matches the current wording (same rule as the student app). */
+ *  A lesson 과제 is done when the student's completion matches the current wording (same rule as the student app); `graded`:
+ *  the 숙제 평가 a later lesson gave it (null grade: passed without one), which the screen shows first, as the student app does. */
 async function assignmentList(db:any,uid:string,internalStudentId:string,legacy:any[]){
  const old=legacy.filter((d:any)=>d.data().studentUid===uid&&english(d.data())).map((d:any)=>({id:d.id,content:text(d.data().content,5000),isDone:Boolean(d.data().isDone),createdAt:date(d.data().createdAt)}));
- const fromLog=(await recentLessonTasks(db,internalStudentId)).sort((a:any,b:any)=>Date.parse(b.lessonDateStart)-Date.parse(a.lessonDateStart)).slice(0,10);
+ const {found,seen}=await recentLessonTasks(db,internalStudentId),grades=assignmentGrades(seen);
+ // a 과제 written again in a later 일지 (carried) is listed once, at the later one
+ const fromLog=found.filter((r:any)=>!grades.get(lessonReportId(r))?.carried).sort((a:any,b:any)=>Date.parse(b.lessonDateStart)-Date.parse(a.lessonDateStart)).slice(0,10);
  const refs=fromLog.map((r:any)=>db.collection('users').doc(uid).collection('assignmentCompletions').doc(lessonReportId(r)));
  const done=!refs.length?[]:typeof db.getAll==='function'?await db.getAll(...refs):await Promise.all(refs.map((r:any)=>r.get()));
- const log=fromLog.map((r:any,i:number)=>({id:'lesson-'+lessonReportId(r),content:text(r.derivedAssignment,5000),isDone:Boolean(done[i]?.exists)&&done[i].data().contentHash===assignmentContentHash(r),createdAt:date(r.lessonDateStart)}));
+ const log=fromLog.map((r:any,i:number)=>({id:'lesson-'+lessonReportId(r),content:text(r.derivedAssignment,5000),isDone:Boolean(done[i]?.exists)&&done[i].data().contentHash===assignmentContentHash(r),createdAt:date(r.lessonDateStart),graded:grades.get(lessonReportId(r))||null}));
  return [...log,...old].sort((a,b)=>(Date.parse(b.createdAt||'')||0)-(Date.parse(a.createdAt||'')||0)).slice(0,10);
 }
 

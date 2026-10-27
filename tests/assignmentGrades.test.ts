@@ -34,3 +34,17 @@ test('선생님이 확인한 과제: one 평가 grades one 과제 — the latest
   const same = assignmentGrades([r('x', '2026-10-01', { derivedAssignment: 'p.1' }), r('y', '2026-10-01', { homework: '상', derivedAssignment: 'p.2' })]);
   assert.equal(same.size, 0, 'a lesson on the same day does not grade it');
 });
+
+test('선생님이 확인한 과제: a 과제 written again word for word (carried to the 누적 테스트 day) is one 과제, listed at the later 일지', () => {
+  const reports = [
+    r('a', '2026-10-20', { derivedAssignment: '어법 프린트  3장', homework: '상' }),
+    r('t', '2026-10-22', { derivedAssignment: '어법 프린트 3장', homework: '없는 날' }),
+    r('b', '2026-10-23', { derivedAssignment: '독해 2지문', homework: '상' }),
+  ];
+  const g = assignmentGrades(reports);
+  assert.deepEqual(g.get(lessonReportId(reports[0])), { grade: null, date: '2026-10-22', carried: true }, 'the earlier copy goes on in the test-day 일지');
+  assert.deepEqual(g.get(lessonReportId(reports[1])), { grade: '상', date: '2026-10-23' }, 'the 10/23 평가 grades it once');
+  assert.equal(g.has(lessonReportId(reports[2])), false);
+  const other = assignmentGrades([r('x', '2026-10-01', { derivedAssignment: 'p.1' }), r('y', '2026-10-02', { derivedAssignment: 'p.2', homework: '없는 날' }), r('z', '2026-10-03', { homework: '중' })]);
+  assert.deepEqual([other.get(lessonReportId(r('x', '2026-10-01')))?.grade, other.get(lessonReportId(r('y', '2026-10-02')))?.grade], [null, '중'], 'a different 과제 written: each its own (the older passed)');
+});

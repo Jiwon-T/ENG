@@ -157,7 +157,8 @@ export async function moveStudentAccount(db: any, actor: any, raw: unknown, auth
  * before being linked on another one (L). U's 학습 기록 join L's (L's own copy wins where both have one: L is the
  * academy's account); U's 펫·탑·원정대·방 go, and only U's points are added to L's pet (not as points earned: the 포인트
  * 내역 and this month's coupon stay as they were) — when L has no pet yet, U's pet comes over whole. A pet pass U bought
- * comes over when L has none in force. L keeps its link; U is marked moved and its sign-in blocked. A failed run can be
+ * comes over when L has none in force. L keeps its link; U is marked moved (with L's email, masked, for the notice U
+ *  gets when it signs in) and can still sign in. A failed run can be
  * run again (it starts from what is still under U; the points are added in the same write that deletes U's pet, so once).
  */
 async function mergeAccounts(db: any, actor: any, raw: unknown) {
@@ -182,9 +183,11 @@ export async function previewAccountMerge(db: any, actor: any, raw: unknown) {
   return { from: { uid: fromUid, ...who(from), ...old }, to: { uid: toUid, ...who(to), ...fresh, student: String(student || '').slice(0, 40) } };
 }
 
-/** 기존 계정으로 옮기기. `auth`: Firebase Admin auth, to block U's sign-in (a failure there is reported, the move stands). */
-export async function mergeIntoLinkedAccount(db: any, actor: any, raw: unknown, auth: any, now = Date.now()) {
-  const { fromUid: U, toUid: L, from } = await mergeAccounts(db, actor, raw);
+/** 'you***@gmail.com': enough for the student to know the account, not the whole address. */
+export const maskedEmail = (email: unknown) => { const [local = '', domain = ''] = String(email || '').split('@'); return local && domain ? `${local.slice(0, 3)}***@${domain}` : ''; };
+/** 기존 계정으로 옮기기. U can still sign in afterwards (it is told where its records went). */
+export async function mergeIntoLinkedAccount(db: any, actor: any, raw: unknown, _auth?: any, now = Date.now()) {
+  const { fromUid: U, toUid: L, from, to } = await mergeAccounts(db, actor, raw);
   const w = writer(db), moved: Record<string, number> = {};
   const add = (k: string, n = 1) => { moved[k] = (moved[k] || 0) + n; };
 
@@ -250,14 +253,9 @@ export async function mergeIntoLinkedAccount(db: any, actor: any, raw: unknown, 
   // 7) U let go: marked moved; L keeps its link; the rankings are made again
   const at = new Date(now).toISOString();
   const latest = (await db.collection('users').doc(U).get()).data() || from;
-  await w.set(db.collection('users').doc(U), { ...latest, movedTo: L, movedAt: now, petStats: null, updatedAt: at });
+  await w.set(db.collection('users').doc(U), { ...latest, movedTo: L, movedToEmail: maskedEmail(to.email), movedAt: now, petStats: null, updatedAt: at });
   for (const id of ['current', MONTH_RANK_DOC]) { const old = (await db.collection(PET_RANKINGS).doc(id).get()).data(); if (old) await w.set(db.collection(PET_RANKINGS).doc(id), { ...old, builtAt: 0 }); }
   await w.set(db.collection('accountMoves').doc(`${now}_${U.slice(0, 8)}`), { kind: 'merge', fromUid: U, toUid: L, by: actor.uid, at: now, moved, points });
   await w.flush();
-
-  // 8) U cannot sign in any more
-  let signInBlocked = false;
-  try { await auth.updateUser(U, { disabled: true }); await auth.revokeRefreshTokens(U); forgetFirebaseSessions(U); signInBlocked = true; } catch { /* reported */ }
-  if (signInBlocked) { const u = (await db.collection('users').doc(U).get()).data(); if (u) await db.runTransaction(async (tx: any) => { tx.set(db.collection('users').doc(U), { ...u, signInBlocked: true }); }); }
-  return { moved, points, signInBlocked, toUid: L };
+  return { moved, points, toUid: L };
 }

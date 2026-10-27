@@ -905,6 +905,11 @@ html:has(.teacher-workspace)::-webkit-scrollbar-thumb,.teacher-workspace ::-webk
 .report-caption{margin:8px 0 12px;}
 .report-sparkline{width:100%;max-height:80px;color:var(--workspace-brand-fg);margin:12px 0;}
 .report-session,.report-assignment,.report-schedule{border-radius:16px;background:var(--workspace-neutral-bg);padding:16px;margin:12px 0;}
+/* 학습 리포트 cards (장학 쿠폰 · 인증 요청 · 변형 문제 · 과제): one title size and one text size, like the rows above them */
+.teacher-workspace .report-online-assignments h4{margin:0 0 8px;font-size:14px;font-weight:800;line-height:1.4;color:var(--workspace-text);}
+.teacher-workspace .report-online-assignments .report-assignment{padding:10px 12px;margin:8px 0;border-radius:12px;}
+.teacher-workspace .report-assignment p{margin:0;font-size:13px;line-height:1.5;color:var(--workspace-text);}
+.teacher-workspace .report-assignment p:first-child{margin-bottom:2px;font-size:12px;font-weight:700;color:var(--workspace-muted);}
 /* Online report evaluation: one short note, saved for the student's own report. */
 .report-online-evaluation{border-radius:16px;background:var(--workspace-neutral-bg);padding:12px 16px;margin:12px 0;display:grid;gap:8px;}.report-online-evaluation h4{margin:0;font-size:14px;font-weight:800;}.report-online-evaluation textarea{width:100%;box-sizing:border-box;}.report-online-evaluation-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;}.report-online-evaluation-foot .report-caption{flex:1 1 200px;min-width:0;}.teacher-workspace .report-online-evaluation-foot .primary-button{min-height:44px;}.report-online-evaluation.is-compact{gap:4px;padding:10px 14px;}.report-online-evaluation-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}.report-online-evaluation-row h4{flex:none;}.report-online-evaluation-row p{flex:1 1 200px;min-width:0;margin:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.report-online-evaluation-actions{display:inline-flex;gap:6px;align-items:center;}
 .report-session-heading{display:flex;align-items:flex-start;gap:12px;}

@@ -46,6 +46,11 @@ function OnlineEvaluation({studentKey,initial,onDirty}:{key?:string;studentKey:s
   {message&&<p role="status" className="report-caption">{message}</p>}
  </section>;
 }
+/** 과제 checked in a later lesson: its 숙제 평가 and that lesson's day (or passed without one), shown before the student's own 완료 mark. */
+function GradedChip({graded}:{graded:{grade:string|null;date:string}}){
+ const none=graded.grade===null,missed=graded.grade==='미제출',day=`${Number(graded.date.slice(5,7))}/${Number(graded.date.slice(8,10))}`;
+ return <span title="다음 수업의 숙제 평가" className={`ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${none?'bg-slate-100 text-slate-500':missed?'bg-rose-50 text-rose-700':'bg-emerald-50 text-emerald-700'}`}>{none?'평가 없이 지남':missed?'미제출':`숙제 ${graded.grade}`} · {day}</span>;
+}
 export default function TeacherOnlineLearning({data,page,onPrevious,onNext,loading,studentKey,onEvaluationDirty}:any){
  const [filter,setFilter]=useState('all'),[wrongOnly,setWrongOnly]=useState(false),[expanded,setExpanded]=useState<string[]>([]);
  if(!data)return <p role="status">온라인 학습 기록을 불러오는 중…</p>;
@@ -66,7 +71,7 @@ export default function TeacherOnlineLearning({data,page,onPrevious,onNext,loadi
  {studentKey&&<StudentCouponCard studentKey={studentKey}/>}
  {studentKey&&<TeacherStudyCerts studentKey={studentKey}/>}
  {studentKey&&<TeacherQuestionAttempts studentKey={studentKey}/>}
- {Array.isArray(data.assignments)&&<section className="report-online-assignments"><h4>과제 · 최근 10개</h4>{(data.assignments||[]).map((a:any)=><article key={a.id} className="report-assignment"><p>{date(a.createdAt)} <StatusBadge kind={a.isDone?'done':'saved'} text={a.isDone?'완료':'미완료'}/></p><p>{a.content}</p></article>)}{!data.assignments.length&&<p className="report-caption">남긴 과제가 없습니다.</p>}</section>}
+ {Array.isArray(data.assignments)&&<section className="report-online-assignments"><h4>과제 · 최근 10개</h4>{(data.assignments||[]).map((a:any)=><article key={a.id} className="report-assignment"><p>{date(a.createdAt)} {a.graded?<GradedChip graded={a.graded}/>:<StatusBadge kind={a.isDone?'done':'saved'} text={a.isDone?'완료':'미완료'}/>}</p><p>{a.content}</p></article>)}{!data.assignments.length&&<p className="report-caption">남긴 과제가 없습니다.</p>}</section>}
  {data.evaluation&&studentKey&&<OnlineEvaluation key={studentKey+':'+(data.evaluation.updatedAt||'')} studentKey={studentKey} initial={data.evaluation} onDirty={onEvaluationDirty}/>}
  </div>;
 }

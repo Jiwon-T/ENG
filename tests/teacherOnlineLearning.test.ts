@@ -175,3 +175,21 @@ test('앱 사용자 › 학습 기록: 변형 문제, 지문 분석 and 워크�
  assert.deepEqual(m.passages.map((p:any)=>p.id),['p2','p1']);assert.equal(m.passages[1].first,'First sentence.');
  assert.equal(m.workbooks.length,1);assert.equal(m.workbooks[0].versions.length,2);assert.ok(!JSON.stringify([q,m]).includes('OTHER'),'never another account');
 });
+test('과제 list: a 과제 checked in a later 영어 lesson carries that 숙제 평가 (graded), as the student app shows it',async()=>{
+ const f=fixture();
+ const lesson=(id:string,subject:string,day:string,task:string,homework='')=>({internalStudentId:'internal',reportIdentity:id,notionPageId:id,subject,lessonDateStart:day+'T14:00:00+09:00',derivedAssignment:task,homework});
+ f.rows.lessonReports={a:lesson('a','영어','2026-10-01','교재 3과'),b:lesson('b','영어','2026-10-05','','상'),m:lesson('m','수학','2026-10-06','','미제출'),c:lesson('c','영어','2026-10-08','단어 Day 5','미확인')};
+ const list=(await loadTeacherOnlineLearning(f.db,f.actor,key,'',undefined,f.deps)).online.assignments as any[];
+ const by=(t:string)=>list.find(a=>a.content===t);
+ assert.deepEqual(by('교재 3과').graded,{grade:'상',date:'2026-10-05'});
+ assert.equal(by('단어 Day 5').graded,null,'not checked yet (미확인 is not a check)');
+});
+test('과제 list: a 과제 carried to the next 일지 word for word is listed once, at the later one',async()=>{
+ const f=fixture();
+ const lesson=(id:string,day:string,task:string,homework='')=>({internalStudentId:'internal',reportIdentity:id,notionPageId:id,subject:'영어',lessonDateStart:day+'T14:00:00+09:00',derivedAssignment:task,homework});
+ f.rows.lessonReports={a:lesson('a','2026-10-20','어법 프린트 3장'),t:lesson('t','2026-10-22','어법 프린트 3장','없는 날'),b:lesson('b','2026-10-23','독해 2지문','상')};
+ const list=(await loadTeacherOnlineLearning(f.db,f.actor,key,'',undefined,f.deps)).online.assignments as any[];
+ const rows=list.filter(a=>a.content==='어법 프린트 3장');
+ assert.equal(rows.length,1,'once');
+ assert.deepEqual(rows[0].graded,{grade:'상',date:'2026-10-23'});
+});
