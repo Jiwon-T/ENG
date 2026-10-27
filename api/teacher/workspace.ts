@@ -102,11 +102,13 @@ export async function handleLessonMigrationCron(req: IncomingMessage,res:ServerR
     const secret=process.env.CRON_SECRET||'',header=req.headers.authorization||'';
     if(secret.length<16||!timingSafeCompare(header,'Bearer '+secret))return sendJson(res,401,{ok:false,error:'UNAUTHORIZED'});
     try{const {db}=initialize();
+        // 이달의 성장 first, on its own: on the 1st, last month's reward is paid (once; a failure is logged and retried the next day)
+        let growth:any=null;try{growth=await (await import('../_lib/petGrowth.js')).settleMonthlyGrowth(db);}catch(e:any){console.warn('PET_GROWTH_SETTLE_FAILED',{error:String(e?.message||'').slice(0,80)});}
         // Daily: empty lessons that have been in the trash for more than 7 days.
         // A failed purge is reported (HTTP 500 + code) so the scheduler shows it; it is retried on the next daily run.
         const {purgeExpiredLessonTrash}=await import('../_lib/appLessonRestore.js');let trash:{purged:number;more:boolean};
-        try{trash=await purgeExpiredLessonTrash(db);}catch(e:any){console.warn('LESSON_TRASH_PURGE_FAILED',{error:String(e?.message||'').slice(0,80)});return sendJson(res,500,{ok:false,error:'LESSON_TRASH_PURGE_FAILED',retry:'next-daily-run'});}
-        return sendJson(res,200,{ok:true,trashPurged:trash.purged,more:Boolean(trash.more)});}
+        try{trash=await purgeExpiredLessonTrash(db);}catch(e:any){console.warn('LESSON_TRASH_PURGE_FAILED',{error:String(e?.message||'').slice(0,80)});return sendJson(res,500,{ok:false,error:'LESSON_TRASH_PURGE_FAILED',retry:'next-daily-run',growth:growth?{month:growth.month,paid:growth.paid,skipped:growth.skipped||null}:null});}
+        return sendJson(res,200,{ok:true,trashPurged:trash.purged,more:Boolean(trash.more),growth:growth?{month:growth.month,paid:growth.paid,skipped:growth.skipped||null}:null});}
     catch(error:any){const result=workspaceError(error,'lesson-migration-cron');console.warn('LESSON_MIGRATION_CRON_FAILED',{error:result.body.error,diagnosticId:result.body.diagnosticId});return sendJson(res,result.status,result.body);}
 }
 /** 새 가입자 알림 for Make (Authorization: Bearer MAKE_HOOK_SECRET, at least 16 characters; unset = off). */

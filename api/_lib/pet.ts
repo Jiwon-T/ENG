@@ -15,6 +15,9 @@ export interface ServerPet { slot: number; character: string; name: string; /** 
   /** 장비 모양 (the worn tower gear, copied on each tower change), 👁 (false: the outfit only), the look before a job (검사 or 마법사) */
   gear?: PetGearLook | null; gearShow?: boolean; gearStyle?: PetJob | null;
   /** 장비 세트 pieces from 원정대 ★3, moved into the pet's tower gear on its next tower visit */ gearInbox?: string[] }
+/** One board's 이달의 성장 result for a student: how much they grew, their place (null: not placed), the points. */
+export interface GrowthLine { gain: number; rank: number | null; points: number }
+export interface GrowthPaid { floor?: GrowthLine; star?: GrowthLine }
 export interface ServerPetState {
   version: 1; points: number; inventory: string[]; /** before 여러 마리: what pet 1 wore */ clothing?: string | null; accessory?: string | null; background: string;
   currentPetSlot: number; unlockedSlots: number; pets: ServerPet[];
@@ -33,6 +36,9 @@ export interface ServerPetState {
   lessonPaid?: Record<string, { p: number; x: number; d: string }>;
   /** 쌓인 포인트 알림: 수업 보상 that came in (or changed) without the student, shown once when the app opens. */
   inbox?: InboxLine[];
+  /** 이달의 성장 보상 paid, by the month it was for ('2026-10'): each board's growth, place and points (paid once). */
+  growthPaid?: Record<string, GrowthPaid>;
+  /** the 이달의 성장 pop-ups still to show, oldest first (cleared when seen) */ growthNotices?: (GrowthPaid & { month: string })[];
   /** 가방: snacks from 간식 상자 (item id → count), given to the pet without points. */ snacks?: Record<string, number>;
   /** 가방 › 친구 선물: 기운 snacks friends gave (one a day beyond the limit, even while 탈진) */ friendSnacks?: Record<string, number>;
   /** 목표 물건: the 특별 item the student is saving up for (shown at the top of the pet screen) */ goal?: string;

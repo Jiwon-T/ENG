@@ -259,6 +259,8 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
   let uid: string;
   try { uid = (await deps.verify(header.slice(7).trim())).uid; } catch { return sendJson(res, 401, {ok: false, error: 'INVALID_TOKEN'}); }
   const db = deps.db(), now = deps.now();
+  // 이달의 성장: the first pet request of a month keeps last month's end before it changes anything
+  await (await import('../petGrowth.js')).keepMonthEnd(db, now).catch(() => console.warn('PET_GROWTH_END_FAILED'));
   const fail = (code: string, status = 400) => sendJson(res, status, {ok: false, error: code, message: MESSAGES[code] || '잠시 후 다시 해 주세요.'});
   try {
     if (req.method === 'GET' && new URL(req.url || '', 'http://localhost').searchParams.get('summary') === '1') {
@@ -276,7 +278,9 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
         quests: questView(state, records, now),
         coupon: coupon ? {earned: coupon.earned, goal: coupon.goal, requested: coupon.requested, extra: coupon.extra || null} : null, ...(claimed ? {claimed} : {}), ...rank,
         // 쌓인 포인트 알림 (shown once as a popup, then inbox-seen)
-        ...(state?.inbox?.length ? {inbox: state.inbox} : {})});
+        ...(state?.inbox?.length ? {inbox: state.inbox} : {}),
+        // 이달의 성장 보상 paid on the 1st (shown once as a popup, then growth-seen)
+        ...(state?.growthNotices?.length ? {growth: state.growthNotices} : {})});
     }
     // A pass-only room after the pass ended shows the plain room in every response (the choice is kept for when it is back).
     // 장비 모습 not kept yet (gear from before it was kept): worked out from the tower for the answer only — in every
@@ -317,6 +321,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
     if (action === 'import-local') return done(await change(db, uid, now, (s, exists) => { if (exists) throw Error('PET_IMPORT_CLOSED'); importLocalPet(s, body.local); return {imported: true}; }));
     if (action === 'award') { const source = String(body.source || ''); if (!Object.hasOwn(PET_STUDY_RATES, source)) return fail('PET_BAD_SOURCE'); return done(await change(db, uid, now, s => awardStudy(s, source as any, body.count))); }
     if (action === 'inbox-seen') return done(await change(db, uid, now, s => { s.inbox = []; }));
+    if (action === 'growth-seen') return done(await change(db, uid, now, s => { s.growthNotices = []; }));
     if (action === 'claim-study') { const reports = await studyReports(db, uid); return done(await change(db, uid, now, s => { const r = claimStudyRewards(s, pendingStudyRewards(s, reports, now)); return reports.length ? {...r, points: r.points + settleLessons(s, reports, now)} : r; }), {pendingRewards: 0}); }
     // 오늘 할 일: open today's 간식 상자 (all three done); a snack from the 가방 is given like a bought one, without points
     if (action === 'quest-claim') { const rec = await readQuestRecords(db, uid, now); const out = await change(db, uid, now, s => claimQuestBox(s, rec, now)); return done(out, {quests: questView(out.state, rec, now)}); }
@@ -448,7 +453,7 @@ export async function handlePet(req: IncomingMessage, res: ServerResponse, deps:
       return fail('PET_BAD_ACTION');
     }
     // 순위 (모험가·원정대) and one pet's room from it.
-    if (action === 'rank-board') return sendJson(res, 200, {ok: true, ranking: body.kind === 'month' ? await readMonthRanking(db, uid, now) : await readRankings(db, uid, body.kind, body.teachers, now)});
+    if (action === 'rank-board') return sendJson(res, 200, {ok: true, ranking: body.kind === 'month' ? await readMonthRanking(db, uid, now) : String(body.kind || '').startsWith('growth') ? await (await import('../petGrowth.js')).readGrowthBoard(db, uid, String(body.kind).slice(7), now) : await readRankings(db, uid, body.kind, body.teachers, now)});
     if (action === 'rank-refresh') return sendJson(res, 200, {ok: true, ...(body.kind === 'month' ? {at: (await monthRankingSnapshot(db, now)).builtAt} : await refreshRankings(db, now))});
     // 방 구경: a 응원 스티커 in a friend's room (the 순위 row it was opened from), and closing or opening your own room
     // (a room opened from the 순위 names its row; one opened by code, 방명록 or 친구 찾기 names its `ref`, via 'room')

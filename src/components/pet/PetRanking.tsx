@@ -5,7 +5,7 @@ import PassMark from './PassMark';
 import { SCENE, SceneArt } from './PetScenes';
 import { MedalLayer } from './PetCoupon';
 import AdventureNames, { type NamesView } from './AdventureNames';
-import { GEAR_SET_SHORT, PET_JOBS, PET_ROOM, petItem, petStage, type PetGearView, type PetJob, type PetRoomSticker } from '../../lib/petCatalog';
+import { GEAR_SET_SHORT, PET_GROWTH, PET_JOBS, PET_ROOM, petItem, petStage, type PetGearView, type PetJob, type PetRoomSticker } from '../../lib/petCatalog';
 
 // 순위: 모험가 (each pet) and 원정대 (each student), every academy together, by 원정대 이름·모험가 별칭 only. A row opens that
 // pet's room (outfit, background, 금메달) — a visit (방 구경): 다녀간 친구, 응원 스티커, or closing your own room. Teachers can switch their own pets in ('선생님 포함').
@@ -17,7 +17,11 @@ interface RankRow { rank: number; id: number; label: string; sub: string; job: P
 interface Ranking { at: number; kind: 'pet' | 'guild'; /** 🗼 탑 층순 or ⭐ 원정대 별순 */ sort?: 'floor' | 'stars'; teacherView: boolean; withTeachers: boolean; total: number; rows: RankRow[]; mine: RankRow[] }
 interface MonthRow { rank: number; label: string; by: 'alias' | 'pet' | 'nick' | 'name'; sub: string; earned: number; look: Look | null; me: boolean }
 interface MonthRanking { at: number; stale?: boolean; kind: 'month'; teacherView: boolean; goal: number; month: string; total: number; rows: MonthRow[]; mine: { rank: number | null; earned: number } | null }
-type AnyRanking = (Ranking & { stale?: boolean }) | MonthRanking;
+/** 이달의 성장: this month's growth (탑 floors or 원정대 stars), the top 10, my place and how far the next reward is. */
+interface GrowthRow { rank: number; gain: number; points: number; label: string; sub: string; look: Look; me: boolean }
+interface GrowthRanking { kind: 'growth'; board: 'floor' | 'star'; month: string; pending: boolean; total: number; rows: GrowthRow[]; mineRow?: GrowthRow;
+  mine: { rank: number | null; gain: number; points: number; next: { more: number | null; points: number; what: 'join' | 'top10' | 'top3' } | null } | null }
+type AnyRanking = (Ranking & { stale?: boolean }) | MonthRanking | GrowthRanking;
 export interface RoomView { today: number; total: number; stickers: Partial<Record<PetRoomSticker, number>>; sticker: PetRoomSticker | null; gift?: string | null }
 export interface Wallet { points: number; snacks: Record<string, number>; giftsLeft: number }
 export interface Profile { /** a teacher looking: whose pet it is (학생 · 학원 연결 안 된 앱 계정 · 선생님) */ owner?: { kind: 'student' | 'app' | 'teacher' | 'other-academy'; name: string; /** the admin: the app name, when not the real one */ alias?: string }; /** a friend's room closed by its owner */ hidden?: boolean; /** kept as my 이웃 */ neighbor?: boolean; /** what I can give from here (간식 선물) */ wallet?: Wallet | null; room?: RoomView | null; /** my own room is closed */ roomHidden?: boolean; /** the 순위 row it was opened from */ id?: number; /** opened by code, 방명록 or 친구 찾기: the line to leave a sticker by */ ref?: { at: number; id: number }; gear?: PetGearView | null; label: string; guild: string; name: string; character: string; level: number; job: PetJob | null; aura?: 'light' | 'dark' | null; pass?: 'pet' | 'premium' | null; clothing: string | null; accessories: string[]; background: string; decor: { id: string; x: number; y: number }[]; medals: number; /** 은메달 (a month with only a 5천 원 coupon) */ silver?: number; best: number; stars: number; me: boolean }
@@ -36,6 +40,15 @@ function Row({ r, onOpen, byStars = false }: { key?: string; r: RankRow; onOpen:
   <button type="button" onClick={onOpen} aria-label={`${r.label} ${r.me ? '내 방 보기' : '방문하기'}`} className="flex-none rounded-full border border-[#cecbf6] px-2 py-1 text-[11px] font-bold text-[#3c3489] hover:bg-[#f4f2fc]">{r.me ? '내 방' : '방문'}</button></div>;
 }
 
+function GrowthLine({ r, board }: { key?: string; r: GrowthRow; board: 'floor' | 'star' }) {
+  return <div className={`flex w-full items-center gap-2.5 border-t border-[#f1eff8] px-2 py-2 first:border-t-0 ${r.me ? 'rounded-xl bg-[#fffaf0]' : ''}`}>
+    <span className="w-6 flex-none text-center text-sm font-black" style={{ color: r.rank <= 3 ? MEDAL[r.rank - 1] : '#94a3b8' }}>{r.rank}</span>
+    <Portrait look={r.look} />
+    <span className="min-w-0 flex-1"><b className="block truncate text-sm font-black text-[#26215c]">{r.label}{r.rank <= PET_GROWTH.top.length && r.points > 0 && <span className="ml-1 rounded-full bg-[#faeeda] px-1.5 text-[10px] font-bold text-[#854f0b]">{PET_GROWTH.titles[board]}</span>}{r.me && <span className="ml-1 rounded bg-[#ef9f27] px-1 text-[10px] font-bold text-white">나</span>}</b>
+      {r.sub && <span className="block truncate text-[11px] text-slate-500">{r.sub}</span>}</span>
+    <span className="flex-none text-right"><b className="block text-sm font-black text-[#3c3489]">+{r.gain}{board === 'floor' ? '층' : '★'}</b><span className="text-[10px] text-slate-500">{r.points ? `${r.points.toLocaleString()}P` : '—'}</span></span>
+  </div>;
+}
 function MonthLine({ r }: { key?: string; r: MonthRow }) {
   return <div className={`flex w-full items-center gap-2.5 border-t border-[#f1eff8] px-2 py-2 first:border-t-0 ${r.me ? 'rounded-xl bg-[#fffaf0]' : ''}`}>
     <span className="w-6 flex-none text-center text-sm font-black" style={{ color: r.rank <= 3 ? MEDAL[r.rank - 1] : '#94a3b8' }}>{r.rank}</span>
@@ -99,9 +112,11 @@ export function Room({ p, onClose, onSticker, onHide, onNeighbor, onGift }: { p:
 
 /** `withTeachers`: open on the ranking with the teachers (a teacher's home chip shows their place there). */
 export default function PetRanking({ send, onClose, withTeachers = false }: { send: Send; onClose: () => void; withTeachers?: boolean }) {
-  const [kind, setKind] = useState<'pet' | 'guild' | 'month'>('pet'), [teachers, setTeachers] = useState(withTeachers);
+  const [kind, setKind] = useState<'pet' | 'guild' | 'growth' | 'month'>('pet'), [teachers, setTeachers] = useState(withTeachers);
+  // 이달의 성장: 🗼 탑 성장 / ⭐ 원정대 성장
+  const [growthBoard, setGrowthBoard] = useState<'floor' | 'star'>('floor');
   // 🗼 탑 층순 / ⭐ 원정대 별순 (모험가·원정대): the order rides in the kind the server reads ('pet-stars', 'guild-stars')
-  const [sort, setSort] = useState<'floor' | 'stars'>('floor'), byStars = sort === 'stars' && kind !== 'month', kindParam = byStars ? `${kind}-stars` : kind;
+  const [sort, setSort] = useState<'floor' | 'stars'>('floor'), ranked = kind === 'pet' || kind === 'guild', byStars = sort === 'stars' && ranked, kindParam = kind === 'growth' ? `growth-${growthBoard}` : byStars ? `${kind}-stars` : kind;
   const [ranking, setRanking] = useState<AnyRanking | null>(null), [notice, setNotice] = useState(''), [profile, setProfile] = useState<Profile | null>(null), [names, setNames] = useState<NamesView | null>(null);
   // Each view read is kept, so switching 모험가 · 원정대 back shows at once. A ranking older than 10 minutes is shown
   // straight away; the rebuild is asked for after it, and the list is read again when that is done.
@@ -121,8 +136,8 @@ export default function PetRanking({ send, onClose, withTeachers = false }: { se
       }
     }).catch(e => setNotice(e?.message || '순위를 불러오지 못했어요.'));
   };
-  useEffect(load, [kind, teachers, sort]); // eslint-disable-line react-hooks/exhaustive-deps
-  const board = ranking && ranking.kind !== 'month' ? ranking : null, month = ranking?.kind === 'month' ? ranking : null;
+  useEffect(load, [kind, teachers, sort, growthBoard]); // eslint-disable-line react-hooks/exhaustive-deps
+  const board = ranking && ranking.kind !== 'month' && ranking.kind !== 'growth' ? ranking : null, month = ranking?.kind === 'month' ? ranking : null, growth = ranking?.kind === 'growth' ? ranking : null;
   const open = (r: RankRow) => send('rank-profile', { at: ranking?.at, id: r.id, kind: kindParam, teachers }).then(x => setProfile({ ...x.profile, id: r.id })).catch(e => { setNotice(e?.message || '잠시 후 다시 해 주세요.'); if (e?.code === 'RANK_STALE') load(); });
   const openNames = () => send('guild-state').then(r => setNames(r.guild?.names || null)).catch(e => setNotice(e?.message || '잠시 후 다시 해 주세요.'));
   return <div className="fixed inset-0 z-[85] flex items-end justify-center bg-slate-900/40 sm:items-center sm:p-4" onClick={onClose}>
@@ -133,14 +148,21 @@ export default function PetRanking({ send, onClose, withTeachers = false }: { se
         <button type="button" onClick={onClose} aria-label="닫기" className="rounded-full p-1 text-slate-400 hover:bg-slate-100"><X size={18} aria-hidden="true" /></button>
       </header>
       <div className="flex items-center gap-1.5 px-4 pt-2">
-        <div role="tablist" aria-label="순위 종류" className="flex gap-1 rounded-full bg-[#f4f2fc] p-0.5">{([['pet', '모험가'], ['guild', '원정대'], ['month', '이달 포인트']] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={kind === id} onClick={() => setKind(id)} className={`rounded-full px-3 py-1 text-xs font-bold ${kind === id ? 'bg-white text-[#3c3489] shadow-sm' : 'text-slate-500'}`}>{label}</button>)}</div>
-        {ranking?.teacherView && kind !== 'month' && <button type="button" aria-pressed={teachers} onClick={() => setTeachers(!teachers)} className={`ml-auto rounded-full border px-2.5 py-1 text-[11px] font-bold ${teachers ? 'border-[#3c3489] bg-[#3c3489] text-white' : 'border-[#cecbf6] text-[#3c3489]'}`}>선생님 포함</button>}
+        <div role="tablist" aria-label="순위 종류" className="flex gap-1 rounded-full bg-[#f4f2fc] p-0.5">{([['pet', '모험가'], ['guild', '원정대'], ['growth', '이달의 성장'], ['month', '이달 포인트']] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={kind === id} onClick={() => setKind(id)} className={`rounded-full px-3 py-1 text-xs font-bold ${kind === id ? 'bg-white text-[#3c3489] shadow-sm' : 'text-slate-500'}`}>{label}</button>)}</div>
+        {ranked && (ranking as any)?.teacherView && <button type="button" aria-pressed={teachers} onClick={() => setTeachers(!teachers)} className={`ml-auto rounded-full border px-2.5 py-1 text-[11px] font-bold ${teachers ? 'border-[#3c3489] bg-[#3c3489] text-white' : 'border-[#cecbf6] text-[#3c3489]'}`}>선생님 포함</button>}
       </div>
-      {kind !== 'month' && <div role="group" aria-label="순위 기준" className="flex gap-1.5 px-4 pt-2">{([['floor', '🗼 탑 층순'], ['stars', '⭐ 원정대 별순']] as const).map(([id, label]) => <button key={id} type="button" aria-pressed={sort === id} onClick={() => setSort(id)} className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${sort === id ? 'border-[#7f77dd] bg-[#eeedfe] text-[#3c3489]' : 'border-[#e4e0f5] text-slate-500'}`}>{label}</button>)}</div>}
-      <p className="px-4 pt-1.5 text-[11px] text-slate-500">{kind === 'month' ? `학생마다 · ${month ? Number(month.month.slice(5)) : new Date().getMonth() + 1}월에 모은 포인트 · 상위 10명` : kind === 'pet' ? (byStars ? '펫마다 · 원정대 별 → 탑 최고 층 → 레벨' : '펫마다 · 탑 최고 층 → 원정대 별 → 레벨') : (byStars ? '학생마다 · 펫들의 원정대 별을 모두 더해요' : '학생마다 · 펫들의 탑 최고 층을 모두 더해요')}{kind === 'month' ? '' : ' · 모든 학원 함께'} · 10분마다 새로 계산해요</p>
+      {kind === 'growth' && <div role="group" aria-label="성장 순위" className="flex gap-1.5 px-4 pt-2">{([['floor', '🗼 탑 성장'], ['star', '⭐ 원정대 성장']] as const).map(([id, label]) => <button key={id} type="button" aria-pressed={growthBoard === id} onClick={() => setGrowthBoard(id)} className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${growthBoard === id ? 'border-[#7f77dd] bg-[#eeedfe] text-[#3c3489]' : 'border-[#e4e0f5] text-slate-500'}`}>{label}</button>)}</div>}
+      {ranked && <div role="group" aria-label="순위 기준" className="flex gap-1.5 px-4 pt-2">{([['floor', '🗼 탑 층순'], ['stars', '⭐ 원정대 별순']] as const).map(([id, label]) => <button key={id} type="button" aria-pressed={sort === id} onClick={() => setSort(id)} className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${sort === id ? 'border-[#7f77dd] bg-[#eeedfe] text-[#3c3489]' : 'border-[#e4e0f5] text-slate-500'}`}>{label}</button>)}</div>}
+      <p className="px-4 pt-1.5 text-[11px] text-slate-500">{kind === 'growth' ? `${growth ? Number(growth.month.slice(5)) : new Date().getMonth() + 1}월에 ${growthBoard === 'floor' ? '오른 탑 층수' : '모은 원정대 별'} · 다음 달 1일 지급 (1~3위 ${PET_GROWTH.top.map(n => n.toLocaleString()).join('·')} / ~${PET_GROWTH.next.upTo}위 ${PET_GROWTH.next.points} / +${PET_GROWTH.join[growthBoard]}${growthBoard === 'floor' ? '층' : '별'} ${PET_GROWTH.join.points}P)` : kind === 'month' ? `학생마다 · ${month ? Number(month.month.slice(5)) : new Date().getMonth() + 1}월에 모은 포인트 · 상위 10명` : kind === 'pet' ? (byStars ? '펫마다 · 원정대 별 → 탑 최고 층 → 레벨' : '펫마다 · 탑 최고 층 → 원정대 별 → 레벨') : (byStars ? '학생마다 · 펫들의 원정대 별을 모두 더해요' : '학생마다 · 펫들의 탑 최고 층을 모두 더해요')}{kind === 'month' ? '' : ' · 모든 학원 함께'} · 10분마다 새로 계산해요</p>
       {notice && <p role="alert" className="px-4 pt-1 text-xs font-bold text-[#b04a5a]">{notice}</p>}
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto px-3 pb-4">
         {!ranking ? <p role="status" className="py-8 text-center text-sm text-slate-500">순위를 불러오는 중…</p>
+          : growth ? <>{growth.pending ? <p className="py-8 text-center text-sm text-slate-500">새 달 성장 기록을 준비하고 있어요. 조금 뒤에 다시 봐 주세요</p>
+            : growth.rows.length ? growth.rows.map(r => <GrowthLine key={`${r.rank}-${r.label}`} r={r} board={growth.board} />) : <p className="py-8 text-center text-sm text-slate-500">이번 달에는 아직 오른 친구가 없어요</p>}
+            {growth.mineRow && <><p className="py-1 text-center text-xs text-slate-300" aria-hidden="true">⋯</p><GrowthLine r={growth.mineRow} board={growth.board} /></>}
+            {growth.mine && !growth.pending && <div className="mt-2 rounded-xl bg-[#fef2f3] px-3 py-2 text-xs text-[#8b2f40]"><b className="font-black">나</b> · {growth.mine.rank ? `${growth.mine.rank}위 · ` : ''}+{growth.mine.gain}{growth.board === 'floor' ? '층' : '별'}{growth.mine.points ? <> → <b className="font-black">{growth.mine.points.toLocaleString()}P</b> 받을 예정</> : ''}
+              {growth.mine.next?.more && <span className="block text-[11px]">{growth.mine.next.more}{growth.board === 'floor' ? '층' : '별'} 더 {growth.mine.next.what === 'join' ? `오르면 ${growth.mine.next.points}P` : growth.mine.next.what === 'top10' ? `오르면 ${PET_GROWTH.next.upTo}위 안 (${growth.mine.next.points}P)` : `오르면 3위 (${growth.mine.next.points.toLocaleString()}P)`}!</span>}</div>}
+            <p className="pt-2 text-center text-[10px] text-slate-400">모두 {growth.total}명 · 선생님 펫은 빠져요 · 같은 기록이면 같은 순위</p></>
           : month ? <>{month.rows.length ? month.rows.map(r => <MonthLine key={`${r.rank}-${r.label}`} r={r} />) : <p className="py-8 text-center text-sm text-slate-500">이번 달에는 아직 포인트를 모은 친구가 없어요</p>}
             {month.mine && <div className="mt-2 flex items-center gap-2 rounded-xl bg-[#fef2f3] px-3 py-2 text-xs text-[#8b2f40]"><b className="font-black">나</b>
               <span className="flex-1">{month.mine.rank ? `${month.mine.rank}위 · ${month.mine.earned.toLocaleString()}P` : '포인트가 쌓이면 순위에 올라요'}</span>

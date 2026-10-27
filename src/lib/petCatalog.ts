@@ -195,6 +195,10 @@ export const PET_LATE_REWARD = { points: 15, xp: 25 };
 /** 누적 테스트 (3차시 테스트 날, from the timetable): 출석 보너스 +50P on top of 출석 (지각: 80%), and 누적 테스트 개근상 1000P
  *  (coupon count) in a month with 4+ test days all attended, 30% less a 지각. A test day with no 일지 counts as 결석
  *  (decided 2026-10-21: a day left blank is mostly a student who did not come). */
+/** 이달의 성장: each month's growth of the 탑 (best floors of all pets added up) and the 원정대 (stars added up), ranked
+ *  apart; 1st–3rd, then up to 10th, then anyone who grew this much (`join`, which every reward needs). Paid on the 1st (Korea time) for the month before,
+ *  counted for that month's 장학 쿠폰. From October 2026 (the tower and the 원정대 began then, so its start is 0). */
+export const PET_GROWTH = { from: '2026-10', top: [1000, 700, 500], next: { upTo: 10, points: 200 }, join: { floor: 3, star: 5, points: 100 }, titles: { floor: '등반왕', star: '탐험왕' } } as const;
 export const PET_TEST_DAY = { from: '2026-10-01', bonus: { points: 50, xp: 50 }, lateRate: 0.8, perfect: 1000, latePenalty: 0.3, minDays: 4 } as const;
 export const PET_HOMEWORK_REWARD: Record<string, { points: number; xp: number }> = {
   '최상': { points: 40, xp: 60 }, '상': { points: 30, xp: 45 }, '중상': { points: 20, xp: 30 }, '중': { points: 10, xp: 15 },
