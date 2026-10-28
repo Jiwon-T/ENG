@@ -140,6 +140,7 @@ test('학생 목록 쿠폰 %: the snapshot keeps each student key (never sent to
   const card: any = await teacherStudentCoupon(f.db, {admin: true, academyId: 'main'}, A, OCT22);
   assert.deepEqual([card.linked, card.offline, card.earned, card.requested], [false, true, 30 + (40 + 15) * 3, false]);
   assert.ok(card.ledger.length > 0, 'the 내역 the % is made of');
+  assert.equal(card.forecast.growth, null, '월말 예상: no app, no 이달의 성장');
   assert.equal(f.rows.has('petStates/a'), false, 'nothing saved');
   const src = (await import('node:fs')).readFileSync(new URL('../src/components/teacher/StudentMasterPanel.tsx', import.meta.url), 'utf8');
   assert.match(src, /\{typeof s\.couponPoints==='number'&&onCouponCard&&<span className=\{`smr-gauge/, 'the list % reads couponPoints (pet summary or the snapshot)');

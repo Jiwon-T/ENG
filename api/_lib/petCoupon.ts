@@ -4,7 +4,7 @@
 import {normalizeNotionPageId as uuid, isNotionPageId} from './notionPageId.js';
 import {readStudentMapping} from './studentIdentity.js';
 import {DIRECTORY_ROWS, directoryRowKey} from './academyDirectorySource.js';
-import {PET_STATES, type CouponExtra, applyCouponExtras, claimStudyRewards, couponEarnedIn, earnedIn, initialPetState, monthEarned, noteInbox, pendingStudyRewards, petSummary, prevMonth, rollDay, seoulDay, settleLessons, type ServerPetState} from './pet.js';
+import {PET_STATES, type CouponExtra, applyCouponExtras, claimStudyRewards, couponEarnedIn, earnedIn, initialPetState, monthEarned, noteInbox, pendingStudyRewards, petSummary, prevMonth, rollDay, seoulDay, settleLessons, type GrowthPaid, type ServerPetState} from './pet.js';
 import {lessonRows} from './lessonRewardRows.js';
 import {COUPON_BOOST, PET_COUPON, countsForMonth, medalLabel, passAllows, petItem, silverMedal, type CouponTier} from '../../src/lib/petCatalog.js';
 
@@ -147,13 +147,22 @@ export async function listCoupons(db: any, actor: any) {
  *  if every lesson were already paid: the linked student's pet plus what is still waiting, and for a student without the app
  *  the same lessons counted the same way (nothing is saved). So the list is fair to students who study without the app,
  *  and a coupon can be asked for offline. `app`: 'linked' (has a pet), 'no-pet' (account, no pet yet), 'none' (no account). */
+/** 월말 예상: this month's 이달의 성장 so far for every student, read once (a failure only leaves the growth out). */
+const readGrowthForecast = (db: any, now: number) => import('./petGrowth.js').then(m => m.growthForecast(db, now)).catch(() => { console.warn('PET_GROWTH_FORECAST_FAILED'); return null; });
+/** What the month's end decides, as things stand: 개근 (if it keeps up) and 이달의 성장 (the place in the ranking made at
+ *  `growthAt`; the linked account's pet needed). */
+const forecastOf = (o: {uid: string | null; hadPet: boolean; all: ServerPetState}, growth: {at: number; byUid: Map<string, GrowthPaid>} | null, month: string) => {
+  const g = growth && o.uid && o.hadPet ? growth.byUid.get(o.uid) || {} : null;
+  return {perfect: Number(o.all.couponExtra?.[month]?.pending) || 0, growth: g, ...(g ? {growthAt: growth!.at} : {})};
+};
 export async function listPetPoints(db: any, actor: any, now = Date.now()) {
   // the admin and the principal: the whole academy; a teacher: the students they have (any subject)
   const whole = Boolean(actor?.admin && actor.academyId === 'main' || actor?.principal && actor.academyId === 'main');
   if (!whole && !(actor?.scopes || []).length) throw Error('FORBIDDEN');
   const mine = new Set((actor?.scopes || []).map((s: any) => { try { return uuid(String(s?.studentKey || '')); } catch { return ''; } }));
   const month = seoulDay(now).slice(0, 7);
-  const [members, coupons] = await Promise.all([db.collection('academyStudentMemberships').where('academyId', '==', 'main').get(), db.collection(PET_COUPONS).where('month', '==', month).get()]);
+  const [members, coupons, growth] = await Promise.all([db.collection('academyStudentMemberships').where('academyId', '==', 'main').get(), db.collection(PET_COUPONS).where('month', '==', month).get(),
+    readGrowthForecast(db, now)]);
   const asked = new Set(coupons.docs.map((d: any) => d.data().studentKey));
   const keys = members.docs.filter((d: any) => !d.data().disabled).map((d: any) => { try { return uuid(d.id); } catch { return ''; } }).filter((k: string) => k && (whole || mine.has(k)));
   const byKey = new Map<string, PetCoupon[]>();
@@ -168,7 +177,8 @@ export async function listPetPoints(db: any, actor: any, now = Date.now()) {
       // the coupons the admin may ask for offline now (단계 쿠폰 from November)
       options: monthState(month, earned, byKey.get(key) || [], o.all.couponExtra?.[month]).options.filter(x => x.ready).map(x => ({id: x.id, won: x.won})), homework: homeworkRate(o.all.couponExtra?.[month]),
       // this month's 포인트 내역 (what the gauge is made of), with what is still waiting
-      ledger: (o.all.ledger || []).filter(x => countsForMonth(x.day, month)), extra: o.all.couponExtra?.[month] || null};
+      ledger: (o.all.ledger || []).filter(x => countsForMonth(x.day, month)), extra: o.all.couponExtra?.[month] || null,
+      forecast: forecastOf(o, growth, month)};
   }))).filter(Boolean) as {key: string; name: string; points: number; earned: number; requested: boolean; app: string; waiting: number; options: {id: CouponTier; won: number}[]; ledger: any[]}[];
   return {month, goal: PET_COUPON.goal, students: students.sort((a, b) => b.earned - a.earned || a.name.localeCompare(b.name, 'ko'))};
 }
@@ -266,15 +276,18 @@ export async function teacherStudentCoupon(db: any, actor: any, keyInput: unknow
     const o = await owedPoints(db, key, now); if (!o) return {linked: false};
     const list = (await db.collection(PET_COUPONS).where('studentKey', '==', key).get()).docs.map((d: any) => d.data() as PetCoupon).filter((c: PetCoupon) => c.month === month);
     return {linked: false, offline: true, month, goal: PET_COUPON.goal, earned: monthEarned(o.all), points: Number(o.all.points || 0), requested: list.length > 0, paid: list.length > 0 && list.every(c => Boolean(c.paidAt)),
-      coupons: list.map(c => ({won: c.won ?? PET_COUPON.monthWon, paid: Boolean(c.paidAt)})), ledger: (o.all.ledger || []).filter(x => countsForMonth(x.day, month)), extra: o.all.couponExtra?.[month] || null};
+      coupons: list.map(c => ({won: c.won ?? PET_COUPON.monthWon, paid: Boolean(c.paidAt)})), ledger: (o.all.ledger || []).filter(x => countsForMonth(x.day, month)), extra: o.all.couponExtra?.[month] || null,
+      forecast: forecastOf(o, null, month)};
   }
   const [raw, list] = await Promise.all([db.collection(PET_STATES).doc(uid).get().then((s: any) => s.data()), readMonthCoupons(db, uid, month)]);
   const s = raw ? rollDay(raw, now) as ServerPetState : null;
   // every coupon of the month (단계 쿠폰: up to two 5천 원), each with its own 지급 state
-  const o = await owedPoints(db, key, now).catch(() => null);
+  const [o, growth] = await Promise.all([owedPoints(db, key, now).catch(() => null), readGrowthForecast(db, now)]);
   return {linked: true, month, goal: PET_COUPON.goal, earned: o ? monthEarned(o.all) : s ? monthEarned(s) : 0, points: s ? Number(s.points || 0) : 0, requested: list.length > 0, paid: list.length > 0 && list.every(c => Boolean(c.paidAt)),
     coupons: list.map(c => ({won: c.won ?? PET_COUPON.monthWon, paid: Boolean(c.paidAt)})),
-    ledger: (s?.ledger || []).filter(x => countsForMonth(x.day, month)), extra: (o ? o.all : s)?.couponExtra?.[month] || null};
+    ledger: (s?.ledger || []).filter(x => countsForMonth(x.day, month)), extra: (o ? o.all : s)?.couponExtra?.[month] || null,
+    // 월말 예상 (the same as the coupon list)
+    forecast: o ? forecastOf(o, growth, month) : null};
 }
 /** 지급 완료 (or undo it). */
 export async function markCouponPaid(db: any, actor: any, input: any) {

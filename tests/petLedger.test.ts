@@ -71,6 +71,7 @@ test('학습 리포트 › 장학 쿠폰: the teachers who have the student (any
   const math = {uid: 't', admin: false, scopes: [{studentKey: A, subject: '수학'}]};
   const out: any = await teacherStudentCoupon(f.db, math, A, OCT31);
   assert.deepEqual([out.linked, out.earned, out.points, out.ledger.length, out.goal], [true, 50, s.points, 1, 10_000]);
+  assert.deepEqual(out.forecast, {perfect: 0, growth: {}, growthAt: OCT31}, '월말 예상: a pet, no growth yet this month, and the ranking’s time');
   await assert.rejects(teacherStudentCoupon(f.db, {uid: 'x', admin: false, scopes: []}, A, OCT31), /FORBIDDEN/);
   assert.equal((await teacherStudentCoupon(f.db, {admin: true, scopes: []}, A, OCT31) as any).earned, 50);
 });

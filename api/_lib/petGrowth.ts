@@ -8,7 +8,7 @@
 // (keepMonthEnd): floors and stars only grow through those requests, so a late payment never counts the new month.
 import {PET_GROWTH} from '../../src/lib/petCatalog.js';
 import {PET_STATES, earnPoints, petSummary, prevMonth, rollDay, seoulDay, type GrowthLine, type GrowthPaid, type ServerPetState} from './pet.js';
-import {buildRankings, roomSnapshot, type RankPet, type RankSnapshot} from './petRanking.js';
+import {buildRankings, rankingSnapshot, roomSnapshot, type RankPet, type RankSnapshot} from './petRanking.js';
 import {climber} from './petTower.js';
 
 export const PET_GROWTH_DOCS = 'petGrowth';
@@ -116,6 +116,18 @@ export async function seenGrowthNotice(db: any, uid: string) {
   const ref = db.collection(PET_STATES).doc(uid);
   await db.runTransaction(async (tx: any) => { const s = (await tx.get(ref)).data(); if (s?.growthNotices?.length) tx.set(ref, {...s, growthNotices: []}); });
   return {ok: true};
+}
+
+/** 쿠폰 › 월말 예상 (admin and teachers): this month's growth so far — each student's place and the points it would get
+ *  if the month ended now (null while the month's start is not kept yet), and `at`, when the ranking it comes from was
+ *  made: a snapshot over 10 minutes old is made again first (while another request is making it, the last one is used, so
+ *  the screen shows the time). Nothing is saved or paid. */
+export async function growthForecast(db: any, now = Date.now()) {
+  const [start, snap] = await Promise.all([startOf(db, seoulDay(now).slice(0, 7)), rankingSnapshot(db, now)]);
+  if (!start) return null;
+  const byUid = new Map<string, GrowthPaid>(), totals = totalsOf(snap);
+  for (const kind of ['floor', 'star'] as const) for (const r of growthBoard(totals, start, kind)) byUid.set(r.uid, {...byUid.get(r.uid), [kind]: {gain: r.gain, rank: r.rank, points: r.points}});
+  return {at: snap.builtAt, byUid};
 }
 
 /** 순위 › 이달의 성장 (as `viewer` sees it): this month's growth so far — the top 10 and their own place — with the points

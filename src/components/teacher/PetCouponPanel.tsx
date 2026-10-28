@@ -5,6 +5,7 @@ import {CouponBonus,PointsHistory} from '../pet/PetCoupon';
 import type {LedgerItem} from '../../lib/petService';
 import {askConfirm} from './ConfirmDialog';
 import {maskedName} from '../../lib/rankNames';
+import {MonthEndForecast,expected,reachAtEnd,type CouponForecast} from './CouponForecast';
 
 // 이달의 장학 쿠폰 (admin): every coupon students asked for, by month, and 지급 완료. The same rows give the "26.10 쿠폰"
 // badges on the student list (StudentMasterPanel) and the small window a badge opens.
@@ -37,11 +38,12 @@ function RankNickname({name,value,save}:{name:string;value:string;save:(nickname
 /** 이번 달 포인트: how this month's earned points (the coupon count) spread over the students, then each student's points
  *  held and earned this month, most earned first (a name filter). */
 /** app: 'linked' (pet), 'no-pet' (account, no pet yet), 'none' (no app account); waiting: points still to be settled. */
-interface PointsRow {key?:string;name:string;points:number;earned:number;requested:boolean;ledger?:LedgerItem[];app?:'linked'|'no-pet'|'none';waiting?:number;/** coupons that can be asked for now */options?:{id:'full'|'half';won:number}[]}
+interface PointsRow {key?:string;name:string;points:number;earned:number;requested:boolean;ledger?:LedgerItem[];app?:'linked'|'no-pet'|'none';waiting?:number;/** coupons that can be asked for now */options?:{id:'full'|'half';won:number}[];
+ /** 월말 예상 */forecast?:CouponForecast}
 const BUCKETS=[[0,2000,'~2천'],[2000,4000,'~4천'],[4000,6000,'~6천'],[6000,8000,'~8천'],[8000,10000,'~1만'],[10000,Infinity,'1만+']] as const;
 /** `canRequest` (관리자 설정 › 쿠폰): 오프라인 신청 for a student who reached a coupon but can't ask in the app. */
 export function PetPointsOverview({request,act,canRequest=false,onRequested}:{key?:number;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;canRequest?:boolean;onRequested?:()=>Promise<void>|void}){
- const [data,setData]=useState<{month:string;goal:number;students:PointsRow[]}|null>(null),[query,setQuery]=useState(''),[all,setAll]=useState(false),[openRow,setOpenRow]=useState(-1);
+ const [data,setData]=useState<{month:string;goal:number;students:PointsRow[]}|null>(null),[query,setQuery]=useState(''),[all,setAll]=useState(false),[openRow,setOpenRow]=useState(-1),[byForecast,setByForecast]=useState(false);
  const reload=async()=>setData(await request('read:pet-points'));
  const [nicks,setNicks]=useState<Record<string,string>>({});
  useEffect(()=>{void act(reload);void request('read:rank-names').then(r=>setNicks(Object.fromEntries(Object.entries(r?.names||{}).map(([k,v]:any)=>[k,v.nickname])))).catch(()=>undefined);},[]);
@@ -61,25 +63,26 @@ export function PetPointsOverview({request,act,canRequest=false,onRequested}:{ke
  };
  if(!data)return <p className="mt-2 text-xs text-slate-400">이번 달 포인트를 불러오는 중…</p>;
  const counts=BUCKETS.map(([lo,hi])=>data.students.filter(s=>s.earned>=lo&&s.earned<hi).length),top=Math.max(1,...counts),reached=counts[counts.length-1];
- const shown=data.students.filter(s=>!query.trim()||s.name.includes(query.trim())),list=all||query.trim()?shown:shown.slice(0,10);
+ const shown=data.students.filter(s=>!query.trim()||s.name.includes(query.trim())).sort((a,b)=>byForecast?b.earned+expected(b)-a.earned-expected(a):0),list=all||query.trim()?shown:shown.slice(0,10);
  return <div className="mt-3 rounded-xl border border-slate-100 p-3">
   <div className="flex items-baseline justify-between gap-2 text-sm"><b className="font-bold">{Number(data.month.slice(5))}월 쿠폰 누적 분포</b><span className="text-xs text-slate-500">학생 {data.students.length}명 · 목표 달성 {reached}명</span></div>
   <div className="mt-2 flex h-16 items-end gap-1.5" role="img" aria-label={BUCKETS.map(([, , l],i)=>`${l} ${counts[i]}명`).join(', ')}>{counts.map((n,i)=><div key={i} className="flex flex-1 flex-col items-center justify-end gap-0.5"><span className="text-[10px] text-slate-500">{n||''}</span><span className="w-full rounded-t" style={{height:`${Math.max(n?8:2,(n/top)*48)}px`,background:i===BUCKETS.length-1?'#efa23a':'#f4c0d1'}}/></div>)}</div>
   <div className="flex gap-1.5 text-center text-[10px] text-slate-400">{BUCKETS.map(([, , l],i)=><span key={l} className={`flex-1 ${i===BUCKETS.length-1?'font-bold text-amber-700':''}`}>{l}</span>)}</div>
   {/* the same count for every student: what the 수업 일지 give, app or not (a coupon can be asked for offline) */}
   <p className="mt-2 text-[11px] text-slate-400">앱이 없어도 수업 일지대로 받을 포인트로 보여요 · 앱 미연결 {data.students.filter(s=>s.app==='none').length}명</p>
-  <div className="mt-3 flex items-center gap-2"><input aria-label="학생 이름 찾기" placeholder="이름 찾기" value={query} onChange={e=>setQuery(e.target.value)} className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 px-2 text-xs"/></div>
+  <div className="mt-3 flex items-center gap-2"><input aria-label="학생 이름 찾기" placeholder="이름 찾기" value={query} onChange={e=>setQuery(e.target.value)} className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 px-2 text-xs"/>
+   <div role="group" aria-label="정렬" className="flex flex-none gap-1">{([[false,'누적순'],[true,'예상순']] as const).map(([v,l])=><button key={l} type="button" aria-pressed={byForecast===v} onClick={()=>{setByForecast(v);setOpenRow(-1);}} className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${byForecast===v?'border-[#e0587a] bg-[#fdf0f2] text-[#8b2f40]':'border-slate-200 text-slate-500'}`}>{l}</button>)}</div></div>
   {/* the gauge is this month's coupon count only (full = the goal); what the student holds is the grey line under the name */}
-  <div className="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_76px] gap-x-2 border-b border-slate-200 pb-1 text-[11px] text-slate-400"><span>학생</span><span>쿠폰 누적 → 목표 {won(data.goal)}P</span><span className="text-right">쿠폰 누적</span></div>
-  {list.map((s,i)=><div key={s.name+i}><button type="button" aria-expanded={openRow===i} onClick={()=>setOpenRow(openRow===i?-1:i)} title="이번 달 내역 보기" className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_76px] items-center gap-x-2 rounded border-b border-slate-100 py-1 text-left text-xs hover:bg-[#fff7f8]">
-   <span className="min-w-0"><span className="block truncate">{s.name}{s.requested&&<span className="ml-1" title="이번 달 쿠폰 신청">🎟️</span>}{s.earned>=data.goal&&!s.requested&&<span className="ml-1 rounded bg-amber-50 px-1 text-[10px] font-bold text-amber-800">신청 가능</span>}</span>
+  <div className="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_96px] gap-x-2 border-b border-slate-200 pb-1 text-[11px] text-slate-400"><span>학생</span><span>쿠폰 누적 → 목표 {won(data.goal)}P <span className="text-[10px]">· 연한 칸 = 월말 예상</span></span><span className="text-right">쿠폰 누적</span></div>
+  {list.map((s,i)=><div key={s.name+i}><button type="button" aria-expanded={openRow===i} onClick={()=>setOpenRow(openRow===i?-1:i)} title="이번 달 내역 보기" className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_96px] items-center gap-x-2 rounded border-b border-slate-100 py-1 text-left text-xs hover:bg-[#fff7f8]">
+   <span className="min-w-0"><span className="block truncate">{s.name}{s.requested&&<span className="ml-1" title="이번 달 쿠폰 신청">🎟️</span>}{s.earned>=data.goal&&!s.requested&&<span className="ml-1 rounded bg-amber-50 px-1 text-[10px] font-bold text-amber-800">신청 가능</span>}{(t=>t&&<span className="ml-1 whitespace-nowrap rounded bg-[#faeeda] px-1 text-[10px] font-bold text-[#633806]" title="지금 그대로라면 월말에 이 쿠폰 기준을 넘어요">월말 {t.won>=10000?'1만':'5천'} 예상</span>)(reachAtEnd(s))}</span>
     <span className="block truncate text-[10px] text-slate-400">포인트 {won(s.points)}P{s.app==='none'?<span title="앱 계정이 없어요 · 수업 일지대로 받을 포인트"> · 앱 미연결</span>:s.app==='no-pet'?<span title="펫을 아직 안 골랐어요 · 포인트는 쌓여요"> · 펫 없음</span>:(s.waiting||0)>0?<span title="다음 반영이나 앱을 열 때 들어올 포인트"> · +{won(s.waiting||0)} 대기</span>:null}</span></span>
-   <span className="h-2 overflow-hidden rounded-full bg-[#f6e3e6]"><span className="block h-full rounded-full" style={{width:`${Math.min(100,s.earned/data.goal*100)}%`,background:s.earned>=data.goal?'#efa23a':'#e0587a'}}/></span>
-   <span className="text-right tabular-nums"><b className={`font-bold ${s.earned>=data.goal?'text-amber-700':'text-slate-700'}`}>{won(s.earned)}</b> <span className="text-[10px] text-slate-400">{s.earned>=data.goal?'✓':`${Math.floor(s.earned/data.goal*100)}%`}</span></span>
+   <span className="flex h-2 overflow-hidden rounded-full bg-[#f6e3e6]"><span className="block h-full flex-none" style={{width:`${Math.min(100,s.earned/data.goal*100)}%`,background:s.earned>=data.goal?'#efa23a':'#e0587a'}}/><span className="block h-full flex-none bg-[#f0a3b6]" style={{width:`${Math.max(0,Math.min(100,(s.earned+expected(s))/data.goal*100)-Math.min(100,s.earned/data.goal*100))}%`}}/></span>
+   <span className="text-right tabular-nums"><b className={`font-bold ${s.earned>=data.goal?'text-amber-700':'text-slate-700'}`}>{won(s.earned)}</b> <span className="text-[10px] text-slate-400">{s.earned>=data.goal?'✓':`${Math.floor(s.earned/data.goal*100)}%`}</span>{expected(s)>0&&<span className="block text-[10px] text-slate-400">→ 약 {won(s.earned+expected(s))}</span>}</span>
   </button>
    {canRequest&&s.key&&(s.options||[]).length>0&&<div className="mb-1 flex flex-wrap items-center gap-1.5 pl-1 text-[11px] text-amber-700"><span aria-hidden="true">🎟️</span>신청할 수 있어요{(s.options||[]).map(o=><button key={o.id} type="button" className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-0.5 font-bold" onClick={()=>void offline(s,o)}>{won(o.won)}원 오프라인 신청</button>)}</div>}
    {/* the gauge's 내역, as the student sees it */}
-   {openRow===i&&<div className="mb-2 rounded-lg bg-[#fffafb] px-3 pb-2">{s.key&&<RankNickname name={s.name} value={nicks[s.key]||''} save={saveNick(s)}/>}<CouponBonus extra={s.extra} earned={s.earned}/><PointsHistory coupon={{month:data.month,earned:s.earned}} ledger={s.ledger||[]} extra={s.extra} defaultOpen/>{!s.earned&&<p className="pt-2 text-[11px] text-slate-400">이번 달 모은 포인트가 아직 없어요.</p>}</div>}
+   {openRow===i&&<div className="mb-2 rounded-lg bg-[#fffafb] px-3 pb-2">{s.key&&<RankNickname name={s.name} value={nicks[s.key]||''} save={saveNick(s)}/>}<MonthEndForecast s={s}/><CouponBonus extra={s.extra} earned={s.earned}/><PointsHistory coupon={{month:data.month,earned:s.earned}} ledger={s.ledger||[]} extra={s.extra} defaultOpen/>{!s.earned&&<p className="pt-2 text-[11px] text-slate-400">이번 달 모은 포인트가 아직 없어요.</p>}</div>}
   </div>)}
   {!query.trim()&&shown.length>10&&<button type="button" className="mt-1 w-full text-center text-xs font-bold text-[#8b2f40]" onClick={()=>setAll(!all)}>{all?'접기':`전체 ${shown.length}명 보기`}</button>}
  </div>;

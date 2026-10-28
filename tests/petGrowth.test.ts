@@ -98,3 +98,28 @@ test('이달의 성장: an end kept between the payment’s read and its write i
   assert.equal(doc.results.a.floor.gain, 8, 'results from the kept end');
   assert.deepEqual(f.rows.get('petGrowth/2026-11').start.a, {floor: 8, star: 4});
 });
+
+test('쿠폰 › 월말 예상: this month’s growth as each student’s place and points now (nothing saved); none before the start is kept', async () => {
+  const {growthForecast} = await import('../api/_lib/petGrowth.js');
+  const f = registrationFirestore();
+  pets(f, 'a', [[20, 4]]); pets(f, 'b', [[2, 9]]); pets(f, 't', [[50, 50]], 'teacher');
+  const g: any = await growthForecast(f.db, OCT);
+  assert.deepEqual(g.byUid.get('a'), {floor: {gain: 20, rank: 1, points: 1000}, star: {gain: 4, rank: 2, points: 0}});
+  assert.deepEqual(g.byUid.get('b').floor, {gain: 2, rank: 2, points: 0}, 'below +3 floors: a place, no points yet');
+  assert.equal(g.byUid.has('t'), false, 'teachers left out');
+  assert.equal(g.at, OCT, 'the ranking’s time');
+  assert.equal(f.rows.get('petGrowth/2026-10'), undefined, 'nothing saved');
+  assert.equal(await growthForecast(f.db, Date.parse('2026-11-05T03:00:00Z')), null, 'November before its start is kept');
+});
+
+test('쿠폰 › 월말 예상: a ranking over 10 minutes old is made again first (not the 6-hour one the rooms may use)', async () => {
+  const {growthForecast} = await import('../api/_lib/petGrowth.js');
+  const f = registrationFirestore();
+  pets(f, 'a', [[20, 4]]);
+  f.rows.set('petRankings/current', {builtAt: OCT - 3 * 3_600_000, pets: []}); // 3 hours old: nobody had grown
+  const g: any = await growthForecast(f.db, OCT);
+  assert.equal(g.at, OCT, 'made again now');
+  assert.equal(g.byUid.get('a').floor.gain, 20);
+  f.rows.set('petRankings/current', {builtAt: OCT - 5 * 60_000, pets: []}); // 5 minutes old: used as it is, with its time
+  assert.equal((await growthForecast(f.db, OCT) as any).at, OCT - 5 * 60_000);
+});
