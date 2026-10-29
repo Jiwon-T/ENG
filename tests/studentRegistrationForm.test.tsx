@@ -54,3 +54,18 @@ test('과목별 수강료: 과목마다 입력하고 합계를 학생 수강료�
  for(const label of ['영어 수강료','수학 수강료','300,000','합계 수강료','550,000원','1회 37,500원'])assert.ok(html.includes(label),label);
  assert.ok(!html.includes('원서 동의·서명 확인'));
 });
+test('등록 첫 달 원서: the button says it registers; saving runs 등록 확정 right after (상담만 진행 stays a plain save)',async()=>{
+    const value=emptyRegistration();
+    assert.ok(renderToStaticMarkup(<StudentRegistrationForm value={value} onChange={()=>{}} onSubmit={()=>{}}/>).includes('저장하고 등록'));
+    const consult=renderToStaticMarkup(<StudentRegistrationForm value={{...value,intakeStage:'consultation'}} onChange={()=>{}} onSubmit={()=>{}}/>);
+    assert.ok(!consult.includes('저장하고 등록')&&consult.includes('>저장<'));
+    const src=(await import('node:fs')).readFileSync(new URL('../src/components/teacher/StudentRegistrationManager.tsx',import.meta.url),'utf8');
+    assert.match(src,/const enroll=value\.purpose==='new'&&value\.intakeStage!=='consultation';/);
+    assert.match(src,/if\(then&&current===generation\.current\)await sync\(then\);/,'the same 등록 확정 (with the same-student check) after the save');
+});
+test('등록한 원서: opened with the student’s 입학·상담 정보 as it is now, and read again when 원서 수정 closes',async()=>{
+    const src=(await import('node:fs')).readFileSync(new URL('../src/components/teacher/StudentRegistrationManager.tsx',import.meta.url),'utf8');
+    assert.match(src,/const saved=result\.data\.record,shown=await withLatestAdmission\(record\.id,saved\);/);
+    assert.match(src,/request<any>\('student-admission',\{studentKey:saved\.studentKey,registrationId:id\}\)/);
+    assert.match(src,/setAdmissionFor\(null\);if\(open&&current\?\.id===id\)void edit\(current\);/);
+});

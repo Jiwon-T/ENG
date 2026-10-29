@@ -219,6 +219,8 @@
 .teacher-workspace .rv-chips .lr-excel{flex:none;margin-left:4px;min-height:36px}
 .teacher-workspace .rv-chips .lr-excel-tests{display:inline-flex;align-items:center;gap:4px;flex:none;font-size:12px;color:#64748b;white-space:nowrap;cursor:pointer}
 .teacher-workspace .rv-chips .lr-excel-tests input{width:auto;height:auto;min-height:0;margin:0}
+/* phone: the period chips wrap, so the 엑셀 button at the end of the row is not pushed off the screen (the row scrolls without a bar) */
+@media(max-width:640px){.teacher-workspace .rv-chips:has(.lr-excel){flex-wrap:wrap;overflow-x:visible}.teacher-workspace .rv-chips .lr-excel{margin-left:0}}
 /* 학습 세트: wide tabs instead of chips */
 .teacher-workspace .set-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:4px;margin:0 0 16px;border-radius:18px;background:#f1f5f9}
 .teacher-workspace .set-tab{display:grid;gap:2px;justify-items:center;min-height:58px;padding:8px 10px;border:0;border-radius:14px;background:none;color:#64748b;cursor:pointer;font:inherit}

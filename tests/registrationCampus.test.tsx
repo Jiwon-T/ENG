@@ -25,7 +25,7 @@ test('원서 form: campus toggle left of the name, no (선택) on 학교·학년
  const pick=html.slice(html.indexOf('adm-subject-pick'));const at=['수학','국어','영어','과학','한국사'].map(s=>pick.indexOf(s));
  assert.deepEqual([...at].sort((a,b)=>a-b),at,'수학 국어 영어 과학 한국사');
  const foot=html.slice(html.indexOf('adm-foot'));
- assert.doesNotMatch(foot,/>이전</,'no 이전 on the first step');assert.match(foot,/gs-grow[^]*다음[^]*>저장<\/button>/,'다음 then 저장, after the spacer');
+ assert.doesNotMatch(foot,/>이전</,'no 이전 on the first step');assert.match(foot,/gs-grow[^]*다음[^]*>저장(하고 등록)?<\/button>/,'다음 then 저장, after the spacer');
  assert.doesNotMatch(foot,/등록 내용 저장/);
 });
 test('campus per subject: saved as "{과목} 캠퍼스"; the student 캠퍼스 is every campus they attend',()=>{

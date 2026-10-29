@@ -8,7 +8,7 @@ import {commitAppStudentRegistration,endTrialRegistration} from '../api/_lib/app
 import {saveStudentRegistration,convertRegistrationToResident} from '../api/_lib/teacherStudentRegistration.js';
 import {emptyRegistration} from '../src/lib/studentRegistration.js';
 import {directoryRowKey,directorySourceKey,readDirectoryStudents} from '../api/_lib/academyDirectorySource.js';
-import {readCoreProfile,readCoreEnrollment,saveCoreProfile} from '../api/_lib/academyCore.js';
+import {readCoreProfile,readCoreEnrollment,saveCoreProfile,readCoreAdmission,saveCoreAdmission} from '../api/_lib/academyCore.js';
 import {profileFromPage,profileProperties,studentProfileSchema} from '../api/_lib/teacherStudentProfile.js';
 import {readStudentMapping,lookupStudentIdentity} from '../api/_lib/studentIdentity.js';
 import {hashStudentKey} from '../api/_lib/security.js';
@@ -52,4 +52,18 @@ test('시범 수업: a 상담 intake goes on the roster as 시범 (대기, 담�
  assert.equal(row().fields.properties['등록상태'].status.name,'등록');assert.equal(f.rows.get('academyStudentMemberships/'+key).disabled,false);assert.ok(scoped());
  assert.ok(f.rows.get('teacherClasses/'+klassId).students.includes(key),'the 반 now');
  assert.equal((f.rows.get('teacherWorkspaceAccess/'+teacher).scopes||[]).filter((s:any)=>s.studentKey===key).length,1,'one scope');
+});
+test('원서 수정 after 등록: the teacher who wrote (or co-writes) the 원서 reads and saves the student’s 입학·상담 정보 through it; others not',async()=>{
+ const f=await fixture(),r=await commitAppStudentRegistration(f.db,f.actor,f.saved.id,1) as any,regPath='teacherStudentRegistrations/'+f.saved.id,key=r.studentKey;
+ f.rows.set(regPath,{...f.rows.get(regPath),ownerUid:teacher,coWriters:['co']});
+ const t={uid:teacher,admin:false,principal:false,academyId:'main',coreMode:true};
+ await assert.rejects(readCoreAdmission(f.db,t,key),/FORBIDDEN/,'without the 원서: 원장님·관리자 only');
+ const read=await readCoreAdmission(f.db,t,key,f.saved.id) as any;
+ const saved=await saveCoreAdmission(f.db,t,key,randomUUID(),read.editedAt,read.data,f.saved.id) as any;assert.equal(saved.studentKey,key);
+ assert.ok(await readCoreAdmission(f.db,{...t,uid:'co'},key,f.saved.id),'a co-writer too');
+ await assert.rejects(readCoreAdmission(f.db,{...t,uid:'other'},key,f.saved.id),/FORBIDDEN/,'another teacher');
+ await assert.rejects(readCoreAdmission(f.db,t,'55555555-5555-4555-8555-555555555555',f.saved.id),/FORBIDDEN/,'another student');
+ f.rows.set(regPath,{...f.rows.get(regPath),syncStatus:'pending'});
+ await assert.rejects(readCoreAdmission(f.db,t,key,f.saved.id),/FORBIDDEN/,'a 원서 not registered');
+ assert.ok(await readCoreAdmission(f.db,f.actor,key),'the admin as before');
 });

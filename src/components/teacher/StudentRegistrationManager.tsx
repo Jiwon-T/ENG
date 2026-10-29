@@ -1,4 +1,6 @@
 import StudentEnrollmentEditor from './StudentEnrollmentEditor';
+import StudentAdmissionEditor from './StudentAdmissionEditor';
+import {emptyAdmission} from '../../lib/studentAdmission';
 import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import StatusBadge from './StatusBadge';
@@ -23,6 +25,13 @@ async function request<T>(action:string, values:Record<string,unknown>={}) {
     for(const [key,value] of Object.entries(values))params.set(key,String(value));
     return teacherAuthenticatedRequest<T>(auth,'/api/teacher/workspace?'+params.toString());
 }
+/** A registered 원서 shows the student's 입학·상담 정보 as it is now (원서 수정 · 학생 정보), over what was saved at 등록;
+ *  not read (no access, a failure): the 원서 as saved. */
+async function withLatestAdmission(id:string,saved:RegistrationRecord):Promise<RegistrationInput>{
+    if(saved.syncStatus!=='synced'||saved.purpose==='additional'||!saved.studentKey)return saved.data;
+    const r=await request<any>('student-admission',{studentKey:saved.studentKey,registrationId:id}).catch(()=>null),d=r?.ok&&r.data?.ok?r.data.record?.data:null;
+    return d?{...saved.data,admission:{...emptyAdmission(),...saved.data.admission,...d.admission},guardianName:d.guardianName??saved.data.guardianName,guardianSalutation:d.guardianSalutation??saved.data.guardianSalutation}:saved.data;
+}
 function responseMessage(result:{userMessage?:string;data?:{message?:string;diagnosticId?:string}}) {
     return `${result.data?.message || result.userMessage || '처리하지 못했습니다. 다시 시도해 주세요.'}${result.data?.diagnosticId ? ` (오류 ID: ${result.data.diagnosticId})` : ''}`;
 }
@@ -31,6 +40,8 @@ function responseMessage(result:{userMessage?:string;data?:{message?:string;diag
  *  the 등록 확정 · 시범 끝 · 시범 수업 쓰기 buttons. */
 export default function StudentRegistrationManager({paneTarget,onPaneOpen,paneControl,registerAttempt,beforeOpen,trialRecords,onWriteTrial,onSynced,students=[],coreMode=false,query='',active=false,startSignal=0,startName='',startId='',onSavedNew,onClosed,onCount,canAdditional=true}:{/** 학생 관리: the right column the 원서 opens in (instead of a dialog) */paneTarget?:HTMLElement|null;/** the pane opened or closed */onPaneOpen?:(open:boolean)=>void;/** the parent closes the pane (after its own ask) */paneControl?:MutableRefObject<null|(()=>void)>;/** asked before another student or tab is shown while the pane is open */registerAttempt?:(attempt:(action:()=>void)=>void)=>()=>void;/** asked before a row opens (the student shown on the right may have unsaved input) */beforeOpen?:(go:()=>void)=>void;/** 시범 수업 기록: that student's lesson records */trialRecords?:(studentKey:string)=>ReactNode;/** 시범 수업 쓰기 */onWriteTrial?:(studentKey:string)=>void;/** the 원서 closed (not when 닫기 was cancelled) */onClosed?:()=>void;onSynced:()=>Promise<void>;/** with startSignal: open this saved 원서 instead of a new one */startId?:string;/** a new 원서's first save (상담 일정 ties it) */onSavedNew?:(id:string)=>void;/** 기존 학생 추가 과목 상담 (it changes a registered student's enrollment): 원장님·관리자 only */canAdditional?:boolean;coreMode?:boolean;students?:any[];query?:string;active?:boolean;startSignal?:number;/** The name to start the form with (시간표 엑셀 가져오기 › 새 학생 등록). */startName?:string;onCount?:(count:number)=>void}) {
     const [intake,setIntake]=useState('all'),[enrollmentKey,setEnrollmentKey]=useState('');
+    // 원서 수정 after 등록: the student's 입학·상담 정보 (the 원서 itself stays as it was at 등록)
+    const [admissionFor,setAdmissionFor]=useState<{studentKey:string;id:string}|null>(null);
     const [page,setPage]=useState(1),[reload,setReload]=useState(0);
     const [list,setList]=useState<PageResult>({ok:true,records:[],page:1,pages:1,total:0});
     const [loading,setLoading]=useState(true),[listError,setListError]=useState('');
@@ -126,10 +137,11 @@ export default function StudentRegistrationManager({paneTarget,onPaneOpen,paneCo
             const result=await request<ServerResult>('student-registration',{id:record.id});
             if(current!==generation.current)return;
             if(!result.ok || !result.data?.ok || !result.data.record)throw new Error(responseMessage(result));
-            const saved=result.data.record;
-            intent.current=null;setKey(saved.requestId);setRevision(saved.revision);setValue(saved.data);setDirty(false);setRetrying(false);
+            const saved=result.data.record,shown=await withLatestAdmission(record.id,saved);
+            if(current!==generation.current)return;
+            intent.current=null;setKey(saved.requestId);setRevision(saved.revision);setValue(shown);setDirty(false);setRetrying(false);
             setLocked(saved.canEdit===false || ['syncing','uncertain','synced'].includes(saved.syncStatus));setOpen(true);
-            if(saved.syncStatus==='synced')setFeedback('등록한 학생 정보는 학생 목록의 ‘정보 수정’에서 변경할 수 있습니다.');
+            if(saved.syncStatus==='synced')setFeedback(saved.purpose!=='additional'&&saved.studentKey?'등록한 원서는 ‘원서 수정’에서 고쳐요. 이름·학교·연락처는 학생 목록의 ‘정보 수정’에서 변경할 수 있습니다.':'등록한 학생 정보는 학생 목록의 ‘정보 수정’에서 변경할 수 있습니다.');
             if(saved.canEdit===false && saved.syncStatus!=='synced')setFeedback('등록 결과를 확인한 뒤 수정할 수 있습니다.');
         } catch(error) { if(current===generation.current)setFeedback(error instanceof Error?error.message:'등록 내용을 불러오지 못했습니다.'); }
         finally { if(current===generation.current)setBusy(false); }
@@ -145,6 +157,11 @@ export default function StudentRegistrationManager({paneTarget,onPaneOpen,paneCo
     }
     async function save() {
         if(writeBusy.current || (locked && !retrying))return;
+        // 등록 첫 달 (신입생): saving puts the student on the roster at once (등록 확정 right after the save). A mistake is undone in
+        // 학생 정보 › 수강 관리 (대기 · 중단); a 원서 still being written is saved as 상담만 진행.
+        const enroll=value.purpose==='new'&&value.intakeStage!=='consultation';
+        if(enroll&&!retrying&&!await askConfirm({title:'저장하면 바로 등록돼요',message:'학생 목록·수업 일지·수강료에 바로 들어가요. 등록한 뒤에는 학생 목록의 ‘정보 수정’에서 고치고, 잘못 등록했다면 수강 관리에서 대기·중단으로 바꿔요. 아직 쓰는 중이면 진행 상태를 ‘상담만 진행’으로 저장해 주세요.',confirmText:'저장하고 등록',icon:'check'}))return;
+        let then:RegistrationSummary|null=null;
         writeBusy.current=true;setBusy(true);setFeedback('');
         const current=generation.current,uid=auth.currentUser?.uid;
         let responseReceived=false;
@@ -160,7 +177,8 @@ export default function StudentRegistrationManager({paneTarget,onPaneOpen,paneCo
             }
             if(revision===undefined)onSavedNew?.(result.data.id);
             intent.current=null;setRevision(result.data.revision);setDirty(false);setLocked(false);setRetrying(false);
-            setFeedback(value.purpose==='additional'?'추가 과목 상담을 저장했습니다. 목록에서 기존 학생의 수강 관리로 이어갈 수 있습니다.':value.intakeStage==='consultation'?'상담 내용을 저장했습니다. 아직 학생 명부에는 등록하지 않았습니다.':coreMode?'등록 내용을 저장했습니다. 앱 등록 확정 후 등록 첫 달 목록에서 관리합니다.':'등록 내용을 저장했습니다. 등록 확정 후 등록 첫 달 목록에서 관리합니다.');setReload(old=>old+1);
+            setFeedback(value.purpose==='additional'?'추가 과목 상담을 저장했습니다. 목록에서 기존 학생의 수강 관리로 이어갈 수 있습니다.':value.intakeStage==='consultation'?'상담 내용을 저장했습니다. 아직 학생 명부에는 등록하지 않았습니다.':'등록 내용을 저장했습니다. 학생 명부에 등록하는 중…');setReload(old=>old+1);
+            if(enroll&&['pending','failed'].includes(String(result.data.syncStatus||'pending'))){currentId.current=result.data.id;then={id:result.data.id,revision:result.data.revision,syncStatus:result.data.syncStatus||'pending',purpose:'new'} as RegistrationSummary;}
         } catch(error) {
             if(current!==generation.current)return;
             if(!responseReceived && intent.current){setRetrying(true);setLocked(true);}
@@ -168,6 +186,8 @@ export default function StudentRegistrationManager({paneTarget,onPaneOpen,paneCo
         } finally {
             writeBusy.current=false;if(current===generation.current)setBusy(false);
         }
+        // the same 등록 확정 as the button (a student already on the list is asked about first; declined or failed: the button stays)
+        if(then&&current===generation.current)await sync(then);
     }
     async function sync(record:RegistrationSummary) {
         if(writeBusy.current)return;
@@ -222,6 +242,7 @@ export default function StudentRegistrationManager({paneTarget,onPaneOpen,paneCo
     const stageText=(record:RegistrationSummary)=>record.purpose==='additional'?'추가 과목 상담':record.intakeStage==='consultation'?(record.trialStudentKey?(record.trialEndedAt?'시범 끝':'시범 수업 중'):'상담만 진행'):record.syncStatus==='synced'?'등록 첫 달':registrationStatusLabels[record.syncStatus]||'등록 확인 필요';
     const actions=(record:RegistrationSummary)=><>
         {record.purpose!=='additional'&&record.intakeStage!=='consultation'&&record.syncStatus!=='synced' ? <button type="button" className="primary-button" disabled={busy} onClick={()=>void sync(record)}>{record.syncStatus==='uncertain' || record.syncStatus==='syncing'?'반영 결과 확인':record.syncStatus==='failed'?coreMode?'앱 등록 재시도':'등록 재시도':coreMode?'앱 등록 확정':'등록 확정'}</button> : null}
+        {record.purpose!=='additional'&&record.syncStatus==='synced'&&record.studentKey ? <button type="button" className="primary-button" disabled={busy} onClick={()=>setAdmissionFor({studentKey:record.studentKey!,id:record.id})}>원서 수정</button> : null}
         {record.purpose!=='additional'&&record.intakeStage==='consultation'&&!record.trialStudentKey ? <button type="button" className="small-button" disabled={busy} onClick={()=>void trial(record,false)}>시범 수업 학생으로 올리기</button> : null}
         {record.purpose!=='additional'&&record.intakeStage==='consultation'&&record.trialStudentKey&&!record.trialEndedAt ? <button type="button" className="small-button" disabled={busy} onClick={()=>void trial(record,true)}>시범 끝 (등록 안 함)</button> : null}
         {record.purpose==='additional'&&record.existingStudentKey ? <button type="button" className="small-button" disabled={busy} onClick={()=>setEnrollmentKey(record.existingStudentKey!)}>기존 학생 수강 관리</button> : null}
@@ -300,6 +321,8 @@ export default function StudentRegistrationManager({paneTarget,onPaneOpen,paneCo
         {feedback && !open ? <p role="status" className="report-caption">{feedback}</p> : null}
         {paneTarget ? (open ? createPortal(paneView,paneTarget) : null) : <WorkspaceDialog open={open} title={revision===undefined?'입학·상담 원서 작성':'입학·상담 원서 조회·수정'} onClose={close}>{dialogTop}{formBody}</WorkspaceDialog>}
         {printing&&<PrintPortal active orientation="portrait" onDone={()=>setPrinting(null)}><AdmissionFormSheet value={printing==='blank'?null:printing}/></PrintPortal>}
+        {/* closed: the open 원서 is read again, so it shows what was just saved */}
+        {admissionFor&&<StudentAdmissionEditor studentKey={admissionFor.studentKey} registrationId={admissionFor.id} onClose={()=>{const id=admissionFor.id;setAdmissionFor(null);if(open&&current?.id===id)void edit(current);}}/>}
         {enrollmentKey&&<StudentEnrollmentEditor studentKey={enrollmentKey} onClose={()=>setEnrollmentKey('')} onSaved={()=>{setEnrollmentKey('');void onSynced().catch(()=>setFeedback('수강 변경은 완료됐지만 학생 목록을 다시 불러오지 못했습니다.'));setReload(n=>n+1);}}/>}
     </section>;
 }

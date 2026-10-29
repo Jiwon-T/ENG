@@ -17,3 +17,12 @@ test('이날 앱 학습: labels, DAY range, and the score that 점수로 넣기 
   assert.equal(dayStudyScore(session({totalItems: 0})), null);
   assert.equal(dayStudyScore(session({score: 31})), null);
 });
+
+test('이날 앱 학습 › 합쳐서 점수로 넣기: 정답 and 문항 each added up; word only when every picked one is; none scored → null', async () => {
+  const {combinedDayStudyScore} = await import('../src/components/teacher/LessonDayStudy.tsx');
+  const s = (over: Partial<DayStudySession>): DayStudySession => ({id: 'x', wordbookTitle: '', type: 'test', category: 'word', createdAt: null, duration: null, score: 18, totalItems: 20, dayStart: null, dayEnd: null, incorrectCount: 0, wrongWords: [], ...over});
+  assert.deepEqual(combinedDayStudyScore([s({}), s({score: 17})]), {wrong: 5, total: 40, count: 2, word: true});
+  assert.deepEqual(combinedDayStudyScore([s({}), s({category: 'grammar', score: 9, totalItems: 10})]), {wrong: 3, total: 30, count: 2, word: false});
+  assert.deepEqual(combinedDayStudyScore([s({}), s({score: null, totalItems: null})]), {wrong: 2, total: 20, count: 1, word: true}, 'a session without a score is left out');
+  assert.equal(combinedDayStudyScore([]), null);
+});

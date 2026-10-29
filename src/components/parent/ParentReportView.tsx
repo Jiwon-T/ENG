@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import type { ParentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
 import { safeFetchJson } from '../../lib/safeFetchJson';
 import { sortParentSchedules } from '../../lib/studentReportLists';
-import { testLabel, testScoreTitle, extraScoresText, examExtraScoresText } from '../../lib/lessonReportText';
+import { testLabel, testScoreTitle, extraScoresText, examExtraScoresText, reportCategory } from '../../lib/lessonReportText';
 import {
   formatReportDetailDate,
   formatReportListDate,
@@ -824,7 +824,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                                         {listDate}
                                       </span>
                                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 shrink-0">
-                                        {rep.subject || '영어'} · {rep.category || '수업'}
+                                        {rep.subject || '영어'} · {reportCategory(rep)}
                                       </span>
                                     </div>
                                     <span
@@ -927,7 +927,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                               {getDisplayStatus(selectedReport.attendance)}
                             </span>
                             <span className="text-xs px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-700">
-                              {selectedReport.subject || '영어'} · {selectedReport.category || '수업'}
+                              {selectedReport.subject || '영어'} · {reportCategory(selectedReport)}
                             </span>
                           </div>
                         </div>
@@ -1100,7 +1100,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                                       {listDate}
                                     </span>
                                     <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold shrink-0">
-                                      {rep.subject || '영어'} · {rep.category || '수업'}
+                                      {rep.subject || '영어'} · {reportCategory(rep)}
                                     </span>
                                   </div>
                                   <span
@@ -1174,7 +1174,7 @@ export const ParentReportView: React.FC<ParentReportViewProps> = ({ reportSlug, 
                             {getDisplayStatus(selectedReport.attendance)}
                           </span>
                           <span className="text-xs px-2.5 py-1 rounded-lg font-bold bg-slate-100 text-slate-700">
-                            {selectedReport.subject || '영어'} · {selectedReport.category || '수업'}
+                            {selectedReport.subject || '영어'} · {reportCategory(selectedReport)}
                           </span>
                         </div>
                       </div>

@@ -54,4 +54,7 @@ test('등록 확정 전: a student already on the list with the same name and a 
   assert.deepEqual(found.map(m => [m.studentKey, m.by, m.status, m.subjects]).sort(), [['s-phone', 'phone', '등록', ['영어']], ['s-school', 'school', '등록', ['영어']]]);
   assert.equal(JSON.stringify(found).includes('1234'), false, 'no phone in the match');
   await assert.rejects(findRegisteredMatches(f.db, t2, r.id), /FORBIDDEN/, 'only who may open the 원서');
+  // 시범 수업 then 등록 확정: the 원서's own 시범 student continues, never a match against itself
+  const doc = f.rows.get(`teacherStudentRegistrations/${r.id}`); f.rows.set(`teacherStudentRegistrations/${r.id}`, {...doc, trialStudentKey: 's-phone'});
+  assert.deepEqual((await findRegisteredMatches(f.db, t1, r.id)).map(m => m.studentKey), ['s-school']);
 });

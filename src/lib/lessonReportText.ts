@@ -20,5 +20,9 @@ export interface ExtraScore { name: string; score: number }
 export const extraScoresText = (list?: ExtraScore[] | null) => (list || []).map(t => `${testLabel(t.name)} ${t.score}점`).join(' · ');
 /** 내신 대비 점수's other tests: ② 90점 · ③ 78점 */
 export const examExtraScoresText = (list?: number[] | null) => (list || []).map((n, i) => `${'②③④⑤'[i] || ''} ${n}점`).join(' · ');
+/** 수업 or 테스트: a record with no 수업 time, only 자습 (3차시 누적 테스트 등), is a 테스트 — also for reports published before
+ *  the category was set that way. */
+export const reportCategory = (r: { category?: string | null; lessonTime?: string | null; selfStudyTime?: string | null }) =>
+  r.category === '테스트' || (!String(r.lessonTime || '').trim() && String(r.selfStudyTime || '').trim()) ? '테스트' : '수업';
 export const testLabel = (name?: string | null) => name?.trim() || '테스트';
 export const testScoreTitle = (name?: string | null) => name?.trim() ? `테스트 점수 · ${name.trim()}` : '테스트 점수';

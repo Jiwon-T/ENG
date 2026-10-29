@@ -162,7 +162,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             if(action==='pet-coupons'){failureStage='pet-coupon';const {listCoupons}=await import('../_lib/petCoupon.js');return sendJson(res,200,{ok:true,...await listCoupons(db,actor)});}
             if(action==='guild-nicknames'){failureStage='pet-party';const {listGuildNicknames}=await import('../_lib/teacherPetParty.js');return sendJson(res,200,{ok:true,...await listGuildNicknames(db,actor)});}
             if(action==='student-school'){failureStage='student-school';const {readStudentSchool}=await import('../_lib/studentSchool.js');return sendJson(res,200,{ok:true,...await readStudentSchool(db,actor,params.get('studentKey'))});}
-            if(action==='student-admission'){failureStage='student-admission-read';if(!await coreActive(db,actor))throw Error('CORE_NOT_READY');return sendJson(res,200,{ok:true,record:await readCoreAdmission(db,actor,params.get('studentKey'))});}
+            if(action==='student-admission'){failureStage='student-admission-read';if(!await coreActive(db,actor))throw Error('CORE_NOT_READY');return sendJson(res,200,{ok:true,record:await readCoreAdmission(db,actor,params.get('studentKey'),params.get('registrationId')||undefined)});}
             if(action==='student-profile'){failureStage='student-profile-read';return sendJson(res,200,{ok:true,record:await readStudentProfile(db,actor,params.get('studentKey'))});}
             if (action === 'registration-options') {
                 failureStage='student-registration-options';
@@ -424,9 +424,9 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
             return sendJson(res,200,{ok:true,...await discardStudentEnrollment(db,actor,v.studentKey,v.operationId)});
         }
         if(body.action==='save-student-admission') {
-            const v=z.object({action:z.literal('save-student-admission'),studentKey:z.string().uuid(),operationId:z.string().uuid(),expectedEditedAt:z.string().datetime(),data:z.unknown()}).strict().parse(body);
+            const v=z.object({action:z.literal('save-student-admission'),studentKey:z.string().uuid(),operationId:z.string().uuid(),expectedEditedAt:z.string().datetime(),data:z.unknown(),registrationId:z.string().regex(/^[a-f0-9]{64}$/).optional()}).strict().parse(body);
             if(!await coreActive(db,actor))throw Error('CORE_NOT_READY');
-            return sendJson(res,200,{ok:true,...await saveCoreAdmission(db,actor,v.studentKey,v.operationId,v.expectedEditedAt,v.data)});
+            return sendJson(res,200,{ok:true,...await saveCoreAdmission(db,actor,v.studentKey,v.operationId,v.expectedEditedAt,v.data,v.registrationId)});
         }
         if(body.action==='save-student-profile') {
             failureStage='student-profile-save';

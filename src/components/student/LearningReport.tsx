@@ -13,7 +13,7 @@ import { safeFetchJson } from '../../lib/safeFetchJson';
 import { askConfirm } from '../teacher/ConfirmDialog';
 import { AssignedQuestionList } from '../generator/AssignedQuestions';
 import type { StudentLessonReportDTO, StudentScheduleDTO } from '../../types/lessonReport';
-import { testLabel } from '../../lib/lessonReportText';
+import { testLabel, reportCategory } from '../../lib/lessonReportText';
 
 function activityDate(value: any) {
   const date = value?.toDate ? value.toDate() : value?.toMillis ? new Date(value.toMillis()) : new Date(value);
@@ -754,7 +754,7 @@ export default function LearningReport({ focusTask }: { focusTask?: string } = {
                     })}
                   </span>
                   <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                    {report.subject || '영어'} · {report.category}
+                    {report.subject || '영어'} · {reportCategory(report)}
                   </span>
                 </div>
                 <div className="mt-2 grid grid-cols-4 gap-1 text-center">

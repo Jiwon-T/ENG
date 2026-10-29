@@ -684,9 +684,14 @@
 .teacher-workspace .lesson-day-study-score {flex:none;font-size:12px;}
 .teacher-workspace .lesson-day-study-fill {flex:none;height:26px;min-height:26px;padding:0 9px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;color:#8b2f40;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .teacher-workspace .lesson-day-study-fill:hover {background:#fef2f3;border-color:#f3d5da;}
+.teacher-workspace .lesson-day-study-fill:disabled {opacity:.5;cursor:default;background:#fff;border-color:#e2e8f0;}
+.teacher-workspace .lesson-day-study-pick {flex:none;width:14px;height:14px;min-height:0;margin:0;accent-color:#d26272;}
+.teacher-workspace .lesson-day-study-sum {display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0 5px;border-top:1px solid #f1f5f9;font-size:12px;}
 .teacher-workspace .lesson-evaluation-heading h3:has(.lesson-day-study) {display:flex;align-items:center;gap:8px;}
 .teacher-workspace .lesson-evaluation-heading .lesson-day-study {margin-left:0;}
 .teacher-workspace .lesson-evaluation-heading .lesson-day-study-pop {right:auto;left:0;}
+/* phone: the list opens as a sheet at the bottom of the screen (next to the chip it could run off the side) */
+@media(max-width:640px){.teacher-workspace .lesson-day-study-pop,.teacher-workspace .lesson-evaluation-heading .lesson-day-study-pop{position:fixed;top:auto;left:12px;right:12px;bottom:12px;width:auto;z-index:1000;max-height:70vh;display:flex;flex-direction:column}.teacher-workspace .lesson-day-study-pop ul{max-height:none;flex:1;min-height:0}}
 .teacher-workspace .student-combobox-extra {position:absolute;top:0;right:0;z-index:5;display:flex;}
 .teacher-workspace .lesson-scores-panel .lesson-test-inline {grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:6px;align-items:center;}
 .teacher-workspace .lesson-scores-panel .lesson-test-inline label {display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:10px;}

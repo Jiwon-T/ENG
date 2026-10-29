@@ -12,15 +12,16 @@ import {useLeaveProtection} from '../../lib/leaveProtection';
 type Value={admission:AdmissionInput;guardianName:string;guardianSalutation:string};
 const failure=(r:any)=>r.data?.error==='NOTION_EDIT_CONFLICT'?'다른 곳에서 먼저 저장했어요. 입력하신 내용은 그대로 두었어요.':`${r.data?.message||r.userMessage||'저장하지 못했습니다.'}${r.data?.diagnosticId?` (오류 ID: ${r.data.diagnosticId})`:''}`;
 
-/** 입학·상담 정보 (admin/principal): the answers given at registration, viewable and editable afterwards.
+/** 입학·상담 정보 (admin/principal; from 상담·신입생, the teacher who wrote the 원서: `registrationId`): the answers given at
+ *  registration, viewable and editable afterwards.
  *  보호자 이름·호칭 are not asked at counselling, so they have no field; their stored values are sent back unchanged. */
-export default function StudentAdmissionEditor({studentKey,onClose}:{studentKey:string;onClose:()=>void}){
+export default function StudentAdmissionEditor({studentKey,registrationId,onClose}:{studentKey:string;registrationId?:string;onClose:()=>void}){
  const [value,setValue]=useState<Value|null>(null),[editedAt,setEditedAt]=useState(''),[dirty,setDirty]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[loading,setLoading]=useState(true);
  useLeaveProtection(dirty);
  const operation=useRef<string|null>(null),version=useRef(0);
  // A save refused because someone saved first: the typed values stay; the latest saved version waits until a choice is made.
  const [conflict,setConflict]=useState<{data:Value;editedAt:string}|null>(null);
- async function load(){const r=await teacherAuthenticatedRequest<any>(auth,'/api/teacher/workspace?'+new URLSearchParams({action:'student-admission',studentKey}));
+ async function load(){const r=await teacherAuthenticatedRequest<any>(auth,'/api/teacher/workspace?'+new URLSearchParams({action:'student-admission',studentKey,...(registrationId?{registrationId}:{})}));
   if(!r.ok||!r.data?.ok||!r.data.record)throw Error(failure(r));return r.data.record;}
  useEffect(()=>{const current=++version.current;setLoading(true);
   load().then(record=>{if(current!==version.current)return;setValue({...record.data,admission:{...emptyAdmission(),...record.data.admission}});setEditedAt(record.editedAt);})
@@ -31,7 +32,7 @@ export default function StudentAdmissionEditor({studentKey,onClose}:{studentKey:
   if(!value||busy)return;const current=version.current;setBusy(true);setMessage('');
   // The same operation id is reused when a save is retried without further edits (the server answers it once).
   operation.current=operation.current||crypto.randomUUID();
-  try{const r=await teacherAuthenticatedRequest<any>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save-student-admission',studentKey,operationId:operation.current,expectedEditedAt:editedAt,data:value})});
+  try{const r=await teacherAuthenticatedRequest<any>(auth,'/api/teacher/workspace',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save-student-admission',studentKey,operationId:operation.current,expectedEditedAt:editedAt,data:value,...(registrationId?{registrationId}:{})})});
    if(current!==version.current)return;
    if(!r.ok||!r.data?.ok){setMessage(failure(r));if(r.data?.error==='NOTION_EDIT_CONFLICT'){const record=await load();if(current!==version.current)return;setConflict({data:{...record.data,admission:{...emptyAdmission(),...record.data.admission}},editedAt:record.editedAt});operation.current=null;}return;}
    setEditedAt(r.data.editedAt);setDirty(false);setConflict(null);operation.current=null;setMessage('입학·상담 정보를 저장했습니다.');

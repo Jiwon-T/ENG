@@ -61,8 +61,8 @@ export async function setCoreTeacherAccess(db:any,actor:any,input:any){
   if(Boolean(old.disabled)===v.disabled)return {uid:v.uid,disabled:v.disabled,alreadySaved:true};
   tx.set(ref,{...old,disabled:v.disabled,accessChangedAt:Date.now(),accessChangedBy:actor.uid,assignmentRevision:(old.assignmentRevision||0)+1});return {uid:v.uid,disabled:v.disabled};});
 }
-export async function readCoreProfile(db:any,actor:any,keyInput:any,decode:(page:any)=>any){
- manage(actor);const key=uuid(z.string().uuid().parse(keyInput));await member({get:(r:any)=>r.get()},db,actor,key);
+export async function readCoreProfile(db:any,actor:any,keyInput:any,decode:(page:any)=>any,allowed?:(key:string)=>Promise<void>){
+ if(allowed)await allowed(uuid(z.string().uuid().parse(keyInput)));else manage(actor);const key=uuid(z.string().uuid().parse(keyInput));await member({get:(r:any)=>r.get()},db,actor,key);
  const r=valid((await refFor(db,'students',key).get()).data(),'students');
  // The earliest 과목 시작일, offered in 학생 정보 to fill an empty 학원 등록일 (no enrollment row: nothing offered).
  const e=await enrollmentRow(db,key).catch(()=>null),firstSubjectStart=e?subjects.map(s=>e.row.fields.properties[s+' 시작일']?.date?.start).filter(Boolean).sort()[0]||null:null;
@@ -100,9 +100,17 @@ export async function saveCoreProfile(db:any,actor:any,keyInput:any,operation:an
 }
 /** 입학·상담 정보 after registration (admin/principal, same checks as the profile): read, and save only those
  *  properties in one transaction with the version check, an idempotent receipt and directory history. */
-export async function readCoreAdmission(db:any,actor:any,keyInput:any){return readCoreProfile(db,actor,keyInput,(page:any)=>admissionFromProperties(page.properties));}
-export async function saveCoreAdmission(db:any,actor:any,keyInput:any,operation:any,expected:any,input:any){
- manage(actor);const key=uuid(z.string().uuid().parse(keyInput)),op=z.string().uuid().parse(operation),time=z.string().datetime().parse(expected),data=admissionEditSchema.parse(input);
+/** 입학·상담 정보 (the 원서 after 등록): 원장님·관리자, or the teacher who wrote (or co-writes) the 원서 this student was
+ *  registered from (`registrationId`: that 원서, registered). */
+async function admissionAccess(db:any,actor:any,key:string,registrationInput?:unknown){
+ if(actor.academyId==='main'&&(actor.admin||actor.principal))return;
+ if(actor.academyId!=='main'||!registrationInput)throw Error('FORBIDDEN');
+ const r=(await db.collection('teacherStudentRegistrations').doc(z.string().regex(/^[a-f0-9]{64}$/).parse(registrationInput)).get()).data();
+ if(!r||r.academyId!==actor.academyId||r.syncStatus!=='synced'||(r.data?.purpose||'new')!=='new'||!r.studentKey||uuid(String(r.studentKey))!==key||r.ownerUid!==actor.uid&&!(r.coWriters||[]).includes(actor.uid))throw Error('FORBIDDEN');
+}
+export async function readCoreAdmission(db:any,actor:any,keyInput:any,registrationId?:unknown){return readCoreProfile(db,actor,keyInput,(page:any)=>admissionFromProperties(page.properties),key=>admissionAccess(db,actor,key,registrationId));}
+export async function saveCoreAdmission(db:any,actor:any,keyInput:any,operation:any,expected:any,input:any,registrationId?:unknown){
+ const key=uuid(z.string().uuid().parse(keyInput));await admissionAccess(db,actor,key,registrationId);const op=z.string().uuid().parse(operation),time=z.string().datetime().parse(expected),data=admissionEditSchema.parse(input);
  const ref=refFor(db,'students',key),receipt=db.collection(CORE_COMMANDS).doc(digest(['admission',actor.uid,op])),fingerprint=digest([key,time,data]);
  return db.runTransaction(async(tx:any)=>{
   await guard(tx,db);await member(tx,db,actor,key);const old=valid((await tx.get(ref)).data(),'students'),command=(await tx.get(receipt)).data();

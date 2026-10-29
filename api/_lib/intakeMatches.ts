@@ -64,8 +64,9 @@ export async function findRegisteredMatches(db: any, actor: RegistrationActor, i
   const v = r.data || {}, name = nameKey(v.name), phones = [v.studentPhone, v.guardianPhone].map(phoneKey).filter((p: string) => p.length >= 9);
   const spaced = (s: unknown) => String(s || '').replace(/\s+/g, ''), title = spaced(r.title), out: RegisteredMatch[] = [];
   const rows = (await db.collection('academyDirectorySources').where('academyId', '==', actor.academyId).where('kind', '==', 'students').get()).docs.map((d: any) => d.data());
+  // this 원서's own student is never a match: the one it registered, or its 시범 student (등록 확정 continues that one)
   for (const row of rows) {
-    const props = row.fields?.properties; if (!props || row.fields?.archived || row.fields?.in_trash || row.issue || row.studentKey === r.studentKey) continue;
+    const props = row.fields?.properties; if (!props || row.fields?.archived || row.fields?.in_trash || row.issue || row.studentKey === r.studentKey || r.trialStudentKey && row.studentKey === r.trialStudentKey) continue;
     const full = titleOf(props); if (nameKey(full) !== name && nameKey(full.replace(/\s*\(.*\)\s*$/, '')) !== name) continue;
     const theirs = [props['학생연락처']?.phone_number, props['보호자연락처']?.phone_number].map(phoneKey).filter((p: string) => p.length >= 9);
     const by = phones.some((p: string) => theirs.includes(p)) ? 'phone' : title && /\(/.test(title) && spaced(full) === title ? 'school' : null;
