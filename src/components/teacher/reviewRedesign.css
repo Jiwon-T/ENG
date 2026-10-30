@@ -973,6 +973,9 @@
 .teacher-workspace .intake-pane-memo{display:grid;gap:4px;margin:0 0 10px;font-size:13px}.teacher-workspace .intake-pane-memo div{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px}.teacher-workspace .intake-pane-memo dt{color:#64748b}.teacher-workspace .intake-pane-memo dd{margin:0;white-space:pre-wrap;color:#334155}
 .teacher-workspace .student-intake-row[aria-current="true"]{border-color:#ed93b1;background:#fbeaf0}
 .teacher-workspace .today-consult-card.is-current{border-style:solid;border-color:#d26272;background:#fef2f3}
+.teacher-workspace .word-tasks-fold{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin:0 0 8px}.teacher-workspace .word-tasks-fold .word-tasks-panel{align-self:stretch;margin:0}
+.teacher-workspace .word-tasks-chip{padding:3px 11px;border:1px solid #d6e9f8;border-radius:999px;background:#f7fbfe;font-size:12px;font-weight:700;color:#0c447c}
+.report-task-tag{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;border:1px solid #2563eb;font-size:11px;font-weight:700;color:#2563eb;vertical-align:middle}.report-task-tag.is-test.is-passed{background:#2563eb;color:#fff}.report-task-tag.is-expedition{border-color:#1d9e75;color:#0f6e56}.report-task-tag.is-expedition.is-passed{background:#1d9e75;color:#fff}
 .teacher-workspace .word-tasks-panel{margin:0 0 12px;padding:10px 12px;border:1px solid #d6e9f8;border-radius:14px;background:#f7fbfe;font-size:12px;color:#334155}
 .teacher-workspace .word-tasks-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}.teacher-workspace .word-tasks-head b{font-size:13px;color:#0c447c}.teacher-workspace .word-tasks-head span{font-size:11px;color:#64748b}
 .teacher-workspace .word-tasks-row{display:grid;grid-template-columns:minmax(0,1fr) 120px 88px 40px;gap:8px;align-items:center;padding:7px 0;border-top:1px solid #e2eef8}

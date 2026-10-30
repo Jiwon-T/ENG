@@ -22,7 +22,8 @@ export async function studyReports(db: any, uid: string, preloadedUser?: any, ov
 export const LESSON_BACKFILL = 'lessonBackfill';
 /** One student's lessons by the student record — linked or not (`uid` null: no app account, so a 시험 left on 자동 is paper).
  *  `studentKey`: to find the student's 누적 테스트 날 in the timetable (one row a test day is marked `testDay`; a test day
- *  with no 일지 before today gets a 결석 row, read for the rewards only). */
+ *  with no 일지 before today gets a 결석 row, read for the rewards only). A test taken on another day — a 수업 없는 일지,
+ *  attended, with a 테스트 평가, on a day that is not the student's test day (one a day) — is marked `testDayHalf`. */
 export async function lessonRows(db: any, internalStudentId: string, uid: string | null, override?: { report: any; deleted: boolean } | null, studentKey?: string) {
   // 숙제 points come from the teacher's 숙제 평가 in the next lesson, not from the student's own 완료 check.
   const [reports, backfill] = await Promise.all([db.collection('lessonReports').where('internalStudentId', '==', internalStudentId).get(), db.collection(LESSON_BACKFILL).where('internalStudentId', '==', internalStudentId).get()]);
@@ -51,11 +52,19 @@ export async function lessonRows(db: any, internalStudentId: string, uid: string
     else if (day <= yesterday) rows.push({id: `testday-${day}`, date: day, subject: '영어', attendance: '결석', homework: '', hasAssignment: false, test: '', testPaper: true, attitude: '', session: false, studied: false});
   }
   for (const r of rows) if (r.id.startsWith('testday-')) testRow.set(r.id, r.date);
+  // 일정 외 테스트: not on the timetable's test day (a 보충 or a day moved), half the 누적 테스트 출석 bonus; 개근상 counts
+  // only the timetable's days
+  const halfRow = new Set<string>(), halfDays = new Set<string>();
+  if (studentKey) for (const r of rows) {
+    const day = String(r.date || '').slice(0, 10);
+    if (r.session || testRow.has(r.id) || tests.has(day) || halfDays.has(day) || day < PET_TEST_DAY.from || day > today || !/출석|지각/.test(r.attendance) || /결석/.test(r.attendance) || ['', '미확인', '없는 날', '미제출'].includes(String(r.test || ''))) continue;
+    halfRow.add(r.id); halfDays.add(day);
+  }
   // 테스트 평가 left on 자동: paper unless the student took an app 단어 테스트 that day (read once, only when needed; a
   // failed read counts every such test as an app test, the smaller reward)
   const appDays = uid && rows.some(r => r.testPaper === null && PET_TEST_REWARD.paper[r.test]) ? await appTestDays(db, uid) : null;
   return rows.map(r => ({id: r.id, date: r.date, attendance: r.attendance, homework: r.homework, homeworkGrade: grades.get(r.id)?.grade, gradedAt: grades.get(r.id)?.gradedAt, gradedBy: grades.get(r.id)?.by,
-    test: r.test, testPaper: r.testPaper ?? (uid ? isPaperDay(appDays, String(r.date).slice(0, 10)) : true), attitude: r.attitude, subject: r.subject, session: r.session, studied: r.studied, ...(testRow.has(r.id) ? {testDay: true} : {})}));
+    test: r.test, testPaper: r.testPaper ?? (uid ? isPaperDay(appDays, String(r.date).slice(0, 10)) : true), attitude: r.attitude, subject: r.subject, session: r.session, studied: r.studied, ...(testRow.has(r.id) ? {testDay: true} : halfRow.has(r.id) ? {testDayHalf: true} : {})}));
 }
 /** 자동: paper only when the day was read in full and had no app 단어 테스트 (a day not read = app, the smaller reward). */
 export const isPaperDay = (seen: {days: Set<string>; from: string} | null, day: string) => Boolean(seen && day >= seen.from && !seen.days.has(day));

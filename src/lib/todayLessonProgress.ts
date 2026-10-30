@@ -43,6 +43,16 @@ export function todayRecords(server:readonly any[]|undefined,memory:readonly any
  for(const r of server||[])if(r?.id){const kept=byId.get(r.id);if(!kept||newer(r,kept))byId.set(r.id,r);}
  return [...byId.values()];
 }
+/** 일정 외 일지: the day's saved lessons that no event of the day takes (written for a lesson that was not on the
+ *  schedule), the newest copy of each, by start time. `matchEvents`: the whole day's events, before anything was hidden
+ *  (a hidden lesson's record stays with its event). */
+export function offScheduleLessons(records:readonly any[],matchEvents:readonly TodayLesson[],date:string){
+ const byId=new Map<string,any>();
+ for(const r of records)if(r?.id&&!r.archived&&!r.deleteRequested&&r.stage!=='new'&&r.data?.date===date&&r.data.studentKey){const kept=byId.get(r.id);if(!kept||newer(r,kept))byId.set(r.id,r);}
+ const taken=new Set<string>();
+ for(const e of matchEvents)for(const key of e.students){const r=todayLessonRecord(e,key,records,matchEvents);if(r?.id)taken.add(r.id);}
+ return [...byId.values()].filter(r=>!taken.has(r.id)).sort((a,b)=>lessonStartOf(a.data).localeCompare(lessonStartOf(b.data)));
+}
 /** `matchEvents`: the whole day's events before anything was hidden, so hiding a lesson or a student never moves
  *  its saved lesson onto another event; defaults to `events`. */
 export function todayLessonProgress(events:readonly TodayLesson[],records:readonly any[],matchEvents:readonly TodayLesson[]=events){

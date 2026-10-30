@@ -72,8 +72,8 @@ test('teacher dialog asks one reason when students are taken off (not for a stop
  assert.match(src,/\.\.\.\(reason\?\{transferReason:reason\.reason,transferNote:reason\.note\}:\{\}\)/);
  const dialog=read('TransferReasonDialog.tsx');assert.match(dialog,/disabled=\{!reason\}/,'저장 waits for a reason');assert.match(dialog,/reason==='기타'&&<input className="confirm-modal-note" aria-label="기타 사유 메모 \(선택\)"/);
 });
-test('일괄 상 and 일괄 중 in both editors; the 회차 hint is short with the full text as tooltip',async()=>{
- for(const f of ['TeacherWorkspace.tsx','TeacherLessonGrid.tsx']){const src=read(f);assert.match(src,/\(\['상','중'\] as const\)\.map\(level=>/,f);assert.match(src,/attitude:level,homework:level/,f);assert.match(src,/출석·태도·숙제 일괄 \{level\}/,f);}
+test('일괄 상, 일괄 중 and 일괄 미확인 in both editors; the 회차 hint is short with the full text as tooltip',async()=>{
+ for(const f of ['TeacherWorkspace.tsx','TeacherLessonGrid.tsx']){const src=read(f);assert.match(src,/\(\['상','중','미확인'\] as const\)\.map\(level=>/,f);assert.match(src,/attitude:level,homework:level/,f);assert.match(src,/출석·태도·숙제 일괄 \$\{level\}/,f);assert.match(src,/'일괄 미확인'/,f);assert.match(src,/level==='미확인'\?'미확인':'출석'/,f);}
  const {shortRoundHint}=await import('../src/lib/sessionNumbers');
  assert.equal(shortRoundHint('자동 입력 · 직전 6.7회차(10/06) +1'),'직전 6.7 +1');assert.equal(shortRoundHint('자동 입력 · 2026-10 월별 시작 0 +0.9'),'월 첫 수업 +0.9');assert.equal(shortRoundHint('자동 입력 · 2026-10 월별 시작 0 +1','자습'),'월 첫 자습 +1','자습 says 자습');assert.equal(shortRoundHint(''),'');
  assert.match(read('LessonAcademyFields.tsx'),/title=\{roundHints\[round\]\|\|undefined\}>\{shortRoundHint\(roundHints\[round\]\|\|'',title\)\}/);

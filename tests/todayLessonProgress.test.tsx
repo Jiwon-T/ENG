@@ -88,3 +88,13 @@ test('progress and next unwritten match saved lessons against the whole day, not
  assert.equal(nextUnwrittenLesson([e16],[saved14],undefined,[e14,e16])?.event.id,'h16');
  assert.deepEqual(todayLessonProgress([e16],[saved14]),{total:1,published:1,saved:0,empty:0},'default stays the shown events');
 });
+test('일정 외 일지: a lesson no event takes (another student, or another subject) is listed by its time, newest copy; one an event takes is not',async()=>{
+ const {offScheduleLessons}=await import('../src/lib/todayLessonProgress');
+ const rows=[record('a','published'),{...record('d','draft'),data:{...record('d','draft').data,start:'19:30'},revision:1},{...record('d','draft'),data:{...record('d','draft').data,start:'19:30'},revision:2,stage:'published'},{...record('e','draft'),data:{studentKey:'a',date:event.date,subject:'수학',start:'15:00'}},{...record('f','draft'),archived:true},{...record('g','draft'),data:{...record('g','draft').data,date:'2026-10-08'}}];
+ assert.deepEqual(offScheduleLessons(rows,[event],event.date).map(r=>[r.id,r.stage]),[['e','draft'],['d','published']]);
+ // a hidden lesson keeps its record (the day's events before hiding are matched)
+ assert.deepEqual(offScheduleLessons([record('a','draft')],[event],event.date),[]);
+ const props:any={data:{uid:'t',admin:true,classes:[],students:[{studentKey:'d',studentDisplayName:'디 (테스트중1)'}],drafts:[{...record('d','draft'),data:{...record('d','draft').data,start:'19:30',end:'20:30'}}],schedules:[]},date:event.date,onDate:()=>{},request:async()=>({})};
+ const html=renderToStaticMarkup(<TeacherTodayLessons {...props} onStudent={()=>{}}/>);
+ assert.ok(html.includes('일정 외')&&html.includes('19:30–20:30')&&html.includes('>디<'),'listed even on a day with no lesson on the schedule');
+});
