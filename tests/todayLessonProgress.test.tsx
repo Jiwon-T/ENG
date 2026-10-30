@@ -97,4 +97,18 @@ test('일정 외 일지: a lesson no event takes (another student, or another su
  const props:any={data:{uid:'t',admin:true,classes:[],students:[{studentKey:'d',studentDisplayName:'디 (테스트중1)'}],drafts:[{...record('d','draft'),data:{...record('d','draft').data,start:'19:30',end:'20:30'}}],schedules:[]},date:event.date,onDate:()=>{},request:async()=>({})};
  const html=renderToStaticMarkup(<TeacherTodayLessons {...props} onStudent={()=>{}}/>);
  assert.ok(html.includes('일정 외')&&html.includes('19:30–20:30')&&html.includes('>디<'),'listed even on a day with no lesson on the schedule');
+ // the same time written for two students: one card; in the 반 view one card that loads them both
+ const two={...props,data:{...props.data,students:[...props.data.students,{studentKey:'e',studentDisplayName:'이 (테스트중1)'}],drafts:[...props.data.drafts,{...record('e','published'),data:{...record('e','published').data,start:'19:30',end:'20:30'}}]}};
+ assert.equal((renderToStaticMarkup(<TeacherTodayLessons {...two} onStudent={()=>{}}/>).match(/today-extra-card/g)||[]).length,1);
+ const group=renderToStaticMarkup(<TeacherTodayLessons {...two} onGroup={()=>{}}/>);
+ assert.ok(group.includes('일정 외 수업')&&group.includes('반영 1/2명')&&group.includes('반 불러오기'));
+ // a 자습-only one opens as a 수업 없는 날 at its 자습 time, so the grid finds the saved lesson
+ const {matchingSavedLesson,newGridLesson}=await import('../src/lib/teacherLessonGrid');const {sessionSeed}=await import('../src/lib/teacherTodayLessons');
+ const study={id:'s1',ownerUid:'t',stage:'draft',data:{studentKey:'d',subject:'영어',date:event.date,start:'',end:'',classSession:'없음',selfStudy:'있음',selfStudyStart:'18:00',selfStudyEnd:'19:00'}};
+ const seed={...newGridLesson('d','영어',event.date,'18:00','19:00'),...sessionSeed({start:'18:00',end:'19:00',session:'study'},'d')};
+ assert.equal(matchingSavedLesson([study],seed,'t',false)?.id,'s1');
+ // tapped again: the row already there is the same lesson (compared after sessionSeed), no second row
+ const {sameGridLesson}=await import('../src/lib/teacherLessonGrid');
+ assert.equal(sameGridLesson({data:study.data},seed,false),true);assert.equal(sameGridLesson({data:{...study.data,selfStudyStart:'19:00'}},seed,false),false);
+ assert.equal(sameGridLesson({data:newGridLesson('d','영어',event.date,'18:00','19:00')},seed,false),false,'a class at 18:00 is another lesson');
 });

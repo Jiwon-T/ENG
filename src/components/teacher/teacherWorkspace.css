@@ -687,6 +687,16 @@
 .teacher-workspace .lesson-day-study-fill:disabled {opacity:.5;cursor:default;background:#fff;border-color:#e2e8f0;}
 .teacher-workspace .lesson-day-study-pick {flex:none;width:14px;height:14px;min-height:0;margin:0;accent-color:#d26272;}
 .teacher-workspace .lesson-day-study-sum {display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0 5px;border-top:1px solid #f1f5f9;font-size:12px;}
+.teacher-workspace .lesson-label-line:has(.recent-lessons) {display:flex;align-items:center;gap:6px;}
+.teacher-workspace .lesson-label-line .recent-lessons {margin-left:auto;font-weight:400;}
+.teacher-workspace .recent-lessons .lesson-day-study-pop {width:min(440px,calc(100vw - 32px));}
+.teacher-workspace .recent-lessons-note {margin:6px 0;font-size:12px;color:#94a3b8;}
+.teacher-workspace .lesson-day-study-pop li.recent-lesson {display:grid;gap:3px;align-items:start;}
+.teacher-workspace .recent-lesson-head {display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.teacher-workspace .recent-lesson-actions {display:flex;gap:4px;flex:none;}
+.teacher-workspace .recent-lesson-content {white-space:pre-line;word-break:break-word;font-size:12px;color:#334155;}
+.teacher-workspace .recent-lesson-assignment {white-space:normal;}
+.teacher-workspace .lesson-day-study-fill.is-plain {color:#475569;}
 .teacher-workspace .lesson-evaluation-heading h3:has(.lesson-day-study) {display:flex;align-items:center;gap:8px;}
 .teacher-workspace .lesson-evaluation-heading .lesson-day-study {margin-left:0;}
 .teacher-workspace .lesson-evaluation-heading .lesson-day-study-pop {right:auto;left:0;}

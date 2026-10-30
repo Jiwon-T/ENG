@@ -9,6 +9,10 @@ export function applyCommonLesson<T extends ReturnType<typeof newGridLesson>>(le
 }) { return { ...lesson, ...common }; }
 export function gridScore(correct: number | null, total: number | null) { return correct === null || total === null || total <= 0 || correct < 0 || correct > total ? null : Math.round(correct / total * 10000) / 100; }
 /** Reopen an exact saved lesson, never another teacher's or another time slot. */
+/** The row already in the grid for this lesson: the seed as it is opened (after sessionSeed — a 수업 없는 날 has no
+ *  class time and is told by its 자습 start), so tapping the same card again adds no second row. */
+export const sameGridLesson=(row:{data:any},seed:any,matchEnd=true)=>row.data.studentKey===seed.studentKey&&row.data.subject===seed.subject&&row.data.date===seed.date&&row.data.start===seed.start&&(!matchEnd||row.data.end===seed.end)
+ &&(seed.classSession!=='없음'||row.data.classSession==='없음'&&row.data.selfStudyStart===seed.selfStudyStart);
 export function matchingSavedLesson(records:readonly any[],input:any,ownerUid:string,matchEnd=true) {
  return records.filter(r=>r.ownerUid===ownerUid&&!r.archived&&!r.deleteRequested&&r.stage!=='new'&&r.data&&['studentKey','subject','date','start',...(matchEnd?['end']:[]),...(input.classSession==='없음'?['classSession','selfStudyStart']:[])].every(key=>r.data[key]===input[key]))
  .sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0)||Number(b.revision||0)-Number(a.revision||0))[0];
