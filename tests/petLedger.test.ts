@@ -128,3 +128,22 @@ test('학습 리포트 › 장학 쿠폰: two 5천 원 coupons, one handed out �
   const out: any = await teacherStudentCoupon(f.db, {admin: true, scopes: []}, A, NOV);
   assert.deepEqual([out.requested, out.paid, out.coupons], [true, false, [{won: 5000, paid: true}, {won: 5000, paid: false}]]);
 });
+
+test('관리자 › 장학 쿠폰 (유예 기간): last month as it ended, with the coupons still to ask for, and asked for offline as that month', async () => {
+  const {listPetPoints, requestCouponOffline} = await import('../api/_lib/petCoupon.js');
+  const {hashStudentKey} = await import('../api/_lib/security.js');
+  const f = registrationFirestore(), A = '11111111-1111-4111-8111-111111111111', admin = {uid: 'admin', admin: true, academyId: 'main', scopes: []};
+  f.rows.set('users/a', {role: 'student', notionStudentKey: A}); f.rows.set(`academyStudentMemberships/${A}`, {academyId: 'main'}); enrol(f, A);
+  f.rows.set(`notionStudentMappings/${hashStudentKey(A)}`, {studentKey: A, notionStudentPageId: A, internalStudentId: 'int-a', studentDisplayName: '김하늘', sourceMode: 'firestore', firebaseUid: 'a'});
+  const s: any = initialPetState(OCT31); s.earnedBy = {'2026-10': 12_000}; s.earned = {month: '2026-10', points: 12_000}; f.rows.set('petStates/a', s);
+  const NOV2 = Date.parse('2026-11-02T05:00:00Z');
+  const out: any = await listPetPoints(f.db, admin, NOV2);
+  assert.deepEqual(out.last, {month: '2026-10', until: '2026-11-03'});
+  assert.deepEqual([out.students[0].earned, out.students[0].last.earned, out.students[0].last.requested], [0, 12_000, false], 'November so far, and October as it ended');
+  assert.deepEqual(out.students[0].last.options.map((o: any) => o.id).sort(), ['full', 'half']);
+  await requestCouponOffline(f.db, admin, {studentKey: A, tier: 'full', month: '2026-10'}, NOV2);
+  const after: any = await listPetPoints(f.db, admin, NOV2);
+  assert.equal(after.students[0].last.requested, true, 'asked for as October');
+  assert.equal(after.students[0].requested, false, 'November not');
+  assert.equal(((await listPetPoints(f.db, admin, NOV5)) as any).last, undefined, 'after the grace days: this month only');
+});

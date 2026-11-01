@@ -160,13 +160,17 @@ export async function listPetPoints(db: any, actor: any, now = Date.now()) {
   const whole = Boolean(actor?.admin && actor.academyId === 'main' || actor?.principal && actor.academyId === 'main');
   if (!whole && !(actor?.scopes || []).length) throw Error('FORBIDDEN');
   const mine = new Set((actor?.scopes || []).map((s: any) => { try { return uuid(String(s?.studentKey || '')); } catch { return ''; } }));
-  const month = seoulDay(now).slice(0, 7);
-  const [members, coupons, growth] = await Promise.all([db.collection('academyStudentMemberships').where('academyId', '==', 'main').get(), db.collection(PET_COUPONS).where('month', '==', month).get(),
-    readGrowthForecast(db, now)]);
+  const day = seoulDay(now), month = day.slice(0, 7);
+  // 유예 기간 (the first days of a month): last month's coupon may still be asked for, here too (offline)
+  const last = inGrace(day) ? prevMonth(month) : null;
+  const [members, coupons, lastCoupons, growth] = await Promise.all([db.collection('academyStudentMemberships').where('academyId', '==', 'main').get(), db.collection(PET_COUPONS).where('month', '==', month).get(),
+    last ? db.collection(PET_COUPONS).where('month', '==', last).get() : Promise.resolve({docs: []}), readGrowthForecast(db, now)]);
   const asked = new Set(coupons.docs.map((d: any) => d.data().studentKey));
   const keys = members.docs.filter((d: any) => !d.data().disabled).map((d: any) => { try { return uuid(d.id); } catch { return ''; } }).filter((k: string) => k && (whole || mine.has(k)));
   const byKey = new Map<string, PetCoupon[]>();
   for (const c of coupons.docs.map((x: any) => x.data() as PetCoupon)) byKey.set(c.studentKey, [...(byKey.get(c.studentKey) || []), c]);
+  const lastByKey = new Map<string, PetCoupon[]>();
+  for (const c of lastCoupons.docs.map((x: any) => x.data() as PetCoupon)) lastByKey.set(c.studentKey, [...(lastByKey.get(c.studentKey) || []), c]);
   // only students 등록 now (대기 · 중단 are left out of the list)
   const students = (await Promise.all(keys.map(async (key: string) => {
     if (await enrollmentOf(db, key) !== '등록') return null;
@@ -178,9 +182,13 @@ export async function listPetPoints(db: any, actor: any, now = Date.now()) {
       options: monthState(month, earned, byKey.get(key) || [], o.all.couponExtra?.[month]).options.filter(x => x.ready).map(x => ({id: x.id, won: x.won})), homework: homeworkRate(o.all.couponExtra?.[month]),
       // this month's 포인트 내역 (what the gauge is made of), with what is still waiting
       ledger: (o.all.ledger || []).filter(x => countsForMonth(x.day, month)), extra: o.all.couponExtra?.[month] || null,
-      forecast: forecastOf(o, growth, month)};
+      forecast: forecastOf(o, growth, month),
+      // 유예 기간: last month as it ended (its count, what was asked for, the coupons still to ask for, its 내역)
+      ...(last ? (() => { const e = couponEarnedIn(o.all, last), list = lastByKey.get(key) || [];
+        return {last: {earned: e, requested: list.length > 0, options: monthState(last, e, list, o.all.couponExtra?.[last]).options.filter(x => x.ready).map(x => ({id: x.id, won: x.won})),
+          ledger: (o.all.ledger || []).filter(x => countsForMonth(x.day, last)), extra: o.all.couponExtra?.[last] || null}}; })() : {})};
   }))).filter(Boolean) as {key: string; name: string; points: number; earned: number; requested: boolean; app: string; waiting: number; options: {id: CouponTier; won: number}[]; ledger: any[]}[];
-  return {month, goal: PET_COUPON.goal, students: students.sort((a, b) => b.earned - a.earned || a.name.localeCompare(b.name, 'ko'))};
+  return {month, goal: PET_COUPON.goal, ...(last ? {last: {month: last, until: `${day.slice(0, 8)}${String(PET_COUPON.graceDays).padStart(2, '0')}`}} : {}), students: students.sort((a, b) => b.earned - a.earned || a.name.localeCompare(b.name, 'ko'))};
 }
 /** One student's points as the 수업 일지 give them (nothing saved): the linked account's pet plus what is still waiting, or
  *  for a student without the app the same lessons counted the same way. Null when the student has no record. */
