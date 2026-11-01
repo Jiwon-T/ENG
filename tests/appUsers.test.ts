@@ -26,6 +26,19 @@ test('app users: admin lists accounts, newest sign-up first', async () => {
     assert.equal(r.users[0].joinedAt, '2026-10-10T00:00:00.000Z');
     assert.equal(r.users.find((u: any) => u.uid === 'admin').isAdmin, true);
     assert.equal(r.users.find((u: any) => u.uid === 'kid').linkedStudent, true);
+    // 알림: the devices each account turned it on with (a count only, no token)
+    f.rows.set('pushTokens/a', {uid: 'kid', token: 'tok-a', role: 'student'}); f.rows.set('pushTokens/b', {uid: 'kid', token: 'tok-b', role: 'student'});
+    const p: any = await listAppUsers(f.db, admin);
+    assert.deepEqual(p.users.map((u: any) => [u.uid, u.push]), [['new', 0], ['kid', 2], ['admin', 0]]);
+    assert.equal(JSON.stringify(p).includes('tok-a'), false, 'no token sent');
+    assert.equal(p.pushUnknown, undefined);
+    // the tokens not read: told apart from none
+    const get = f.db.collection.bind(f.db); (f.db as any).collection = (name: string) => name === 'pushTokens' ? {select: () => ({get: async () => { throw Error('down'); }})} : get(name);
+    const failed: any = await listAppUsers(f.db, admin);
+    assert.equal(failed.pushUnknown, true); assert.equal(failed.users.find((u: any) => u.uid === 'kid').push, 0);
+    // no field projection: not read at all (never the whole documents with the tokens)
+    let whole = false; (f.db as any).collection = (name: string) => name === 'pushTokens' ? {get: async () => { whole = true; return {docs: []}; }} : get(name);
+    assert.equal(((await listAppUsers(f.db, admin)) as any).pushUnknown, true); assert.equal(whole, false);
     await assert.rejects(listAppUsers(f.db, { uid: 'admin', admin: false, academyId: 'main' }), /FORBIDDEN/);
 });
 

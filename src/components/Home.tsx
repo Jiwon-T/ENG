@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { PushHomeCard } from './PushOptIn';
+import { PushHomeToggle } from './PushOptIn';
 import TodayQuests from './pet/TodayQuests';
 import { auth } from '../lib/firebase';
 import { loadStudentResource } from '../lib/studentReportCache';
@@ -119,6 +119,8 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
           <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-black text-[#5e1e2a] md:text-base">오늘</h2>{!isEducator && (pending !== null || wordTasks > 0) && homework > 0 && <span className="rounded-full bg-[#f5a3a8] px-2 py-0.5 text-[11px] font-bold text-[#5e1e2a]">숙제 {homework}</span>}</div>
           {isEducator ? <button type="button" onClick={() => onNavigate('teacher-room')} className={row}><span className={rowIcon}><Users size={15} className={rowSvg} aria-hidden="true" /></span><span className="min-w-0 flex-1"><b className="block font-bold text-[#5e1e2a]">선생님방</b><span className="block text-xs text-slate-500 md:text-sm">수업 일지 · 일정 · 성적 관리</span></span><ChevronRight size={16} className={rowArrow} aria-hidden="true" /></button> : <>
             {nextSchedule?.uid === userUid && nextSchedule.schedule && <button type="button" onClick={() => onNavigate('report')} className={row}><span className={rowIcon}><Clock size={15} className={rowSvg} aria-hidden="true" /></span><span className="min-w-0 flex-1 truncate">다음 수업 · {scheduleTime(nextSchedule.schedule.startAt)} {nextSchedule.schedule.title}</span><ChevronRight size={16} className={rowArrow} aria-hidden="true" /></button>}
+            {/* 과제·보강 알림: one line over the 과제 (academy students: the alerts are theirs) */}
+            {studentLinked && userRole === 'student' && userUid && <PushHomeToggle uid={userUid} />}
             <button type="button" onClick={() => onNavigate('report')} className={row}><span className={rowIcon}><CheckCircle2 size={15} className={rowSvg} aria-hidden="true" /></span><span className="min-w-0 flex-1">{pending !== null ? (pending > 0 ? `미완료 수업 숙제 ${pending}개` : '미완료 수업 숙제 없음') : '숙제 · 일정 확인하기'}</span><ChevronRight size={16} className={rowArrow} aria-hidden="true" /></button>
             {studentLinked && <AssignedQuestionRow onOpen={() => onNavigate('report')} rowClass={row} iconClass={rowIcon} svgClass={rowSvg} arrowClass={rowArrow} />}
             {studentLinked && userRole === 'student' && <HomeWordTasks rowClass={row} iconClass={rowIcon} arrowClass={rowArrow} onCount={setWordTasks} />}
@@ -127,7 +129,6 @@ export default function Home({ onNavigate, userRole, userEmail, hasNewAssignment
         </section>
 
         {userRole === 'student' && petSummary?.quests && <TodayQuests quests={petSummary.quests} onGo={view => onNavigate(view)} />}
-        {userRole === 'student' && userUid && <PushHomeCard uid={userUid} />}
         {userRole === 'student' && !studentLinked && onLinked && <button type="button" onClick={() => setLinkOpen(true)} className="mt-3 flex min-h-[48px] w-full items-center gap-2 rounded-2xl bg-[#f5a3a8] px-4 text-left text-sm font-bold text-[#5e1e2a] shadow-sm shadow-[#f5a3a840]"><KeyRound size={17} aria-hidden="true" /><span className="flex-1">학원 연결하고 리포트 받기</span><ChevronRight size={17} aria-hidden="true" /></button>}
 
         <div className="mt-3 grid grid-cols-2 gap-2.5 md:mt-4 md:grid-cols-4 md:gap-4">

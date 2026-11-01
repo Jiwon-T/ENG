@@ -26,8 +26,18 @@ export function pushState(uid: string, key = WEB_PUSH_KEY, browser = false): Pus
   if (Notification.permission === 'denied') return 'blocked';
   return Notification.permission === 'granted' && read(savedKey(uid)) ? 'on' : 'off';
 }
-export const pushCardDismissed = (uid: string) => Boolean(read(dismissedKey(uid)));
-export const dismissPushCard = (uid: string) => write(dismissedKey(uid), '1');
+/** 나중에 (or 닫기) on the home line: hidden for 7 days, then asked again (a mark from before, without a time, has run out). */
+export const PUSH_ASK_AGAIN_DAYS = 7;
+export const pushCardDismissed = (uid: string, now = Date.now()) => now - (Number(read(dismissedKey(uid))) || 0) < PUSH_ASK_AGAIN_DAYS * 86_400_000;
+export const dismissPushCard = (uid: string, now = Date.now()) => write(dismissedKey(uid), String(now));
+export const iphoneDevice = () => typeof navigator !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent);
+/** The home line for this device: off (a switch), install (an iPhone not added to the home screen: it cannot get web
+ *  push there), blocked (allowed in the phone's settings only), or nothing (on, put off, or a device that cannot). */
+export function homePushView(state: PushState, iphone: boolean, installed: boolean, dismissed: boolean): 'off' | 'install' | 'blocked' | null {
+  if (dismissed || state === 'on') return null;
+  if (iphone && !installed) return 'install';
+  return state === 'off' ? 'off' : state === 'blocked' ? 'blocked' : null;
+}
 
 async function deviceToken(key: string) {
   const { getMessaging, getToken } = await import('firebase/messaging');

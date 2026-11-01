@@ -1,5 +1,5 @@
 import {Fragment,useEffect,useState} from 'react';
-import {ArrowRightLeft,BookOpen,ChevronDown,ChevronUp,Info,Link2,MoreHorizontal,School,Search,ShieldCheck,User,UserMinus,UserPlus,Users} from 'lucide-react';
+import {ArrowRightLeft,Bell,BookOpen,ChevronDown,ChevronUp,Info,Link2,MoreHorizontal,School,Search,ShieldCheck,User,UserMinus,UserPlus,Users} from 'lucide-react';
 import StatusBadge from './StatusBadge';
 import {matchesKoreanSearch} from '../../lib/koreanSearch';
 import {askConfirm} from './ConfirmDialog';
@@ -15,8 +15,8 @@ function userKind(u:any){
 export default function AppUserManager({busy,request,act,refresh,autoLoad=false,onOpenStudents}:{busy:boolean;request:(a:string,b?:any)=>Promise<any>;act:(f:()=>Promise<any>)=>Promise<void>;refresh:()=>Promise<any>;autoLoad?:boolean;onOpenStudents?:()=>void}){
  // 학습 기록: the open panel of a student account not linked to a student yet (one at a time)
  const [studyUid,setStudyUid]=useState('');
- const [list,setList]=useState<any[]|null>(null),[query,setQuery]=useState(''),[group,setGroup]=useState<'all'|'teacher'|'student'>('all'),[notice,setNotice]=useState('');
- const load=async()=>{const r=await request('read:app-users');setList(r.users||[]);};
+ const [list,setList]=useState<any[]|null>(null),[pushUnknown,setPushUnknown]=useState(false),[query,setQuery]=useState(''),[group,setGroup]=useState<'all'|'teacher'|'student'>('all'),[notice,setNotice]=useState('');
+ const load=async()=>{const r=await request('read:app-users');setList(r.users||[]);setPushUnknown(Boolean(r.pushUnknown));};
  // 연결 제안: accounts whose name matches one student without an account or one 앱 미연결 선생님 (hints only: a failed read hides the box).
  const [hints,setHints]=useState<{suggestions:any[];unclear:any[]}|null>(null);
  const loadHints=async()=>{try{setHints(await request('read:link-suggestions'));}catch{setHints(null);}};
@@ -57,7 +57,7 @@ export default function AppUserManager({busy,request,act,refresh,autoLoad=false,
    {moving&&<AccountMovePanel key={moving.uid+(moving.moveMode||'')} from={moving} mode={moving.moveMode||'new'} users={list} busy={busy} request={request} act={act} onClose={()=>setMoving(null)} onMoved={async message=>{setMoving(null);await load();await refresh();setNotice(message);}}/>}
    <div className="gs-rows">{shown.slice(0,200).map(u=>{const k=userKind(u),who=u.name||u.email;const unlinked=!u.isAdmin&&!isTeacher(u)&&!u.linkedStudent;return <Fragment key={u.uid}><div className="gs-row app-user-row">
     {renaming?.uid===u.uid?<form className="gs-row-who app-user-rename" onSubmit={e=>{e.preventDefault();rename(u);}}><input aria-label={`${who} 앱 이름`} value={renaming.value} maxLength={100} autoFocus onChange={e=>setRenaming({uid:u.uid,value:e.target.value})}/><button type="submit" className="small-button" disabled={busy||!renaming.value.trim()}>저장</button><button type="button" className="gs-quiet" onClick={()=>setRenaming(null)}>취소</button></form>
-     :<span className="gs-row-who"><strong>{u.name||'이름 없음'}</strong><span className="rv-sub">{u.email}{u.joinedAt&&` · ${new Date(u.joinedAt).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'numeric',day:'numeric'})} 가입`}</span>{u.movedToEmail&&<span className="mt-0.5 inline-flex w-fit items-center gap-1 rounded-full bg-[#eeedfe] px-2 py-0.5 text-[11px] font-bold text-[#3c3489]" title="기존 계정으로 옮긴 계정 · 로그인은 계속 돼요. 여기서 또 공부했으면 다시 옮기면 돼요"><ArrowRightLeft size={11} aria-hidden="true"/>옮김 → {u.movedToEmail}</span>}{unlinked&&<button type="button" className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-[#8b2f40]" aria-expanded={studyUid===u.uid} onClick={()=>setStudyUid(studyUid===u.uid?'':u.uid)}><BookOpen size={13} aria-hidden="true"/>학습 기록{studyUid===u.uid?<ChevronUp size={13} aria-hidden="true"/>:<ChevronDown size={13} aria-hidden="true"/>}</button>}</span>}
+     :<span className="gs-row-who"><strong>{u.name||'이름 없음'}</strong><span className="rv-sub">{u.email}{u.joinedAt&&` · ${new Date(u.joinedAt).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'numeric',day:'numeric'})} 가입`}</span>{u.movedToEmail&&<span className="mt-0.5 inline-flex w-fit items-center gap-1 rounded-full bg-[#eeedfe] px-2 py-0.5 text-[11px] font-bold text-[#3c3489]" title="기존 계정으로 옮긴 계정 · 로그인은 계속 돼요. 여기서 또 공부했으면 다시 옮기면 돼요"><ArrowRightLeft size={11} aria-hidden="true"/>옮김 → {u.movedToEmail}</span>}{u.push>0&&<span className="mt-0.5 inline-flex w-fit items-center gap-1 rounded-full bg-[#e1f5ee] px-2 py-0.5 text-[11px] font-bold text-[#085041]" title="이 계정에서 앱 알림을 켠 기기 수"><Bell size={11} aria-hidden="true"/>알림 켬{u.push>1?` · 기기 ${u.push}대`:''}</span>}{unlinked&&<button type="button" className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold text-[#8b2f40]" aria-expanded={studyUid===u.uid} onClick={()=>setStudyUid(studyUid===u.uid?'':u.uid)}><BookOpen size={13} aria-hidden="true"/>학습 기록{studyUid===u.uid?<ChevronUp size={13} aria-hidden="true"/>:<ChevronDown size={13} aria-hidden="true"/>}</button>}</span>}
     <span className={'aur-chip is-'+k.tone}><k.Icon size={13} aria-hidden="true"/>{k.text}</span>
     <span className="aur-main">{u.isAdmin||u.linkedStudent?null:isTeacher(u)?<button type="button" className="aur-button" disabled={busy} onClick={()=>change(u,'student')}>학생으로 되돌리기</button>:<button type="button" className="aur-button" disabled={busy} onClick={()=>change(u,'teacher')}><UserPlus size={14} aria-hidden="true"/>선생님 권한 주기</button>}</span>
     <details className="aur-more"><summary aria-label={`${who} 더 보기`} title="더 보기"><MoreHorizontal size={16} aria-hidden="true"/></summary><div className="aur-menu" onClick={e=>{if((e.target as HTMLElement).closest('button'))e.currentTarget.closest('details')?.removeAttribute('open');}}>
@@ -76,6 +76,6 @@ export default function AppUserManager({busy,request,act,refresh,autoLoad=false,
    {removed&&(removed.length?<div className="gs-rows">{removed.map(r=><div key={r.id} className="gs-row app-user-row"><span className="gs-row-who"><strong>{r.name||'이름 없음'}</strong><span className="rv-sub">{r.email} · {new Date(r.at).toLocaleDateString('ko-KR')} 탈퇴</span></span>
     <span>{r.signInBlocked?<StatusBadge kind="failed" text="로그인 막힘"/>:<StatusBadge kind="saved" text="로그인 가능"/>}</span>
     <button type="button" className="gs-quiet" disabled={busy} onClick={()=>signIn(r,!r.signInBlocked)}>{r.signInBlocked?'로그인 다시 허용':'로그인 막기'}</button></div>)}</div>:<p className="rv-empty">탈퇴한 계정이 없습니다.</p>)}</details>}
-  {notice&&<p role="status" className="gs-note">{notice}</p>}
+  {notice&&<p role="status" className="gs-note">{notice}</p>}{pushUnknown&&<p role="status" className="gs-note">알림 켬 여부를 불러오지 못했어요. 새로고침하면 다시 확인해요.</p>}
  </section>;
 }

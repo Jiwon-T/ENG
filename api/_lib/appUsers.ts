@@ -14,13 +14,18 @@ function joinedAt(v: any): string | null {
 
 export async function listAppUsers(db: any, actor: any) {
     admin(actor);
-    const [users, access] = await Promise.all([db.collection('users').limit(1001).get(), db.collection('teacherWorkspaceAccess').get()]);
+    // 알림: how many devices of each account turned it on — the account field only (the tokens are neither read nor sent;
+    // no field projection, no read); a failed read is told apart from none (pushUnknown)
+    const tokenQuery = db.collection('pushTokens'), tokenRead = typeof tokenQuery.select === 'function' ? tokenQuery.select('uid').get().catch(() => { console.warn('APP_USER_PUSH_READ_FAILED'); return null; }) : Promise.resolve(null);
+    const [users, access, tokens] = await Promise.all([db.collection('users').limit(1001).get(), db.collection('teacherWorkspaceAccess').get(), tokenRead]);
+    const push = new Map<string, number>(); for (const t of tokens?.docs || []) { const uid = String(t.data()?.uid || ''); if (uid) push.set(uid, (push.get(uid) || 0) + 1); }
     if (users.docs.length > 1000) throw Error('APP_USER_LIMIT');
     const profiles = new Map(access.docs.map((d: any) => [d.id, d.data()]));
     return {
+        ...(tokens ? {} : {pushUnknown: true}),
         users: users.docs.map((d: any) => {
             const u = d.data() || {}, p: any = profiles.get(d.id);
-            return { uid: d.id, name: String(u.alias || u.name || '').slice(0, 80), email: String(u.email || '').slice(0, 120), role: u.role || 'student', linkedStudent: Boolean(u.notionStudentKey), movedToEmail: u.movedTo && u.movedToEmail ? String(u.movedToEmail).slice(0, 120) : null, isAdmin: d.id === process.env.ADMIN_UID, workspace: p ? { disabled: Boolean(p.disabled), role: p.workspaceRole || 'teacher' } : null, joinedAt: joinedAt(u.createdAt) };
+            return { uid: d.id, name: String(u.alias || u.name || '').slice(0, 80), email: String(u.email || '').slice(0, 120), role: u.role || 'student', linkedStudent: Boolean(u.notionStudentKey), movedToEmail: u.movedTo && u.movedToEmail ? String(u.movedToEmail).slice(0, 120) : null, isAdmin: d.id === process.env.ADMIN_UID, workspace: p ? { disabled: Boolean(p.disabled), role: p.workspaceRole || 'teacher' } : null, joinedAt: joinedAt(u.createdAt), push: push.get(d.id) || 0 };
         // Newest sign-ups first (they are the ones to look at); accounts without a sign-up time go last.
         }).sort((a: any, b: any) => (b.joinedAt ? Date.parse(b.joinedAt) : 0) - (a.joinedAt ? Date.parse(a.joinedAt) : 0) || a.name.localeCompare(b.name, 'ko')),
     };
