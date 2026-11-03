@@ -10,7 +10,9 @@ import {emptyRegistration} from '../src/lib/studentRegistration.js';
 import {directoryRowKey,directorySourceKey,readDirectoryStudents} from '../api/_lib/academyDirectorySource.js';
 import {readCoreProfile,readCoreEnrollment,saveCoreProfile,readCoreAdmission,saveCoreAdmission} from '../api/_lib/academyCore.js';
 import {profileFromPage,profileProperties,studentProfileSchema} from '../api/_lib/teacherStudentProfile.js';
-import {readStudentMapping,lookupStudentIdentity} from '../api/_lib/studentIdentity.js';
+import {readStudentMapping,lookupStudentIdentity,migrateStudentMapping} from '../api/_lib/studentIdentity.js';
+import {readFileSync} from 'node:fs';
+import {linkStudentAccount} from '../api/_lib/studentAccountLink.js';
 import {hashStudentKey} from '../api/_lib/security.js';
 process.env.PHONE_PIN_PEPPER='p'.repeat(64);
 const teacher='teacher',teacherId='22222222-2222-4222-8222-222222222222',klassId='33333333-3333-4333-8333-333333333333';
@@ -67,3 +69,5 @@ test('원서 수정 after 등록: the teacher who wrote (or co-writes) the 원�
  await assert.rejects(readCoreAdmission(f.db,t,key,f.saved.id),/FORBIDDEN/,'a 원서 not registered');
  assert.ok(await readCoreAdmission(f.db,f.actor,key),'the admin as before');
 });
+test('a new app student gets a parent report address: the report-slug route finds the mapping by the student key (no Notion page id)',async()=>{const f=await fixture(),r=await commitAppStudentRegistration(f.db,f.actor,f.saved.id,1),identity=await lookupStudentIdentity(f.db as any,r.studentKey),mapping=await migrateStudentMapping(f.db as any,identity.studentKey,identity.studentDisplayName);assert.equal(mapping.studentKey,r.studentKey);assert.equal(mapping.origin,'app');assert.equal(mapping.notionStudentPageId,null);await assert.rejects(migrateStudentMapping(f.db as any,identity.notionStudentPageId as any,identity.studentDisplayName),/INVALID_NOTION_STUDENT_PAGE_ID/);const route=readFileSync(new URL('../api/teacher/report-slug.ts',import.meta.url),'utf8');assert.equal(/migrateStudentMapping\([^)]*notionStudentPageId/.test(route),false);});
+test('a new app student can be linked to a student app account (found by the student key; the app mapping keeps its origin)',async()=>{const f=await fixture(),r=await commitAppStudentRegistration(f.db,f.actor,f.saved.id,1);f.rows.set('users/kid',{role:'student'});const linked=await linkStudentAccount(f.db,{firebaseUid:'kid',studentKey:r.studentKey,linkedByUid:'admin'});assert.equal(linked.studentKey,r.studentKey);const mapping=await readStudentMapping(f.db as any,r.studentKey);assert.equal(mapping?.firebaseUid,'kid');assert.equal(mapping?.origin,'app');assert.equal(mapping?.notionStudentPageId,null);assert.equal(f.rows.get('users/kid').notionStudentKey,r.studentKey);f.rows.set('users/other',{role:'student'});await assert.rejects(linkStudentAccount(f.db,{firebaseUid:'other',studentKey:r.studentKey,linkedByUid:'admin'}),/ALREADY_LINKED_TO_ANOTHER_ACCOUNT/);});

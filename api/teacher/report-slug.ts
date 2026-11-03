@@ -46,7 +46,8 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
 
       try {
         const page = await lookupStudentIdentity(db, studentKey, false);
-        const mapping = await migrateStudentMapping(db, page.notionStudentPageId, page.studentDisplayName);
+        // the student's key (an app-registered student has no Notion page id; for others it is the same id)
+        const mapping = await migrateStudentMapping(db, page.studentKey, page.studentDisplayName);
         const snap = await db.collection('reportSlugs')
           .where('internalStudentId', '==', mapping.internalStudentId)
           .get();
@@ -130,7 +131,7 @@ async function routeHandler(req: IncomingMessage, res: ServerResponse) {
       }
 
       // 2) 학생 원본 페이지 ID로부터 안정적인 internalStudentId 생성
-      const existingIdentity = await migrateStudentMapping(db, studentLookup.notionStudentPageId, studentLookup.studentDisplayName);
+      const existingIdentity = await migrateStudentMapping(db, studentLookup.studentKey, studentLookup.studentDisplayName);
       studentKey = existingIdentity.studentKey;
       const internalStudentId = existingIdentity.internalStudentId;
       const studentKeyHash = hashStudentKey(studentKey);

@@ -13,7 +13,7 @@ export function templateFirestore(){
   },
  });
  const db={collection:(name:string)=>query(name),runTransaction:(fn:any)=>{
-  const promise=tail.then(async()=>{const writes=new Map<string,any>();const result=await fn({get:async(ref:any)=>{if(writes.size)throw Error('READ_AFTER_WRITE');return ref.get();},set:(ref:any,data:any)=>writes.set(ref.path,structuredClone(data)),delete:(ref:any)=>writes.set(ref.path,undefined)});
+  const promise=tail.then(async()=>{const writes=new Map<string,any>();const result=await fn({get:async(ref:any)=>{if(writes.size)throw Error('READ_AFTER_WRITE');return ref.get();},set:(ref:any,data:any)=>writes.set(ref.path,structuredClone(data)),delete:(ref:any)=>writes.set(ref.path,undefined),update:(ref:any,data:any)=>writes.set(ref.path,{...structuredClone(writes.has(ref.path)?writes.get(ref.path):rows.get(ref.path)),...structuredClone(data)})});
    if(fail){fail=false;throw Error('FIRESTORE_UNAVAILABLE');}for(const [path,data] of writes){if(data===undefined)rows.delete(path);else rows.set(path,data);metrics.writes++;}return result;
   });tail=promise.then(()=>undefined,()=>undefined);return promise;
  }};

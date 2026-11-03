@@ -17,7 +17,8 @@ export async function linkStudentAccount(db: any, input: { firebaseUid: string; 
     if (userSnap.data()?.role !== 'student') throw new Error('INVALID_ROLE');
     // 2) Exactly one registered student.
     const studentLookup = await lookupStudentIdentity(db, input.studentKey, false);
-    const existingIdentity = await migrateStudentMapping(db, studentLookup.notionStudentPageId, studentLookup.studentDisplayName);
+    // by the student's key: an app-registered student has no Notion page id (for others it is the same id)
+    const existingIdentity = await migrateStudentMapping(db, studentLookup.studentKey, studentLookup.studentDisplayName);
     const studentKey = existingIdentity.studentKey;
     const internalStudentId = existingIdentity.internalStudentId;
     const mappingRef = db.collection('notionStudentMappings').doc(hashStudentKey(studentKey));
