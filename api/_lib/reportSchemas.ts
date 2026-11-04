@@ -248,6 +248,8 @@ export interface StoredStudentSchedule {
   serverReceivedAt: string;
   serverUpdatedAt: string;
   completedAt?: string | null;
+  /** the teacher deleted the schedule (status 취소 too): kept for the teacher's calendar, never shown to students or parents */
+  deleted?: boolean;
 }
 
 /**

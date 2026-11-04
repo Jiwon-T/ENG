@@ -1,6 +1,9 @@
 import { koreanDay } from '../../src/lib/teacherWeekCalendar.js';
-import { canTeach } from './teacherWorkspacePolicy.js';
-export function teacherReflectedSchedules(records: any[], mappings: Map<string, any>, actor: any) {
+import { canTeach, canAccessOwned } from './teacherWorkspacePolicy.js';
+/** `managed`: the teacher's schedule records of the same range; a published copy whose schedule was deleted says so
+ *  (`deleted`), and `restorable` when this teacher may bring it back (owner or admin). */
+export function teacherReflectedSchedules(records: any[], mappings: Map<string, any>, actor: any, managed: any[] = []) {
+    const deletedRecords = new Map(managed.filter(m => m.archived && m.appPublishedRevision).map(m => [m.id, m]));
     const students = new Map<string, string>();
     for (const [key, mapping] of mappings)
         students.set(mapping.internalStudentId, key);
@@ -19,7 +22,8 @@ export function teacherReflectedSchedules(records: any[], mappings: Map<string, 
                 existing.students.push(studentKey);
             continue;
         }
-        grouped.set(id, { id, notionPageId: r.notionScheduleId||null, appScheduleId:r.appScheduleId||null, title: r.title, date: koreanDay(start), start: time(start), end: end ? time(end) : '', subject, students: [studentKey], kind: r.scheduleType, status: r.status, notice: r.notice });
+        const removed = r.appScheduleId ? deletedRecords.get(r.appScheduleId) : null;
+        grouped.set(id, { id, notionPageId: r.notionScheduleId||null, appScheduleId:r.appScheduleId||null, ...(r.deleted||removed ? { deleted: true, restorable: Boolean(removed && canAccessOwned(actor, removed.ownerUid, removed.academyId)) } : {}), title: r.title, date: koreanDay(start), start: time(start), end: end ? time(end) : '', subject, students: [studentKey], kind: r.scheduleType, status: r.status, notice: r.notice });
     }
     return [...grouped.values()];
 }

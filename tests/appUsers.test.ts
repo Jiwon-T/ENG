@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { templateFirestore } from './helpers/templateFirestore.js';
-import { listAppUsers, setAppUserRole, removeAppUser, listRemovedUsers, setRemovedSignIn, setAppUserName } from '../api/_lib/appUsers.js';
+import { listAppUsers, setAppUserRole, removeAppUser, listRemovedUsers, setRemovedSignIn, setAppUserName, setOwnAppName, setOwnAppIcon } from '../api/_lib/appUsers.js';
 import { readAdminHistory } from '../api/_lib/adminHistory.js';
 import { hashStudentKey } from '../api/_lib/security.js';
 
@@ -144,4 +144,35 @@ test('app users: a graduated student linked account can be removed; the link goe
     g.rows.set('notionStudentMappings/' + hashStudentKey('sk'), { studentKey: 'sk', internalStudentId: 'internal', firebaseUid: 'someone-else' });
     await removeAppUser(g.db, admin, { uid: 'kid', blockSignIn: false });
     assert.equal(g.rows.get('notionStudentMappings/' + hashStudentKey('sk')).firebaseUid, 'someone-else');
+});
+test('이름 설정하기: the account saves its own name through the server (a server-changed record with a text updatedAt too); the same name still finishes the step, also for the admin', async () => {
+    const f = seed();
+    const uid = [...f.rows.keys()].find(k => k.startsWith('users/') && f.rows.get(k).role === 'student')!.slice(6);
+    f.rows.set('users/' + uid, { ...f.rows.get('users/' + uid), alias: '모의 학생', isNameSet: false, updatedAt: '2026-11-03T00:00:00.000Z' });
+    await assert.rejects(setOwnAppName(f.db, uid, { name: '  ' }));
+    await assert.rejects(setOwnAppName(f.db, uid, { name: '이름', role: 'teacher' }));
+    await assert.rejects(setOwnAppName(f.db, 'nobody', { name: '이름' }), /USER_NOT_FOUND/);
+    const same = await setOwnAppName(f.db, uid, { name: ' 모의 학생 ' });
+    assert.equal(same.unchanged, undefined); assert.equal(f.rows.get('users/' + uid).isNameSet, true);
+    assert.equal([...f.rows.keys()].filter(k => k.startsWith('appUserNameHistory/')).length, 0, 'no history when the name stays');
+    assert.equal((await setOwnAppName(f.db, uid, { name: '모의 학생' })).unchanged, true);
+    await setOwnAppName(f.db, uid, { name: '새 이름' });
+    const user = f.rows.get('users/' + uid); assert.equal(user.alias, '새 이름'); assert.equal(user.role, 'student'); assert.equal(user.updatedAt, '2026-11-03T00:00:00.000Z');
+    assert.equal([...f.rows.keys()].filter(k => k.startsWith('appUserNameHistory/')).length, 1);
+    f.rows.set('users/' + uid, { ...f.rows.get('users/' + uid), isNameSet: false });
+    assert.equal((await setAppUserName(f.db, admin, { uid, name: '새 이름' })).unchanged, undefined);
+    assert.equal(f.rows.get('users/' + uid).isNameSet, true);
+    assert.equal((await setAppUserName(f.db, admin, { uid, name: '새 이름' })).unchanged, true);
+});
+test('아이콘 선택: the account saves one of the listed icons through the server (text updatedAt kept); other values and fields are refused', async () => {
+    const f = seed();
+    const uid = [...f.rows.keys()].find(k => k.startsWith('users/') && f.rows.get(k).role === 'student')!.slice(6);
+    f.rows.set('users/' + uid, { ...f.rows.get('users/' + uid), updatedAt: '2026-11-03T00:00:00.000Z' });
+    const before = f.rows.get('users/' + uid);
+    await assert.rejects(setOwnAppIcon(f.db, uid, { icon: 'https://example.com/x.png' }));
+    await assert.rejects(setOwnAppIcon(f.db, uid, { icon: '🦊', role: 'teacher' }));
+    await assert.rejects(setOwnAppIcon(f.db, 'nobody', { icon: '🦊' }), /USER_NOT_FOUND/);
+    assert.deepEqual(f.rows.get('users/' + uid), before);
+    assert.equal((await setOwnAppIcon(f.db, uid, { icon: '🦊' })).icon, '🦊');
+    assert.deepEqual(f.rows.get('users/' + uid), { ...before, photoURL: '🦊' });
 });

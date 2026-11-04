@@ -46,9 +46,9 @@ export async function loadTeacherReportReview(db: Firestore, actor: any, student
     const lessonIndex: LessonIndexRow[] = indexOnly ? lessons.docs.map(d => ({ id: d.id, subject: d.data().subject, lessonDateStart: d.data().lessonDateStart })).filter(visible).sort((a, b) => Date.parse(b.lessonDateStart) - Date.parse(a.lessonDateStart)) : [];
     const activeSlug = slugs?.docs.find(d => d.data().active === true)?.data().reportSlug;
     const parentUrl = actor.admin && activeSlug ? `/${encodeURIComponent(activeSlug)}` : null;
-    const result={ subjectOptions:[...new Set([...raw,...lessonIndex,...schedules.docs.map(d=>d.data()).filter(visible),...academic.subjects.filter(visible)].map(r=>r.subject||'영어'))],linked: true, studentLinked: Boolean(mapping.firebaseUid), parentUrl,
+    const result={ subjectOptions:[...new Set([...raw,...lessonIndex,...schedules.docs.map(d=>d.data()).filter(s=>!s.deleted&&visible(s)),...academic.subjects.filter(visible)].map(r=>r.subject||'영어'))],linked: true, studentLinked: Boolean(mapping.firebaseUid), parentUrl,
         reports: raw.map(r => audience === 'parent' ? parentLessonDTO(r) : studentLessonDTO(r, completionHashes)),
-        schedules: schedules.docs.map(d => ({ ...d.data(), scheduleDocId:d.data().scheduleDocId || d.id }) as StoredStudentSchedule).filter(visible).map(reportScheduleDTO),
+        schedules: schedules.docs.map(d => ({ ...d.data(), scheduleDocId:d.data().scheduleDocId || d.id }) as StoredStudentSchedule).filter(s => !s.deleted && visible(s)).map(reportScheduleDTO),
         academic: { records: academic.records.filter(visible), subjects: academic.subjects.filter(visible), academyScores: academic.academyScores.filter(visible) },
     };
     if(indexOnly){

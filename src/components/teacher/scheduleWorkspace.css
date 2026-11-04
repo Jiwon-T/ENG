@@ -172,3 +172,6 @@ body:has(.teacher-workspace) nav.no-print.sticky {background:var(--workspace-sur
 .class-slot-row .lesson-chip-options {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;}
 .teacher-workspace .class-slot-row .lesson-option-chip {min-width:44px;padding:4px 2px;}
 .teacher-workspace .class-slot-row .lesson-option-chip[aria-checked=true],.teacher-workspace .class-slot-row .lesson-option-chip.tone-neutral[aria-checked=true]:not(:disabled):hover {background:var(--workspace-brand-bg);color:var(--workspace-brand-fg);border-color:var(--workspace-brand-dot);}
+.schedule-deleted-chip {display:inline-flex;align-items:center;gap:3px;flex:none;font-size:11px;line-height:16px;padding:0 6px;border:1px solid var(--workspace-neutral-border);border-radius:999px;color:var(--workspace-muted);}
+.schedule-restore-row {padding:0 8px 8px;}
+.schedule-restore-row .small-button {min-height:28px;padding:2px 8px;font-size:12px;gap:4px;}

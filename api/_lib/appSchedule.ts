@@ -44,6 +44,8 @@ export async function publishAppSchedule(db: any, actor: any, idInput: any, revi
     const projected = { ...prior, scheduleDocId: docId, notionScheduleId: prior?.notionScheduleId || source || null, appScheduleId: id, internalStudentId: internal, studentKey: student?.studentKey || prior?.studentKey, title: data.title, startAt: data.date + 'T' + data.start + ':00+09:00', endAt: data.date + 'T' + data.end + ':00+09:00', subject: data.subject, scheduleType: data.kind, status: removed ? '취소' : data.status === '변경' ? '예정' : data.status, notice: !student && !archive ? (prior?.notice ? prior.notice + ' (대상에서 제외됨)' : '(일정 대상에서 제외됨)') : data.note || null, completedAt: !removed && data.status === '완료' ? (prior?.status === '완료' ? prior.completedAt || at : at) : null, teacherDraftId: id, teacherAppRevision: revision, academyId: actor.academyId, sourceMode: 'firestore', sourceUpdatedAt: at, serverUpdatedAt: at };
     if (prior && (archive || !student))
         Object.assign(projected, prior, { status: '취소', completedAt: null, teacherDraftId: id, teacherAppRevision: revision, appScheduleId: id, sourceMode: 'firestore', sourceUpdatedAt: at, serverUpdatedAt: at, ...(!archive ? { notice: prior.notice ? prior.notice + ' (대상에서 제외됨)' : '(일정 대상에서 제외됨)' } : {}) });
+    // a deleted schedule's copies say so (teachers can bring it back; students and parents never see it)
+    (projected as any).deleted = archive;
     changes.push({ target, prior, projected });
 } const record = { ...old, revision, stage: archive ? 'archived' : 'published', archived: archive, deleteRequested: false, sourceMode: 'firestore', appPublishedRevision: revision, lastSubmittedRevision: revision, scheduleProjectionDoneRevision: revision, appEdited: true, updatedAt: now }; for (const change of changes)
     tx.set(change.target, change.projected); if (stateRef)
@@ -52,6 +54,16 @@ export async function archiveAppSchedule(db: any, actor: any, id: any, revision:
     return db.runTransaction(async (tx: any) => { const old = (await tx.get(ref)).data(); if (!old || !canAccessOwned(actor, old.ownerUid, old.academyId))
         throw Error('FORBIDDEN'); if (old.revision !== revision)
         throw Error('DRAFT_CONFLICT'); stable(old); tx.set(ref, { ...old, archived: true, stage: 'archived', sourceMode: 'firestore', updatedAt: Date.now() }); tx.set(db.collection('scheduleAppHistory').doc(id + ':' + revision + ':archive'), { before: old, by: actor.uid, at: Date.now(), reason: 'archive-private' }); return { archived: true }; }); return publishAppSchedule(db, actor, id, revision, true); }
+/** 되살리기: a deleted schedule that had been published comes back as it was before (its last status) and is
+ *  published again, so students and parents see it again (owner or admin, as for deleting). Once back, asking again does nothing. */
+export async function restoreAppSchedule(db: any, actor: any, idInput: any) { const id = z.string().uuid().parse(idInput), ref = db.collection('teacherSchedules').doc(id);
+    const revision = await db.runTransaction(async (tx: any) => { const old = (await tx.get(ref)).data(); if (!old || !canAccessOwned(actor, old.ownerUid, old.academyId) || old.academyId !== actor.academyId)
+        throw Error('FORBIDDEN'); if (!old.archived)
+        return null; stable(old); if (!old.appPublishedRevision)
+        throw Error('FORBIDDEN'); const at = Date.now(), record = { ...old, archived: false, deleteRequested: false, stage: 'draft', revision: old.revision + 1, sourceMode: 'firestore', updatedAt: at }; tx.set(ref, record); tx.set(db.collection('scheduleAppHistory').doc(id + ':' + record.revision + ':restore'), { before: old, after: record, by: actor.uid, at, reason: 'restore' }); return record.revision; });
+    if (revision === null)
+        return { restored: false, alreadyRestored: true };
+    return { restored: true, ...await publishAppSchedule(db, actor, id, revision) }; }
 /** Never switch a live academy merely because the new code is deployed. */
 // One bootstrap asked this up to 18 times; a 2-second per-instance memo (cleared on switch changes) keeps it to one read pair.
 const scheduleModeMemo = new WeakMap<object, { at: number; value: Promise<boolean> }>();

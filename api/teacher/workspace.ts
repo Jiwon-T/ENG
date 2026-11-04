@@ -280,7 +280,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const records=local.docs.map(d=>({id:d.id,...d.data()}));
                 // 상담 일정: each 신입생's 원서 (작성 중, or the registered student)
                 const consultTies=records.some((r:any)=>r.consultLinks)?await (await import('../_lib/consultLinks.js')).consultTies(db,actor,records):{};
-                return sendJson(res,200,{ok:true,hiddenTodayLessons,consultTies,...(dayLessons?{dayLessons}:{}),schedules:mergeSourceRows(records,remote).filter((r:any)=>!r.archived&&(!day||r.data?.date===day)),reflectedSchedules:teacherReflectedSchedules(reflected.map(d=>d.data()),mappings,actor).filter((r:any)=>!day||r.date===day)});
+                return sendJson(res,200,{ok:true,hiddenTodayLessons,consultTies,...(dayLessons?{dayLessons}:{}),schedules:mergeSourceRows(records,remote).filter((r:any)=>!r.archived&&(!day||r.data?.date===day)),reflectedSchedules:teacherReflectedSchedules(reflected.map(d=>d.data()),mappings,actor,records).filter((r:any)=>!day||r.date===day)});
             }
             if(action==='managed-record') {
                 const kind=z.enum(['lesson','academic','schedule','class','curriculum']).parse(params.get('kind'));
@@ -363,7 +363,7 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
                 const staff = resourcesOnly||!needs('settings','schedule','curriculum')?[]:actor.admin ? (await db.collection('users').where('role','in',['teacher','principal']).get()).docs.map(d=>({uid:d.id,name:d.data().alias||d.data().name||'선생님'})) : await Promise.all(staffAccess.map(async (a:any)=>{const u=(await db.collection('users').doc(a.uid).get()).data();return {uid:a.uid,name:u?.alias||u?.name||'선생님'};}));
                 if(actor.admin)for(const a of access as any[])if(a.offline&&!a.linkedUid&&!staff.some((s:any)=>s.uid===a.uid))staff.push({uid:a.uid,name:a.workspaceLabel||'선생님'}); // added without an app account
                 if(actor.admin&&needs('settings')&&process.env.ADMIN_UID&&!staff.some((s:any)=>s.uid===process.env.ADMIN_UID)){const adminUser=(await db.collection('users').doc(process.env.ADMIN_UID).get()).data();staff.push({uid:process.env.ADMIN_UID,name:adminUser?.alias||adminUser?.name||'관리자 선생님'});}
-                const result:any = { ok: true, admin: actor.admin, principal: actor.principal, academyId: actor.academyId, teachingScopes: actor.teachingScopes, uid: actor.uid, scopes: actor.scopes, students, curricula: mergedCurricula.filter((r:any)=>!r.archived), drafts: records.filter((r:any)=>!r.archived), schedules: (fast?scheduleRecords:mergeSourceRows(scheduleRecords,sourceSchedules)).filter((r:any)=>!r.archived), reflectedSchedules: teacherReflectedSchedules(reflected.map(d => d.data()), mappings, actor), classes: mergedClasses.filter((r:any)=>!r.archived), notionIssues:sourceWorkspace.issues, notionSources:sourceWorkspace.sources, staff, access };
+                const result:any = { ok: true, admin: actor.admin, principal: actor.principal, academyId: actor.academyId, teachingScopes: actor.teachingScopes, uid: actor.uid, scopes: actor.scopes, students, curricula: mergedCurricula.filter((r:any)=>!r.archived), drafts: records.filter((r:any)=>!r.archived), schedules: (fast?scheduleRecords:mergeSourceRows(scheduleRecords,sourceSchedules)).filter((r:any)=>!r.archived), reflectedSchedules: teacherReflectedSchedules(reflected.map(d => d.data()), mappings, actor, scheduleRecords), classes: mergedClasses.filter((r:any)=>!r.archived), notionIssues:sourceWorkspace.issues, notionSources:sourceWorkspace.sources, staff, access };
                 result.coreMode=Boolean(actor.coreMode);
                 if(needs('lesson'))result.lessonAppMode=await lessonModeEarly;
                 if(draftsEarly)result.draftsPage=await draftsEarly;
@@ -542,7 +542,8 @@ export async function handleWorkspace(req: IncomingMessage, res: ServerResponse,
         // Classes and curricula are saved in the app store above.
         if(['save-curriculum','save-class'].includes(body.action))throw new Error('CORE_NOT_READY');
         if(body.action==='archive-schedule'&&await appSchedulesActive(db,actor)){failureStage='schedule-archive';return sendJson(res,200,{ok:true,...await archiveAppSchedule(db,actor,body.id,body.revision)});}
-        if(['archive-class','archive-curriculum','archive-schedule'].includes(body.action))throw new Error('CORE_NOT_READY');
+        if(body.action==='restore-schedule'&&await appSchedulesActive(db,actor)){failureStage='schedule-restore';return sendJson(res,200,{ok:true,...await (await import('../_lib/appSchedule.js')).restoreAppSchedule(db,actor,body.id)});}
+        if(['archive-class','archive-curriculum','archive-schedule','restore-schedule'].includes(body.action))throw new Error('CORE_NOT_READY');
         if(body.action==='save-schedule'&&await appSchedulesActive(db,actor)){failureStage='schedule-save';return sendJson(res,200,{ok:true,...await saveAppSchedule(db,actor,body)});}
         if(body.action==='save-schedule')throw new Error('CORE_NOT_READY');
         if(body.action==='publish-schedule'&&await appSchedulesActive(db,actor)){failureStage='schedule-reflection';return sendJson(res,200,{ok:true,...await publishAppSchedule(db,actor,body.id,body.revision)});}

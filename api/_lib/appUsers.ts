@@ -3,6 +3,7 @@ import { forgetFirebaseSessions } from './firebaseSession.js';
 import { hashStudentKey } from './security.js';
 import { normalizeNotionPageId } from './notionPageId.js';
 import { writeAppTeacherRow } from './offlineTeacher.js';
+import { PROFILE_ICONS } from '../../src/lib/profileIcons.js';
 // App accounts for the admin: everyone signs up as a student; the admin grants teacher access here.
 function admin(actor: any) { if (!actor.admin || actor.academyId !== 'main') throw Error('FORBIDDEN'); }
 
@@ -58,6 +59,36 @@ export async function setAppUserRole(db: any, actor: any, input: unknown) {
     });
 }
 
+/** 이름 설정하기 / 앱 이름 바꾸기 (the person's own account): saved by the server, since the browser may not write a user
+ *  record the server changed (its updatedAt is text, which the rules refuse). Only alias and isNameSet change; recorded
+ *  for 관리 기록 like the admin's change. */
+export async function setOwnAppName(db: any, uid: string, input: unknown) {
+    const v = z.object({ name: z.string().trim().min(1).max(100) }).strict().parse(input);
+    const userRef = db.collection('users').doc(uid);
+    return db.runTransaction(async (tx: any) => {
+        const user = (await tx.get(userRef)).data();
+        if (!user) throw Error('USER_NOT_FOUND');
+        const from = String(user.alias || user.name || '');
+        if (from === v.name && user.isNameSet) return { name: v.name, unchanged: true };
+        const at = Date.now();
+        tx.set(userRef, { ...user, alias: v.name, isNameSet: true });
+        if (from !== v.name) tx.set(db.collection('appUserNameHistory').doc(`${uid}:${at}`), { uid, from, to: v.name, by: uid, at });
+        return { name: v.name };
+    });
+}
+
+/** 아이콘 선택 (the person's own account): one of the listed icons, saved by the server for the same reason as the name. */
+export async function setOwnAppIcon(db: any, uid: string, input: unknown) {
+    const v = z.object({ icon: z.enum(PROFILE_ICONS) }).strict().parse(input);
+    const userRef = db.collection('users').doc(uid);
+    return db.runTransaction(async (tx: any) => {
+        const user = (await tx.get(userRef)).data();
+        if (!user) throw Error('USER_NOT_FOUND');
+        if (user.photoURL !== v.icon) tx.set(userRef, { ...user, photoURL: v.icon });
+        return { icon: v.icon };
+    });
+}
+
 /** The app name (users.alias) the person chose at first sign-in; the admin can correct it here. Recorded for 관리 기록. */
 export async function setAppUserName(db: any, actor: any, input: unknown) {
     admin(actor);
@@ -67,7 +98,8 @@ export async function setAppUserName(db: any, actor: any, input: unknown) {
         const user = (await tx.get(userRef)).data();
         if (!user) throw Error('APP_USER_NOT_FOUND');
         const from = String(user.alias || user.name || '');
-        if (from === v.name) return { uid: v.uid, name: v.name, unchanged: true };
+        // the same name still finishes the first-sign-in name step (the student's own save may have been refused before)
+        if (from === v.name && user.isNameSet) return { uid: v.uid, name: v.name, unchanged: true };
         const at = Date.now();
         tx.set(userRef, { ...user, alias: v.name, isNameSet: true });
         tx.set(db.collection('appUserNameHistory').doc(`${v.uid}:${at}`), { uid: v.uid, from, to: v.name, by: actor.uid, at });

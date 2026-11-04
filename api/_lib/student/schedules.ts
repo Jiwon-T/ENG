@@ -88,7 +88,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       .get();
 
     const storedSchedules: StoredStudentSchedule[] = [];
-    schedulesSnap.forEach(d => storedSchedules.push(d.data() as StoredStudentSchedule));
+    // a deleted schedule is not shown (a cancelled one is)
+    schedulesSnap.forEach(d => { if (!d.data().deleted) storedSchedules.push(d.data() as StoredStudentSchedule); });
 
     storedSchedules.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 

@@ -223,7 +223,7 @@ export default function TeacherWorkspace({ onNavigate, initialTab, initialStuden
         if(changes.length&&changes.every(action=>['save-draft','publish','save-schedule','publish-schedule','save-class-status'].includes(action)))return;
         const changed=changes[0]||'';
         if(changed==='save-schedule'||changed==='save-class-status')return;
-        if(changed==='publish-schedule'||changed==='archive-schedule'){mergeData(await request('read:schedule-records',{force:'1'}));return;}
+        if(changed==='publish-schedule'||changed==='archive-schedule'||changed==='restore-schedule'){mergeData(await request('read:schedule-records',{force:'1'}));return;}
         if(['save-class','save-curriculum','archive-class','archive-curriculum'].includes(changed)){
             mergeData(await request('read:bootstrap',{section:'curriculum',resourcesOnly:'1',force:'1'}));return;
         }

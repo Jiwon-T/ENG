@@ -17,6 +17,7 @@ import { lastSignedOut, loadLogin, rememberSignedIn } from './lib/authHint';
 import { NibTile } from './components/RosyLogo';
 import { PassBadge } from './components/PassBadge';
 import { PetService, type PetSummary } from './lib/petService';
+import { PROFILE_ICONS } from './lib/profileIcons';
 
 function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
   return (
@@ -193,7 +194,7 @@ export default function App() {
   const [showNameEditModal, setShowNameEditModal] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [newName, setNewName] = useState('');
-  const [isUpdatingName, setIsUpdatingName] = useState(false);
+  const [isUpdatingName, setIsUpdatingName] = useState(false), [nameError, setNameError] = useState(''), [iconError, setIconError] = useState('');
   // Opened from the pencil (a change, can be cancelled) rather than the required first-time prompt.
   const [nameEditByChoice, setNameEditByChoice] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -741,18 +742,21 @@ export default function App() {
               <p className="text-slate-500 mb-8 font-medium">나를 표현하는 아이콘을 골라보세요!</p>
               
               <div className="grid grid-cols-5 gap-3 max-h-[300px] overflow-y-auto no-scrollbar p-2">
-                {['🦊', '🐰', '🐯', '🐼', '🦁', '🐥', '🐱', '🐶', '🦄', '🐨', '🍎', '⭐️', '🎨', '🚀', '💡', '🌈', '🍦', '🍩', '🥑', '👾'].map((emoji) => (
+                {PROFILE_ICONS.map((emoji) => (
                   <button
                     key={emoji}
                     onClick={async () => {
                       if (!user) return;
+                      setIconError('');
                       try {
-                        const userDocRef = doc(db, 'users', user.uid);
-                        await setDoc(userDocRef, { photoURL: emoji }, { merge: true });
+                        // saved by the server, as the name is
+                        const { safeFetchJson } = await import('./lib/safeFetchJson');
+                        const r = await safeFetchJson<any>('/api/student/app-profile', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` }, body: JSON.stringify({ icon: emoji }) });
+                        if (!r.ok) { setIconError(r.userMessage || '아이콘을 저장하지 못했어요. 잠시 후 다시 해 주세요.'); return; }
                         setProfile(prev => prev ? { ...prev, photoURL: emoji } : null);
                         setShowIconPicker(false);
-                      } catch (err) {
-                        console.error('Failed to update icon:', err);
+                      } catch {
+                        setIconError('인터넷 연결을 확인한 뒤 다시 해 주세요.');
                       }
                     }}
                     className="aspect-square flex items-center justify-center text-3xl hover:bg-pastel-pink-50 rounded-2xl transition-all hover:scale-110 active:scale-95"
@@ -761,9 +765,10 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              {iconError && <p role="alert" className="mt-4 text-sm font-bold text-rose-600">{iconError}</p>}
               
               <button
-                onClick={() => setShowIconPicker(false)}
+                onClick={() => { setShowIconPicker(false); setIconError(''); }}
                 className="mt-8 w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-bold hover:bg-slate-200 transition-all"
               >
                 닫기
@@ -799,7 +804,7 @@ export default function App() {
                   placeholder="자기 이름을 입력하세요"
                   value={newName}
                   maxLength={100}
-                  onChange={(e) => setNewName(e.target.value)}
+                  onChange={(e) => { setNewName(e.target.value); setNameError(''); }}
                   className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-pastel-pink-200 focus:ring-4 focus:ring-pastel-pink-50 transition-all font-bold text-center text-lg"
                   autoFocus
                 />
@@ -807,13 +812,12 @@ export default function App() {
                 <button
                   onClick={async () => {
                     if (!newName.trim() || !user) return;
-                    setIsUpdatingName(true);
+                    setIsUpdatingName(true); setNameError('');
                     try {
-                      const userDocRef = doc(db, 'users', user.uid);
-                      await setDoc(userDocRef, { 
-                        alias: newName.trim(),
-                        isNameSet: true 
-                      }, { merge: true });
+                      // saved by the server: the browser may not write a user record the server changed
+                      const { safeFetchJson } = await import('./lib/safeFetchJson');
+                      const r = await safeFetchJson<any>('/api/student/app-profile', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` }, body: JSON.stringify({ name: newName.trim() }) });
+                      if (!r.ok) { setNameError(r.userMessage || '이름을 저장하지 못했어요. 잠시 후 다시 해 주세요.'); return; }
                       
                       setProfile(prev => prev ? { 
                         ...prev, 
@@ -823,8 +827,8 @@ export default function App() {
                       
                       setShowNameEditModal(false);
                       setNameEditByChoice(false);
-                    } catch (err) {
-                      console.error('Failed to update name:', err);
+                    } catch {
+                      setNameError('인터넷 연결을 확인한 뒤 다시 해 주세요.');
                     } finally {
                       setIsUpdatingName(false);
                     }
@@ -834,6 +838,7 @@ export default function App() {
                 >
                   {isUpdatingName ? '저장 중...' : '설정 완료'}
                 </button>
+                {nameError && <p role="alert" className="text-sm font-bold text-rose-600">{nameError}</p>}
                 {/* The first name is required; changing it later can be cancelled. */}
                 {nameEditByChoice && (
                   <button type="button" onClick={() => { setShowNameEditModal(false); setNameEditByChoice(false); }} disabled={isUpdatingName}
