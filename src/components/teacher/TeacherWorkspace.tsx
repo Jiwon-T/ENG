@@ -12,7 +12,7 @@ import LessonModeSwitch from './LessonModeSwitch';
 import StatusBadge,{statusKind} from './StatusBadge';
 import {fieldDisclosureError} from '../../lib/lessonDisclosure';
 import AutoTextarea from './AutoTextarea';
-import { autoSessionNumbers, editedSessionNumbers, withStudyDefaults, numberTenths, sameLessonTarget } from '../../lib/sessionNumbers';
+import { autoSessionNumbers, editedSessionNumbers, withStudyDefaults, numberTenths, sameLessonTarget, loadedSessionHistory } from '../../lib/sessionNumbers';
 import WorkspaceRequestMetrics from './WorkspaceRequestMetrics';
 import {beginWorkspaceRequest,finishWorkspaceRequest,clearWorkspaceRequestMetrics} from '../../lib/workspaceRequestMetrics';
 import {regularLessonTime} from '../../lib/lessonTimePresets';
@@ -284,7 +284,7 @@ export default function TeacherWorkspace({ onNavigate, initialTab, initialStuden
         if(saved){const shown=compactLessonInput({...emptyLesson(),...saved.data});loadedLesson.current=JSON.stringify(shown);setLesson(shown);setDraftId(saved.id);setRevision(saved.revision);setAutoLoading(false);loadSessionHistory(saved.data);return;}
         setAutoLoading(true);
         try{const previous=await request('previous-lesson',{studentKey,subject:seed.subject,date:seed.date});
-            if(version===autoVersion.current){sessionHistory.current=previous.data.sessionRecords||[];setLesson((current:any)=>{const filled=applyPreviousLesson(current,seed,previous.data,touched);return Array.isArray(previous.data.sessionRecords)?autoSessionNumbers(filled,sessionHistory.current,touched).data:filled;});}
+            if(version===autoVersion.current){sessionHistory.current=loadedSessionHistory(previous.data.sessionRecords);setLesson((current:any)=>{const filled=applyPreviousLesson(current,seed,previous.data,touched);return Array.isArray(previous.data.sessionRecords)?autoSessionNumbers(filled,sessionHistory.current,touched).data:filled;});}
         }catch(e){if(version===autoVersion.current)setMessage(e instanceof Error?e.message:'직전 수업을 불러오지 못했습니다.');}
         finally{if(version===autoVersion.current)setAutoLoading(false);}
     }
@@ -295,7 +295,7 @@ export default function TeacherWorkspace({ onNavigate, initialTab, initialStuden
     // A saved lesson also loads the earlier lessons, so a counter turned on later (e.g. 자습) can be counted and hinted.
     const [,setHistoryTick]=useState(0);
     // When they arrive, the automatic rounds are counted again (a 자습 turned on meanwhile); rounds typed by hand stay.
-    function loadSessionHistory(baseline:any){const version=autoVersion.current,{studentKey,subject,date}=baseline||{};if(!studentKey||!subject||!date)return;void request('previous-lesson',{studentKey,subject,date}).then((p:any)=>{if(version!==autoVersion.current||!sameLessonTarget(latestLesson.current,{studentKey,subject,date}))return; /* the date (or student) changed meanwhile: these are not its earlier lessons */const history=p?.data?.sessionRecords||[];sessionHistory.current=history;setLesson((d:any)=>sameLessonTarget(d,{studentKey,subject,date})?editedSessionNumbers(d,baseline,autoTouches.current,history):d);setHistoryTick(n=>n+1);}).catch(()=>{/* hints only; the lesson stays usable */});}
+    function loadSessionHistory(baseline:any){const version=autoVersion.current,{studentKey,subject,date}=baseline||{};if(!studentKey||!subject||!date)return;void request('previous-lesson',{studentKey,subject,date}).then((p:any)=>{if(version!==autoVersion.current||!sameLessonTarget(latestLesson.current,{studentKey,subject,date}))return; /* the date (or student) changed meanwhile: these are not its earlier lessons */const history=loadedSessionHistory(p?.data?.sessionRecords);sessionHistory.current=history;setLesson((d:any)=>sameLessonTarget(d,{studentKey,subject,date})?editedSessionNumbers(d,baseline,autoTouches.current,history):d);setHistoryTick(n=>n+1);}).catch(()=>{/* hints only; the lesson stays usable */});}
     function openDraft(d: any) { setSavedLookup(null);autoTouches.current=new Set();sessionHistory.current=[];autoVersion.current++;setAutoLoading(false); setData((old:any)=>({...old,drafts:[d,...old.drafts.filter((r:any)=>r.id!==d.id)]}));const shown=compactLessonInput({ ...emptyLesson(), ...d.data });loadedLesson.current=JSON.stringify(shown);setLesson(shown); setDraftId(d.id); setRevision(d.revision); setLessonMode('single'); setLessonDialogOpen(true); loadSessionHistory(d.data); }
     const students = data?.students || [];
     // 이달의 장학 쿠폰 badges on the student list (admin): loaded with the list.

@@ -66,12 +66,17 @@ function latestSessionRecord(records:readonly any[],input:any,kind:SessionKind,s
 export function sessionBase(records:readonly any[],input:any,kind:SessionKind):any {
  return latestSessionRecord(records,input,kind,true);
 }
+/** Earlier lessons as the server sent them (previous-lesson's sessionRecords). Only for these is "no earlier lesson"
+ *  known to mean a first lesson (counted from 0, like a new month) rather than history not loaded yet. */
+const loadedHistories=new WeakSet<object>();
+export function loadedSessionHistory(records:unknown):any[]{if(!Array.isArray(records))return [];loadedHistories.add(records);return records;}
 export function nextSessionNumbers(records:readonly any[],input:any):{lesson:number|null;study:number|null} {
  const next=(kind:SessionKind)=>{if((kind==='lesson'?input.classSession:input.selfStudy)!=='있음')return null;
   const minutes=kindMinutes(kind,input);if(minutes===null)return null;
-  // No earlier counted lesson of this student·subject at all (history not loaded, or a brand-new student): left empty.
+  // No earlier counted lesson of this student·subject at all: a first lesson starts at 0 once the history is known to be
+  // loaded (loadedSessionHistory); before that it is left empty.
   // A first 자습 after earlier lessons with only a 수업 회차 starts at 0, like a new month.
-  const base=sessionBase(records,input,kind);if(!base&&!latestSessionRecord(records,input,'lesson',false)&&!latestSessionRecord(records,input,'study',false))return null;
+  const base=sessionBase(records,input,kind);if(!base&&!loadedHistories.has(records)&&!latestSessionRecord(records,input,'lesson',false)&&!latestSessionRecord(records,input,'study',false))return null;
   const tenths=(base?numberTenths(kind==='lesson'?base.round:base.selfStudyRound)!:0)+(absent(input)?0:sessionIncrement(kind,minutes)!);return tenths/10;
  };return {lesson:next('lesson'),study:next('study')};
 }

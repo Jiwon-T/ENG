@@ -1,6 +1,6 @@
 import React from 'react';
 import test from 'node:test';import assert from 'node:assert/strict';import {renderToStaticMarkup} from 'react-dom/server';
-import {sessionIncrement,nextSessionNumbers,autoSessionNumbers,formatSessionNumber,sessionBase} from '../src/lib/sessionNumbers';
+import {sessionIncrement,nextSessionNumbers,autoSessionNumbers,formatSessionNumber,sessionBase,loadedSessionHistory} from '../src/lib/sessionNumbers';
 import LessonAcademyFields from '../src/components/teacher/LessonAcademyFields';
 import {applyPreviousLesson} from '../src/lib/teacherTodayLessons';
 import {handleWorkspace} from '../api/teacher/workspace';
@@ -172,4 +172,13 @@ test('a first 자습 after lessons with only a 수업 회차 starts at 0 (+1 for
  assert.deepEqual([first.data.round,first.data.selfStudyRound],[13,1]);
  assert.equal(first.hints.selfStudyRound,'자동 입력 · 2026-10 월별 시작 0 +1');
  assert.deepEqual(nextSessionNumbers([],input),{lesson:null,study:null},'nothing loaded yet');
+});
+test('a brand-new student’s first lesson counts from 0 once the earlier lessons are known to be none; before loading it stays empty',()=>{
+ const none=loadedSessionHistory([]);
+ const first=autoSessionNumbers(input,none);
+ assert.deepEqual([first.data.round,first.data.selfStudyRound],[nextSessionNumbers(loadedSessionHistory([]),input).lesson,nextSessionNumbers(loadedSessionHistory([]),input).study]);
+ assert.ok(first.data.round>0&&first.data.selfStudyRound>0);
+ assert.equal(first.hints.round,`자동 입력 · ${input.date.slice(0,7)} 월별 시작 0 +${formatSessionNumber(first.data.round)}`);
+ assert.deepEqual(nextSessionNumbers([],input),{lesson:null,study:null},'not loaded: still empty');
+ assert.deepEqual(loadedSessionHistory(undefined),[]);assert.deepEqual(nextSessionNumbers(loadedSessionHistory(undefined),input),{lesson:null,study:null},'a failed load stays empty');
 });

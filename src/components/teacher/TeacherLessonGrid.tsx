@@ -4,7 +4,7 @@ import {withAutoTestGrade} from '../../lib/lessonTestInput';
 import {fieldDisclosureError} from '../../lib/lessonDisclosure';
 import {ChevronLeft,ChevronRight} from 'lucide-react';
 import AutoTextarea from './AutoTextarea';
-import { autoSessionNumbers, editedSessionNumbers, withStudyDefaults } from '../../lib/sessionNumbers';
+import { autoSessionNumbers, editedSessionNumbers, withStudyDefaults, loadedSessionHistory } from '../../lib/sessionNumbers';
 import {regularLessonTime} from '../../lib/lessonTimePresets';
 import {matchesKoreanSearch} from '../../lib/koreanSearch';
 import ChipGroup from './ChipGroup';
@@ -116,7 +116,7 @@ export default function TeacherLessonGrid({ headingActions,data, busy, request, 
         setSelection([]);setActiveStudent(next.length?rows.length:Math.max(0,rows.findIndex(r=>keys.some(key=>sameGridLesson(r,seedOf(key),matchEnd)))));setEditorOpen(true);
         await Promise.all(next.filter(row=>row.loading).map(async row=>{
             try{const result=await request('previous-lesson',{studentKey:row.data.studentKey,subject:row.data.subject,date:row.data.date});
-                setRows(previous=>previous.map(r=>r.id===row.id?{...r,loading:false,sessionRecords:result.data.sessionRecords,data:Array.isArray(result.data.sessionRecords)?autoSessionNumbers(applyPreviousLesson(r.data,row.data,result.data,r.touched),result.data.sessionRecords,r.touched,Boolean(r.savedData)||r.stage!=='new').data:applyPreviousLesson(r.data,row.data,result.data,r.touched),error:undefined}:r));
+                setRows(previous=>previous.map(r=>r.id===row.id?{...r,loading:false,sessionRecords:Array.isArray(result.data.sessionRecords)?loadedSessionHistory(result.data.sessionRecords):result.data.sessionRecords,data:Array.isArray(result.data.sessionRecords)?autoSessionNumbers(applyPreviousLesson(r.data,row.data,result.data,r.touched),result.data.sessionRecords,r.touched,Boolean(r.savedData)||r.stage!=='new').data:applyPreviousLesson(r.data,row.data,result.data,r.touched),error:undefined}:r));
             }catch(e){setRow(row.id,{loading:false,error:e instanceof Error?e.message:'직전 수업 조회 실패'});}
         }));
     }
