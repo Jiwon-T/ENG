@@ -177,23 +177,27 @@ export function planImport(cells:SheetCells[],data:any,choices:Record<string,str
    return {classId:null,key,name,status:'new',changes:g.lines.map(l=>`${DAY_NAMES[l.weekday]} ${l.start}~${l.end}`),lines:g.lines,revision:0,
     data:{name,status:'진행 중',subject,campus,students:g.keys,slots:[...lessonSlots,...testSlots].map(tidy),books:[]}};
   }
-  // An existing class: the sheet's weekdays take the lesson slot of that weekday (time and 자습), and the 3차시 lines on the
-  // sheet's test weekdays; every other slot stays as it was.
-  const c=g.existing,old=(c.slots||[]) as any[],next=[...old],changes:string[]=[];
+  // An existing class: the sheet is its whole week. Each lesson line takes one of its lesson slots that weekday (the same
+  // time first; time and 자습 from the sheet); lesson slots the sheet has no line for are dropped (a class moved to other
+  // weekdays never shows on both), and the sheet's 3차시 lines replace its tests. Stopped (중단) slots stay as they were.
+  const c=g.existing,old=(c.slots||[]) as any[],changes:string[]=[];
+  const live=old.filter(o=>o.kind!=='test'&&o.status!=='중단'),taken=new Map<any,any>(),added:any[]=[];
   for(const s of lessonSlots.map(tidy)){
-   const at=next.findIndex(o=>o.kind!=='test'&&o.weekday===s.weekday&&o.status!=='중단');
-   if(at<0){next.push(s);changes.push(`${DAY_NAMES[s.weekday]} 수업 추가 ${s.start}~${s.end}`);continue;}
-   const o=next[at];if(o.start!==s.start||o.end!==s.end)changes.push(`${DAY_NAMES[s.weekday]} ${o.start}~${o.end} → ${s.start}~${s.end}`);
+   const free=live.filter(o=>!taken.has(o)&&o.weekday===s.weekday),o=free.find(o=>o.start===s.start&&o.end===s.end)||free[0];
+   if(!o){added.push(s);changes.push(`${DAY_NAMES[s.weekday]} 수업 추가 ${s.start}~${s.end}`);continue;}
+   if(o.start!==s.start||o.end!==s.end)changes.push(`${DAY_NAMES[s.weekday]} ${o.start}~${o.end} → ${s.start}~${s.end}`);
    else if(clean({...o,study:o.study||[]})!==clean({...s,study:s.study||[]}))changes.push(`${DAY_NAMES[s.weekday]} 자습 시간 바뀜`);
-   next[at]={...o,start:s.start,end:s.end,study:s.study};if(!s.study)delete next[at].study;
+   const n={...o,start:s.start,end:s.end,study:s.study};if(!s.study)delete n.study;taken.set(o,n);
   }
-  const testDays=new Set(testSlots.map(t=>t.weekday));
-  const keptTests=next.filter(o=>o.kind==='test'&&testDays.has(o.weekday));
-  const newTests=testSlots.map(tidy);
-  if(keptTests.length!==newTests.length||keptTests.some(o=>!newTests.some(t=>clean(t)===clean(o))))changes.push(...[...testDays].map(d=>`${DAY_NAMES[d]} 테스트 바뀜`));
+  for(const o of live)if(!taken.has(o))changes.push(`${DAY_NAMES[o.weekday]} ${o.start}~${o.end} 수업 빠짐`);
+  const oldTests=old.filter(o=>o.kind==='test'),newTests=testSlots.map(tidy);
+  if(oldTests.length!==newTests.length||oldTests.some(o=>!newTests.some(t=>clean(t)===clean(o)))){
+   const days=[...new Set([...oldTests,...newTests].map(t=>t.weekday))].filter(d=>JSON.stringify(oldTests.filter(t=>t.weekday===d).map(clean).sort())!==JSON.stringify(newTests.filter(t=>t.weekday===d).map(clean).sort()));
+   changes.push(...days.map(d=>`${DAY_NAMES[d]} 테스트 바뀜`));
+  }
   // an old test keeps its id (and status) only on the same weekday and time, and only once: two slots never share an id
   const reused=new Set<any>();
-  const slots=[...next.filter(o=>!(o.kind==='test'&&testDays.has(o.weekday))),...newTests.map(t=>{const was=keptTests.find(o=>!reused.has(o)&&o.weekday===t.weekday&&o.start===t.start&&o.end===t.end);if(was)reused.add(was);return was?{...(was.id?{id:was.id}:{}),...(was.status?{status:was.status}:{}),...t}:t;})];
+  const slots=[...old.filter(o=>o.kind!=='test'&&(o.status==='중단'||taken.has(o))).map(o=>taken.get(o)||o),...added,...newTests.map(t=>{const was=oldTests.find(o=>!reused.has(o)&&o.weekday===t.weekday&&o.start===t.start&&o.end===t.end);if(was)reused.add(was);return was?{...(was.id?{id:was.id}:{}),...(was.status?{status:was.status}:{}),...t}:t;})];
   const changed=changes.length>0;
   return {classId:c.id,name:c.name,status:changed?'changed':'same',changes,lines:g.lines,revision:c.revision||0,notionEditedAt:c.notionEditedAt,
    data:changed?saved(c,{slots:slots.slice(0,14)}):null};

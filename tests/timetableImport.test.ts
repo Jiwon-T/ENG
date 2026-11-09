@@ -80,12 +80,11 @@ test('a changed time, a new class, 자습 per student, a 3차시 line, and names
   assert.deepEqual(plan.unknown.map(u => [u.raw, u.options]), [['최지후', [k(4)]], ['정우진', [k(5), k(6)]]], 'a near name and two of the same name are asked, never guessed');
   const c1 = plan.classes.find(c => c.classId === 'c1')!;
   assert.equal(c1.status, 'changed');
-  assert.deepEqual(c1.changes, ['월 16:10~17:30 → 16:20~17:40', '화 테스트 바뀜']);
+  assert.deepEqual(c1.changes, ['월 16:10~17:30 → 16:20~17:40', '수 16:10~17:30 수업 빠짐', '화 테스트 바뀜']);
   assert.deepEqual(c1.data.slots, [
     {id: 's1', weekday: 1, start: '16:20', end: '17:40', kind: 'lesson', status: '진행 중', study: [{start: '17:40', end: '18:40'}]},
-    {id: 's2', weekday: 3, start: '16:10', end: '17:30', kind: 'lesson', status: '진행 중'},
     {id: 's3', status: '진행 중', weekday: 2, start: '17:30', end: '18:30', kind: 'test'},
-  ], 'the sheet\'s weekdays change; 수 stays; the 화 test keeps its id and now names the whole class');
+  ], 'the sheet\'s weekdays change and the whole week is the sheet: 수 (no line) is dropped; the 화 test keeps its id and now names the whole class');
   assert.deepEqual(c1.data.books, [{id: 'b', title: '교재', status: 'current'}], 'books kept, only the saved fields');
   assert.equal(c1.revision, 3);
   const pending = plan.classes.filter(c => c.status === 'new');
@@ -118,4 +117,27 @@ test('classes not on the sheet: 중단 suggested when every student moved to ano
   assert.deepEqual(news.map(c => [c.key, c.data.campus, c.data.subject]), [['new:0', '용죽', '영어'], ['new:1', null, '영어']], 'the campus the students take the subject at');
   const set = planImport(cells, data, {}, {}, {'new:0': {name: '월요반', campus: '고덕', subject: '수학'}, 'new:1': {campus: null}});
   assert.deepEqual(set.classes.filter(c => c.status === 'new').map(c => [c.name, c.data.name, c.data.campus, c.data.subject]), [['월요반', '월요반', '고덕', '수학'], ['중1 이서연반', '중1 이서연반', null, '영어']]);
+});
+
+test('a class moved to other weekdays is not shown on both: lesson slots without a sheet line are dropped, stopped ones kept, tests replaced', () => {
+  const data = base();
+  const c1 = data.classes.find((c: any) => c.id === 'c1');
+  c1.slots = [
+    {id: 'a', weekday: 1, start: '18:50', end: '20:10', kind: 'lesson', status: '진행 중'},
+    {id: 'b', weekday: 5, start: '18:20', end: '19:40', kind: 'lesson', status: '진행 중'},
+    {id: 'c', weekday: 2, start: '16:30', end: '17:50', kind: 'lesson', status: '진행 중'},
+    {id: 'd', weekday: 6, start: '10:00', end: '11:20', kind: 'lesson', status: '중단'},
+    {id: 't', weekday: 4, start: '17:00', end: '18:00', kind: 'test', status: '진행 중'},
+  ];
+  const cells: SheetCells[] = [
+    {weekday: 2, lesson: '4:30~5:50\n김민준, 이서연', study: '', test: ''},
+    {weekday: 0, lesson: '12:40~2:00\n김민준, 이서연', study: '', test: '1:30~2:30 김민준, 이서연'},
+  ];
+  const plan = planImport(cells, data).classes.find(c => c.classId === 'c1')!;
+  assert.deepEqual(plan.changes, ['일 수업 추가 12:40~14:00', '월 18:50~20:10 수업 빠짐', '금 18:20~19:40 수업 빠짐', '목 테스트 바뀜', '일 테스트 바뀜']);
+  assert.deepEqual(plan.data.slots.map((s: any) => [s.id, s.weekday, s.start, s.kind, s.status]), [
+    ['c', 2, '16:30', 'lesson', '진행 중'], ['d', 6, '10:00', 'lesson', '중단'], [undefined, 0, '12:40', 'lesson', undefined], [undefined, 0, '13:30', 'test', undefined],
+  ], '화 keeps its slot id; 월·금 gone; the stopped 토 stays; the old 목 test is replaced by the 일 one');
+  const twice = planImport([{weekday: 2, lesson: '4:30~5:50\n김민준, 이서연\n7:00~8:20\n김민준, 이서연', study: '', test: ''}], data).classes.find(c => c.classId === 'c1')!;
+  assert.deepEqual(twice.data.slots.filter((s: any) => s.weekday === 2).map((s: any) => [s.id, s.start]), [['c', '16:30'], [undefined, '19:00']], 'two lessons on one day: two slots, not one changed twice');
 });
